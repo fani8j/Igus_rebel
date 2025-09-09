@@ -1,0 +1,11 @@
+moveit_setup_assistant_config:
+  URDF:
+    package: igus_rebel_description
+    relative_path: urdf/igus_rebel2.urdf
+    xacro_args: ""
+  SRDF:
+    relative_path: config/igus_rebel2.srdf
+  CONFIG:
+    author_name: Hoang Dung Dinh
+    author_email: dinhhoangdung0712@gmail.com
+    generated_timestamp: 1651073867

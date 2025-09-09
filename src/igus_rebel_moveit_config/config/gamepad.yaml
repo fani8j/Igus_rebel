@@ -1,0 +1,10 @@
+teleop_joy_twist:
+  ros__parameters:
+    command_frame_id: "base_link"
+    axis_linear_x: 1
+    axis_linear_y: 0
+    axis_linear_z: 7
+    axis_angular_x: 3
+    axis_angular_y: 2
+    axis_angular_z: 6
+    button_enable: 7

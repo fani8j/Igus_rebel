@@ -1,0 +1,249 @@
+<?xml version="1.0"?>
+<robot name="igus_rebel">
+
+<!-- measured from model -->
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://igus_rebel_description/meshes/robolink_rebel/Robolink_RebeL_000.dae"/>
+      </geometry>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://igus_rebel_description/meshes/robolink_rebel/Robolink_RebeL_000.dae"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="1.0" />
+      <inertia ixx="1.0" iyy="1.0" izz="1.0" ixy="0.0" ixz="0.0" iyz="0.0" />
+    </inertial>
+  </link>
+  
+
+  
+  <joint name="joint1" type="revolute">
+    <parent link="base_link"/>
+    <child link="link_1"/>
+    <origin rpy="0.0 0.0 3.1416" xyz="0.0 0 0.126"/>
+    <axis xyz="0 0 -1"/>
+    <limit effort="330.0" lower="-3.12414" upper="3.12414" velocity="2.16"/> <!-- limit taken from the controller -->
+    <dynamics damping="0.0" friction="0.0"/>
+  </joint>
+  
+  <link name="link_1">
+    <visual>
+      <geometry>
+        <mesh filename="package://igus_rebel_description/meshes/robolink_rebel/Robolink_RebeL_001.dae"/>
+      </geometry>
+      <origin rpy="0 0 3.1416" xyz="0.0 0.0 -0.0537"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://igus_rebel_description/meshes/robolink_rebel/Robolink_RebeL_001.dae"/>
+      </geometry>
+      <origin rpy="0 0 3.1416" xyz="0.0 0.0 -0.0537"/>
+    </collision>
+    <inertial>
+      <mass value="0.1" />
+      <inertia ixx="0.03" iyy="0.03" izz="0.03" ixy="0.0" ixz="0.0" iyz="0.0" />
+    </inertial>
+  </link>
+  
+   
+  <joint name="joint2" type="revolute">
+    <parent link="link_1"/>
+    <child link="link_2"/>
+    <origin rpy="0.0 0.0 0.0" xyz="0.0 0.025 0.153"/>
+    <axis xyz="0 -1 0"/>
+    <limit effort="330.0" lower="-1.48353" upper="2.44346" velocity="2.16"/> <!-- limits taken from the controller -->
+    <dynamics damping="0.0" friction="0.0"/>
+  </joint>
+  
+  <link name="link_2">
+    <visual>
+      <geometry>
+        <mesh filename="package://igus_rebel_description/meshes/robolink_rebel/Robolink_RebeL_002_0.dae"/>
+      </geometry>
+      <origin rpy="-1.5707 0 0" xyz="0 -0.005 -0.00625"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://igus_rebel_description/meshes/robolink_rebel/Robolink_RebeL_002_0.dae"/>
+      </geometry>
+      <origin rpy="-1.5707 0 0" xyz="0 -0.005 -0.00625"/>
+    </collision>
+    <inertial>
+      <mass value="0.1" />
+      <inertia ixx="0.03" iyy="0.03" izz="0.03" ixy="0.0" ixz="0.0" iyz="0.0" />
+    </inertial>
+  </link>
+  
+
+  <joint name="joint_fixed_1" type="fixed">
+    <parent link="link_2"/>
+    <child link="link_3"/>
+    <origin rpy="0.0 0.0 0.0" xyz="0.0 -0.025 0.1"/>
+    <dynamics damping="0.0" friction="0.0"/>
+  </joint>
+    
+  <link name="link_3">
+    <visual>
+      <geometry>
+        <mesh filename="package://igus_rebel_description/meshes/robolink_rebel/Robolink_RebeL_002_1.dae"/>
+      </geometry>
+      <origin rpy="0 0 3.1416" xyz="0 -0.00625 -0.00625"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://igus_rebel_description/meshes/robolink_rebel/Robolink_RebeL_002_1.dae"/>
+      </geometry>
+      <origin rpy="0 0 3.1416" xyz="0 -0.00625 -0.00625"/>
+    </collision>
+    <inertial>
+      <mass value="0.1" />
+      <inertia ixx="0.03" iyy="0.03" izz="0.03" ixy="0.0" ixz="0.0" iyz="0.0" />
+    </inertial>    
+  </link>
+  
+  
+  <joint name="joint_fixed_2" type="fixed">
+    <parent link="link_3"/>
+    <child link="link_4"/>
+    <origin rpy="0.0 -1.0472 0.0" xyz="-0.0326 0.0 0.05646"/>
+    <dynamics damping="0.0" friction="0.0"/>
+  </joint>
+  
+    <link name="link_4">
+    <visual>
+      <geometry>
+        <mesh filename="package://igus_rebel_description/meshes/robolink_rebel/Robolink_RebeL_002_2.dae"/>
+      </geometry>
+      <origin rpy="0 0 -3.1416" xyz="0.0 0.0 -0.00625"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://igus_rebel_description/meshes/robolink_rebel/Robolink_RebeL_002_2.dae"/>
+      </geometry>
+      <origin rpy="0 0 -3.1416" xyz="0.0 0.0 -0.00625"/>
+    </collision>
+    <inertial>
+      <mass value="0.1" />
+      <inertia ixx="0.03" iyy="0.03" izz="0.03" ixy="0.0" ixz="0.0" iyz="0.0" />
+    </inertial>
+  </link>
+  
+    <joint name="joint3" type="revolute">
+    <parent link="link_4"/>
+    <child link="link_5"/>
+    <origin rpy="0.0 0.0 0.0" xyz="0.0 0.025 0.1"/> <!-- 1.0472 -->
+    <axis xyz="0 -1 0"/>
+    <limit effort="330.0" lower="-1.39626" upper="2.61799" velocity="2.16"/>
+    <dynamics damping="0.0" friction="0.0"/>
+  </joint>
+  
+  <link name="link_5">
+    <visual>
+      <geometry>
+        <mesh filename="package://igus_rebel_description/meshes/robolink_rebel/Robolink_RebeL_003.dae"/>
+      </geometry>
+      <origin rpy="-1.5707 0 0" xyz="0 -0.008 -0.008"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://igus_rebel_description/meshes/robolink_rebel/Robolink_RebeL_003.dae"/>
+      </geometry>
+      <origin rpy="-1.5707 0 0" xyz="0 -0.008 -0.008"/>
+    </collision>
+    <inertial>
+      <mass value="0.1" />
+      <inertia ixx="0.03" iyy="0.03" izz="0.03" ixy="0.0" ixz="0.0" iyz="0.0" />
+    </inertial>
+  </link>
+  
+  
+  <joint name="joint4" type="revolute">
+    <parent link="link_5"/>
+    <child link="link_6"/>
+    <origin rpy="0.0 0.0 0.0" xyz="0.0 -0.025 0.153"/> 
+    <axis xyz="0 0 1"/>
+    <limit effort="330.0" lower="-3.12414" upper="3.12414" velocity="2.16"/>
+    <dynamics damping="0.0" friction="0.0"/>
+  </joint>
+  
+  <link name="link_6">
+    <visual>
+      <geometry>
+        <mesh filename="package://igus_rebel_description/meshes/robolink_rebel/Robolink_RebeL_004.dae"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 -0.003125"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://igus_rebel_description/meshes/robolink_rebel/Robolink_RebeL_004.dae"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 -0.003125"/>
+    </collision>
+    <inertial>
+      <mass value="0.1" />
+      <inertia ixx="0.03" iyy="0.03" izz="0.03" ixy="0.0" ixz="0.0" iyz="0.0" />
+    </inertial>
+  </link>
+  
+  <joint name="joint5" type="revolute">
+    <parent link="link_6"/>
+    <child link="link_7"/>
+    <origin rpy="0.0 0.0 0.0" xyz="0.0 0.029 0.143"/>
+    <axis xyz="0 -1 0"/>
+    <limit effort="330.0" lower="-1.65806" upper="1.65806" velocity="2.16"/>
+    <dynamics damping="0.0" friction="0.0"/>
+  </joint>
+  
+  <link name="link_7">
+    <visual>
+      <geometry>
+        <mesh filename="package://igus_rebel_description/meshes/robolink_rebel/Robolink_RebeL_005.dae"/>
+      </geometry>
+      <origin rpy="0 1.57 -1.5707" xyz="0 -0.00625 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://igus_rebel_description/meshes/robolink_rebel/Robolink_RebeL_005.dae"/>
+      </geometry>
+      <origin rpy="0 1.57 -1.5707" xyz="0 -0.00625 0"/>
+    </collision>
+    <inertial>
+      <mass value="0.1" />
+      <inertia ixx="0.03" iyy="0.03" izz="0.03" ixy="0.0" ixz="0.0" iyz="0.0" />
+    </inertial>
+  </link>
+  
+  
+  <joint name="joint6" type="revolute">
+    <parent link="link_7"/>
+    <child link="link_8"/>
+    <origin rpy="0.0 0.0 0.0" xyz="0.0 -0.029 0.1188"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="330.0" lower="-3.12414" upper="3.12414" velocity="2.16"/>
+    <dynamics damping="0.0" friction="0.0"/>
+  </joint>
+  
+  <link name="link_8">
+    <visual>
+      <geometry>
+        <mesh filename="package://igus_rebel_description/meshes/robolink_rebel/Robolink_RebeL_006.dae"/>
+      </geometry>
+      <origin rpy="0 -1.57 0" xyz="0.0 0.0 -0.00625"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://igus_rebel_description/meshes/robolink_rebel/Robolink_RebeL_006.dae"/>
+      </geometry>
+      <origin rpy="0 -1.57 0" xyz="0.0 0.0 -0.00625"/>
+    </collision>
+    <inertial>
+      <mass value="0.1" />
+      <inertia ixx="0.03" iyy="0.03" izz="0.03" ixy="0.0" ixz="0.0" iyz="0.0" />
+    </inertial>
+  </link>
+  
+</robot>

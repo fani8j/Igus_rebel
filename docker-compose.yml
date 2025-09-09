@@ -1,0 +1,27 @@
+services:
+  ros2_dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ros2_jazzy_rebel
+    container_name: ros2_jazzy_rebel_dev
+    volumes:
+      - ./:/ros2_ws    # Sync your local workspace
+      - ros2_install:/ros2_ws/install   # Persist install
+      - ros2_build:/ros2_ws/build       # Persist build
+      - ros2_log:/ros2_ws/log           # Persist logs
+      - /tmp/.X11-unix:/tmp/.X11-unix   # X11 socket for GUI apps
+      - /dev:/dev
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1               # Prevent shared memory errors
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+    privileged: true
+    network_mode: host
+    stdin_open: true
+    tty: true
+
+volumes:
+  ros2_install:
+  ros2_build:
+  ros2_log:

@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<!-- igus_rebel.control.xacro -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <xacro:macro name="igus_rebel_control" params="arm_id hardware_protocol">
+        <xacro:macro name="joint_control" params="joint">
+            <joint name="${joint}">
+                <xacro:if value="${hardware_protocol == 'gazebo'}">
+                    <command_interface name="position" />
+                </xacro:if>
+                <xacro:if value="${hardware_protocol == 'rebel'}">
+                    <command_interface name="velocity" />
+                </xacro:if>
+                <state_interface name="position" />
+                <state_interface name="velocity" />
+            </joint>
+        </xacro:macro>
+
+        <ros2_control name="${arm_id}_controller" type="system">
+            <hardware>
+                <xacro:if value="${hardware_protocol == 'mock_hardware'}">
+                    <plugin>mock_components/GenericSystem</plugin>
+                </xacro:if>
+                <xacro:if value="${hardware_protocol == 'gazebo'}">
+                    <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+                </xacro:if>
+                <xacro:if value="${hardware_protocol == 'rebel'}">
+                    <plugin>Igus/Rebel</plugin>
+                </xacro:if>
+            </hardware>
+            <xacro:joint_control joint="joint1" />
+            <xacro:joint_control joint="joint2" />
+            <xacro:joint_control joint="joint3" />
+            <xacro:joint_control joint="joint4" />
+            <xacro:joint_control joint="joint5" />
+            <xacro:joint_control joint="joint6" />
+        </ros2_control>
+        <xacro:if value="${hardware_protocol == 'gazebo'}">
+            <gazebo>
+                <plugin filename="libgz_ros2_control-system.so" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+                    <robot_param>robot_description</robot_param>
+                    <robot_param_node>robot_state_publisher</robot_param_node>
+                    <parameters>$(find igus_rebel_moveit_config)/config/ros_controllers.yaml</parameters>
+                    <controller_manager_name>controller_manager</controller_manager_name>
+                </plugin>
+            </gazebo>
+        </xacro:if>
+    </xacro:macro>
+</robot>

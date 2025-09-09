@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://wiki.ros.org/xacro"
+       name="igus_rebel" >
+  <xacro:arg name="hardware_protocol" default="rebel"/>
+  <!-- igus_rebel -->
+  <xacro:include filename="$(find igus_rebel_description)/urdf/igus_rebel2.urdf" />
+
+  <xacro:include filename="$(find igus_rebel_description)/urdf/igus_rebel2.control.xacro"/>
+  <xacro:igus_rebel_control arm_id="rebel_arm" hardware_protocol="$(arg hardware_protocol)"/>
+  
+  <link name="world" />
+
+  <joint name="world_joint" type="fixed">
+    <parent link="world" />
+    <child link = "base_link" />
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+  </joint>
+
+</robot>
