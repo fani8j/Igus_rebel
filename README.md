@@ -18,14 +18,6 @@ Currently, the package can only be used by building it from source.
 
 The ros node expects to reach the robot at the IP and port `192.168.3.11:3920`, this IP is fixed in **src/igus_rebel/include/Rebel.hpp**, line 88. You can change the IP here, make sure to build the code by `colcon build` after changes.
 
-## Usage: Not using docker ##
-
-It is recommended to run the ROS node with the provided launch file, using `ros2 launch igus_rebel rebel.launch.py`
-
-To control the robot with MoveIt, first start the igus_rebel ROS node (`ros2 launch igus_rebel rebel.launch.py`) and then run `ros2 launch igus_rebel_moveit_config igus_rebel_motion_planner.launch.py use_gui:=true`
-
-To simulate the robot in Gazebo and control the simulated robot with MoveIt run `ros2 launch igus_rebel_moveit_config igus_rebel_simulated.launch.py`
-
 ## Installation: Using docker ##
 
 In case you are not using Ubuntu 24.04 and ROS2 Jazzy, you can use docker as an alternative way.
@@ -36,7 +28,7 @@ To build docker image:
 sudo docker compose build
 ```
 
-## Usage: Using docker ##
+## Docker usage ##
 
 Run the container:
 
@@ -50,7 +42,28 @@ To entry docker container environment, use the following command on each new ter
 sudo docker exec -it ros2_jazzy_rebel_dev bash
 ```
 
-You can freely modify the code inside src folder and build by `colcon build` inside docker container.
+You can freely modify the code inside src folder in host computer and build by `colcon build` inside docker container.
+
+## Usage: on real ReBel robot
+
+Launch hardware interface, controller:
+```bash
+ros2 launch igus_rebel rebel.launch.py
+```
+
+Launch moveit motionn planner and teleoperation mode:
+
+```bash
+ros2 launch igus_rebel_moveit_config igus_rebel_motion_planner.launch.py use_gui:=true
+```
+
+## Usage: on simulation
+
+To simulate the robot in Gazebo and control the simulated robot with MoveIt run:
+
+```bash
+ros2 launch igus_rebel_moveit_config igus_rebel_simulated.launch.py
+```
 
 ## Set digital outputs
 
