@@ -215,10 +215,10 @@ def opaque_func(context, *args, **kwargs):
     )
     
     return [
-        # move_group_node,
-        # servo_node,
-        # joy_node,
-        # teleop_twist_joy_node,
+        move_group_node,
+        servo_node,
+        joy_node,
+        teleop_twist_joy_node,
         launch_rviz
     ]
 
