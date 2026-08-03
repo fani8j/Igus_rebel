@@ -1,12 +1,13 @@
 import os
 from pathlib import Path
 
-from ament_index_python.packages import get_package_share_directory
+from ament_index_python.packages import get_package_prefix, get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
     IncludeLaunchDescription,
     OpaqueFunction,
+    TimerAction,
 )
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -25,6 +26,9 @@ def opaque_func(context, *args, **kwargs):
     namespace = LaunchConfiguration("namespace")
     hardware_protocol = LaunchConfiguration('hardware_protocol')
     use_sim_time = LaunchConfiguration('use_sim_time')
+    run_mtc_program = LaunchConfiguration("run_mtc_program")
+    execute_mtc = LaunchConfiguration("execute_mtc")
+    mtc_start_delay = LaunchConfiguration("mtc_start_delay")
 
     joint_limits_file = PathJoinSubstitution(
         [
@@ -85,6 +89,19 @@ def opaque_func(context, *args, **kwargs):
         ]
     )
     ompl_context = load_yaml(Path(ompl_file.perform(context)))
+    if os.environ.get("ROS_DISTRO") == "humble":
+        # Humble accepts one planner plugin and a whitespace-delimited request-adapter chain.
+        ompl_pipeline = ompl_context["move_group"]
+        ompl_pipeline["planning_plugin"] = ompl_pipeline.pop("planning_plugins")[0]
+        ompl_pipeline["request_adapters"] = " ".join([
+            "default_planner_request_adapters/ResolveConstraintFrames",
+            "default_planner_request_adapters/FixWorkspaceBounds",
+            "default_planner_request_adapters/FixStartStateBounds",
+            "default_planner_request_adapters/FixStartStateCollision",
+            "default_planner_request_adapters/FixStartStatePathConstraints",
+            "default_planner_request_adapters/AddTimeOptimalParameterization",
+        ])
+        ompl_pipeline.pop("response_adapters", None)
     ompl = {"ompl": ompl_context}
 
     moveit_controllers = {
@@ -123,6 +140,7 @@ def opaque_func(context, *args, **kwargs):
             "publish_geometry_updates": True,
             "publish_state_updates": True,
             "publish_transforms_updates": True,
+            "capabilities": "move_group/ExecuteTaskSolutionCapability",
         },
         ompl_context,
     ]
@@ -142,6 +160,28 @@ def opaque_func(context, *args, **kwargs):
         ],
     )
 
+    mtc_params_file = PathJoinSubstitution(
+        [
+            FindPackageShare("igus_rebel_moveit_config"),
+            "config",
+            "mtc_ptp_lin.yaml",
+        ]
+    )
+    mtc_node = Node(
+        condition=IfCondition(run_mtc_program),
+        package="igus_rebel_moveit_config",
+        executable="rebel_mtc_ptp_lin",
+        namespace=namespace,
+        parameters=[
+            mtc_params_file,
+            {"execute": execute_mtc},
+            {"use_sim_time": use_sim_time},
+            moveit_args,
+        ],
+        output="screen",
+    )
+    delayed_mtc_node = TimerAction(period=mtc_start_delay, actions=[mtc_node])
+
     # Get parameters for the Servo node
     servo_params_file = PathJoinSubstitution(
         [
@@ -151,15 +191,32 @@ def opaque_func(context, *args, **kwargs):
         ]
     )
     servo_context = load_yaml(Path(servo_params_file.perform(context)))
+    if os.environ.get("ROS_DISTRO") == "humble":
+        # Translate parameters renamed or removed after Humble's MoveIt Servo release.
+        joint_limit_margins = servo_context.pop("joint_limit_margins", [0.1])
+        servo_context["joint_limit_margin"] = joint_limit_margins[0]
+        servo_context.pop("use_smoothing", None)
+        servo_context.pop("check_octomap_collisions", None)
+        servo_context["planning_frame"] = "base_link"
+        servo_context["ee_frame_name"] = "link6"
+        servo_context["robot_link_command_frame"] = "base_link"
+        servo_context["use_gazebo"] = hardware_protocol.perform(context) == "gazebo"
     servo_params = {
         "moveit_servo": servo_context
     }
     # This sets the update rate and planning group name for the acceleration limiting filter.
     planning_group_name = {"planning_group_name": "igus_rebel_arm"}
 
+    moveit_servo_libexec = os.path.join(get_package_prefix("moveit_servo"), "lib", "moveit_servo")
+    servo_executable = (
+        "servo_node"
+        if os.path.exists(os.path.join(moveit_servo_libexec, "servo_node"))
+        else "servo_node_main"
+    )
+
     servo_node = Node(
         package="moveit_servo",
-        executable="servo_node",
+        executable=servo_executable,
         namespace=namespace,
         parameters=[
             {'use_sim_time': use_sim_time},
@@ -219,6 +276,7 @@ def opaque_func(context, *args, **kwargs):
         servo_node,
         joy_node,
         teleop_twist_joy_node,
+        delayed_mtc_node,
         launch_rviz
     ]
 
@@ -227,6 +285,21 @@ def generate_launch_description():
     namespace_arg = DeclareLaunchArgument("namespace", default_value="")
     prefix_arg = DeclareLaunchArgument("prefix", default_value="")
     use_gui_arg = DeclareLaunchArgument("use_gui", default_value="true")
+    run_mtc_program_arg = DeclareLaunchArgument(
+        "run_mtc_program",
+        default_value="false",
+        description="Plan the configured PTP then LIN task",
+    )
+    execute_mtc_arg = DeclareLaunchArgument(
+        "execute_mtc",
+        default_value="false",
+        description="Execute the MTC solution after planning; false is planning-only",
+    )
+    mtc_start_delay_arg = DeclareLaunchArgument(
+        "mtc_start_delay",
+        default_value="3.0",
+        description="Seconds to wait for controllers before starting the MTC task",
+    )
     
     use_sim_time_arg = DeclareLaunchArgument(
         'use_sim_time', 
@@ -245,6 +318,9 @@ def generate_launch_description():
     ld.add_action(namespace_arg)
     ld.add_action(use_gui_arg)
     ld.add_action(hardware_protocol_arg)
+    ld.add_action(run_mtc_program_arg)
+    ld.add_action(execute_mtc_arg)
+    ld.add_action(mtc_start_delay_arg)
 
     ld.add_action(OpaqueFunction(function=opaque_func))
 

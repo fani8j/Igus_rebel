@@ -5,19 +5,36 @@ services:
       dockerfile: Dockerfile
     image: ros2_jazzy_rebel
     container_name: ros2_jazzy_rebel_dev
+
     volumes:
-      - ./:/ros2_ws    # Sync your local workspace
-      - ros2_install:/ros2_ws/install   # Persist install
-      - ros2_build:/ros2_ws/build       # Persist build
-      - ros2_log:/ros2_ws/log           # Persist logs
-      - /tmp/.X11-unix:/tmp/.X11-unix   # X11 socket for GUI apps
-      - /dev:/dev
+      - ./:/ros2_ws
+      - ros2_install:/ros2_ws/install
+      - ros2_build:/ros2_ws/build
+      - ros2_log:/ros2_ws/log
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ${XAUTHORITY}:${XAUTHORITY}:ro
+      - /dev/dri:/dev/dri
+
     environment:
       - DISPLAY=${DISPLAY}
-      - QT_X11_NO_MITSHM=1               # Prevent shared memory errors
+      - XAUTHORITY=${XAUTHORITY}
+      - QT_X11_NO_MITSHM=1
+      - QT_QPA_PLATFORM=xcb
+      - NVIDIA_DRIVER_CAPABILITIES=all
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-    privileged: true
+      - __NV_PRIME_RENDER_OFFLOAD=1
+      - __GLX_VENDOR_LIBRARY_NAME=nvidia
+
     network_mode: host
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
     stdin_open: true
     tty: true
 

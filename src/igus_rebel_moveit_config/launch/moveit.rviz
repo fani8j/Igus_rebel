@@ -26,6 +26,8 @@ Panels:
     Name: Time
     SyncMode: 0
     SyncSource: ""
+  - Class: moveit_task_constructor/Motion Planning Tasks
+    Name: Motion Planning Tasks
 Visualization Manager:
   Class: ""
   Displays:
@@ -428,6 +430,11 @@ Visualization Manager:
         Show Robot Visual: true
       Value: true
       Velocity_Scaling_Factor: 0.1
+    - Class: moveit_task_constructor/Motion Planning Tasks
+      Enabled: true
+      Name: Motion Planning Tasks
+      Robot Description: robot_description
+      Task Solution Topic: /solution
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48

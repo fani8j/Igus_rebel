@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="igus_rebel_with_schmalz_suction">
+
+  <xacro:arg name="hardware_protocol" default="mock_hardware"/>
+  <xacro:arg name="include_ros2_control" default="true"/>
+  <xacro:arg name="attach_suction" default="true"/>
+  <xacro:arg name="show_suction_cable" default="false"/>
+
+  <!-- Initial transform from link6 frame to the physical tool flange plane. -->
+  <xacro:arg name="rebel_flange_xyz" default="0 0 0.052"/>
+  <xacro:arg name="rebel_flange_rpy" default="0 0 0"/>
+
+  <xacro:arg name="suction_cup_diameter" default="0.0367"/>
+  <xacro:arg name="suction_cup_exposed_height" default="0.019"/>
+  <xacro:arg name="suction_total_mass" default="0.224"/>
+
+  <xacro:include filename="$(find igus_rebel_description)/urdf/igus_rebel2.urdf"/>
+  <xacro:include filename="$(find igus_rebel_description)/urdf/suction_gripper.urdf.xacro"/>
+  <xacro:include filename="$(find igus_rebel_description)/urdf/igus_rebel2.control.xacro"/>
+
+  <xacro:if value="$(arg include_ros2_control)">
+    <xacro:igus_rebel_control
+      arm_id="rebel_arm"
+      hardware_protocol="$(arg hardware_protocol)"/>
+  </xacro:if>
+
+  <xacro:if value="$(arg attach_suction)">
+    <xacro:rebel_schmalz_ecbpmi
+      parent_link="link6"
+      prefix=""
+      flange_xyz="$(arg rebel_flange_xyz)"
+      flange_rpy="$(arg rebel_flange_rpy)"
+      total_tool_mass="$(arg suction_total_mass)"
+      cup_diameter="$(arg suction_cup_diameter)"
+      cup_exposed_height="$(arg suction_cup_exposed_height)"
+      show_cable="$(arg show_suction_cable)"/>
+  </xacro:if>
+
+</robot>

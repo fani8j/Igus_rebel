@@ -2,7 +2,12 @@
 #include <control_msgs/msg/joint_jog.hpp>
 #include <sensor_msgs/msg/joy.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
+#if __has_include(<moveit_msgs/srv/servo_command_type.hpp>)
 #include <moveit_msgs/srv/servo_command_type.hpp>
+#define IGUS_REBEL_HAS_SERVO_COMMAND_TYPE 1
+#else
+#define IGUS_REBEL_HAS_SERVO_COMMAND_TYPE 0
+#endif
 #include <rclcpp/rclcpp.hpp>
 #include <signal.h>
 #include <stdio.h>
@@ -34,10 +39,11 @@ private:
 
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_pub_;
     rclcpp::Publisher<control_msgs::msg::JointJog>::SharedPtr joint_pub_;
+#if IGUS_REBEL_HAS_SERVO_COMMAND_TYPE
     rclcpp::Client<moveit_msgs::srv::ServoCommandType>::SharedPtr switch_input_;
-    rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_sub_;
-
     std::shared_ptr<moveit_msgs::srv::ServoCommandType::Request> request_;
+#endif
+    rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_sub_;
     double joint_vel_cmd_;
     std::string command_frame_id_;
     bool status_enable_ = false;
@@ -57,16 +63,16 @@ JoyServo::JoyServo() : joint_vel_cmd_(1.0), command_frame_id_{"base_link"}
     joy_sub_ = nh_->create_subscription<sensor_msgs::msg::Joy>(
         "joy", ROS_QUEUE_SIZE, std::bind(&JoyServo::joyCallback, this, std::placeholders::_1));
 
-    // Client for switching input types
+#if IGUS_REBEL_HAS_SERVO_COMMAND_TYPE
+    // MoveIt 2.10 and newer require explicitly selecting the active command type.
     switch_input_ = nh_->create_client<moveit_msgs::srv::ServoCommandType>("servo_node/switch_command_type");
-    initializeParams();
 
-    // Wait to enable twist mode
     RCLCPP_INFO_STREAM(nh_->get_logger(), "Waiting for servoing...");
     request_ = std::make_shared<moveit_msgs::srv::ServoCommandType::Request>();
     request_->command_type = moveit_msgs::srv::ServoCommandType::Request::TWIST;
     switch_input_->wait_for_service();
     switch_input_->async_send_request(request_);
+#endif
 
     RCLCPP_INFO_STREAM(nh_->get_logger(), "Servoing enabled. Ready to send commands.");
 }

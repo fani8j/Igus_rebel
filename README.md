@@ -6,21 +6,30 @@
 
 ## Compatibility ##
 
-This was tested on ROS2 Jazzy on Ubuntu 24.04.2.
+Tested combinations:
+
+- ROS 2 Jazzy on Ubuntu 24.04
+- ROS 2 Humble on Ubuntu 22.04
 
 ## Installation: Not using docker ##
 
-Currently, the package can only be used by building it from source.
+The packages are built from source in a colcon workspace. For Humble:
 
-* Pull this repository
-* Navigate to the colcon workspace folder and install the dependencies with `rosdep install --from-paths . --ignore-src -r -y`
-* Build with `colcon build`
+```bash
+source /opt/ros/humble/setup.bash
+rosdep update
+rosdep install --from-paths src --ignore-src -r -y --rosdistro humble
+colcon build --symlink-install
+source install/setup.bash
+```
+
+The same commands work for Jazzy after replacing `humble` with `jazzy`.
 
 The ros node expects to reach the robot at the IP and port `192.168.3.11:3920`, this IP is fixed in **src/igus_rebel/include/Rebel.hpp**, line 88. You can change the IP here, make sure to build the code by `colcon build` after changes.
 
 ## Installation: Using docker ##
 
-In case you are not using Ubuntu 24.04 and ROS2 Jazzy, you can use docker as an alternative way.
+Docker is optional; the supported Ubuntu and ROS 2 combinations above can run natively.
 
 To build docker image:
 
@@ -64,6 +73,36 @@ To simulate the robot in Gazebo and control the simulated robot with MoveIt run:
 ```bash
 ros2 launch igus_rebel_moveit_config igus_rebel_simulated.launch.py
 ```
+
+## RobotViewer
+
+At `https://viewer.robotsfan.com/`, choose **Load Files** and select:
+
+- `src/igus_rebel_description/urdf/igus_rebel2_robotviewer.urdf`
+- all twelve `.dae` files in
+  `src/igus_rebel_description/meshes/rebel_d00617809/`
+
+The browser cannot read mesh files from the local ROS installation when only
+the URDF is selected, so the URDF and its DAE files must be loaded together.
+
+## Isaac Sim
+
+Generate the corrected six-axis URDF before importing it into Isaac Sim:
+
+```bash
+source /opt/ros/$ROS_DISTRO/setup.bash
+source install/setup.bash
+xacro src/igus_rebel_description/urdf/igus_rebel_isaac_wrapper.urdf.xacro \
+  -o /tmp/igus_rebel_official.urdf
+```
+
+Import `/tmp/igus_rebel_official.urdf` with a fixed base, articulation creation,
+inertias, and collision geometry enabled. Keep fixed joints separate on the
+first import so the ROS link hierarchy remains visible. The twelve visual meshes
+are tessellated from the igus `D00617809` STEP assembly and preserve its native
+CAD material regions. Collisions, inertias, and joint frames remain those of
+the version-two robot.
+Regenerate the USD after changes instead of using the pre-generated USD files.
 
 ## Set digital outputs
 

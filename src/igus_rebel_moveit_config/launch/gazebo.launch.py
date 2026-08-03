@@ -44,10 +44,8 @@ def generate_launch_description():
         package='ros_gz_sim',
         executable='create',
         output='screen',
-        parameters=[{'topic': 'robot_description',
-                     'name': 'igus_rebel',
-                     'use_sim_time': True,
-                     }],
+        arguments=['-topic', 'robot_description', '-name', 'igus_rebel'],
+        parameters=[{'use_sim_time': LaunchConfiguration('use_sim_time')}],
     )
 
     # Include the ROS controllers launch file

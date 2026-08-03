@@ -28,11 +28,26 @@ def generate_launch_description():
         'use_sim_time', 
         default_value='true', 
         description='Use sim time if true')
+    run_mtc_program_arg = DeclareLaunchArgument(
+        'run_mtc_program',
+        default_value='false',
+        description='Plan the configured PTP then LIN task')
+    execute_mtc_arg = DeclareLaunchArgument(
+        'execute_mtc',
+        default_value='false',
+        description='Execute the MTC solution after planning')
+    mtc_start_delay_arg = DeclareLaunchArgument(
+        'mtc_start_delay',
+        default_value='15.0',
+        description='Seconds to wait for simulated controllers before starting the MTC task')
     
     hardware_protocol = LaunchConfiguration('hardware_protocol')
     use_sim_time = LaunchConfiguration('use_sim_time')
     use_gui = LaunchConfiguration('use_gui')
     
+    run_mtc_program = LaunchConfiguration('run_mtc_program')
+    execute_mtc = LaunchConfiguration('execute_mtc')
+    mtc_start_delay = LaunchConfiguration('mtc_start_delay')
     robot_description_file = os.path.join(
         get_package_share_directory('igus_rebel_description'),
         'urdf',
@@ -73,6 +88,9 @@ def generate_launch_description():
             'hardware_protocol': hardware_protocol,
             'use_sim_time': use_sim_time,
             'use_gui': use_gui,
+            'run_mtc_program': run_mtc_program,
+            'execute_mtc': execute_mtc,
+            'mtc_start_delay': mtc_start_delay,
         }.items(),
     )
     
@@ -84,6 +102,9 @@ def generate_launch_description():
         paused_arg,
         hardware_protocol_arg,
         use_sim_time_arg,
+        run_mtc_program_arg,
+        execute_mtc_arg,
+        mtc_start_delay_arg,
         gazebo_launch,
         robot_state_pub_node,
         moveit_launch,

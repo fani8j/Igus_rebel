@@ -4,7 +4,7 @@
     <xacro:macro name="igus_rebel_control" params="arm_id hardware_protocol">
         <xacro:macro name="joint_control" params="joint">
             <joint name="${joint}">
-                <xacro:if value="${hardware_protocol == 'gazebo'}">
+                <xacro:if value="${hardware_protocol == 'gazebo' or hardware_protocol == 'isaac_topic' or hardware_protocol == 'mock_hardware'}">
                     <command_interface name="position" />
                 </xacro:if>
                 <xacro:if value="${hardware_protocol == 'rebel'}">
@@ -22,6 +22,12 @@
                 </xacro:if>
                 <xacro:if value="${hardware_protocol == 'gazebo'}">
                     <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+                </xacro:if>
+                <xacro:if value="${hardware_protocol == 'isaac_topic'}">
+                    <plugin>topic_based_ros2_control/TopicBasedSystem</plugin>
+                    <param name="joint_commands_topic">/isaac_joint_commands</param>
+                    <param name="joint_states_topic">/isaac_joint_states</param>
+                    <param name="trigger_joint_command_threshold">0.0001</param>
                 </xacro:if>
                 <xacro:if value="${hardware_protocol == 'rebel'}">
                     <plugin>Igus/Rebel</plugin>
