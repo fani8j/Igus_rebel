@@ -13,17 +13,33 @@ Tested combinations:
 
 ## Installation: Not using docker ##
 
-The packages are built from source in a colcon workspace. For Humble:
+The packages are built from source in a colcon workspace. Run the commands for
+your installed ROS 2 distribution from the workspace root.
+
+### ROS 2 Humble on Ubuntu 22.04
 
 ```bash
 source /opt/ros/humble/setup.bash
+sudo apt update
 rosdep update
 rosdep install --from-paths src --ignore-src -r -y --rosdistro humble
 colcon build --symlink-install
 source install/setup.bash
 ```
 
-The same commands work for Jazzy after replacing `humble` with `jazzy`.
+### ROS 2 Jazzy on Ubuntu 24.04
+
+```bash
+source /opt/ros/jazzy/setup.bash
+sudo apt update
+rosdep update
+rosdep install --from-paths src --ignore-src -r -y --rosdistro jazzy
+colcon build --symlink-install
+source install/setup.bash
+```
+
+The `rosdep install` step installs MoveIt Task Constructor and the other
+distribution-specific dependencies required by `igus_rebel_moveit_config`.
 
 The ros node expects to reach the robot at the IP and port `192.168.3.11:3920`, this IP is fixed in **src/igus_rebel/include/Rebel.hpp**, line 88. You can change the IP here, make sure to build the code by `colcon build` after changes.
 
