@@ -1,0 +1,36 @@
+box_perception:
+  ros__parameters:
+    rgb_topic: /camera/color/image_raw/compressed
+    depth_topic: /camera/depth/image_raw/compressedDepth
+    camera_info_topic: /camera/color/camera_info
+    use_compressed_rgb: true
+    use_compressed_depth: true
+    robot_base_frame: base_link
+
+    use_auto_roi: true
+    manual_roi: [590, 90, 860, 300]
+    manual_roi_reference_size: [1280, 720]
+    constrain_auto_roi: true
+    auto_roi_search_margin_ratio: 0.25
+
+    sync_queue_size: 10
+    sync_slop_s: 0.10
+
+    seam_inset_ratio: 0.10
+    depth_patch_radius: 3
+    min_valid_depth_samples: 5
+    min_depth_m: 0.15
+    max_depth_m: 2.0
+    min_seam_length_m: 0.02
+    max_seam_length_m: 1.0
+    max_surface_depth_difference_m: 0.10
+    min_top_face_area_ratio: 0.005
+    max_top_face_height_width_ratio: 0.70
+    max_opposite_edge_angle_difference_deg: 15.0
+
+    tf_timeout_s: 0.20
+    marker_lifetime_s: 30.0
+    publish_debug_image: true
+    publish_local_pointcloud: true
+    pointcloud_stride: 4
+    publish_markers: true

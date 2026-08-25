@@ -1,0 +1,95 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.5
+      Class: rviz_default_plugins/Grid
+      Cell Size: 0.1
+      Name: Grid
+      Plane: XY
+      Reference Frame: <Fixed Frame>
+      Value: true
+    - Class: rviz_default_plugins/RobotModel
+      Description Source: Topic
+      Description Topic:
+        Value: /robot_description
+      Name: ReBeL Robot
+      Value: true
+    - Class: rviz_default_plugins/TF
+      Frame Timeout: 15
+      Name: TF
+      Show Axes: true
+      Show Names: true
+      Show Arrows: true
+      Value: true
+    - Alpha: 0.7
+      Autocompute Intensity Bounds: true
+      Class: rviz_default_plugins/PointCloud2
+      Color Transformer: RGB8
+      Decay Time: 0
+      Name: Registered Point Cloud
+      Position Transformer: XYZ
+      Selectable: true
+      Size (Pixels): 2
+      Style: Points
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /box_detection/registered_points
+      Value: true
+    - Class: rviz_default_plugins/Image
+      Max Value: 1
+      Median window: 5
+      Min Value: 0
+      Name: Detection Debug
+      Normalize Range: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /box_detection/debug_image
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Box Seam
+      Namespaces:
+        box_seam: true
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /box_seam/markers
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: base_link
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 2.0
+      Focal Point:
+        X: 0.0
+        Y: 0.0
+        Z: 0.4
+      Name: Current View
+      Pitch: 0.55
+      Target Frame: base_link
+      Yaw: 0.75
+Window Geometry:
+  Height: 900
+  Width: 1400
