@@ -1,0 +1,4 @@
+string snapshot_file
+---
+bool success
+string message

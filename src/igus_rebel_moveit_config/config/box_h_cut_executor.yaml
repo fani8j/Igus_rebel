@@ -1,0 +1,67 @@
+box_h_cut_executor:
+  ros__parameters:
+    planning_group: igus_rebel_arm
+    # Perception canonicalizes carton geometry into this frame before planning.
+    planning_frame: base_link
+    tool_link: xeg32_tool_tip
+    planning_pipeline: ompl
+    chomp_pipeline: chomp
+    pilz_pipeline: pilz_industrial_motion_planner
+    # OMPL transit plus a Cartesian cut stroke plans the frozen snapshot.
+    motion_profile: ompl_cartesian
+    snapshot_service: /box_perception/capture_snapshot
+    # Collision box is derived from detected top-face corners; height extends below that plane.
+    carton_collision_id: detected_carton
+    carton_height_m: 0.20
+    # Empty selects the newest persisted perception result. Set a .json basename to reuse it.
+    saved_snapshot_dir: ~/box_snapshots
+    saved_snapshot_file: ""
+    # Fixed-fixture override approved by the operator: zero disables the file-age gate.
+    saved_snapshot_max_age_s: 0.0
+    # Middle-seam-only plan for physical accuracy verification; no side strokes are included.
+    cut_pattern: middle_only
+    partial_reverse: false
+    partial_start_fraction: 0.25
+    partial_end_fraction: 0.75
+    # These supplied values apply only to explicit left_partial/right_partial modes.
+    partial_start_joint_degrees: [51.52, 15.99, 124.79, -65.84, 94.37, 125.94]
+    approach_joint_degrees: [51.52, 15.99, 124.79, -65.84, 94.37, 125.94]
+    use_approach_pose_as_cut_start: true
+    approach_cut_start_xyz: [0.270446, -0.000835, 0.127984]
+    approach_cut_orientation_xyzw: [0.679474, -0.371311, 0.538700, 0.332032]
+    approach_cut_length_m: 0.0518
+    # Contact is permitted only between the carton and cutter link during combined strokes.
+    side_cut_tilt_deg: 0.0
+    # Plan-only diagnostic trial; physical execution remains disabled.
+    hover_clearance_m: 0.005
+    cut_clearance_m: 0.0
+    # Operator-validated RViz goal-link6 pose for the first combined left-side stroke.
+    # The live world -> base_link transform is identity; values are expressed in base_link.
+    # The planner converts link6 -> xeg32_tool_tip from the robot model and uses the
+    # resulting TCP pose for the first cut start and its fixed cutter orientation.
+    combined_first_side_link6_frame: base_link
+    combined_first_side_link6_xyz: [0.2355727255344391, 0.03154894337058067, 0.24198371171951294]
+    combined_first_side_link6_orientation_xyzw: [0.6484568119049072, -0.3749435842037201, 0.5120024681091309, 0.42044565081596375]
+    # Anchor the manual orientation to the detected side-cut start. These TCP offsets were
+    # derived from the validated link6 pose and the selected snapshot's detected back_left.
+    manual_first_side_contact_offset_xyz: [-0.00642203, -0.01228259, -0.02380156]
+    # Bound the stroke from the detected contact point to the Cartesian-reachable length.
+    manual_first_side_max_length_m: 0.040
+    # endpoint insets on a 10 mm grid, at least 10 mm from carton corners, and
+    # at least 40 mm long. Each interval is planned with every local R/P/Y
+    # combination from the orientation-offset list. Search is plan-only.
+    combined_search_budget_s: 60.0
+    side_candidate_grid_m: 0.010
+    side_candidate_corner_inset_m: 0.010
+    side_candidate_min_length_m: 0.040
+    side_orientation_offsets_deg: [-5.0, -2.5, 0.0, 2.5, 5.0]
+    # Per-stage planner bound; prevents a saved-snapshot dry run from hanging.
+    planning_timeout_s: 15.0
+    velocity_scaling: 0.05
+    acceleration_scaling: 0.05
+    max_solutions: 1
+    invalidation_distance_m: 0.005
+    # Physical trajectory dispatch stays disabled until an operator deliberately enables it.
+    execution_enabled: false
+    # Mock-controller test window; execution still requires a separate dispatch request.
+    execution_arm_timeout_s: 120.0

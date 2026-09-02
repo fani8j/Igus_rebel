@@ -1,0 +1,12 @@
+std_msgs/Header header
+string snapshot_id
+geometry_msgs/Point seam_start
+geometry_msgs/Point seam_end
+geometry_msgs/Point seam_center
+geometry_msgs/Point back_left
+geometry_msgs/Point back_right
+geometry_msgs/Point front_left
+geometry_msgs/Point front_right
+geometry_msgs/Vector3 surface_normal
+float64 plane_rms_m
+uint32 confirmation_count
