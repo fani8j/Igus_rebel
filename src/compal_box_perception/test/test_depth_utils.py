@@ -6,6 +6,8 @@ from compal_box_perception.depth_utils import (
     build_xyzrgb_points,
     decode_compressed_depth,
     depth_scale_for_encoding,
+    depth_from_plane_at_pixel,
+    fit_top_plane_quad,
     get_median_depth,
     inset_segment,
     normalized_camera_rays,
@@ -45,6 +47,67 @@ def test_local_pointcloud_combines_registered_depth_and_color():
     assert points["x"][1, 0] == pytest.approx(0.0)
     assert points["y"][1, 0] == pytest.approx(2.0)
     assert points["rgb"].view(np.uint32)[1, 0] == 0x0A141E
+
+
+def test_depth_plane_recovers_top_face_without_background_plane():
+    depth = np.full((100, 100), 2000, dtype=np.uint16)
+    depth[25:66, 25:76] = 1000
+    camera_matrix = [100.0, 0.0, 50.0, 0.0, 100.0, 50.0, 0.0, 0.0, 1.0]
+
+    corners, normal, offset, inlier_ratio, rms = fit_top_plane_quad(
+        depth,
+        camera_matrix,
+        (),
+        scale=0.001,
+        fit_roi=(20, 20, 80, 50),
+        classify_roi=(20, 20, 80, 80),
+        sample_stride=2,
+        distance_threshold_m=0.005,
+        iterations=50,
+        min_inliers=100,
+        min_inlier_ratio=0.30,
+    )
+
+    assert corners.shape == (4, 2)
+    assert np.min(corners[:, 0]) == pytest.approx(26, abs=2)
+    assert np.max(corners[:, 0]) == pytest.approx(74, abs=2)
+    assert np.min(corners[:, 1]) == pytest.approx(26, abs=2)
+    assert np.max(corners[:, 1]) == pytest.approx(64, abs=2)
+    assert abs(normal[2]) == pytest.approx(1.0, abs=1e-3)
+    assert abs(abs(offset) - 1.0) < 1e-3
+    assert inlier_ratio > 0.4
+    assert rms < 1e-6
+
+
+def test_plane_fit_rejects_wrong_surface_orientation():
+    depth = np.full((80, 80), 1000, dtype=np.uint16)
+    camera_matrix = [100.0, 0.0, 40.0, 0.0, 100.0, 40.0, 0.0, 0.0, 1.0]
+    with pytest.raises(ValueError, match="RANSAC"):
+        fit_top_plane_quad(
+            depth,
+            camera_matrix,
+            (),
+            scale=0.001,
+            fit_roi=(10, 10, 70, 50),
+            classify_roi=(10, 10, 70, 70),
+            sample_stride=2,
+            min_inliers=100,
+            expected_normal=(1.0, 0.0, 0.0),
+            max_normal_deviation_deg=5.0,
+        )
+
+
+def test_plane_intersection_returns_boundary_depth_without_pixel_sampling():
+    camera_matrix = [100.0, 0.0, 50.0, 0.0, 100.0, 50.0, 0.0, 0.0, 1.0]
+    depth = depth_from_plane_at_pixel(
+        80.0,
+        60.0,
+        camera_matrix,
+        (),
+        plane_normal=(0.0, 0.0, 1.0),
+        plane_offset=-1.0,
+    )
+    assert depth == pytest.approx(1.0)
 
 
 def test_median_depth_clips_at_image_boundary_without_wrapping():

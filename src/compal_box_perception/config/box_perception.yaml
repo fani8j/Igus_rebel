@@ -14,6 +14,35 @@ box_perception:
     auto_roi_search_margin_ratio: 0.25
 
     sync_queue_size: 10
+    # Fit depth only for 3D reconstruction of the revised RGB detector's pixels;
+    # it must not determine 2D carton corners or the seam.
+    use_depth_plane_top_face: true
+    plane_fit_height_ratio: 0.65
+    plane_max_normal_deviation_deg: 20.0
+    plane_sample_stride: 2
+    plane_distance_threshold_m: 0.008
+    plane_ransac_iterations: 100
+    plane_min_inliers: 80
+    plane_min_inlier_ratio: 0.25
+    corner_filter_window: 15
+    max_corner_jump_px: 10.0
+    # The copied original detector performs its own corner refinement and does not
+    # expose the former gradient-refinement helper APIs.
+    use_rgb_quad_edge_refinement: false
+    quad_edge_search_range_px: 8.0
+    quad_edge_offset_step_px: 0.5
+    quad_edge_min_gradient_score: 20.0
+    use_rgb_front_edge_refinement: false
+    front_ratio_min: 0.70
+    front_ratio_max: 1.00
+    front_ratio_step: 0.005
+    front_ratio_filter_window: 15
+    front_ratio_max_jump: 0.05
+    use_rgb_seam_refinement: false
+    seam_ratio_min: 0.20
+    seam_ratio_max: 0.60
+    seam_ratio_step: 0.005
+    seam_min_gradient_score: 20.0
     sync_slop_s: 0.10
 
     seam_inset_ratio: 0.10
@@ -27,9 +56,14 @@ box_perception:
     min_top_face_area_ratio: 0.005
     max_top_face_height_width_ratio: 0.70
     max_opposite_edge_angle_difference_deg: 15.0
+    normal_filter_window: 15
+    max_normal_jump_deg: 10.0
 
     tf_timeout_s: 0.20
     marker_lifetime_s: 30.0
+    snapshot_output_dir: ~/box_snapshots
+    # Mock-controller test: permit an explicitly bounded stale confirmed result.
+    snapshot_max_receipt_age_s: 120.0
     publish_debug_image: true
     publish_local_pointcloud: true
     pointcloud_stride: 4

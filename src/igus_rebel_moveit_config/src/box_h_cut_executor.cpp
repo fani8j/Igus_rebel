@@ -1,7 +1,5 @@
 #include <Eigen/Geometry>
 #include <compal_box_msgs/srv/capture_box_snapshot.hpp>
-#include <compal_box_msgs/srv/plan_and_execute_saved_snapshot.hpp>
-#include <geometry_msgs/msg/point_stamped.hpp>
 #include <geometry_msgs/msg/pose_array.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <moveit/robot_state/robot_state.h>
@@ -15,7 +13,6 @@
 #include <moveit_msgs/msg/collision_object.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
-#include <std_srvs/srv/set_bool.hpp>
 #include <std_srvs/srv/trigger.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <algorithm>
@@ -39,7 +36,6 @@
 namespace mtc = moveit::task_constructor;
 using CaptureSnapshot = compal_box_msgs::srv::CaptureBoxSnapshot;
 
-using PlanAndExecuteSavedSnapshot = compal_box_msgs::srv::PlanAndExecuteSavedSnapshot;
 struct SideCutCandidate {
   geometry_msgs::msg::Point start;
   geometry_msgs::msg::Point end;
@@ -62,6 +58,7 @@ struct CutSegment {
   double roll_deg{0.0};
   double pitch_deg{0.0};
   double yaw_deg{0.0};
+  bool stop_after_start{false};
 };
 
 class BoxHCutExecutor : public rclcpp::Node
@@ -109,7 +106,10 @@ public:
     carton_height_m_ = declare_parameter<double>("carton_height_m", 0.20);
     hover_clearance_m_ = declare_parameter<double>("hover_clearance_m", 0.10);
     cut_clearance_m_ = declare_parameter<double>("cut_clearance_m", 0.05);
+    middle_entry_alignment_m_ = declare_parameter<double>("middle_entry_alignment_m", 0.010);
     side_cut_tilt_deg_ = declare_parameter<double>("side_cut_tilt_deg", 0.0);
+    side_cut_orientation_mode_ = declare_parameter<std::string>(
+      "side_cut_orientation_mode", "edge_aligned");
     cut_pattern_ = declare_parameter<std::string>("cut_pattern", "left_partial");
     partial_reverse_ = declare_parameter<bool>("partial_reverse", false);
     partial_start_fraction_ = declare_parameter<double>("partial_start_fraction", 0.25);
@@ -151,17 +151,11 @@ public:
     declare_parameter<std::string>("saved_snapshot_file", "");
     saved_snapshot_max_age_s_ = declare_parameter<double>("saved_snapshot_max_age_s", 60.0);
     declare_parameter<bool>("execution_enabled", false);
-    execution_arm_timeout_s_ = declare_parameter<double>("execution_arm_timeout_s", 30.0);
     max_solutions_ = declare_parameter<int>("max_solutions", 1);
-    invalidation_distance_m_ = declare_parameter<double>(
-      "invalidation_distance_m", 0.005);
     const std::array<std::string, 4> profiles{
       "ompl_cartesian", "ompl_pilz", "pilz_only", "chomp_pilz"};
     if (std::find(profiles.begin(), profiles.end(), motion_profile_) == profiles.end()) {
       throw std::invalid_argument("unsupported H-cut motion_profile: " + motion_profile_);
-    }
-    if (execution_arm_timeout_s_ <= 0.0) {
-      throw std::invalid_argument("execution_arm_timeout_s must be positive");
     }
     if (saved_snapshot_max_age_s_ < 0.0) {
       throw std::invalid_argument("saved_snapshot_max_age_s must be non-negative");
@@ -177,19 +171,17 @@ public:
     }
     if (planning_frame_.empty() || carton_collision_id_.empty() || carton_height_m_ <= 0.0 ||
         hover_clearance_m_ < 0.005 || cut_clearance_m_ < 0.0 ||
-        cut_clearance_m_ >= hover_clearance_m_ || cartesian_step_m_ <= 0.0 ||
+        cut_clearance_m_ >= hover_clearance_m_ || middle_entry_alignment_m_ < 0.0 ||
+        middle_entry_alignment_m_ > 0.10 || cartesian_step_m_ <= 0.0 ||
         planning_timeout_s_ <= 0.0 || combined_search_budget_s_ <= 0.0 ||
         side_candidate_grid_m_ <= 0.0 || side_candidate_corner_inset_m_ < 0.0 ||
         side_candidate_min_length_m_ <= 0.0 || manual_first_side_max_length_m_ <= 0.0 ||
         side_orientation_offsets_deg_.empty() || velocity_scaling_ <= 0.0 ||
         velocity_scaling_ > 1.0 || acceleration_scaling_ <= 0.0 ||
-        acceleration_scaling_ > 1.0 || max_solutions_ < 1 || invalidation_distance_m_ <= 0.0 ||
-        max_solutions_ < 1 || invalidation_distance_m_ <= 0.0 ||
-        std::abs(side_cut_tilt_deg_) > 15.0 || partial_start_fraction_ < 0.0 ||
-        partial_end_fraction_ > 1.0 || partial_start_fraction_ >= partial_end_fraction_ ||
+        acceleration_scaling_ > 1.0 || max_solutions_ < 1 ||
         (cut_pattern_ != "h" && cut_pattern_ != "middle_only" &&
-         cut_pattern_ != "left_partial" && cut_pattern_ != "right_partial" &&
-         cut_pattern_ != "combined") ||
+         cut_pattern_ != "middle_entry_debug" && cut_pattern_ != "left_partial" &&
+         cut_pattern_ != "right_partial" && cut_pattern_ != "combined") ||
         ((cut_pattern_ == "left_partial" || cut_pattern_ == "right_partial") &&
          partial_start_joint_degrees_.size() != 6U) ||
         (!approach_joint_degrees_.empty() && approach_joint_degrees_.size() != 6U)) {
@@ -197,10 +189,41 @@ public:
     }
     if ((cut_pattern_ == "left_partial" || cut_pattern_ == "right_partial") &&
         use_approach_pose_as_cut_start_ &&
-        (approach_joint_degrees_.size() != 6U || approach_cut_start_xyz_.size() != 3U ||
+        (approach_joint_degrees_.size() != 6U ||
+         approach_cut_start_xyz_.size() != 3U ||
          approach_cut_orientation_xyzw_.size() != 4U || approach_cut_length_m_ <= 0.0)) {
       throw std::invalid_argument("invalid supplied fixed-orientation cut parameters");
     }
+    if (side_cut_orientation_mode_ != "edge_aligned" &&
+        side_cut_orientation_mode_ != "middle_aligned" &&
+        side_cut_orientation_mode_ != "auto") {
+      throw std::invalid_argument("unsupported side_cut_orientation_mode");
+    }
+    cut_pattern_callback_ = add_on_set_parameters_callback(
+      [this](const std::vector<rclcpp::Parameter>& parameters) {
+        rcl_interfaces::msg::SetParametersResult result;
+        result.successful = true;
+        for (const auto& parameter : parameters) {
+          if (parameter.get_name() != "cut_pattern") continue;
+          const auto pattern = parameter.as_string();
+          if (pattern != "h" && pattern != "middle_only" &&
+              pattern != "middle_entry_debug" && pattern != "left_partial" &&
+              pattern != "right_partial" && pattern != "combined") {
+            result.reason = "unsupported cut_pattern";
+            return result;
+          }
+          std::lock_guard<std::mutex> lock(plan_mutex_);
+          if (execution_in_progress_) {
+            result.successful = false;
+            result.reason = "cannot change cut_pattern during trajectory execution";
+            return result;
+          }
+          cut_pattern_ = pattern;
+          planned_task_.reset();
+          planned_snapshot_.reset();
+        }
+        return result;
+      });
 
     joint_state_sub_ = create_subscription<sensor_msgs::msg::JointState>(
       "/joint_states", 10,
@@ -217,28 +240,9 @@ public:
       "/box_motion/cut_target_poses", rclcpp::QoS(1).reliable().transient_local());
     carton_collision_pub_ = create_publisher<moveit_msgs::msg::CollisionObject>(
       "/collision_object", rclcpp::QoS(1).reliable().transient_local());
-    center_sub_ = create_subscription<geometry_msgs::msg::PointStamped>(
-      "/box_seam/center", 10,
-      [this](geometry_msgs::msg::PointStamped::SharedPtr message) {
-        std::lock_guard<std::mutex> lock(plan_mutex_);
-        if (!planned_snapshot_) {
-          return;
-        }
-        const auto& center = planned_snapshot_->seam_center;
-        const double distance = std::hypot(
-          std::hypot(message->point.x - center.x, message->point.y - center.y),
-          message->point.z - center.z);
-        if (distance > invalidation_distance_m_) {
-          RCLCPP_WARN(
-            get_logger(), "Invalidating H-cut plan: carton center moved %.1f mm",
-            distance * 1000.0);
-          planned_task_.reset();
-          planned_snapshot_.reset();
-        }
-      });
 
     plan_service_ = create_service<std_srvs::srv::Trigger>(
-      "~/capture_and_plan_h_cut",
+      "~/plan_h_cut",
       [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
              std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
         std::unique_lock<std::mutex> lock(plan_mutex_, std::try_to_lock);
@@ -250,54 +254,51 @@ public:
         if (execution_in_progress_) {
           response->success = false;
           response->message = "cannot plan while an H-cut trajectory execution is active";
+          return;
+        }
+        const auto snapshot_file = get_parameter("saved_snapshot_file").as_string();
+        response->success = snapshot_file.empty() ?
+          captureAndPlan(response->message) : planSavedSnapshot(response->message);
+      },
+      rmw_qos_profile_services_default, callback_group_);
+    live_detection_plan_service_ = create_service<std_srvs::srv::Trigger>(
+      "~/plan_from_live_detection",
+      [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+             std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+        std::unique_lock<std::mutex> lock(plan_mutex_, std::try_to_lock);
+        if (!lock.owns_lock() || execution_in_progress_) {
+          response->success = false;
+          response->message = "cannot plan while another planning or execution operation is active";
           return;
         }
         response->success = captureAndPlan(response->message);
+        if (response->success) response->message = "fresh live detection: " + response->message;
       },
       rmw_qos_profile_services_default, callback_group_);
-    saved_plan_service_ = create_service<std_srvs::srv::Trigger>(
-      "~/plan_saved_snapshot_h_cut",
+    tcp_debug_start_service_ = create_service<std_srvs::srv::Trigger>(
+      "~/start_tcp_debug",
       [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
              std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
         std::unique_lock<std::mutex> lock(plan_mutex_, std::try_to_lock);
-        if (!lock.owns_lock()) {
+        if (!lock.owns_lock() || execution_in_progress_) {
           response->success = false;
-          response->message = "another H-cut plan operation is active";
+          response->message = "cannot start TCP debug while another planning or execution operation is active";
           return;
         }
-        if (execution_in_progress_) {
-          response->success = false;
-          response->message = "cannot plan while an H-cut trajectory execution is active";
-          return;
-        }
-        response->success = planSavedSnapshot(response->message);
+        response->success = captureAndStartTcpDebug(response->message);
       },
       rmw_qos_profile_services_default, callback_group_);
-    one_shot_saved_execution_service_ = create_service<PlanAndExecuteSavedSnapshot>(
-      "~/plan_and_execute_saved_snapshot_h_cut",
-      [this](const std::shared_ptr<PlanAndExecuteSavedSnapshot::Request> request,
-             std::shared_ptr<PlanAndExecuteSavedSnapshot::Response> response) {
+    tcp_debug_record_service_ = create_service<std_srvs::srv::Trigger>(
+      "~/record_tcp_debug_point",
+      [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+             std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
         std::unique_lock<std::mutex> lock(plan_mutex_, std::try_to_lock);
-        if (!lock.owns_lock()) {
+        if (!lock.owns_lock() || execution_in_progress_) {
           response->success = false;
-          response->message = "another H-cut plan operation is active";
+          response->message = "cannot record TCP debug point while another planning or execution operation is active";
           return;
         }
-        if (execution_in_progress_) {
-          response->success = false;
-          response->message = "an H-cut trajectory execution is already active";
-          return;
-        }
-        if (request->snapshot_file.empty()) {
-          response->success = false;
-          response->message = "snapshot_file must name a saved .json file";
-          return;
-        }
-        if (!planNamedSavedSnapshot(request->snapshot_file, response->message)) {
-          response->success = false;
-          return;
-        }
-        response->success = dispatchPlannedTask(response->message);
+        response->success = recordTcpDebugPoint(response->message);
       },
       rmw_qos_profile_services_default, callback_group_);
     section_diagnostic_service_ = create_service<std_srvs::srv::Trigger>(
@@ -311,39 +312,6 @@ public:
           return;
         }
         response->success = diagnoseSavedSnapshotSections(response->message);
-      },
-      rmw_qos_profile_services_default, callback_group_);
-    arm_execution_service_ = create_service<std_srvs::srv::SetBool>(
-      "~/arm_h_cut_execution",
-      [this](const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
-             std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
-        std::lock_guard<std::mutex> lock(plan_mutex_);
-        if (!request->data) {
-          execution_armed_until_.reset();
-          response->success = true;
-          response->message = "H-cut execution disarmed";
-          return;
-        }
-        if (!get_parameter("execution_enabled").as_bool()) {
-          response->success = false;
-          response->message = "execution service is disabled by execution_enabled";
-          return;
-        }
-        if (execution_in_progress_) {
-          response->success = false;
-          response->message = "an H-cut trajectory execution is already active";
-          return;
-        }
-        if (!planned_task_ || !planned_snapshot_ || planned_task_->solutions().empty()) {
-          response->success = false;
-          response->message = "no valid planned H-cut is available to arm";
-          return;
-        }
-        execution_armed_until_ = now() + rclcpp::Duration::from_seconds(execution_arm_timeout_s_);
-        response->success = true;
-        response->message = "H-cut execution armed for " +
-          std::to_string(static_cast<int>(execution_arm_timeout_s_)) +
-          " s; a separate execute_planned_h_cut request is required";
       },
       rmw_qos_profile_services_default, callback_group_);
     execute_service_ = create_service<std_srvs::srv::Trigger>(
@@ -366,20 +334,12 @@ public:
           response->message = "an H-cut trajectory execution is already active";
           return;
         }
-        if (!execution_armed_until_ || now() > *execution_armed_until_) {
-          execution_armed_until_.reset();
-          response->success = false;
-          response->message = "H-cut execution is not armed or the arm timeout expired";
-          return;
-        }
         if (!planned_task_ || !planned_snapshot_ || planned_task_->solutions().empty()) {
-          execution_armed_until_.reset();
           response->success = false;
           response->message = "no valid planned H-cut is available to execute";
           return;
         }
         if (execution_thread_.joinable()) execution_thread_.join();
-        execution_armed_until_.reset();
         execution_in_progress_ = true;
         auto task = std::move(planned_task_);
         planned_snapshot_.reset();
@@ -409,7 +369,6 @@ public:
           response->message = "cannot clear a plan while an H-cut trajectory execution is active";
           return;
         }
-        execution_armed_until_.reset();
         planned_task_.reset();
         planned_snapshot_.reset();
         response->success = true;
@@ -450,6 +409,146 @@ private:
     return planSnapshot(response->snapshot, message);
   }
 
+  bool captureAndStartTcpDebug(std::string& message)
+  {
+    using namespace std::chrono_literals;
+    if (!snapshot_client_->wait_for_service(5s)) {
+      message = "snapshot service is unavailable";
+      return false;
+    }
+    auto future = snapshot_client_->async_send_request(
+      std::make_shared<CaptureSnapshot::Request>());
+    if (future.wait_for(10s) != std::future_status::ready) {
+      message = "snapshot capture timed out";
+      return false;
+    }
+    const auto response = future.get();
+    if (!response->success) {
+      message = "snapshot rejected: " + response->message;
+      return false;
+    }
+    tcp_debug_snapshot_ = response->snapshot;
+    tcp_debug_index_ = 0U;
+    return planTcpDebugPoint(message);
+  }
+
+  bool planTcpDebugPoint(std::string& message)
+  {
+    if (!tcp_debug_snapshot_ || tcp_debug_index_ >= 3U) {
+      message = "TCP debug session is complete or not started";
+      return false;
+    }
+    std::string validation;
+    if (!validateSnapshot(*tcp_debug_snapshot_, validation)) {
+      message = "snapshot rejected: " + validation;
+      return false;
+    }
+    const auto& snapshot = *tcp_debug_snapshot_;
+    const std::array<std::string, 3> labels{{"seam_start", "seam_end", "seam_center"}};
+    CutSegment segment;
+    if (tcp_debug_index_ == 0U) {
+      segment = {"tcp debug seam start", snapshot.seam_start, snapshot.seam_end, 0.0, 0.0, 0.0, true};
+    } else if (tcp_debug_index_ == 1U) {
+      segment = {"tcp debug seam end", snapshot.seam_end, snapshot.seam_start, 0.0, 0.0, 0.0, true};
+    } else {
+      segment = {"tcp debug seam center", snapshot.seam_center, snapshot.seam_end, 0.0, 0.0, 0.0, true};
+    }
+    std::unique_ptr<mtc::Task> task;
+    std::vector<geometry_msgs::msg::PoseStamped> targets;
+    std::string planning_message;
+    publishCartonGeometry(snapshot);
+    if (!planCutSegments(
+          snapshot, {segment}, false, true, planning_timeout_s_,
+          get_parameter("motion_profile").as_string(),
+          "TCP debug " + labels[tcp_debug_index_] + " dry run", true, task, targets,
+          planning_message)) {
+      message = "TCP debug " + labels[tcp_debug_index_] + " planning failed: " + planning_message;
+      return false;
+    }
+    if (targets.size() != 1U) {
+      message = "TCP debug planner produced an unexpected target count";
+      return false;
+    }
+    publishMarkers(targets);
+    publishTargetPoses(snapshot, targets);
+    planned_snapshot_ = snapshot;
+    planned_task_ = std::move(task);
+    tcp_debug_target_ = targets.front();
+    message = "TCP debug " + labels[tcp_debug_index_] +
+      " dry-run plan published to RViz; manually jog only after reviewing it, then call record_tcp_debug_point; this service never dispatches motion";
+    return true;
+  }
+
+  bool recordTcpDebugPoint(std::string& message)
+  {
+    if (!tcp_debug_snapshot_ || !tcp_debug_target_ || !planned_task_ || tcp_debug_index_ >= 3U) {
+      message = "no TCP debug target is active; call start_tcp_debug first";
+      return false;
+    }
+    sensor_msgs::msg::JointState joint_state;
+    {
+      std::lock_guard<std::mutex> lock(state_mutex_);
+      if (!current_joint_state_ || current_joint_state_->name.empty() || current_joint_state_->position.empty()) {
+        message = "no /joint_states received; cannot record TCP observation";
+        return false;
+      }
+      joint_state = *current_joint_state_;
+    }
+    moveit::core::RobotState state(planned_task_->getRobotModel());
+    state.setToDefaultValues();
+    const auto& variables = planned_task_->getRobotModel()->getVariableNames();
+    for (std::size_t i = 0; i < joint_state.name.size() && i < joint_state.position.size(); ++i) {
+      if (std::find(variables.begin(), variables.end(), joint_state.name[i]) != variables.end()) {
+        state.setVariablePosition(joint_state.name[i], joint_state.position[i]);
+      }
+    }
+    state.update();
+    const Eigen::Vector3d observed = state.getGlobalLinkTransform(tool_link_).translation();
+    const auto& target = tcp_debug_target_->pose.position;
+    const Eigen::Vector3d error(target.x - observed.x(), target.y - observed.y(), target.z - observed.z());
+    const std::array<std::string, 3> labels{{"seam_start", "seam_end", "seam_center"}};
+    namespace fs = std::filesystem;
+    const char* home = std::getenv("HOME");
+    if (home == nullptr) {
+      message = "cannot save TCP debug observation without HOME";
+      return false;
+    }
+    const fs::path directory = fs::path(home) / "tcp_debug_measurements";
+    std::error_code error_code;
+    fs::create_directories(directory, error_code);
+    if (error_code) {
+      message = "cannot create TCP debug measurement directory: " + error_code.message();
+      return false;
+    }
+    const fs::path output = directory / (tcp_debug_snapshot_->snapshot_id + "_" + labels[tcp_debug_index_] + ".json");
+    std::ofstream file(output);
+    if (!file) {
+      message = "cannot write TCP debug observation: " + output.string();
+      return false;
+    }
+    file << "{\n  \"snapshot_id\": \"" << tcp_debug_snapshot_->snapshot_id
+         << "\",\n  \"point\": \"" << labels[tcp_debug_index_]
+         << "\",\n  \"frame_id\": \"" << planning_frame_
+         << "\",\n  \"target_m\": [" << target.x << ", " << target.y << ", " << target.z
+         << "],\n  \"observed_tool_tip_m\": [" << observed.x() << ", " << observed.y() << ", " << observed.z()
+         << "],\n  \"target_minus_observed_m\": [" << error.x() << ", " << error.y() << ", " << error.z() << "]\n}\n";
+    file.close();
+    ++tcp_debug_index_;
+    if (tcp_debug_index_ == 3U) {
+      planned_task_.reset();
+      message = "saved final TCP debug observation to " + output.string() +
+        "; compare all three target_minus_observed_m values before changing the TCP; no robot motion was dispatched";
+      return true;
+    }
+    std::string next_message;
+    if (!planTcpDebugPoint(next_message)) {
+      message = "saved TCP debug observation to " + output.string() + "; next target failed: " + next_message;
+      return false;
+    }
+    message = "saved TCP debug observation to " + output.string() + "; " + next_message;
+    return true;
+  }
+
   bool planSavedSnapshot(std::string& message)
   {
     std::string source_path;
@@ -470,32 +569,6 @@ private:
     return planned;
   }
 
-  bool dispatchPlannedTask(std::string& message)
-  {
-    if (!planned_task_ || !planned_snapshot_ || planned_task_->solutions().empty()) {
-      message = "no valid planned H-cut is available to execute";
-      return false;
-    }
-    if (execution_thread_.joinable()) execution_thread_.join();
-    execution_armed_until_.reset();
-    execution_in_progress_ = true;
-    auto task = std::move(planned_task_);
-    planned_snapshot_.reset();
-    execution_thread_ = std::thread([this, task = std::move(task)]() mutable {
-      try {
-        const auto result = task->execute(*task->solutions().front());
-        RCLCPP_INFO(
-          get_logger(), "H-cut trajectory execution %s",
-          result == moveit::core::MoveItErrorCode::SUCCESS ? "completed" : "failed");
-      } catch (const std::exception& exception) {
-        RCLCPP_ERROR(get_logger(), "H-cut trajectory execution threw: %s", exception.what());
-      }
-      std::lock_guard<std::mutex> completion_lock(plan_mutex_);
-      execution_in_progress_ = false;
-    });
-    message = "H-cut trajectory dispatch accepted; monitor controller execution";
-    return true;
-  }
   bool diagnoseSavedSnapshotSections(std::string& message)
   {
     std::string source_path;
@@ -810,6 +883,9 @@ private:
         };
       } else if (cut_pattern_ == "middle_only") {
         segments = {{"middle seam cut", snapshot.seam_start, snapshot.seam_end}};
+      } else if (cut_pattern_ == "middle_entry_debug") {
+        segments = {{"middle seam entry debug", snapshot.seam_start, snapshot.seam_end,
+          0.0, 0.0, 0.0, true}};
       } else if (cut_pattern_ == "left_partial") {
         const auto& start = partial_reverse_ ? snapshot.front_left : snapshot.back_left;
         const auto& end = partial_reverse_ ? snapshot.back_left : snapshot.front_left;
@@ -821,25 +897,46 @@ private:
           interpolate(snapshot.front_right, snapshot.back_right, partial_start_fraction_),
           interpolate(snapshot.front_right, snapshot.back_right, partial_end_fraction_)}};
       }
-
       std::unique_ptr<mtc::Task> task;
       std::vector<geometry_msgs::msg::PoseStamped> cut_targets;
-      const bool allow_cutter_carton_contact = cut_pattern_ == "middle_only";
-      if (!planCutSegments(
-            snapshot, segments, partial_cut, allow_cutter_carton_contact, planning_timeout_s_,
-            motion_profile, "Snapshot-relative " + cut_pattern_ + " dry run", true, task,
-            cut_targets, message)) {
-        return false;
+      const bool allow_cutter_carton_contact =
+        cut_pattern_ == "middle_only" || cut_pattern_ == "middle_entry_debug" || partial_cut;
+
+      const bool automatic_side_orientation =
+        partial_cut && side_cut_orientation_mode_ == "auto";
+      const std::string requested_side_orientation_mode = side_cut_orientation_mode_;
+      if (automatic_side_orientation) side_cut_orientation_mode_ = "edge_aligned";
+      bool planned = planCutSegments(
+        snapshot, segments, partial_cut, allow_cutter_carton_contact, planning_timeout_s_,
+        motion_profile, "Snapshot-relative " + cut_pattern_ + " dry run", true, task,
+        cut_targets, message);
+      if (!planned && automatic_side_orientation) {
+        side_cut_orientation_mode_ = "middle_aligned";
+        planned = planCutSegments(
+          snapshot, segments, partial_cut, allow_cutter_carton_contact, planning_timeout_s_,
+          motion_profile, "Snapshot-relative " + cut_pattern_ + " top-orientation fallback dry run",
+          true, task, cut_targets, message);
       }
+      side_cut_orientation_mode_ = requested_side_orientation_mode;
+      if (!planned) return false;
       publishMarkers(cut_targets);
       publishTargetPoses(snapshot, cut_targets);
       planned_snapshot_ = snapshot;
       planned_task_ = std::move(task);
+      const bool includes_middle_seam =
+        cut_pattern_ == "h" || cut_pattern_ == "middle_only" ||
+        cut_pattern_ == "middle_entry_debug";
       message = "Snapshot-relative " + cut_pattern_ + " dry-run plan [" + motion_profile +
-                "] published to RViz; execution requires a separately armed service request";
+                "] published to RViz" +
+                (includes_middle_seam ? "; middle entry alignment_m=" +
+                  formatMeters(middle_entry_alignment_m_) : "") +
+                (cut_pattern_ == "middle_entry_debug" ?
+                  "; stops at seam_start before the cut traverse" : "") +
+                "; execution remains disabled until execution_enabled is set";
       RCLCPP_INFO(
-        get_logger(), "Planned snapshot %s with profile %s and pattern %s",
-        snapshot.snapshot_id.c_str(), motion_profile.c_str(), cut_pattern_.c_str());
+        get_logger(), "Planned snapshot %s with profile %s and pattern %s; middle entry alignment %.1f mm",
+        snapshot.snapshot_id.c_str(), motion_profile.c_str(), cut_pattern_.c_str(),
+        includes_middle_seam ? middle_entry_alignment_m_ * 1000.0 : 0.0);
       return true;
     } catch (const std::exception& exception) {
       RCLCPP_ERROR(
@@ -1014,7 +1111,7 @@ private:
                       " attempted_pairs=" + std::to_string(attempted_pairs) +
                       " budget_s=" + formatMeters(combined_search_budget_s_) +
                       " budget_state=" + budget_state +
-                      "; execution requires a separately armed service request";
+                      "; execution remains disabled until execution_enabled is set";
             RCLCPP_INFO(
               get_logger(),
               "Planned snapshot %s combined bounded candidate: left %.1f mm rpy %s, "
@@ -1148,25 +1245,40 @@ private:
       cut_pattern_ == "combined" && hasManualFirstSideLink6Pose() ?
       std::make_optional(manualFirstSideToolPose(snapshot, task->getRobotModel())) : std::nullopt;
     for (const auto& segment : segments) {
-      const bool is_middle_seam = segment.name == "middle seam cut";
+      const bool is_middle_seam =
+        segment.name == "middle seam cut" || segment.name == "middle seam entry debug";
       const bool use_manual_first_side_pose =
         manual_first_side_pose && segment.name == "left side cut";
       const double tilt_deg = is_middle_seam ? 0.0 : side_cut_tilt_deg_;
+      auto orientation_start_target = segment.end;
+      auto orientation_end_target = segment.end;
+      orientation_end_target.x += segment.end.x - segment.start.x;
+      orientation_end_target.y += segment.end.y - segment.start.y;
+      orientation_end_target.z += segment.end.z - segment.start.z;
+      if (!is_middle_seam && side_cut_orientation_mode_ == "middle_aligned") {
+        const double seam_dx = snapshot.seam_end.x - snapshot.seam_start.x;
+        const double seam_dy = snapshot.seam_end.y - snapshot.seam_start.y;
+        const double seam_dz = snapshot.seam_end.z - snapshot.seam_start.z;
+        orientation_start_target = segment.start;
+        orientation_start_target.x += seam_dx;
+        orientation_start_target.y += seam_dy;
+        orientation_start_target.z += seam_dz;
+        orientation_end_target = segment.end;
+        orientation_end_target.x += seam_dx;
+        orientation_end_target.y += seam_dy;
+        orientation_end_target.z += seam_dz;
+      }
       auto hover_start = targetPose(
-        snapshot, segment.start, segment.end, hover_clearance_m_, tilt_deg,
+        snapshot, segment.start, orientation_start_target, hover_clearance_m_, tilt_deg,
         segment.roll_deg, segment.pitch_deg, segment.yaw_deg);
       auto cut_start = targetPose(
-        snapshot, segment.start, segment.end, cut_clearance_m_, tilt_deg,
+        snapshot, segment.start, orientation_start_target, cut_clearance_m_, tilt_deg,
         segment.roll_deg, segment.pitch_deg, segment.yaw_deg);
-      auto forward_target = segment.end;
-      forward_target.x += segment.end.x - segment.start.x;
-      forward_target.y += segment.end.y - segment.start.y;
-      forward_target.z += segment.end.z - segment.start.z;
       auto hover_end = targetPose(
-        snapshot, segment.end, forward_target, hover_clearance_m_, tilt_deg,
+        snapshot, segment.end, orientation_end_target, hover_clearance_m_, tilt_deg,
         segment.roll_deg, segment.pitch_deg, segment.yaw_deg);
       auto cut_end = targetPose(
-        snapshot, segment.end, forward_target, cut_clearance_m_, tilt_deg,
+        snapshot, segment.end, orientation_end_target, cut_clearance_m_, tilt_deg,
         segment.roll_deg, segment.pitch_deg, segment.yaw_deg);
       if (use_manual_first_side_pose) {
         cut_start = *manual_first_side_pose;
@@ -1202,6 +1314,10 @@ private:
         const double length = std::sqrt(dx * dx + dy * dy + dz * dz);
         if (length <= 0.0) throw std::runtime_error("zero-length supplied cut direction");
         cut_start = poseFromParameters(snapshot, approach_cut_start_xyz_, approach_cut_orientation_xyzw_);
+        if (side_cut_orientation_mode_ == "middle_aligned") {
+          cut_start.pose.orientation = targetPose(
+            snapshot, segment.start, orientation_start_target, 0.0).pose.orientation;
+        }
         cut_end = cut_start;
         cut_end.pose.position.x += approach_cut_length_m_ * dx / length;
         cut_end.pose.position.y += approach_cut_length_m_ * dy / length;
@@ -1214,32 +1330,57 @@ private:
           return false;
         }
       }
+      auto entry_alignment = hover_start;
+      if (is_middle_seam && middle_entry_alignment_m_ > 0.0) {
+        const double dx = segment.end.x - segment.start.x;
+        const double dy = segment.end.y - segment.start.y;
+        const double dz = segment.end.z - segment.start.z;
+        const double length = std::sqrt(dx * dx + dy * dy + dz * dz);
+        if (length <= 0.0) throw std::runtime_error("zero-length middle seam direction");
+        entry_alignment.pose.position.x -= middle_entry_alignment_m_ * dx / length;
+        entry_alignment.pose.position.y -= middle_entry_alignment_m_ * dy / length;
+        entry_alignment.pose.position.z -= middle_entry_alignment_m_ * dz / length;
+      }
       cut_targets.push_back(cut_start);
-      cut_targets.push_back(cut_end);
+      if (!segment.stop_after_start) cut_targets.push_back(cut_end);
       if (!use_supplied_start) {
         auto transit = std::make_unique<mtc::stages::MoveTo>(
-          "transit above " + segment.name + " [" + motion_profile + "]", transit_planner);
+          "transit above " + segment.name + " entry [" + motion_profile + "]", transit_planner);
         transit->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
         transit->setGroup(planning_group_);
         transit->setIKFrame(tool_link_);
         if (partial_cut) {
           transit->setGoal(jointGoalDegrees(joint_group, partial_start_joint_degrees_));
         } else if (motion_profile == "chomp_pilz") {
-          transit->setGoal(jointGoal(ik_state, joint_group, hover_start));
+          transit->setGoal(jointGoal(ik_state, joint_group, entry_alignment));
         } else {
-          transit->setGoal(hover_start);
+          transit->setGoal(entry_alignment);
         }
         task->add(std::move(transit));
       }
+      if (is_middle_seam && middle_entry_alignment_m_ > 0.0) {
+        auto align = std::make_unique<mtc::stages::MoveTo>(
+          "align above middle seam start [" + motion_profile + "]", stroke_planner);
+        align->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
+        align->setGroup(planning_group_);
+        align->setIKFrame(tool_link_);
+        align->setGoal(hover_start);
+        task->add(std::move(align));
+      }
       if (!partial_cut) {
         auto descend = std::make_unique<mtc::stages::MoveTo>(
-          "descend to " + segment.name + " [" + motion_profile + "]", stroke_planner);
+          "descend from aligned " + segment.name + " start [" + motion_profile + "]",
+          stroke_planner);
         descend->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
         descend->setGroup(planning_group_);
         descend->setIKFrame(tool_link_);
         descend->setGoal(cut_start);
         task->add(std::move(descend));
       }
+      if (segment.stop_after_start) {
+        continue;
+      }
+
       auto traverse = std::make_unique<mtc::stages::MoveTo>(
         "cut " + segment.name + " [" + motion_profile + "]", stroke_planner);
       traverse->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
@@ -1385,7 +1526,7 @@ private:
 
   bool hasManualFirstSideLink6Pose() const
   {
-    return !combined_first_side_link6_frame_.empty();
+    return !get_parameter("combined_first_side_link6_frame").as_string().empty();
   }
 
   geometry_msgs::msg::PoseStamped manualFirstSideToolPose(
@@ -1629,39 +1770,57 @@ private:
       marker.color.a = 1.0;
       array.markers.push_back(marker);
     }
+    if (cut_targets.size() % 2U != 0U) {
+      const auto& target = cut_targets.back();
+      visualization_msgs::msg::Marker marker;
+      marker.header = target.header;
+      marker.ns = "middle_entry_debug";
+      marker.id = 0;
+      marker.type = visualization_msgs::msg::Marker::SPHERE;
+      marker.action = visualization_msgs::msg::Marker::ADD;
+      marker.pose = target.pose;
+      marker.scale.x = marker.scale.y = marker.scale.z = 0.030;
+      marker.color.r = 1.0;
+      marker.color.g = 1.0;
+      marker.color.b = 0.0;
+      marker.color.a = 1.0;
+      array.markers.push_back(marker);
+    }
     marker_pub_->publish(array);
   }
-
   std::mutex plan_mutex_;
   std::mutex state_mutex_;
   std::optional<sensor_msgs::msg::JointState> current_joint_state_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;
   rclcpp::CallbackGroup::SharedPtr callback_group_;
   rclcpp::Client<CaptureSnapshot>::SharedPtr snapshot_client_;
-  rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr center_sub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_pub_;
   rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr target_pose_pub_;
   rclcpp::Publisher<moveit_msgs::msg::CollisionObject>::SharedPtr carton_collision_pub_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr plan_service_;
-  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr saved_plan_service_;
-  rclcpp::Service<PlanAndExecuteSavedSnapshot>::SharedPtr one_shot_saved_execution_service_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr section_diagnostic_service_;
-  rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr arm_execution_service_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr execute_service_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr clear_service_;
-  std::unique_ptr<mtc::Task> planned_task_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr live_detection_plan_service_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr tcp_debug_start_service_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr tcp_debug_record_service_;
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr cut_pattern_callback_;
   std::optional<Snapshot> planned_snapshot_;
-  std::optional<rclcpp::Time> execution_armed_until_;
+  std::optional<Snapshot> tcp_debug_snapshot_;
+  std::optional<geometry_msgs::msg::PoseStamped> tcp_debug_target_;
+  std::size_t tcp_debug_index_{0U};
+  std::unique_ptr<mtc::Task> planned_task_;
   std::thread execution_thread_;
-  std::string saved_snapshot_dir_, cut_pattern_, combined_first_side_link6_frame_;
+  std::string saved_snapshot_dir_, cut_pattern_, side_cut_orientation_mode_,
+    combined_first_side_link6_frame_;
   std::string planning_frame_, planning_group_, tool_link_, planning_pipeline_, chomp_pipeline_;
   std::string pilz_pipeline_, motion_profile_, snapshot_service_, carton_collision_id_;
-  double carton_height_m_, hover_clearance_m_, cut_clearance_m_, side_cut_tilt_deg_,
+  double carton_height_m_, hover_clearance_m_, cut_clearance_m_, middle_entry_alignment_m_,
+    side_cut_tilt_deg_,
     partial_start_fraction_, partial_end_fraction_, approach_cut_length_m_, cartesian_step_m_,
     planning_timeout_s_, combined_search_budget_s_, side_candidate_grid_m_,
     side_candidate_corner_inset_m_, side_candidate_min_length_m_, manual_first_side_max_length_m_,
-    velocity_scaling_, acceleration_scaling_, invalidation_distance_m_, execution_arm_timeout_s_,
-    saved_snapshot_max_age_s_;
+    velocity_scaling_, acceleration_scaling_, saved_snapshot_max_age_s_;
   std::vector<double> partial_start_joint_degrees_, approach_joint_degrees_;
   std::vector<double> approach_cut_start_xyz_, approach_cut_orientation_xyzw_;
   std::vector<double> side_orientation_offsets_deg_, combined_first_side_link6_xyz_,

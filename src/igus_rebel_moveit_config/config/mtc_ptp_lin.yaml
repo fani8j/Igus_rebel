@@ -1,7 +1,7 @@
 rebel_mtc_ptp_lin:
   ros__parameters:
     planning_group: igus_rebel_arm
-    tool_link: link6
+    tool_link: xeg32_tool_tip
     controller: rebel_arm_trajectory_controller
     controller_action: /rebel_arm_trajectory_controller/follow_joint_trajectory
     controller_wait_timeout: 30.0

@@ -1,6 +1,7 @@
 """Pure geometry and depth helpers for the live seam detector."""
 
 from __future__ import annotations
+import math
 
 from typing import Iterable, Optional, Sequence, Tuple
 
@@ -94,6 +95,164 @@ def build_xyzrgb_points(
     return points
 
 
+def fit_top_plane_quad(
+    depth: np.ndarray,
+    camera_matrix: Sequence[float],
+    distortion: Iterable[float],
+    *,
+    scale: float,
+    fit_roi: Sequence[int],
+    classify_roi: Sequence[int],
+    sample_stride: int = 2,
+    distance_threshold_m: float = 0.008,
+    iterations: int = 100,
+    min_inliers: int = 80,
+    min_inlier_ratio: float = 0.25,
+    expected_normal: Optional[Sequence[float]] = None,
+    max_normal_deviation_deg: float = 20.0,
+) -> Tuple[np.ndarray, np.ndarray, float, float, float]:
+    """Fit the dominant upper plane and return its image quadrilateral.
+
+    The plane is estimated only in ``fit_roi`` but classified throughout
+    ``classify_roi``. This keeps the vertical carton face out of plane fitting
+    while retaining the complete top boundary for quadrilateral extraction.
+    """
+    if depth.ndim != 2:
+        raise ValueError("depth image must be two-dimensional")
+    if sample_stride < 1:
+        raise ValueError("plane sample stride must be positive")
+    if distance_threshold_m <= 0.0:
+        raise ValueError("plane distance threshold must be positive")
+
+    height, width = depth.shape
+
+    def clip_roi(roi: Sequence[int]) -> Tuple[int, int, int, int]:
+        x0, y0, x1, y1 = (int(value) for value in roi)
+        x0, x1 = max(0, x0), min(width, x1)
+        y0, y1 = max(0, y0), min(height, y1)
+        if x1 <= x0 or y1 <= y0:
+            raise ValueError(f"invalid plane ROI: {tuple(roi)}")
+        return x0, y0, x1, y1
+
+    fit_bounds = clip_roi(fit_roi)
+    classify_bounds = clip_roi(classify_roi)
+    matrix = np.asarray(camera_matrix, dtype=np.float64).reshape(3, 3)
+    coefficients = np.asarray(tuple(distortion), dtype=np.float64)
+    expected = None
+    minimum_alignment = -1.0
+    if expected_normal is not None:
+        expected = np.asarray(expected_normal, dtype=np.float64)
+        expected /= np.linalg.norm(expected)
+        minimum_alignment = math.cos(math.radians(max_normal_deviation_deg))
+
+    def sample_points(bounds):
+        x0, y0, x1, y1 = bounds
+        xs = np.arange(x0, x1, sample_stride, dtype=np.int32)
+        ys = np.arange(y0, y1, sample_stride, dtype=np.int32)
+        grid_x, grid_y = np.meshgrid(xs, ys)
+        sampled_depth = depth[grid_y, grid_x].astype(np.float64) * scale
+        valid = np.isfinite(sampled_depth) & (sampled_depth > 0.0)
+        pixels = np.stack((grid_x[valid], grid_y[valid]), axis=-1).astype(
+            np.float64
+        )
+        if pixels.size == 0:
+            return (
+                np.empty((0, 3), dtype=np.float64),
+                valid,
+                grid_x,
+                grid_y,
+            )
+        rays = cv2.undistortPoints(
+            pixels.reshape(-1, 1, 2), matrix, coefficients
+        ).reshape(-1, 2)
+        z = sampled_depth[valid]
+        points = np.column_stack((rays[:, 0] * z, rays[:, 1] * z, z))
+        return points, valid, grid_x, grid_y
+
+    fit_points, _, _, _ = sample_points(fit_bounds)
+    if fit_points.shape[0] < min_inliers:
+        raise ValueError(
+            f"only {fit_points.shape[0]} valid points available for plane fitting"
+        )
+
+    generator = np.random.default_rng(0)
+    best_mask = None
+    best_count = 0
+    best_error = math.inf
+    for _ in range(iterations):
+        indices = generator.choice(fit_points.shape[0], size=3, replace=False)
+        first, second, third = fit_points[indices]
+        normal = np.cross(second - first, third - first)
+        norm = np.linalg.norm(normal)
+        if norm < 1e-9:
+            continue
+        normal /= norm
+        if expected is not None:
+            alignment = float(np.dot(normal, expected))
+            if abs(alignment) < minimum_alignment:
+                continue
+            if alignment < 0.0:
+                normal = -normal
+        offset = -float(np.dot(normal, first))
+        residuals = np.abs(fit_points @ normal + offset)
+        inliers = residuals <= distance_threshold_m
+        count = int(np.count_nonzero(inliers))
+        error = float(np.mean(residuals[inliers])) if count else math.inf
+        if count > best_count or (count == best_count and error < best_error):
+            best_mask = inliers
+            best_count = count
+            best_error = error
+
+    if best_mask is None or best_count < min_inliers:
+        raise ValueError(f"plane RANSAC found only {best_count} inliers")
+    fit_ratio = best_count / fit_points.shape[0]
+    if fit_ratio < min_inlier_ratio:
+        raise ValueError(
+            f"plane inlier ratio {fit_ratio:.3f} is below {min_inlier_ratio:.3f}"
+        )
+
+    inlier_points = fit_points[best_mask]
+    centroid = np.mean(inlier_points, axis=0)
+    _, _, axes = np.linalg.svd(inlier_points - centroid, full_matrices=False)
+    normal = axes[-1]
+    normal /= np.linalg.norm(normal)
+    if expected is not None and np.dot(normal, expected) < 0.0:
+        normal = -normal
+    offset = -float(np.dot(normal, centroid))
+
+    classify_points, classify_valid, grid_x, grid_y = sample_points(classify_bounds)
+    residuals = np.abs(classify_points @ normal + offset)
+    classify_inliers = residuals <= distance_threshold_m
+    mask = np.zeros(classify_valid.shape, dtype=np.uint8)
+    mask[classify_valid] = classify_inliers.astype(np.uint8) * 255
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        raise ValueError("top plane has no connected image contour")
+    contour = max(contours, key=cv2.contourArea)
+    hull = cv2.convexHull(contour)
+    perimeter = cv2.arcLength(hull, True)
+    quadrilateral = None
+    for epsilon_ratio in np.arange(0.01, 0.12, 0.005):
+        approximation = cv2.approxPolyDP(
+            hull, epsilon_ratio * perimeter, True
+        )
+        if len(approximation) == 4:
+            quadrilateral = approximation.reshape(-1, 2).astype(np.float64)
+            break
+    if quadrilateral is None:
+        raise ValueError("top-plane contour does not simplify to four corners")
+
+    classify_x0, classify_y0, _, _ = classify_bounds
+    quadrilateral[:, 0] = classify_x0 + quadrilateral[:, 0] * sample_stride
+    quadrilateral[:, 1] = classify_y0 + quadrilateral[:, 1] * sample_stride
+    rms = float(np.sqrt(np.mean(residuals[classify_inliers] ** 2)))
+    classify_ratio = float(
+        np.count_nonzero(classify_inliers) / max(classify_points.shape[0], 1)
+    )
+    return quadrilateral, normal, offset, classify_ratio, rms
+
+
 def get_median_depth(
     depth: np.ndarray,
     u: float,
@@ -140,6 +299,30 @@ def inset_segment(
         raise ValueError("segment endpoints must each contain exactly two values")
     delta = end - start
     return start + ratio * delta, end - ratio * delta
+
+
+def depth_from_plane_at_pixel(
+    u: float,
+    v: float,
+    camera_matrix: Sequence[float],
+    distortion: Iterable[float],
+    plane_normal: Sequence[float],
+    plane_offset: float,
+) -> float:
+    """Intersect an image ray with a camera-frame plane and return optical Z."""
+    matrix = np.asarray(camera_matrix, dtype=np.float64).reshape(3, 3)
+    pixel = np.array([[[float(u), float(v)]]], dtype=np.float64)
+    coefficients = np.asarray(tuple(distortion), dtype=np.float64)
+    normalized = cv2.undistortPoints(pixel, matrix, coefficients)[0, 0]
+    ray = np.array([normalized[0], normalized[1], 1.0], dtype=np.float64)
+    normal = np.asarray(plane_normal, dtype=np.float64)
+    denominator = float(np.dot(normal, ray))
+    if abs(denominator) < 1e-9:
+        raise ValueError("pixel ray is parallel to fitted plane")
+    depth = -float(plane_offset) / denominator
+    if not np.isfinite(depth) or depth <= 0.0:
+        raise ValueError("pixel-plane intersection is behind the camera")
+    return depth
 
 
 def pixel_to_camera_xyz(

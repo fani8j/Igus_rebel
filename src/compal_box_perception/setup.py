@@ -26,6 +26,7 @@ setup(
     entry_points={
         "console_scripts": [
             "box_perception_node = compal_box_perception.box_perception_node:main",
+            "compare_detection = compal_box_perception.compare_detection:main",
         ],
     },
 )

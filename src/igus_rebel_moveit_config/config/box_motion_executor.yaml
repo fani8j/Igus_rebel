@@ -1,0 +1,21 @@
+box_motion_executor:
+  ros__parameters:
+    planning_group: igus_rebel_arm
+    tool_link: xeg32_tool_tip
+    planning_pipeline: ompl
+    planner_id: ""
+
+    approach_offset_m: 0.10
+    # WiFi image transport currently arrives several seconds behind wall time.
+    # This relaxed age is allowed only because this node cannot execute.
+    max_detection_age_s: 15.0
+    max_plane_rms_m: 0.005
+
+    velocity_scaling: 0.05
+    acceleration_scaling: 0.05
+    max_solutions: 1
+
+    align_tool_z_to_surface: true
+    # This node intentionally contains no execution path. Setting this true
+    # makes startup fail closed.
+    execute: false

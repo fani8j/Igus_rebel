@@ -45,6 +45,35 @@ detect_tape_seam.py
   套用不穩定的結果，所以正常情況下不需要額外處理，但如果 --debug 觀察到
   角點看起來又跑掉了，可以先確認是不是那條邊的顏色對比不夠明顯。
 
+  2026-09-01：auto-ROI（estimate_auto_roi）加了位置先驗，detect_seam()
+  最後加了 _validate_top_face_quad_color() 做顏色合理性檢查，細節見各自
+  函式的 docstring。加入原因：實測有一次箱子旁邊的橘色卷尺/紅色簽字筆/
+  綠色膠帶台被橋接進候選輪廓，auto-ROI 選中的 ROI 變成 (615, 89, 901, 380)
+  （寬286×高291），比對「黃金範例」frame 20260831_164853 的正確 ROI
+  (665, 100, 896, 285)（寬231×高185，長寬比~1.25，緊貼箱子沒多框東西）
+  明顯胖了一圈，導致 GrabCut/Otsu 把混進來的白色桌面誤判成頂面，回傳出
+  完全不在箱子上的四邊形。
+
+  2026-09-02：原本還加了 min_solidity=0.8 硬性過濾候選（理論上橋接雜物
+  的候選凸包會偏大、solidity 偏低），但拿實機資料實測後發現這個門檻誤傷
+  了另一組正確案例（frame_..._105447，疊放的細長箱子，正常情況 solidity
+  本來就低於 0.8），所以移除了這條硬性過濾，solidity 改成只計算、只在
+  --debug 圖上顯示，不拿來排除候選（見 estimate_auto_roi docstring）。
+  橋接雜物這個問題目前只靠 _validate_top_face_quad_color() 把關，它的
+  min_warm_ratio=0.5 也還沒拿實機資料驗證過，之後要用 --debug 印出的
+  warm_ratio 數值回頭校正，尤其要確認它會不會反過來誤傷合法案例。
+
+  2026-09-02（重要修正）：上面 09-01/09-02 那幾個修正，方向其實錯了——
+  目標應該是「不管環境多亂，都要正確辨識出箱子的4個角點」，_validate_
+  top_face_quad_color() 只能讓程式在抓錯的時候丟出清楚的錯誤，並不能讓
+  程式在那張照片裡真的找到箱子。真正根因是箱子在 _cardboard_color_mask()
+  這一步就已經跟旁邊的橘色卷尺/紅色簽字筆黏成同一個連通元件，後面不管
+  怎麼篩選候選都救不回來。改用 saturation_hi 上限（見 _cardboard_
+  color_mask docstring）從遮罩階段就把這些鮮豔小物排除掉，讓箱子單獨成
+  一塊——這個嘗試還沒驗證過，需要拿 debug_auto_roi_mask.png 確認箱子
+  本身沒被誤傷、鮮豔小物真的被排除，並確認最後能不能真的跑出箱子的
+  4 個角點。
+
 使用方式：
   python3 detect_tape_seam.py
   python3 detect_tape_seam.py --image /path/to/other_frame.png --roi 500 80 900 320
@@ -73,15 +102,32 @@ DEFAULT_ROI = (590, 90, 860, 300)
 # ---------------------------------------------------------------------------
 
 def _cardboard_color_mask(image, brightness_lo=60, brightness_hi=245,
-                           warmth_thresh=14, saturation_lo=20):
+                           warmth_thresh=14, saturation_lo=20, saturation_hi=140):
     """粗略框出畫面中『偏暖色、亮度適中、有一定飽和度』的像素，用來涵蓋整個
     紙箱（不只頂面，側面較暗也要抓到），跟 _is_top_face_color() 是同一個
     邏輯精神，只是門檻放寬，因為這裡的目標是「抓大概位置」，不是精確頂面
     邊界，交給後面 GrabCut + 角點修正去做精細的部分。
 
-    加入 HSV 飽和度門檻（saturation_lo）是為了濾掉背景常見的高亮反光
+    加入 HSV 飽和度下限（saturation_lo）是為了濾掉背景常見的高亮反光
     （例如白色桌面反光、金屬反光），這些點雖然也可能亮度夠、R-B 差略大於0，
     但飽和度通常偏低（趨近灰白），跟紙箱這種有明顯顏色的表面不同。
+
+    **飽和度上限 saturation_hi（2026-09-02 加入，處理「箱子被旁邊鮮豔小物
+    橋接」的根本原因）**：紙箱是偏暗黃褐色、飽和度中等的表面；橘色卷尺、
+    紅色簽字筆這類鮮豔小物雖然也偏暖色、也夠亮，但飽和度明顯比紙箱高很多
+    （鮮豔 vs 混濁）。之前沒有上限，導致這些鮮豔小物也被算進「箱子候選
+    顏色」，跟紙箱連成同一塊輪廓，後面不管怎麼篩選候選都救不回來（一旦在
+    這一步黏在一起，就沒有乾淨的「只框到箱子」的輪廓可選）。加上
+    saturation_hi 從遮罩階段就把這些鮮豔物品排除掉，讓箱子在連通元件分析
+    時能單獨成一塊。
+
+    **這個門檻完全沒有拿實機資料驗證過，是純推論值**：可能誤傷紙箱本身
+    （如果某個角度反光讓紙箱局部飽和度也衝到 140 以上，該部分像素會被排除，
+    可能在箱子輪廓上挖出缺口甚至把箱子切成兩塊）。加了 --debug 一定要打開
+    `debug_auto_roi_mask.png` 親眼確認：(1) 箱子本身有沒有被挖洞/切斷，
+    (2) 橘色卷尺/紅色簽字筆有沒有真的從遮罩裡消失、跟箱子分開。這兩件事
+    都要用真實圖片檢查過才能信任這個門檻，不能只看最後有沒有跑出結果就
+    覺得成功。
     """
     b = image[:, :, 0].astype(np.float32)
     g = image[:, :, 1].astype(np.float32)
@@ -92,102 +138,145 @@ def _cardboard_color_mask(image, brightness_lo=60, brightness_hi=245,
 
     mask = (
         (brightness > brightness_lo) & (brightness < brightness_hi) &
-        (warmth > warmth_thresh) & (saturation > saturation_lo)
+        (warmth > warmth_thresh) &
+        (saturation > saturation_lo) & (saturation < saturation_hi)
     ).astype(np.uint8) * 255
     return mask
 
 
 def estimate_auto_roi(image, min_area_ratio=0.015, max_area_ratio=0.5,
-                       min_extent=0.35, pad_ratio=0.15, search_roi=None):
-    """Estimate a carton ROI, optionally constrained to a trusted search region.
+                       min_extent=0.35, pad_ratio=0.15,
+                       expected_center_ratio=(0.55, 0.24),
+                       max_center_dist_ratio=0.35):
+    """自動抓出畫面中紙箱大概位置的 ROI，取代手動框 --roi。
 
-    ``search_roi`` is an image-coordinate ``(x0, y0, x1, y1)`` gate. Only
-    candidates inside it can be selected, which prevents a larger cardboard
-    object elsewhere in the image from silently replacing the intended carton.
+    做法：先用 _cardboard_color_mask() 抓出「偏暖色」的候選像素，做形態學
+    open/close 把雜訊清掉、把箱子頂面+側面連成一塊，再找輪廓，過濾掉太小
+    （雜訊）或太大（例如整張圖過曝偏暖）的候選，同時用 `extent`（輪廓面積
+    / 外接矩形面積）過濾掉形狀太破碎、太細長的候選（例如人的手臂、頭髮這類
+    窄長區塊，extent 通常明顯偏低）。
 
-    Returns ``(roi, debug_info)``. Candidate bounding boxes and the selected ROI
-    in ``debug_info`` always use full-image coordinates.
+    **位置先驗（2026-09-01 加入）**：純靠顏色 + 面積最大來選候選，實測遇過
+    誤選案例——畫面右下角椅子旁露出的木紋地板剛好也偏暖色、亮度適中、
+    extent 也夠高，面積又比真正的紙箱候選大，於是被排序成第一名選走
+    （auto_roi.png 上看到選中框框到椅子/地板，而不是箱子）。回頭比對三次
+    正確偵測到的紙箱位置（frame_..._105447、104843、105219 三組
+    tape_seam.json 裡的 roi，換算成候選中心點都落在畫面寬度中央偏左一點、
+    高度上方約 1/4 處，即 expected_center_ratio=(0.55, 0.24) 附近），跟那次
+    誤選的椅子候選（中心點在畫面右下方）距離明顯拉開，因此加入這個先驗：
+    候選中心點跟「預期中心」的距離（除以畫面對角線長度正規化）超過
+    max_center_dist_ratio 的候選會被優先排除，只在候選裡挑面積最大的那個；
+    如果套用先驗後完全沒有候選留下（例如箱子這次真的擺到很偏的位置），才
+    退回用全部候選挑面積最大，並印出警告提醒務必檢查 `_auto_roi.png`。
+
+    **形狀（solidity）——只顯示不過濾（2026-09-02 修正）**：曾經試過用
+    solidity（輪廓面積 / 凸包面積）當硬性過濾，理論上「紙箱被旁邊暖色小物
+    橋接成一塊」會讓凸包多算進物件間的空隙、solidity 偏低，藉此擋掉這種
+    候選。但拿實機資料（--debug）實測後發現 `min_solidity=0.8` 直接把一組
+    真正正確的候選也判掉了（frame_..._105447 那組疊放的細長箱子，正常
+    情況solidity 就低於 0.8），是會誤傷正例的硬性門檻，而且因為濾除發生在
+    候選收集階段，被濾掉的候選連數值都不會印出來，沒辦法回頭校正。因此
+    移除這條硬性過濾：solidity 只計算、放進 candidate 資訊、印在
+    `_auto_roi.png` 上供人工參考，不拿來排除候選。真正要擋「橋接雜物→
+    GrabCut/Otsu 誤判成桌面」這種情況，交給 detect_seam() 最後呼叫的
+    `_validate_top_face_quad_color()`——它是直接驗證『偵測出來的頂面顏色
+    像不像紙箱』，比在候選輪廓形狀上做代理猜測（solidity）更貼近問題本身，
+    也不會誤傷「箱子本身形狀就不那麼規則」的合法候選。
+
+    重要限制（務必知道）：這是顏色 + 位置為主的粗略估計，不是真正的物件
+    偵測，兩層過濾可能同時失效（例如另一個物體剛好落在預期位置附近、
+    面積又最大）。expected_center_ratio 是根據目前這個工作站的相機角度、
+    桌面/箱子擺放習慣統計出來的經驗值，換了相機角度或箱子擺放位置差很多，
+    需要跟著重新調整（可以再拿幾張新的正確偵測結果的 roi 回頭重新估算）。
+    因此回傳的 ROI 只當作『大概範圍＋外擴一點邊界』，實際頂面邊界仍然是
+    交給既有的 GrabCut/Otsu/角點修正流程去精算；同時強烈建議搭配 --debug
+    或檢視程式存出的 `_auto_roi.png` 檢查候選框是否真的框到箱子，不要盲目
+    信任自動結果，更不要只看 ROI 候選框對不對就以為整條 pipeline 沒問題
+    ——一定要連 `_tape_seam.png` 的四個角點畫在哪裡都一起檢查。
+
+    回傳 (roi, debug_info)：
+      roi: (x0, y0, x1, y1)，已用 pad_ratio 外擴並裁切到畫面範圍內。
+      debug_info: dict，包含所有候選框（供 --debug 畫出來檢查）、選中的
+        那一個、預期中心點座標、以及是否有套用先驗過濾，方便事後確認自動
+        抓的位置合不合理。
     """
     h, w = image.shape[:2]
-    if search_roi is None:
-        search_x0, search_y0, search_x1, search_y1 = 0, 0, w, h
-    else:
-        search_x0, search_y0, search_x1, search_y1 = (
-            int(value) for value in search_roi
-        )
-        search_x0 = max(0, min(w, search_x0))
-        search_y0 = max(0, min(h, search_y0))
-        search_x1 = max(0, min(w, search_x1))
-        search_y1 = max(0, min(h, search_y1))
-        if search_x1 <= search_x0 or search_y1 <= search_y0:
-            raise ValueError(
-                f"自動 ROI 搜尋範圍不合法: {search_roi}，畫面大小是 {w}x{h}"
-            )
+    image_area = float(h * w)
+    diag = float(np.hypot(w, h))
+    expected_center = (expected_center_ratio[0] * w, expected_center_ratio[1] * h)
 
-    search_image = image[search_y0:search_y1, search_x0:search_x1]
-    search_h, search_w = search_image.shape[:2]
-    search_area = float(search_h * search_w)
-    mask = _cardboard_color_mask(search_image)
-    mask_clean = cv2.morphologyEx(
-        mask, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8)
-    )
-    mask_clean = cv2.morphologyEx(
-        mask_clean, cv2.MORPH_CLOSE, np.ones((25, 25), np.uint8)
-    )
-    contours, _ = cv2.findContours(
-        mask_clean, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-    )
+    mask = _cardboard_color_mask(image)
+    mask_clean = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
+    mask_clean = cv2.morphologyEx(mask_clean, cv2.MORPH_CLOSE, np.ones((25, 25), np.uint8))
+
+    contours, _ = cv2.findContours(mask_clean, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     candidates = []
-    for contour in contours:
-        area = cv2.contourArea(contour)
-        if area < min_area_ratio * search_area or area > max_area_ratio * search_area:
+    for c in contours:
+        area = cv2.contourArea(c)
+        if area < min_area_ratio * image_area or area > max_area_ratio * image_area:
             continue
-        local_x, local_y, box_width, box_height = cv2.boundingRect(contour)
-        extent = (
-            area / float(box_width * box_height)
-            if box_width * box_height > 0
-            else 0.0
-        )
+        x, y, bw, bh = cv2.boundingRect(c)
+        extent = area / float(bw * bh) if bw * bh > 0 else 0.0
         if extent < min_extent:
             continue
-        candidates.append(
-            {
-                "bbox": (
-                    local_x + search_x0,
-                    local_y + search_y0,
-                    box_width,
-                    box_height,
-                ),
-                "area": area,
-                "extent": extent,
-            }
-        )
+        hull = cv2.convexHull(c)
+        hull_area = cv2.contourArea(hull)
+        # solidity 只計算、供 --debug 顯示參考，不拿來排除候選
+        # （2026-09-02：min_solidity=0.8 硬性過濾實測誤傷了正確候選，見上方 docstring）
+        solidity = area / hull_area if hull_area > 0 else 0.0
+        center = (x + bw / 2.0, y + bh / 2.0)
+        center_dist_ratio = float(np.hypot(center[0] - expected_center[0],
+                                            center[1] - expected_center[1]) / diag)
+        candidates.append({
+            "bbox": (x, y, bw, bh),
+            "area": area,
+            "extent": extent,
+            "solidity": solidity,
+            "center": center,
+            "center_dist_ratio": center_dist_ratio,
+        })
 
     if not candidates:
         raise RuntimeError(
-            "自動 ROI 搜尋範圍內找不到夠大、夠『實心』的暖色紙箱候選；"
-            "請檢查搜尋範圍、光線或 auto_roi_mask。"
+            "自動抓不到夠大、夠『實心』的暖色區塊（可能光線太暗、箱子被遮擋，"
+            "或畫面裡找不到符合紙箱顏色特徵的物體），請改用 --roi 手動指定，"
+            "或用 --debug 檢查 auto_roi_mask.png 確認顏色遮罩有沒有抓到箱子。"
         )
 
-    candidates.sort(key=lambda candidate: candidate["area"], reverse=True)
-    chosen = candidates[0]
-    x, y, box_width, box_height = chosen["bbox"]
-    pad_x = int(box_width * pad_ratio)
-    pad_y = int(box_height * pad_ratio)
-    x0 = max(search_x0, x - pad_x)
-    y0 = max(search_y0, y - pad_y)
-    x1 = min(search_x1, x + box_width + pad_x)
-    y1 = min(search_y1, y + box_height + pad_y)
+    # 位置先驗：優先只在「離預期中心夠近」的候選裡挑面積最大的（見上方
+    # docstring）。全部都被先驗排除時才退回用全部候選，並提醒使用者檢查。
+    within_prior = [c for c in candidates if c["center_dist_ratio"] <= max_center_dist_ratio]
+    used_fallback = not within_prior
+    if used_fallback:
+        print(
+            "警告: 沒有候選落在位置先驗範圍內（max_center_dist_ratio="
+            f"{max_center_dist_ratio}），退回用全部候選挑面積最大，"
+            "請務必檢查存出的 *_auto_roi.png 確認有沒有抓對。",
+            file=sys.stderr,
+        )
+    pool = candidates if used_fallback else within_prior
 
-    full_mask = np.zeros((h, w), dtype=np.uint8)
-    full_mask[search_y0:search_y1, search_x0:search_x1] = mask_clean
+    # 同一個先驗範圍內，面積最大的候選當作箱子（見上方 docstring 的驗證說明與限制）
+    pool.sort(key=lambda d: d["area"], reverse=True)
+    chosen = pool[0]
+    x, y, bw, bh = chosen["bbox"]
+
+    pad_x = int(bw * pad_ratio)
+    pad_y = int(bh * pad_ratio)
+    x0 = max(0, x - pad_x)
+    y0 = max(0, y - pad_y)
+    x1 = min(w, x + bw + pad_x)
+    y1 = min(h, y + bh + pad_y)
+
     debug_info = {
-        "mask": full_mask,
+        "mask": mask_clean,
         "candidates": candidates,
         "chosen": chosen,
         "roi": (x0, y0, x1, y1),
-        "search_roi": (search_x0, search_y0, search_x1, search_y1),
+        "expected_center": expected_center,
+        "max_center_dist_ratio": max_center_dist_ratio,
+        "used_fallback": used_fallback,
     }
     return (x0, y0, x1, y1), debug_info
 
@@ -247,37 +336,10 @@ def find_quad_corners(mask, min_area_ratio=0.05):
         )
 
     peri = cv2.arcLength(contour, True)
-    five_vertex_candidate = None
-    for eps_ratio in np.arange(0.01, 0.085, 0.005):
+    for eps_ratio in np.arange(0.01, 0.08, 0.005):
         approx = cv2.approxPolyDP(contour, eps_ratio * peri, True)
         if len(approx) == 4:
             return approx.reshape(-1, 2).astype(float), contour
-        if len(approx) == 5 and five_vertex_candidate is None:
-            five_vertex_candidate = approx.reshape(-1, 2)
-
-    if five_vertex_candidate is not None:
-        points = five_vertex_candidate
-        pentagon = points.reshape(-1, 1, 2).astype(np.int32)
-        repaired_candidates = []
-        if not cv2.isContourConvex(pentagon):
-            for removed_index in range(5):
-                remaining = np.delete(points, removed_index, axis=0)
-                quadrilateral = remaining.reshape(-1, 1, 2).astype(np.float32)
-                retained_area_ratio = (
-                    abs(cv2.contourArea(quadrilateral)) / max(area, 1.0)
-                )
-                if (
-                    retained_area_ratio >= 0.45
-                    and cv2.isContourConvex(quadrilateral.astype(np.int32))
-                ):
-                    repaired_candidates.append(
-                        (retained_area_ratio, remaining, quadrilateral)
-                    )
-        if repaired_candidates:
-            _, remaining, quadrilateral = max(
-                repaired_candidates, key=lambda candidate: candidate[0]
-            )
-            return remaining.astype(float), quadrilateral
 
     raise RuntimeError(
         "頂面輪廓化簡不出乾淨的四邊形（可能被雜物遮擋或頂面亮度分割不乾淨），"
@@ -559,6 +621,58 @@ def order_quad_and_find_seam(corners):
     }
 
 
+def _validate_top_face_quad_color(roi_img, corners, min_warm_ratio=0.5,
+                                   brightness_thresh=130.0, warmth_thresh=10.0,
+                                   num_samples=300):
+    """在把偵測結果回傳出去之前，抽樣檢查『頂面』四邊形內部的顏色是不是真的
+    像紙箱頂面（暖色、有一定亮度），避免 segment_top_face_mask() 的 Otsu
+    亮度門檻在 ROI 混進其他更亮的東西時（例如白色桌面），誤把桌面/背景當
+    頂面，卻完全沒有任何錯誤訊息地回傳出去。
+
+    背景（2026-09-01 加入）：實測案例裡，auto-ROI 選中的候選因為跟旁邊
+    暖色小物被橋接成一塊，外接矩形往下多框了一段白色桌面；GrabCut/Otsu
+    在這種混雜輸入下，切出來「最亮的一塊」變成桌面而不是紙箱頂面（桌面比
+    紙箱頂面亮很多），回傳的四個角點因此完全落在桌面上，但程式本身沒有
+    任何機制發現這件事，只是默默印出一組看起來正常、實際上錯誤的座標。
+
+    做法：在四邊形內部均勻抽樣一批像素，用跟 _is_top_face_color() 相同的
+    「暖色 + 夠亮」判斷邏輯統計符合比例；比例低於 min_warm_ratio 就視為
+    疑似抓到背景/桌面，丟出 RuntimeError，讓上層知道要人工檢查（而不是
+    悄悄回傳一組錯誤的四邊形）。
+
+    warning: min_warm_ratio=0.5 是根據 _is_top_face_color() 既有的門檻
+    （brightness_thresh=130、warmth_thresh=20，這裡故意放寬 warmth_thresh
+    到 10，避免頂面邊緣抗鋸齒/陰影像素被誤判太嚴格）拍出來的經驗值，還沒
+    拿實機資料驗證過，如果正常紙箱也常常被這關擋下來，代表門檻需要調鬆。
+    """
+    h, w = roi_img.shape[:2]
+    mask = np.zeros((h, w), dtype=np.uint8)
+    cv2.fillPoly(mask, [corners.astype(np.int32)], 255)
+    ys, xs = np.where(mask > 0)
+    if len(xs) == 0:
+        raise RuntimeError("偵測到的頂面四邊形沒有涵蓋任何有效像素，明顯異常，請檢查 ROI/角點座標。")
+
+    rng = np.random.default_rng(0)
+    n = min(num_samples, len(xs))
+    idx = rng.choice(len(xs), size=n, replace=False)
+
+    warm_count = 0
+    for i in idx:
+        if _is_top_face_color(roi_img[ys[i], xs[i]], brightness_thresh, warmth_thresh):
+            warm_count += 1
+    warm_ratio = warm_count / n
+
+    if warm_ratio < min_warm_ratio:
+        raise RuntimeError(
+            f"偵測到的『頂面』四邊形內只有 {warm_ratio:.0%} 的抽樣像素符合紙箱"
+            f"暖色特徵（門檻 {min_warm_ratio:.0%}），很可能抓到背景/桌面而不是"
+            "紙箱頂面。請用 --debug 檢查 debug_box_mask.png / "
+            "debug_top_face_mask.png，或確認 ROI 有沒有把桌面/雜物也框進去"
+            "（常見成因：auto-ROI 候選被旁邊暖色雜物橋接、ROI 框太大）。"
+        )
+    return warm_ratio
+
+
 def detect_seam(image, roi, debug=False):
     x0, y0, x1, y1 = roi
     h_img, w_img = image.shape[:2]
@@ -578,6 +692,7 @@ def detect_seam(image, roi, debug=False):
     corners, top_contour = find_quad_corners(top_mask)
     corners = refine_corners_by_line_fit(top_contour, corners)
     corners = refine_corners_by_color_edges(roi_img, corners)
+    _validate_top_face_quad_color(roi_img, corners)
     info = order_quad_and_find_seam(corners)
 
     offset = np.array([x0, y0])
@@ -605,21 +720,40 @@ def detect_seam(image, roi, debug=False):
 
 
 def draw_auto_roi_debug(image, debug_info):
-    """畫出 estimate_auto_roi() 找到的所有候選框（灰色）跟選中的那一個
-    （綠色，並外擴 pad 之後的最終 ROI 用藍色），方便肉眼確認自動抓的
-    位置合不合理——這張圖務必檢查，不要盲目信任自動 ROI 的結果。"""
+    """畫出 estimate_auto_roi() 找到的所有候選框，方便肉眼確認自動抓的
+    位置合不合理——這張圖務必檢查，不要盲目信任自動 ROI 的結果。
+
+    顏色規則：選中的候選是綠色，其餘落在位置先驗範圍內但沒被選中的候選是
+    黃色，被位置先驗排除掉的候選是灰色（如果套用了 fallback，代表這次
+    先驗把所有候選都排除了，灰色候選裡最終還是可能被選中，這時外框仍是
+    綠色，並另外印出 FALLBACK 字樣提醒）。青色圓圈是 expected_center（位置
+    先驗的預期中心點），外擴 pad 之後的最終 ROI 用藍色框起來。"""
     vis = image.copy()
-    if "search_roi" in debug_info:
-        sx0, sy0, sx1, sy1 = debug_info["search_roi"]
-        cv2.rectangle(vis, (sx0, sy0), (sx1, sy1), (255, 255, 0), 2)
+    max_dist = debug_info["max_center_dist_ratio"]
     for cand in debug_info["candidates"]:
         x, y, w, h = cand["bbox"]
         is_chosen = cand is debug_info["chosen"]
-        color = (0, 255, 0) if is_chosen else (128, 128, 128)
+        within_prior = cand["center_dist_ratio"] <= max_dist
+        if is_chosen:
+            color = (0, 255, 0)
+        elif within_prior:
+            color = (0, 255, 255)
+        else:
+            color = (128, 128, 128)
         thickness = 2 if is_chosen else 1
         cv2.rectangle(vis, (x, y), (x + w, y + h), color, thickness)
-        cv2.putText(vis, f"area={cand['area']:.0f} extent={cand['extent']:.2f}",
-                    (x, max(0, y - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1)
+        cv2.putText(
+            vis,
+            f"area={cand['area']:.0f} ext={cand['extent']:.2f} "
+            f"sol={cand['solidity']:.2f} d={cand['center_dist_ratio']:.2f}",
+            (x, max(0, y - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.42, color, 1,
+        )
+    ecx, ecy = debug_info["expected_center"]
+    cv2.drawMarker(vis, (int(ecx), int(ecy)), (255, 255, 0),
+                    markerType=cv2.MARKER_CROSS, markerSize=16, thickness=2)
+    if debug_info["used_fallback"]:
+        cv2.putText(vis, "FALLBACK: no candidate within position prior",
+                    (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
     x0, y0, x1, y1 = debug_info["roi"]
     cv2.rectangle(vis, (x0, y0), (x1, y1), (255, 0, 0), 2)
     return vis
@@ -646,7 +780,8 @@ def resolve_roi(image, roi_arg, auto_roi, debug, output_dir, base_name):
     chosen = debug_info["chosen"]
     print(
         f"自動抓到的 ROI: ({x0}, {y0}, {x1}, {y1})　"
-        f"（選中候選框面積 {chosen['area']:.0f} px、extent {chosen['extent']:.2f}，"
+        f"（選中候選框面積 {chosen['area']:.0f} px、extent {chosen['extent']:.2f}、"
+        f"solidity {chosen['solidity']:.2f}、中心距離比例 {chosen['center_dist_ratio']:.2f}，"
         f"候選共 {len(debug_info['candidates'])} 個）"
     )
 

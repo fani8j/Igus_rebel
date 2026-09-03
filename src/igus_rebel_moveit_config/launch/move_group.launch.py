@@ -29,6 +29,10 @@ def opaque_func(context, *args, **kwargs):
     run_mtc_program = LaunchConfiguration("run_mtc_program")
     execute_mtc = LaunchConfiguration("execute_mtc")
     mtc_start_delay = LaunchConfiguration("mtc_start_delay")
+    run_box_motion_executor = LaunchConfiguration("run_box_motion_executor")
+    box_motion_start_delay = LaunchConfiguration("box_motion_start_delay")
+    run_box_h_cut_executor = LaunchConfiguration("run_box_h_cut_executor")
+    box_h_cut_start_delay = LaunchConfiguration("box_h_cut_start_delay")
 
     joint_limits_file = PathJoinSubstitution(
         [
@@ -42,7 +46,7 @@ def opaque_func(context, *args, **kwargs):
         [
             FindPackageShare("igus_rebel_description"),
             "urdf",
-            "igus_rebel_robot2.urdf.xacro",
+            "igus_rebel_xeg32_wrapper.urdf.xacro",
         ]
     )
     robot_description = Command(
@@ -88,6 +92,20 @@ def opaque_func(context, *args, **kwargs):
             "ompl_planning.yaml",
         ]
     )
+    chomp_file = PathJoinSubstitution(
+        [
+            FindPackageShare("igus_rebel_moveit_config"),
+            "config",
+            "chomp_planning.yaml",
+        ]
+    )
+    pilz_file = PathJoinSubstitution(
+        [
+            FindPackageShare("igus_rebel_moveit_config"),
+            "config",
+            "pilz_industrial_motion_planner_planning.yaml",
+        ]
+    )
     ompl_context = load_yaml(Path(ompl_file.perform(context)))
     if os.environ.get("ROS_DISTRO") == "humble":
         # Humble accepts one planner plugin and a whitespace-delimited request-adapter chain.
@@ -103,6 +121,35 @@ def opaque_func(context, *args, **kwargs):
         ])
         ompl_pipeline.pop("response_adapters", None)
     ompl = {"ompl": ompl_context}
+    executor_ompl_context = dict(ompl_context["move_group"])
+    executor_ompl_context["planner_configs"] = ompl_context["planner_configs"]
+    executor_ompl_context["igus_rebel_arm"] = ompl_context["igus_rebel_arm"]
+    executor_ompl = {"ompl": executor_ompl_context}
+    chomp_context = load_yaml(Path(chomp_file.perform(context)))
+    pilz_context = load_yaml(Path(pilz_file.perform(context)))
+    if os.environ.get("ROS_DISTRO") == "humble":
+        pilz_context["planning_plugin"] = pilz_context.pop("planning_plugins")[0]
+        pilz_context["request_adapters"] = " ".join(
+            [
+                "default_planner_request_adapters/FixWorkspaceBounds",
+                "default_planner_request_adapters/FixStartStateBounds",
+                "default_planner_request_adapters/FixStartStateCollision",
+            ]
+        )
+    named_pipelines = {
+        "planning_pipelines": [
+            "ompl",
+            "chomp",
+            "pilz_industrial_motion_planner",
+        ],
+        "default_planning_pipeline": "ompl",
+        "chomp": chomp_context,
+        "pilz_industrial_motion_planner": pilz_context,
+    }
+    executor_extra_pipelines = {
+        "chomp": chomp_context,
+        "pilz_industrial_motion_planner": pilz_context,
+    }
 
     moveit_controllers = {
         "moveit_simple_controller_manager": controllers_dict,
@@ -142,7 +189,8 @@ def opaque_func(context, *args, **kwargs):
             "publish_transforms_updates": True,
             "capabilities": "move_group/ExecuteTaskSolutionCapability",
         },
-        ompl_context,
+        executor_ompl,
+        named_pipelines,
     ]
 
     # Concatenate all dictionaries together, else moveitpy won't read all parameters
@@ -182,7 +230,56 @@ def opaque_func(context, *args, **kwargs):
     )
     delayed_mtc_node = TimerAction(period=mtc_start_delay, actions=[mtc_node])
 
-    # Get parameters for the Servo node
+    box_motion_params_file = PathJoinSubstitution(
+        [
+            FindPackageShare("igus_rebel_moveit_config"),
+            "config",
+            "box_motion_executor.yaml",
+        ]
+    )
+    box_motion_node = Node(
+        condition=IfCondition(run_box_motion_executor),
+        package="igus_rebel_moveit_config",
+        executable="box_motion_executor",
+        namespace=namespace,
+        parameters=[
+            box_motion_params_file,
+            {"use_sim_time": use_sim_time},
+            moveit_args,
+            executor_ompl,
+            executor_extra_pipelines,
+        ],
+        output="screen",
+    )
+    delayed_box_motion_node = TimerAction(
+        period=box_motion_start_delay, actions=[box_motion_node]
+    )
+    box_h_cut_params_file = PathJoinSubstitution(
+        [
+            FindPackageShare("igus_rebel_moveit_config"),
+            "config",
+            "box_h_cut_executor.yaml",
+        ]
+    )
+    box_h_cut_node = Node(
+        condition=IfCondition(run_box_h_cut_executor),
+        package="igus_rebel_moveit_config",
+        executable="box_h_cut_executor",
+        namespace=namespace,
+        parameters=[
+            box_h_cut_params_file,
+            {"use_sim_time": use_sim_time},
+            moveit_args,
+            executor_ompl,
+            executor_extra_pipelines,
+        ],
+        additional_env={"FASTDDS_BUILTIN_TRANSPORTS": "UDPv4"},
+        output="screen",
+    )
+    delayed_box_h_cut_node = TimerAction(
+        period=box_h_cut_start_delay, actions=[box_h_cut_node]
+    )
+
     servo_params_file = PathJoinSubstitution(
         [
             FindPackageShare("igus_rebel_moveit_config"),
@@ -198,7 +295,7 @@ def opaque_func(context, *args, **kwargs):
         servo_context.pop("use_smoothing", None)
         servo_context.pop("check_octomap_collisions", None)
         servo_context["planning_frame"] = "base_link"
-        servo_context["ee_frame_name"] = "link6"
+        servo_context["ee_frame_name"] = "xeg32_tool_tip"
         servo_context["robot_link_command_frame"] = "base_link"
         servo_context["use_gazebo"] = hardware_protocol.perform(context) == "gazebo"
     servo_params = {
@@ -250,16 +347,18 @@ def opaque_func(context, *args, **kwargs):
     )
 
     default_rviz_file = os.path.join(
-        get_package_share_directory('igus_rebel_moveit_config'),
-        'launch',
-        'moveit.rviz'
+        get_package_share_directory("igus_rebel_moveit_config"),
+        "launch",
+        "moveit.rviz",
     )
     
     rviz_parameters = [
-        {'robot_description_kinematics': kinematics_config,
-         "robot_description_semantic": robot_description_semantic.perform(context),
-         "robot_description_planning": joint_limits_config,
-         'robot_description': robot_description},
+        {
+            "robot_description_kinematics": kinematics_config,
+            "robot_description_semantic": robot_description_semantic.perform(context),
+            "robot_description_planning": joint_limits_config,
+            "robot_description": robot_description.perform(context),
+        },
     ]
 
     launch_rviz = Node(
@@ -277,6 +376,8 @@ def opaque_func(context, *args, **kwargs):
         joy_node,
         teleop_twist_joy_node,
         delayed_mtc_node,
+        delayed_box_motion_node,
+        delayed_box_h_cut_node,
         launch_rviz
     ]
 
@@ -300,6 +401,26 @@ def generate_launch_description():
         default_value="3.0",
         description="Seconds to wait for controllers before starting the MTC task",
     )
+    run_box_motion_executor_arg = DeclareLaunchArgument(
+        "run_box_motion_executor",
+        default_value="false",
+        description="Start the plan-only carton hover MTC executor",
+    )
+    box_motion_start_delay_arg = DeclareLaunchArgument(
+        "box_motion_start_delay",
+        default_value="3.0",
+        description="Seconds to wait for MoveIt before starting the box executor",
+    )
+    run_box_h_cut_executor_arg = DeclareLaunchArgument(
+        "run_box_h_cut_executor",
+        default_value="false",
+        description="Start the frozen-snapshot plan-only H-cut MTC executor",
+    )
+    box_h_cut_start_delay_arg = DeclareLaunchArgument(
+        "box_h_cut_start_delay",
+        default_value="3.0",
+        description="Seconds to wait for MoveIt before starting the H-cut executor",
+    )
     
     use_sim_time_arg = DeclareLaunchArgument(
         'use_sim_time', 
@@ -321,6 +442,10 @@ def generate_launch_description():
     ld.add_action(run_mtc_program_arg)
     ld.add_action(execute_mtc_arg)
     ld.add_action(mtc_start_delay_arg)
+    ld.add_action(run_box_motion_executor_arg)
+    ld.add_action(box_motion_start_delay_arg)
+    ld.add_action(run_box_h_cut_executor_arg)
+    ld.add_action(box_h_cut_start_delay_arg)
 
     ld.add_action(OpaqueFunction(function=opaque_func))
 

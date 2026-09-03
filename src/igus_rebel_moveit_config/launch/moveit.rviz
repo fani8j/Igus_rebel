@@ -435,6 +435,49 @@ Visualization Manager:
       Name: Motion Planning Tasks
       Robot Description: robot_description
       Task Solution Topic: /solution
+    - Alpha: 0.7
+      Autocompute Intensity Bounds: true
+      Class: rviz_default_plugins/PointCloud2
+      Color Transformer: RGB8
+      Decay Time: 0
+      Name: Box Registered Point Cloud
+      Position Transformer: XYZ
+      Size (Pixels): 2
+      Style: Points
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /box_detection/registered_points
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Box Seam
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /box_seam/markers
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Box Motion Targets
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /box_motion/markers
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Snapshot-Relative H-Cut Dry Run
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /box_motion/h_cut_markers
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48

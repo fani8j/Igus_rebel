@@ -1,6 +1,13 @@
 from launch import LaunchDescription
 from launch_ros.actions import Node
-from launch.substitutions import Command, FindExecutable, LaunchConfiguration
+from launch_ros.parameter_descriptions import ParameterValue
+from launch.substitutions import (
+    Command,
+    FindExecutable,
+    LaunchConfiguration,
+    PathJoinSubstitution,
+    PythonExpression,
+)
 from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory
@@ -19,24 +26,38 @@ def generate_launch_description():
     igus_rebel_pkg = get_package_share_directory("igus_rebel")
     igus_rebel_desc_pkg = get_package_share_directory("igus_rebel_description")
     
-    controller_config_path = os.path.join(igus_rebel_pkg, "config", "controller.yaml")
+    controller_config_path = PathJoinSubstitution(
+        [
+            igus_rebel_pkg,
+            "config",
+            PythonExpression(
+                [
+                    "'controller.yaml' if '",
+                    LaunchConfiguration("hardware_protocol"),
+                    "' == 'rebel' else 'controller_mock.yaml'",
+                ]
+            ),
+        ]
+    )
 
     robot_description_file = os.path.join(
         igus_rebel_desc_pkg,
-        'urdf',
-        'igus_rebel_robot2.urdf.xacro'
+        "urdf",
+        "igus_rebel_xeg32_wrapper.urdf.xacro",
     )
 
-    robot_description = {"robot_description" : Command(
-        [
-            FindExecutable(name="xacro"),
-            " ",
-            robot_description_file,
-            " hardware_protocol:=",
-            LaunchConfiguration("hardware_protocol"),
-        ]
+    robot_description = {"robot_description": ParameterValue(
+        Command(
+            [
+                FindExecutable(name="xacro"),
+                " ",
+                robot_description_file,
+                " hardware_protocol:=",
+                LaunchConfiguration("hardware_protocol"),
+            ]
+        ),
+        value_type=str,
     )}
-
 
     ros2_control_node = Node(
         package="controller_manager",

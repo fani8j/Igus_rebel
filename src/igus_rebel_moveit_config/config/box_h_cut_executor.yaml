@@ -18,7 +18,8 @@ box_h_cut_executor:
     saved_snapshot_file: ""
     # Fixed-fixture override approved by the operator: zero disables the file-age gate.
     saved_snapshot_max_age_s: 0.0
-    # Middle-seam-only plan for physical accuracy verification; no side strokes are included.
+    # middle_only runs the complete seam stroke. middle_entry_debug stops at seam_start after
+    # the hover-entry, alignment, and direct descent stages; it never traverses the seam.
     cut_pattern: middle_only
     partial_reverse: false
     partial_start_fraction: 0.25
@@ -30,21 +31,27 @@ box_h_cut_executor:
     approach_cut_start_xyz: [0.270446, -0.000835, 0.127984]
     approach_cut_orientation_xyzw: [0.679474, -0.371311, 0.538700, 0.332032]
     approach_cut_length_m: 0.0518
-    # Contact is permitted only between the carton and cutter link during combined strokes.
+    # Contact is permitted only between the carton and cutter link during bounded cutter strokes.
+    # Before a middle seam cut, travel 10 mm along the seam's reverse direction at hover height,
+    # align linearly to seam_start, then descend directly to the first cut point.
+    middle_entry_alignment_m: 0.010
     side_cut_tilt_deg: 0.0
+    # Side endpoints stay detector-derived; blade orientation follows the middle seam on top.
+    # Set edge_aligned to retain the legacy orientation along the side edge.
+    side_cut_orientation_mode: auto
     # Plan-only diagnostic trial; physical execution remains disabled.
     hover_clearance_m: 0.005
     cut_clearance_m: 0.0
-    # Operator-validated RViz goal-link6 pose for the first combined left-side stroke.
-    # The live world -> base_link transform is identity; values are expressed in base_link.
-    # The planner converts link6 -> xeg32_tool_tip from the robot model and uses the
-    # resulting TCP pose for the first cut start and its fixed cutter orientation.
+    # Plan-only reference from the operator-placed EE:goal_link6 marker. The SRDF
+    # fixes world to base_link, so the marker pose is recorded here in base_link.
+    # The executor composes link6 -> xeg32_tool_tip and constrains the left cut
+    # to the same TCP orientation and detector-relative TCP offset.
     combined_first_side_link6_frame: base_link
-    combined_first_side_link6_xyz: [0.2355727255344391, 0.03154894337058067, 0.24198371171951294]
-    combined_first_side_link6_orientation_xyzw: [0.6484568119049072, -0.3749435842037201, 0.5120024681091309, 0.42044565081596375]
-    # Anchor the manual orientation to the detected side-cut start. These TCP offsets were
-    # derived from the validated link6 pose and the selected snapshot's detected back_left.
-    manual_first_side_contact_offset_xyz: [-0.00642203, -0.01228259, -0.02380156]
+    combined_first_side_link6_xyz: [0.252585232257843, 0.10013595223426819, 0.3037717342376709]
+    combined_first_side_link6_orientation_xyzw: [0.8360192775726318, -0.3310580849647522, 0.28145477175712585, 0.33504557609558105]
+    # T_base_tcp = T_base_link6 * T_link6_tcp = [0.264657840, 0.008365139, 0.137686305].
+    # Offset from this snapshot's detected back_left to the reference TCP.
+    manual_first_side_contact_offset_xyz: [-0.0243959323007746, 0.0106480445920023, -0.0084564958043703]
     # Bound the stroke from the detected contact point to the Cartesian-reachable length.
     manual_first_side_max_length_m: 0.040
     # endpoint insets on a 10 mm grid, at least 10 mm from carton corners, and
@@ -60,8 +67,5 @@ box_h_cut_executor:
     velocity_scaling: 0.05
     acceleration_scaling: 0.05
     max_solutions: 1
-    invalidation_distance_m: 0.005
     # Physical trajectory dispatch stays disabled until an operator deliberately enables it.
     execution_enabled: false
-    # Mock-controller test window; execution still requires a separate dispatch request.
-    execution_arm_timeout_s: 120.0

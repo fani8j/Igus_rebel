@@ -1,8 +1,8 @@
 moveit_setup_assistant_config:
   URDF:
     package: igus_rebel_description
-    relative_path: urdf/igus_rebel2.urdf
-    xacro_args: ""
+    relative_path: urdf/igus_rebel_xeg32_wrapper.urdf.xacro
+    xacro_args: hardware_protocol:=mock_hardware
   SRDF:
     relative_path: config/igus_rebel2.srdf
   CONFIG:

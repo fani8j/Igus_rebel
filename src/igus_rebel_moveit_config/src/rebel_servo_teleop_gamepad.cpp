@@ -21,7 +21,7 @@ namespace
     const std::string JOINT_TOPIC = "delta_joint_cmds";
     const size_t ROS_QUEUE_SIZE = 10;
     const std::string PLANNING_FRAME_ID = "base_link";
-    const std::string EE_FRAME_ID = "link6";
+    const std::string EE_FRAME_ID = "xeg32_tool_tip";
 } // namespace
 
 // Converts key-presses to Twist or Jog commands for Servo, in lieu of a controller

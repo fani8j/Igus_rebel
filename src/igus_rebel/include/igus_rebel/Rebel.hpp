@@ -85,7 +85,7 @@ namespace Igus
         const double degToRad = 0.0174532925199432957692369076848861271344287188854172545609719144;
 
         // IP & port
-        const std::string ip = "192.168.3.11";
+        const std::string ip = "192.168.50.133";
         const int port = 3920;
 
         Rebel();

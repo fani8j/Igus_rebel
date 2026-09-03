@@ -91,7 +91,7 @@ const std::string TWIST_TOPIC = "delta_twist_cmds";
 const std::string JOINT_TOPIC = "delta_joint_cmds";
 const size_t ROS_QUEUE_SIZE = 10;
 const std::string PLANNING_FRAME_ID = "base_link";
-const std::string EE_FRAME_ID = "link6";
+const std::string EE_FRAME_ID = "xeg32_tool_tip";
 }  // namespace
 
 // A class for reading the key inputs from the terminal
