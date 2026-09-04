@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro"
+       name="igus_rebel_with_xeg32">
+
+  <!-- Keep the ReBeL arm hardware configuration independent from the gripper. -->
+  <xacro:arg name="hardware_protocol" default="rebel"/>
+  <xacro:arg name="include_ros2_control" default="true"/>
+  <xacro:arg name="attach_xeg32" default="true"/>
+
+  <!--
+    Fixed hardware mount, verified from the assembled XEG model. The gripper
+    itself is never moved by a knife-pose experiment. The 25 x 25 mm knife is
+    gripped at its CAD-verified jaw position; candidate poses may only change
+    the knife transform while retaining a physically valid jaw engagement.
+  -->
+  <xacro:arg name="xeg32_mount_xyz" default="0 0 0.052"/>
+  <xacro:arg name="xeg32_mount_rpy" default="0 0 0.261799"/>
+  <xacro:arg name="attach_cutter" default="true"/>
+  <xacro:arg name="cutter_mount_xyz" default="-0.077 0 0.029"/>
+  <xacro:arg name="cutter_mount_rpy" default="0 0 0"/>
+  <xacro:arg name="cutter_length" default="0.1855"/>
+  <xacro:arg name="cutter_width" default="0.025"/>
+  <xacro:arg name="cutter_tip_length" default="0.015"/>
+
+  <xacro:include filename="$(find igus_rebel_description)/urdf/igus_rebel2.urdf"/>
+  <xacro:include filename="$(find igus_rebel_description)/urdf/igus_rebel2.control.xacro"/>
+  <xacro:include filename="$(find igus_rebel_description)/urdf/xeg32_gripper.urdf.xacro"/>
+
+  <xacro:if value="$(arg include_ros2_control)">
+    <xacro:igus_rebel_control
+      arm_id="rebel_arm"
+      hardware_protocol="$(arg hardware_protocol)"/>
+  </xacro:if>
+
+  <!-- Same world attachment used by igus_rebel_robot2.urdf.xacro. -->
+  <link name="world"/>
+  <joint name="world_joint" type="fixed">
+    <parent link="world"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <xacro:if value="$(arg attach_xeg32)">
+    <xacro:xeg32_gripper
+      parent_link="link6"
+      prefix="xeg32_"
+      flange_xyz="$(arg xeg32_mount_xyz)"
+      flange_rpy="$(arg xeg32_mount_rpy)"
+      attach_cutter="$(arg attach_cutter)"
+      cutter_mount_xyz="$(arg cutter_mount_xyz)"
+      cutter_mount_rpy="$(arg cutter_mount_rpy)"
+      cutter_length="$(arg cutter_length)"
+      cutter_width="$(arg cutter_width)"
+      cutter_tip_length="$(arg cutter_tip_length)"/>
+  </xacro:if>
+
+</robot>
