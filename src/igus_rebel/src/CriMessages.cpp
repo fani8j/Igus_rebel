@@ -1,9 +1,58 @@
+#include <cstdint>
+#include <sstream>
+#include <type_traits>
+
 #include "rclcpp/rclcpp.hpp"
 
 #include "igus_rebel/CriMessages.hpp"
 #include "igus_rebel/CriKeywords.hpp"
 
 #define FLOAT_PRINT_PRECISION 3
+namespace
+{
+    bool ParseFloat(const std::string &text, float &value)
+    {
+        try
+        {
+            std::size_t parsed = 0;
+            value = std::stof(text, &parsed);
+            return parsed == text.size();
+        }
+        catch (const std::exception &)
+        {
+            return false;
+        }
+    }
+
+    bool ParseInt(const std::string &text, int &value)
+    {
+        try
+        {
+            std::size_t parsed = 0;
+            value = std::stoi(text, &parsed);
+            return parsed == text.size();
+        }
+        catch (const std::exception &)
+        {
+            return false;
+        }
+    }
+
+    bool ParseHexMask(const std::string &text, std::uint64_t &value)
+    {
+        try
+        {
+            std::size_t parsed = 0;
+            value = std::stoull(text, &parsed, 16);
+            return parsed == text.size();
+        }
+        catch (const std::exception &)
+        {
+            return false;
+        }
+    }
+}
+
 
 namespace Igus
 {
@@ -109,48 +158,37 @@ namespace Igus
         }
 
         template <class T, std::size_t N>
-        void CriMessage::FillArray(std::array<T, N> &array, const std::string &spaceSeparatedValues)
+        bool CriMessage::FillArray(std::array<T, N> &array, const std::string &spaceSeparatedValues)
         {
-            typename std::array<T, N>::size_type idx = 0;
-            std::string::size_type begin = 0;
-            std::string::size_type end = spaceSeparatedValues.find(" ", begin + 1);
+            std::istringstream stream(spaceSeparatedValues);
+            std::string token;
+            std::size_t index = 0;
 
-            while (end != std::string::npos)
+            while (stream >> token)
             {
-                if (idx >= N)
+                if (index >= N)
                 {
-                    RCLCPP_ERROR(rclcpp::get_logger("igus_rebel"), "Parsing error");
-                    return;
+                    return false;
                 }
 
-                std::string value = spaceSeparatedValues.substr(begin, end - begin);
-
-                if (std::is_same<float, T>::value)
+                bool parsed = false;
+                if constexpr (std::is_same_v<T, float>)
                 {
-                    array.at(idx) = std::stof(value);
+                    parsed = ParseFloat(token, array[index]);
+                }
+                else if constexpr (std::is_same_v<T, int>)
+                {
+                    parsed = ParseInt(token, array[index]);
                 }
 
-                if (std::is_same<int, T>::value)
+                if (!parsed)
                 {
-                    array.at(idx) = std::stoi(value);
+                    return false;
                 }
-
-                begin = spaceSeparatedValues.find(" ", end);
-                end = spaceSeparatedValues.find(" ", begin + 1);
-                idx++;
+                ++index;
             }
 
-            std::string value = spaceSeparatedValues.substr(begin);
-
-            if (std::is_same<float, T>::value)
-            {
-                array.at(idx) = std::stof(value);
-            }
-
-            if (std::is_same<int, T>::value)
-            {
-                array.at(idx) = std::stoi(value);
-            }
+            return index == N;
         }
 
         template <class T>
@@ -222,7 +260,7 @@ namespace Igus
             return msg.str();
         }
 
-        Status::Status(const std::string &messageString) : CriMessage(MessageType::STATUS)
+        Status::Status(const std::string &messageString) : Status()
         {
             std::string::size_type modeStart = messageString.find(CriKeywords::STATUS_MODE);
             std::string::size_type posJointSetPointStart = messageString.find(CriKeywords::STATUS_POSJOINTSETPOINT);
@@ -238,6 +276,7 @@ namespace Igus
             std::string::size_type currentjointsStart = messageString.find(CriKeywords::STATUS_CURRENTJOINTS);
             std::string::size_type errorStart = messageString.find(CriKeywords::STATUS_ERROR);
             std::string::size_type kinstateStart = messageString.find(CriKeywords::STATUS_KINSTATE);
+            std::string::size_type opmodeStart = messageString.find(CriKeywords::STATUS_OPMODE);
 
             if (
                 !(
@@ -253,9 +292,9 @@ namespace Igus
                     (supplyStart < currentallStart) &&
                     (currentallStart < currentjointsStart) &&
                     (currentjointsStart < errorStart) &&
-                    (errorStart < kinstateStart)))
+                    (errorStart < kinstateStart) &&
+                    (opmodeStart == std::string::npos || kinstateStart < opmodeStart)))
             {
-                RCLCPP_ERROR(rclcpp::get_logger("igus_rebel"), "Bad parsing error for message \"%s\"", messageString.c_str());
                 return;
             }
 
@@ -285,32 +324,44 @@ namespace Igus
                                                                  CriKeywords::STATUS_CURRENTJOINTS.size());
             std::string errorString = ParseMessageString(messageString, errorStart, kinstateStart,
                                                          CriKeywords::STATUS_ERROR.size());
-            std::string kinstateString = ParseMessageString(messageString, kinstateStart, messageString.size() + 1,
+            const std::string::size_type kinstateEnd =
+                opmodeStart == std::string::npos ? messageString.size() + 1 : opmodeStart;
+            std::string kinstateString = ParseMessageString(messageString, kinstateStart, kinstateEnd,
                                                             CriKeywords::STATUS_KINSTATE.size());
 
             std::string::size_type errorSummaryEnd = errorString.find(" ");
+            if (errorSummaryEnd == std::string::npos)
+            {
+                return;
+            }
             errorSummary = errorString.substr(0, errorSummaryEnd);
             std::string errorJointsString = errorString.substr(errorSummaryEnd + 1);
 
+            int kinstateValue = 0;
             mode = GetMode(modeString);
-            FillArray(posJointSetPoint, posJointSetPointString);
-            FillArray(posJointCurrent, posJointCurrentString);
-            FillArray(posCartRobot, posCartRobotString);
-            FillArray(posCartPlattform, posCartPlattformString);
-            try {
-                overrideValue = std::stof(overrideValueString);
-                din = std::stoi(dinString);     // TODO: Process further to actual meaning
-                dout = std::stoi(doutString);   // TODO: Process further to actual meaning
-                eStop = std::stoi(eStopString); // TODO: Process further to actual meaning
-                supply = std::stoi(supplyString);
-                currentall = std::stoi(currentallString);
-            } catch (const std::invalid_argument &e) {
-                RCLCPP_ERROR(rclcpp::get_logger("igus_rebel"), "Error parsing status message: %s", e.what());
+            const bool parsed =
+                mode != Mode::UNKNOWN &&
+                FillArray(posJointSetPoint, posJointSetPointString) &&
+                FillArray(posJointCurrent, posJointCurrentString) &&
+                FillArray(posCartRobot, posCartRobotString) &&
+                FillArray(posCartPlattform, posCartPlattformString) &&
+                ParseFloat(overrideValueString, overrideValue) &&
+                ParseHexMask(dinString, din) &&
+                ParseHexMask(doutString, dout) &&
+                ParseInt(eStopString, eStop) &&
+                ParseInt(supplyString, supply) &&
+                ParseInt(currentallString, currentall) &&
+                FillArray(currentjoints, currentjointsString) &&
+                FillArray(errorJoints, errorJointsString) &&
+                ParseInt(kinstateString, kinstateValue);
+
+            if (!parsed)
+            {
+                return;
             }
-            FillArray(currentjoints, currentjointsString);
-            // errorSummary already set above.
-            FillArray(errorJoints, errorJointsString); // TODO: Process further to actual meaning
-            kinstate = GetKinstate(kinstateString);
+
+            kinstate = GetKinstate(kinstateValue);
+            valid = true;
         }
 
         Status::Status() : CriMessage(MessageType::STATUS)
@@ -329,6 +380,7 @@ namespace Igus
             currentjoints.fill(0);
             errorSummary = "NotInitialized";
             errorJoints.fill(0);
+            valid = false;
             kinstate = Kinstate::UNKNOWN;
         }
 
@@ -421,9 +473,8 @@ namespace Igus
             return Mode::UNKNOWN;
         }
 
-        Kinstate Status::GetKinstate(const std::string &kinstateString)
+        Kinstate Status::GetKinstate(int kinstateInt)
         {
-            int kinstateInt = std::stoi(kinstateString);
 
             switch (kinstateInt)
             {

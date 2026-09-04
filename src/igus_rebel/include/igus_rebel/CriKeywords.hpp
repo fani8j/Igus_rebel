@@ -39,6 +39,7 @@ namespace Igus
         const std::string STATUS_CURRENTJOINTS = "CURRENTJOINTS";
         const std::string STATUS_ERROR = "ERROR";
         const std::string STATUS_KINSTATE = "KINSTATE";
+        const std::string STATUS_OPMODE = "OPMODE";
         const std::string STATUS_FRAMEROBOT = "FRAMEROBOT";
 
         const std::string COMMAND_CONNECT = "Connect";

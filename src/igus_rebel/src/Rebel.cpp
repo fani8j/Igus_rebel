@@ -69,8 +69,14 @@ namespace Igus
                 {
                 case CriMessages::MessageType::STATUS:
                 {
-                    CriMessages::Status status = CriMessages::Status(msg);
-                    // status.Print();
+                    CriMessages::Status status(msg);
+                    if (!status.IsValid())
+                    {
+                        RCLCPP_WARN_THROTTLE(
+                            node_->get_logger(), *node_->get_clock(), 5000,
+                            "Ignoring malformed CRI status message");
+                        break;
+                    }
                     status.Log();
                     currentStatus = status;
                     ProcessStatus(currentStatus);

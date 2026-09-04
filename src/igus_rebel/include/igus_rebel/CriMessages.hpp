@@ -2,6 +2,7 @@
 #define CRI_MESSAGE_HPP_
 
 #include <array>
+#include <cstdint>
 #include <vector>
 #include <regex>
 
@@ -115,7 +116,7 @@ namespace Igus
                                                   const std::string::size_type &, const std::string::size_type &);
 
             template <class T, std::size_t N>
-            static void FillArray(std::array<T, N> &, const std::string &);
+            static bool FillArray(std::array<T, N> &, const std::string &);
 
             template <class T>
             void FillVector(std::vector<T> &, const std::string &);
@@ -136,8 +137,8 @@ namespace Igus
             std::array<float, 6> posCartRobot;
             std::array<float, 3> posCartPlattform;
             float overrideValue;
-            int din;
-            int dout;
+            std::uint64_t din;
+            std::uint64_t dout;
             int eStop;
             int supply;
             int currentall;
@@ -148,14 +149,16 @@ namespace Igus
 
             explicit Status(const std::string &);
             explicit Status();
+            bool IsValid() const { return valid; }
             static std::string ModeToString(const Mode &);
             void Print();
             void Log();
 
         private:
+            bool valid;
             std::string ToString();
             Mode GetMode(const std::string &);
-            Kinstate GetKinstate(const std::string &);
+            Kinstate GetKinstate(int);
         };
 
         class Message : public CriMessage
