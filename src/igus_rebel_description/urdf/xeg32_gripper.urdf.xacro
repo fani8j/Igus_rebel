@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
-  <!-- Reusable HIWIN XEG-32 gripper + camera-mount macro. Geometry/kinematics are taken from the latest Onshape export. -->
-  <xacro:macro name="xeg32_gripper" params="parent_link prefix flange_xyz flange_rpy lock_joints:=true attach_cutter:=true cutter_mount_xyz:='-0.077 0 0.029' cutter_mount_rpy:='0 0 0' cutter_length:=0.1855 cutter_width:=0.025 cutter_tip_length:=0.015">
+  <!-- Rough HIWIN XEG-32 gripper and camera-mount geometry; independent of TCP calibration. -->
+  <xacro:macro name="xeg32_gripper" params="parent_link prefix flange_xyz flange_rpy lock_joints:=true">
     <joint name="${prefix}mount_joint" type="fixed">
       <origin xyz="${flange_xyz}" rpy="${flange_rpy}" />
       <parent link="${parent_link}" />
@@ -59,59 +59,6 @@
         </geometry>
       </collision>
     </link>
-    <!-- Plan-only knife: 185.5 mm overall, 25 x 25 mm body, and a 15 mm square-pyramid tip. -->
-    <xacro:if value="${attach_cutter}">
-      <joint name="${prefix}cutter_mount_joint" type="fixed">
-        <origin xyz="${cutter_mount_xyz}" rpy="${cutter_mount_rpy}" />
-        <parent link="${prefix}base_link" />
-        <child link="${prefix}cutter_link" />
-      </joint>
-      <link name="${prefix}cutter_link">
-        <visual>
-          <origin xyz="0 0 ${-cutter_tip_length / 2.0}" rpy="0 0 0" />
-          <geometry>
-            <box size="${cutter_width} ${cutter_width} ${cutter_length - cutter_tip_length}" />
-          </geometry>
-          <material name="${prefix}cutter_material">
-            <color rgba="0.85 0.15 0.15 1" />
-          </material>
-        </visual>
-        <collision>
-          <origin xyz="0 0 ${-cutter_tip_length / 2.0}" rpy="0 0 0" />
-          <geometry>
-            <box size="${cutter_width} ${cutter_width} ${cutter_length - cutter_tip_length}" />
-          </geometry>
-        </collision>
-        <visual>
-          <origin xyz="0 0 ${cutter_length / 2.0 - cutter_tip_length / 2.0}" rpy="0 0 0" />
-          <geometry>
-            <mesh filename="package://igus_rebel_description/meshes/xeg32/cutter_tip_15mm.stl" />
-          </geometry>
-          <material name="${prefix}cutter_tip_material">
-            <color rgba="0.75 0.78 0.82 1" />
-          </material>
-        </visual>
-        <collision>
-          <origin xyz="0 0 ${cutter_length / 2.0 - cutter_tip_length / 2.0}" rpy="0 0 0" />
-          <geometry>
-            <mesh filename="package://igus_rebel_description/meshes/xeg32/cutter_tip_15mm.stl" />
-          </geometry>
-        </collision>
-      </link>
-      <joint name="${prefix}tool_tip_joint" type="fixed">
-        <!-- Calibrated against the saved middle_only seam_end target 1788412047_726417920. -->
-        <origin xyz="-0.012644 -0.004722 0.082408" rpy="0 0 0" />
-        <parent link="${prefix}cutter_link" />
-        <child link="${prefix}tool_tip" />
-      </joint>
-      <!-- Visual-only TCP locator: the physical knife geometry remains unchanged. -->
-      <link name="${prefix}tool_tip">
-        <visual>
-          <geometry><sphere radius="0.006" /></geometry>
-          <material name="${prefix}tool_tip_marker"><color rgba="0.1 1 0.1 1" /></material>
-        </visual>
-      </link>
-    </xacro:if>
     <link name="${prefix}left_carriage_link">
       <inertial>
         <origin xyz="-0 -0.00376142 -0.00801771" rpy="0 0 0" />

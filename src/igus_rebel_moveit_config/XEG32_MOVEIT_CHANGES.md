@@ -39,21 +39,30 @@ matrix with MoveIt Setup Assistant rather than disabling all XEG collisions.
 
 `xeg32_tool_tip` is the TCP for Servo and all box/MTC planners.
 
-- `xeg32_tool_tip` is the positive-Z apex of `xeg32_cutter_link`.
-- The dummy knife is 185.5 mm overall: a 170.5 mm, 25 × 25 mm rectangular
-  blade plus a 15 mm square-pyramid tip.
-- Its midpoint is `xeg32_base_link = (-77.0, 0, 29.0) mm`, 18 mm +X from
-  the prior distal location, so the knife lies inside rather than through the
-  gripper jaws.
-- Its Z axis remains parallel to `link6` Z; the XEG mount has only a
-  15-degree Z rotation.
+The active TCP is defined in `igus_rebel_xeg32_wrapper.urdf.xacro`, independently
+of optional gripper geometry:
 
-The model is planning geometry only. Keep `execute: false` until the physical
-cutter and its measured TCP have been installed and validated.
+- `link6 -> igus_tool0`: xyz `[0, 0, 0.0527]` m, RPY `[0, 0, pi]`.
+- `igus_tool0 -> xeg32_tool_tip`: xyz `[0.068936, 0.046766, 0.127060]` m,
+  RPY `[0, 0, 0]`. These values are `OffsetX`, `OffsetY`, `OffsetZ`,
+  `OffsetA`, `OffsetB`, and `OffsetC` from `knivetool4_with_pose2` in
+  `knivetool4.xml`, converted from millimetres to metres.
+- Both frames remain available with `attach_xeg32:=false`.
+- Arm kinematics, the `link6` IK solver tip, and the rough XEG mount
+  (`0 0 0.052` m, 15-degree Z rotation) are unchanged. MTC uses the fixed
+  `xeg32_tool_tip` descendant explicitly as its IK frame.
 
-The cutter is permitted to overlap only the wrist (`link6`) and XEG base and
-carriage collision meshes. It remains collision-checked against the carton,
-table, and other arm links.
+The rough `xeg32_cutter_link`, its mounting joint, box and pyramid visual/collision
+geometry, and old cutter-derived TCP joint are removed. The cutter Xacro arguments
+are removed as well. The unused pyramid STL remains as an archived asset.
+Four cutter-specific SRDF collision exclusions and the MTC cutter/carton collision
+exemption are removed; gripper semantics and collision geometry remain unchanged.
+
+The green TCP sphere now also has a 6 mm-radius collision shape. It covers only
+the tip; the physical cutter body remains absent from collision checking.
+The gripper CAD is approximate. Plan success does not establish physical clearance
+or calibrate tool orientation. Keep physical execution disabled until independently
+validated, and discard plans and tool-relative targets made with the old TCP.
 
 ## Controller files intentionally unchanged
 

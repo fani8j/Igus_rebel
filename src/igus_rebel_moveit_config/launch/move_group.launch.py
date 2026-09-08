@@ -280,6 +280,22 @@ def opaque_func(context, *args, **kwargs):
         period=box_h_cut_start_delay, actions=[box_h_cut_node]
     )
 
+    calibration_params = load_yaml(Path(
+        LaunchConfiguration("calibration_verification_config").perform(context)
+    ))["calibration_verification"]["ros__parameters"]
+    calibration_params["execution_allowed"] = LaunchConfiguration("calibration_execution_allowed")
+    calibration_node = Node(
+        condition=IfCondition(LaunchConfiguration("run_calibration_verification")),
+        package="igus_rebel_moveit_config",
+        executable="calibration_verification",
+        parameters=[
+            moveit_args, executor_ompl, executor_extra_pipelines,
+            calibration_params,
+            {"use_sim_time": use_sim_time},
+        ],
+        output="screen",
+    )
+
     servo_params_file = PathJoinSubstitution(
         [
             FindPackageShare("igus_rebel_moveit_config"),
@@ -312,6 +328,7 @@ def opaque_func(context, *args, **kwargs):
     )
 
     servo_node = Node(
+        condition=IfCondition(LaunchConfiguration("run_teleop")),
         package="moveit_servo",
         executable=servo_executable,
         namespace=namespace,
@@ -326,6 +343,7 @@ def opaque_func(context, *args, **kwargs):
 
     # Launch gamepad
     joy_node = Node(
+        condition=IfCondition(LaunchConfiguration("run_teleop")),
         package="joy",
         executable="joy_node",
         parameters=[{'use_sim_time': use_sim_time}],
@@ -340,17 +358,13 @@ def opaque_func(context, *args, **kwargs):
         ]
     )
     teleop_twist_joy_node = Node(
+        condition=IfCondition(LaunchConfiguration("run_teleop")),
         package="igus_rebel_moveit_config",
         executable="rebel_servo_teleop_gamepad",
         parameters=[{'use_sim_time': use_sim_time}, teleop_joy_twist_file],
         output="screen",
     )
 
-    default_rviz_file = os.path.join(
-        get_package_share_directory("igus_rebel_moveit_config"),
-        "launch",
-        "moveit.rviz",
-    )
     
     rviz_parameters = [
         {
@@ -366,12 +380,13 @@ def opaque_func(context, *args, **kwargs):
         package="rviz2",
         executable="rviz2",
         output={"both": "log"},
-        arguments=["-d", default_rviz_file],
+        arguments=["-d", LaunchConfiguration("rviz_config")],
         parameters=rviz_parameters,
     )
     
     return [
         move_group_node,
+        calibration_node,
         servo_node,
         joy_node,
         teleop_twist_joy_node,
@@ -436,6 +451,15 @@ def generate_launch_description():
 
     ld = LaunchDescription()
     ld.add_action(use_sim_time_arg)
+    ld.add_action(DeclareLaunchArgument("run_teleop", default_value="true"))
+    ld.add_action(DeclareLaunchArgument("rviz_config", default_value=os.path.join(
+        get_package_share_directory("igus_rebel_moveit_config"), "launch", "moveit.rviz")))
+    ld.add_action(DeclareLaunchArgument("run_calibration_verification", default_value="false"))
+    ld.add_action(DeclareLaunchArgument("calibration_execution_allowed", default_value="false"))
+    ld.add_action(DeclareLaunchArgument(
+        "calibration_verification_config",
+        default_value=os.path.join(get_package_share_directory("igus_rebel_moveit_config"),
+                                   "config", "calibration_verification.yaml")))
     ld.add_action(namespace_arg)
     ld.add_action(use_gui_arg)
     ld.add_action(hardware_protocol_arg)

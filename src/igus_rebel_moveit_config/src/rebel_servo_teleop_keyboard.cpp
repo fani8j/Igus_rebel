@@ -57,7 +57,9 @@
 #include <conio.h>
 #endif
 
-#define MAX_VEL 0.02
+// A keypress is accepted by Servo for `incoming_command_timeout` (0.3 s).
+// Keep a single Cartesian keypress to approximately 1 mm.
+constexpr double MAX_VEL = 0.001 / 0.3;
 
 // Define used keys
 namespace

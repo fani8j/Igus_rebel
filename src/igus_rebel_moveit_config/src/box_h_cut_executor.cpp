@@ -1,5 +1,5 @@
 #include <Eigen/Geometry>
-#include <compal_box_msgs/srv/capture_box_snapshot.hpp>
+#include <std_msgs/msg/header.hpp>
 #include <geometry_msgs/msg/pose_array.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <moveit/robot_state/robot_state.h>
@@ -34,7 +34,6 @@
 #include <vector>
 
 namespace mtc = moveit::task_constructor;
-using CaptureSnapshot = compal_box_msgs::srv::CaptureBoxSnapshot;
 
 struct SideCutCandidate {
   geometry_msgs::msg::Point start;
@@ -60,7 +59,19 @@ struct CutSegment {
   double yaw_deg{0.0};
   bool stop_after_start{false};
 };
-
+struct Snapshot {
+  std::string snapshot_id;
+  std_msgs::msg::Header header;
+  geometry_msgs::msg::Point seam_start;
+  geometry_msgs::msg::Point seam_end;
+  geometry_msgs::msg::Point seam_center;
+  geometry_msgs::msg::Point back_left;
+  geometry_msgs::msg::Point back_right;
+  geometry_msgs::msg::Point front_left;
+  geometry_msgs::msg::Point front_right;
+  geometry_msgs::msg::Vector3 surface_normal;
+  double plane_rms_m{0.0};
+};
 class BoxHCutExecutor : public rclcpp::Node
 {
 public:
@@ -100,8 +111,10 @@ public:
       declare_parameter<bool>(kinematics_prefix + "position_only_ik", false);
     }
     motion_profile_ = declare_parameter<std::string>("motion_profile", "ompl_pilz");
-    snapshot_service_ = declare_parameter<std::string>(
-      "snapshot_service", "/box_perception/capture_snapshot");
+    external_snapshot_file_ = declare_parameter<std::string>(
+      "external_snapshot_file", "");
+    external_snapshot_max_age_s_ = declare_parameter<double>(
+      "external_snapshot_max_age_s", 30.0);
     carton_collision_id_ = declare_parameter<std::string>("carton_collision_id", "detected_carton");
     carton_height_m_ = declare_parameter<double>("carton_height_m", 0.20);
     hover_clearance_m_ = declare_parameter<double>("hover_clearance_m", 0.10);
@@ -147,23 +160,19 @@ public:
       "manual_first_side_max_length_m", 0.060);
     manual_first_side_contact_offset_xyz_ = declare_parameter<std::vector<double>>(
       "manual_first_side_contact_offset_xyz", std::vector<double>{});
-    saved_snapshot_dir_ = declare_parameter<std::string>("saved_snapshot_dir", "~/box_snapshots");
-    declare_parameter<std::string>("saved_snapshot_file", "");
-    saved_snapshot_max_age_s_ = declare_parameter<double>("saved_snapshot_max_age_s", 60.0);
     declare_parameter<bool>("execution_enabled", false);
     max_solutions_ = declare_parameter<int>("max_solutions", 1);
+    if (external_snapshot_max_age_s_ <= 0.0) {
+      throw std::invalid_argument("external_snapshot_max_age_s must be positive");
+    }
     const std::array<std::string, 4> profiles{
       "ompl_cartesian", "ompl_pilz", "pilz_only", "chomp_pilz"};
     if (std::find(profiles.begin(), profiles.end(), motion_profile_) == profiles.end()) {
       throw std::invalid_argument("unsupported H-cut motion_profile: " + motion_profile_);
     }
-    if (saved_snapshot_max_age_s_ < 0.0) {
-      throw std::invalid_argument("saved_snapshot_max_age_s must be non-negative");
-    }
     const bool has_manual_first_side_pose = !combined_first_side_link6_frame_.empty();
     if (has_manual_first_side_pose &&
-        (combined_first_side_link6_frame_.empty() ||
-         combined_first_side_link6_xyz_.size() != 3U ||
+        (combined_first_side_link6_xyz_.size() != 3U ||
          combined_first_side_link6_orientation_xyzw_.size() != 4U ||
          manual_first_side_contact_offset_xyz_.size() != 3U)) {
       throw std::invalid_argument(
@@ -232,8 +241,6 @@ public:
         current_joint_state_ = *message;
       });
     callback_group_ = create_callback_group(rclcpp::CallbackGroupType::Reentrant);
-    snapshot_client_ = create_client<CaptureSnapshot>(
-      snapshot_service_, rmw_qos_profile_services_default, callback_group_);
     marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(
       "/box_motion/h_cut_markers", rclcpp::QoS(1).reliable().transient_local());
     target_pose_pub_ = create_publisher<geometry_msgs::msg::PoseArray>(
@@ -246,33 +253,12 @@ public:
       [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
              std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
         std::unique_lock<std::mutex> lock(plan_mutex_, std::try_to_lock);
-        if (!lock.owns_lock()) {
-          response->success = false;
-          response->message = "another H-cut plan operation is active";
-          return;
-        }
-        if (execution_in_progress_) {
-          response->success = false;
-          response->message = "cannot plan while an H-cut trajectory execution is active";
-          return;
-        }
-        const auto snapshot_file = get_parameter("saved_snapshot_file").as_string();
-        response->success = snapshot_file.empty() ?
-          captureAndPlan(response->message) : planSavedSnapshot(response->message);
-      },
-      rmw_qos_profile_services_default, callback_group_);
-    live_detection_plan_service_ = create_service<std_srvs::srv::Trigger>(
-      "~/plan_from_live_detection",
-      [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
-             std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
-        std::unique_lock<std::mutex> lock(plan_mutex_, std::try_to_lock);
         if (!lock.owns_lock() || execution_in_progress_) {
           response->success = false;
           response->message = "cannot plan while another planning or execution operation is active";
           return;
         }
-        response->success = captureAndPlan(response->message);
-        if (response->success) response->message = "fresh live detection: " + response->message;
+        response->success = planExternalSnapshot(response->message);
       },
       rmw_qos_profile_services_default, callback_group_);
     tcp_debug_start_service_ = create_service<std_srvs::srv::Trigger>(
@@ -285,7 +271,7 @@ public:
           response->message = "cannot start TCP debug while another planning or execution operation is active";
           return;
         }
-        response->success = captureAndStartTcpDebug(response->message);
+        response->success = startTcpDebug(response->message);
       },
       rmw_qos_profile_services_default, callback_group_);
     tcp_debug_record_service_ = create_service<std_srvs::srv::Trigger>(
@@ -302,7 +288,7 @@ public:
       },
       rmw_qos_profile_services_default, callback_group_);
     section_diagnostic_service_ = create_service<std_srvs::srv::Trigger>(
-      "~/diagnose_saved_snapshot_sections",
+      "~/diagnose_external_snapshot_sections",
       [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
              std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
         std::unique_lock<std::mutex> lock(plan_mutex_, std::try_to_lock);
@@ -311,7 +297,7 @@ public:
           response->message = "cannot diagnose while another planning or execution operation is active";
           return;
         }
-        response->success = diagnoseSavedSnapshotSections(response->message);
+        response->success = diagnoseExternalSnapshotSections(response->message);
       },
       rmw_qos_profile_services_default, callback_group_);
     execute_service_ = create_service<std_srvs::srv::Trigger>(
@@ -386,48 +372,22 @@ public:
   }
 
 private:
-  using Snapshot = compal_box_msgs::msg::BoxSnapshot;
-
-  bool captureAndPlan(std::string& message)
+  bool planExternalSnapshot(std::string& message)
   {
-    using namespace std::chrono_literals;
-    if (!snapshot_client_->wait_for_service(5s)) {
-      message = "snapshot service is unavailable";
-      return false;
-    }
-    auto future = snapshot_client_->async_send_request(
-      std::make_shared<CaptureSnapshot::Request>());
-    if (future.wait_for(10s) != std::future_status::ready) {
-      message = "snapshot capture timed out";
-      return false;
-    }
-    const auto response = future.get();
-    if (!response->success) {
-      message = "snapshot rejected: " + response->message;
-      return false;
-    }
-    return planSnapshot(response->snapshot, message);
+    const auto source_path = get_parameter("external_snapshot_file").as_string();
+    const auto snapshot = loadExternalSnapshot(source_path, message);
+    if (!snapshot) return false;
+    const bool planned = planSnapshot(*snapshot, message);
+    message = "external snapshot " + source_path + ": " + message;
+    return planned;
   }
 
-  bool captureAndStartTcpDebug(std::string& message)
+  bool startTcpDebug(std::string& message)
   {
-    using namespace std::chrono_literals;
-    if (!snapshot_client_->wait_for_service(5s)) {
-      message = "snapshot service is unavailable";
-      return false;
-    }
-    auto future = snapshot_client_->async_send_request(
-      std::make_shared<CaptureSnapshot::Request>());
-    if (future.wait_for(10s) != std::future_status::ready) {
-      message = "snapshot capture timed out";
-      return false;
-    }
-    const auto response = future.get();
-    if (!response->success) {
-      message = "snapshot rejected: " + response->message;
-      return false;
-    }
-    tcp_debug_snapshot_ = response->snapshot;
+    const auto source_path = get_parameter("external_snapshot_file").as_string();
+    const auto snapshot = loadExternalSnapshot(source_path, message);
+    if (!snapshot) return false;
+    tcp_debug_snapshot_ = *snapshot;
     tcp_debug_index_ = 0U;
     return planTcpDebugPoint(message);
   }
@@ -549,30 +509,10 @@ private:
     return true;
   }
 
-  bool planSavedSnapshot(std::string& message)
+  bool diagnoseExternalSnapshotSections(std::string& message)
   {
-    std::string source_path;
-    const auto snapshot = loadLatestSavedSnapshot(source_path, message);
-    if (!snapshot) return false;
-    const bool planned = planSnapshot(*snapshot, message);
-    message = "saved snapshot " + source_path + ": " + message;
-    return planned;
-  }
-
-  bool planNamedSavedSnapshot(const std::string& snapshot_file, std::string& message)
-  {
-    std::string source_path;
-    const auto snapshot = loadLatestSavedSnapshot(source_path, message, snapshot_file);
-    if (!snapshot) return false;
-    const bool planned = planSnapshot(*snapshot, message);
-    message = "saved snapshot " + source_path + ": " + message;
-    return planned;
-  }
-
-  bool diagnoseSavedSnapshotSections(std::string& message)
-  {
-    std::string source_path;
-    const auto snapshot = loadLatestSavedSnapshot(source_path, message);
+    const auto source_path = get_parameter("external_snapshot_file").as_string();
+    const auto snapshot = loadExternalSnapshot(source_path, message);
     if (!snapshot) return false;
     std::string validation;
     const bool canonical = validateSnapshot(*snapshot, validation);
@@ -597,72 +537,45 @@ private:
       report << "; " << section.name << "=" << (planned ? "planned" : "failed")
              << " (" << result << ")";
     }
-    message = "saved snapshot " + source_path + ": " + report.str();
+    message = "external snapshot " + source_path + ": " + report.str();
     return true;
   }
 
-  std::optional<Snapshot> loadLatestSavedSnapshot(
-    std::string& source_path, std::string& message,
-    const std::string& requested_file_name = "") const
+  std::optional<Snapshot> loadExternalSnapshot(
+    const std::string& external_snapshot_file, std::string& message) const
   {
     namespace fs = std::filesystem;
-    std::string directory = saved_snapshot_dir_;
-    if (directory.rfind("~/", 0) == 0) {
-      const char* home = std::getenv("HOME");
-      if (home == nullptr) {
-        message = "cannot expand saved_snapshot_dir without HOME";
-        return std::nullopt;
-      }
-      directory = std::string(home) + directory.substr(1);
+    if (external_snapshot_file.empty()) {
+      message = "external_snapshot_file is required";
+      return std::nullopt;
+    }
+    const fs::path selected(external_snapshot_file);
+    if (!selected.is_absolute() || selected.extension() != ".json") {
+      message = "external_snapshot_file must be an absolute .json path";
+      return std::nullopt;
     }
     std::error_code error;
-    fs::path selected;
-    const auto requested_file = requested_file_name.empty()
-      ? get_parameter("saved_snapshot_file").as_string()
-      : requested_file_name;
-    if (!requested_file.empty()) {
-      const fs::path requested_path(requested_file);
-      if (requested_path.filename() != requested_path || requested_path.extension() != ".json") {
-        message = "saved_snapshot_file must be a .json filename inside " + directory;
-        return std::nullopt;
-      }
-      selected = fs::path(directory) / requested_path;
-      if (!fs::is_regular_file(selected, error) || error) {
-        message = "selected saved snapshot is unavailable: " + selected.string();
-        return std::nullopt;
-      }
-    } else {
-      fs::file_time_type newest_time;
-      for (const auto& entry : fs::directory_iterator(directory, error)) {
-        if (error) break;
-        if (!entry.is_regular_file() || entry.path().extension() != ".json") continue;
-        const auto modified = entry.last_write_time(error);
-        if (error) break;
-        if (selected.empty() || modified > newest_time) {
-          selected = entry.path();
-          newest_time = modified;
-        }
-      }
-      if (error || selected.empty()) {
-        message = "no saved snapshot JSON is available in " + directory;
-        return std::nullopt;
-      }
+    if (!fs::is_regular_file(selected, error) || error) {
+      message = "external snapshot is unavailable: " + selected.string();
+      return std::nullopt;
     }
     const auto modified = fs::last_write_time(selected, error);
     if (error) {
-      message = "cannot read saved snapshot modification time: " + selected.string();
+      message = "cannot read external snapshot modification time: " + selected.string();
       return std::nullopt;
     }
     const auto age_s = std::chrono::duration<double>(
       fs::file_time_type::clock::now() - modified).count();
-    if (saved_snapshot_max_age_s_ > 0.0 && age_s > saved_snapshot_max_age_s_) {
-      std::ostringstream age_message;
-      age_message << "saved snapshot is stale (" << age_s << " s; maximum "
-                  << saved_snapshot_max_age_s_ << " s): " << selected.string();
-      message = age_message.str();
+    if (age_s > external_snapshot_max_age_s_) {
+      message = "external snapshot is stale (" + formatMeters(age_s) + " s; maximum " +
+        formatMeters(external_snapshot_max_age_s_) + " s): " + selected.string();
       return std::nullopt;
     }
     std::ifstream input(selected);
+    if (!input) {
+      message = "cannot read external snapshot: " + selected.string();
+      return std::nullopt;
+    }
     std::ostringstream buffer;
     buffer << input.rdbuf();
     const std::string json = buffer.str();
@@ -689,7 +602,7 @@ private:
     std::smatch frame_match, id_match;
     if (!std::regex_search(json, id_match, std::regex(R"json("snapshot_id"[[:space:]]*:[[:space:]]*"([^"]+)")json")) ||
         !std::regex_search(json, frame_match, std::regex(R"json("frame_id"[[:space:]]*:[[:space:]]*"([^"]+)")json"))) {
-      message = "saved snapshot JSON is missing snapshot_id or frame_id: " + selected.string();
+      message = "external snapshot JSON is missing snapshot_id or frame_id: " + selected.string();
       return std::nullopt;
     }
     Snapshot snapshot;
@@ -701,13 +614,12 @@ private:
         !point("back_right", snapshot.back_right) || !point("front_left", snapshot.front_left) ||
         !point("front_right", snapshot.front_right) || !point("surface_normal", normal) ||
         !scalar("plane_rms_m", snapshot.plane_rms_m)) {
-      message = "saved snapshot JSON is incomplete: " + selected.string();
+      message = "external snapshot JSON is incomplete: " + selected.string();
       return std::nullopt;
     }
     snapshot.surface_normal.x = normal.x;
     snapshot.surface_normal.y = normal.y;
     snapshot.surface_normal.z = normal.z;
-    source_path = selected.string();
     return snapshot;
   }
 
@@ -899,7 +811,7 @@ private:
       }
       std::unique_ptr<mtc::Task> task;
       std::vector<geometry_msgs::msg::PoseStamped> cut_targets;
-      const bool allow_cutter_carton_contact =
+      const bool skip_supplied_approach =
         cut_pattern_ == "middle_only" || cut_pattern_ == "middle_entry_debug" || partial_cut;
 
       const bool automatic_side_orientation =
@@ -907,13 +819,13 @@ private:
       const std::string requested_side_orientation_mode = side_cut_orientation_mode_;
       if (automatic_side_orientation) side_cut_orientation_mode_ = "edge_aligned";
       bool planned = planCutSegments(
-        snapshot, segments, partial_cut, allow_cutter_carton_contact, planning_timeout_s_,
+        snapshot, segments, partial_cut, skip_supplied_approach, planning_timeout_s_,
         motion_profile, "Snapshot-relative " + cut_pattern_ + " dry run", true, task,
         cut_targets, message);
       if (!planned && automatic_side_orientation) {
         side_cut_orientation_mode_ = "middle_aligned";
         planned = planCutSegments(
-          snapshot, segments, partial_cut, allow_cutter_carton_contact, planning_timeout_s_,
+          snapshot, segments, partial_cut, skip_supplied_approach, planning_timeout_s_,
           motion_profile, "Snapshot-relative " + cut_pattern_ + " top-orientation fallback dry run",
           true, task, cut_targets, message);
       }
@@ -1145,7 +1057,7 @@ private:
 
   bool planCutSegments(
     const Snapshot& snapshot, const std::vector<CutSegment>& segments, bool partial_cut,
-    bool allow_cutter_carton_contact, double planner_timeout_s,
+    bool skip_supplied_approach, double planner_timeout_s,
     const std::string& motion_profile, const std::string& task_name, bool explain_failure,
     std::unique_ptr<mtc::Task>& task, std::vector<geometry_msgs::msg::PoseStamped>& cut_targets,
     std::string& message)
@@ -1224,20 +1136,13 @@ private:
       transit_planner = chomp;
       stroke_planner = pilz_lin;
     }
-    if (!allow_cutter_carton_contact && !approach_joint_degrees_.empty()) {
+    if (!skip_supplied_approach && !approach_joint_degrees_.empty()) {
       auto approach = std::make_unique<mtc::stages::MoveTo>(
         "transit to supplied link6 approach [" + motion_profile + "]", transit_planner);
       approach->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
       approach->setGroup(planning_group_);
       approach->setGoal(jointGoalDegrees(joint_group, approach_joint_degrees_));
       task->add(std::move(approach));
-    }
-    if (allow_cutter_carton_contact) {
-      auto allow_cutter_contact = std::make_unique<mtc::stages::ModifyPlanningScene>(
-        "allow cutter/carton contact for bounded combined candidate");
-      allow_cutter_contact->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
-      allow_cutter_contact->allowCollisions(carton_collision_id_, "xeg32_cutter_link", true);
-      task->add(std::move(allow_cutter_contact));
     }
 
     cut_targets.clear();
@@ -1793,7 +1698,6 @@ private:
   std::optional<sensor_msgs::msg::JointState> current_joint_state_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;
   rclcpp::CallbackGroup::SharedPtr callback_group_;
-  rclcpp::Client<CaptureSnapshot>::SharedPtr snapshot_client_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_pub_;
   rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr target_pose_pub_;
   rclcpp::Publisher<moveit_msgs::msg::CollisionObject>::SharedPtr carton_collision_pub_;
@@ -1801,7 +1705,6 @@ private:
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr section_diagnostic_service_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr execute_service_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr clear_service_;
-  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr live_detection_plan_service_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr tcp_debug_start_service_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr tcp_debug_record_service_;
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr cut_pattern_callback_;
@@ -1811,16 +1714,16 @@ private:
   std::size_t tcp_debug_index_{0U};
   std::unique_ptr<mtc::Task> planned_task_;
   std::thread execution_thread_;
-  std::string saved_snapshot_dir_, cut_pattern_, side_cut_orientation_mode_,
+  std::string external_snapshot_file_, cut_pattern_, side_cut_orientation_mode_,
     combined_first_side_link6_frame_;
   std::string planning_frame_, planning_group_, tool_link_, planning_pipeline_, chomp_pipeline_;
-  std::string pilz_pipeline_, motion_profile_, snapshot_service_, carton_collision_id_;
-  double carton_height_m_, hover_clearance_m_, cut_clearance_m_, middle_entry_alignment_m_,
-    side_cut_tilt_deg_,
+  std::string pilz_pipeline_, motion_profile_, carton_collision_id_;
+  double external_snapshot_max_age_s_, carton_height_m_, hover_clearance_m_, cut_clearance_m_,
+    middle_entry_alignment_m_, side_cut_tilt_deg_,
     partial_start_fraction_, partial_end_fraction_, approach_cut_length_m_, cartesian_step_m_,
     planning_timeout_s_, combined_search_budget_s_, side_candidate_grid_m_,
     side_candidate_corner_inset_m_, side_candidate_min_length_m_, manual_first_side_max_length_m_,
-    velocity_scaling_, acceleration_scaling_, saved_snapshot_max_age_s_;
+    velocity_scaling_, acceleration_scaling_;
   std::vector<double> partial_start_joint_degrees_, approach_joint_degrees_;
   std::vector<double> approach_cut_start_xyz_, approach_cut_orientation_xyzw_;
   std::vector<double> side_orientation_offsets_deg_, combined_first_side_link6_xyz_,

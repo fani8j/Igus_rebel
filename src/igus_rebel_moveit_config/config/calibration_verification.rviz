@@ -1,0 +1,66 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: moveit_task_constructor/Motion Planning Tasks
+    Name: Motion Planning Tasks
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Value: true
+      Cell Size: 0.1
+      Plane Cell Count: 20
+    - Class: moveit_rviz_plugin/PlanningScene
+      Name: Robot and obstacles
+      Enabled: true
+      Robot Description: robot_description
+      Planning Scene Topic: /monitored_planning_scene
+      Scene Geometry:
+        Scene Alpha: 0.8
+      Scene Robot:
+        Robot Alpha: 1
+        Show Robot Visual: true
+        Show Robot Collision: false
+    - Class: moveit_task_constructor/Motion Planning Tasks
+      Name: Verification plan preview
+      Enabled: true
+      Robot Description: robot_description
+      Task Solution Topic: /solution
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Board axes
+      Value: true
+      Topic:
+        Value: /calibration_verification/detection_markers
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Depth: 1
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Verification targets
+      Value: true
+      Topic:
+        Value: /calibration_verification/markers
+        Reliability Policy: Reliable
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Depth: 1
+  Enabled: true
+  Global Options:
+    Fixed Frame: base_link
+    Background Color: 48; 48; 48
+    Frame Rate: 15
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 1.5
+      Pitch: 0.5
+      Yaw: 0.8
+      Focal Point: {X: 0.2, Y: 0.0, Z: 0.25}
+Window Geometry:
+  Width: 1200
+  Height: 850

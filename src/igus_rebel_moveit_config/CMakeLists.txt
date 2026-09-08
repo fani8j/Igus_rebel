@@ -13,10 +13,11 @@ find_package(geometry_msgs REQUIRED)
 find_package(moveit_msgs REQUIRED)
 find_package(shape_msgs REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
+find_package(moveit_core REQUIRED)
+find_package(moveit_ros_planning REQUIRED)
 find_package(moveit_task_constructor_core REQUIRED)
 find_package(moveit_task_constructor_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
-find_package(compal_box_msgs REQUIRED)
 
 add_executable(rebel_servo_teleop_keyboard src/rebel_servo_teleop_keyboard.cpp)
 ament_target_dependencies(rebel_servo_teleop_keyboard 
@@ -58,7 +59,6 @@ ament_target_dependencies(box_motion_executor
 
 add_executable(box_h_cut_executor src/box_h_cut_executor.cpp)
 ament_target_dependencies(box_h_cut_executor
-  compal_box_msgs
   rclcpp
   sensor_msgs
   std_srvs
@@ -69,12 +69,22 @@ ament_target_dependencies(box_h_cut_executor
   moveit_task_constructor_core
 )
 target_compile_features(box_h_cut_executor PUBLIC cxx_std_17)
+
+add_executable(calibration_verification src/calibration_verification.cpp)
+ament_target_dependencies(calibration_verification
+  rclcpp rclcpp_action std_srvs sensor_msgs geometry_msgs visualization_msgs
+  control_msgs moveit_core moveit_msgs moveit_ros_planning shape_msgs
+  moveit_task_constructor_core moveit_task_constructor_msgs
+  moveit_ros_planning_interface
+)
+target_compile_features(calibration_verification PUBLIC cxx_std_17)
 install(TARGETS
   rebel_servo_teleop_keyboard
   rebel_servo_teleop_gamepad
   rebel_mtc_ptp_lin
   box_motion_executor
   box_h_cut_executor
+  calibration_verification
   DESTINATION lib/${PROJECT_NAME}
 )
 

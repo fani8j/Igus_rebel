@@ -72,8 +72,4 @@
     <disable_collisions link1="xeg32_base_link" link2="xeg32_left_carriage_link" reason="Adjacent" />
     <disable_collisions link1="xeg32_base_link" link2="xeg32_right_carriage_link" reason="Adjacent" />
     <disable_collisions link1="xeg32_base_link" link2="xeg32_camera_mount_link" reason="Adjacent" />
-    <disable_collisions link1="xeg32_base_link" link2="xeg32_cutter_link" reason="Adjacent" />
-    <disable_collisions link1="xeg32_cutter_link" link2="xeg32_left_carriage_link" reason="Adjacent" />
-    <disable_collisions link1="xeg32_cutter_link" link2="xeg32_right_carriage_link" reason="Adjacent" />
-    <disable_collisions link1="link6" link2="xeg32_cutter_link" reason="Adjacent" />
 </robot>

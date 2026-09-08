@@ -1,0 +1,88 @@
+calibration_verification:
+  ros__parameters:
+    # Measured obstacles enabled; execution still requires explicit authorization.
+    preview_only: false
+    preapproach_only: false
+    retract_after_approach: false
+    planning_group: igus_rebel_arm
+    planning_frame: base_link
+    tool_link: xeg32_tool_tip
+    planning_pipeline: ompl
+    planner_id: RRTConnectkConfigDefault
+
+    controller: rebel_arm_trajectory_controller
+    controller_action: /rebel_arm_trajectory_controller/follow_joint_trajectory
+    joint_states_topic: /joint_states
+
+    # The board pose is captured from /calibration_verification/board_pose.
+    # Uncomment and fill these only after measuring the marker/fixture
+    # relationship. Omitted numeric vectors keep planning fail-closed instead of
+    # assuming a board, cube, marker, or user fixture.
+    # Measurement origin relative to the detected marker center, in marker axes.
+    # All point XY offsets below are relative to this origin.
+    reference_origin_xyz_m: [0.004286, 0.004286, 0.0]
+    point_1_xy_m: [0.0, -0.064585]
+    point_2_xy_m: [-0.07530, -0.064585]
+    # point_3_xy_m: [-0.079586,  -0.002]
+    point_3_xy_m: [-0.07530,  -0.002]
+    board_target_height_m: 0.0
+    # board_to_tcp_orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+    board_to_tcp_rpy_rad: [3.141592653589793, 0.0, 0.0]
+
+    # Platform in the original marker frame, with reference shift applied once.
+    board_collision_id: calibration_platform
+    board_box_center_xyz_m: [0.045714, 0.091664, 0.001]
+    board_box_dimensions_xyz_m: [0.100, 0.100, 0.002]
+    # Below-base keep-out volume in planning_frame (base_link), top at Z=0.
+    table_collision_id: below_base
+    table_box_center_xyz_m: [0.0, 0.0, -1.0]
+    table_box_dimensions_xyz_m: [4.0, 4.0, 2.0]
+
+    # Cube pose is expressed in the captured board frame. The reference point and
+    # approach direction are expressed in the cube frame. Leave omitted until the
+    # actual cube/corner/face and safe approach are known.
+    cube_collision_id: calibration_cube
+    cube_pose_xyz_m: [0.045714, 0.091664, 0.027]
+    cube_pose_rpy_rad: [0.0, 0.0, 0.0]
+    cube_dimensions_xyz_m: [0.050, 0.050, 0.050]
+    # cube_reference_xyz_m: [0.0, 0.0, 0.0]
+    # cube_approach_direction_xyz: [0.0, 0.0, 1.0]
+    # cube_to_tcp_orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+    # cube_to_tcp_rpy_rad: [0.0, 0.0, 0.0]
+
+    # Plan a final non-contact Cartesian descent after the target standoff.
+    target_standoff_m: 0.02
+    final_standoff_m: 0.01
+    preapproach_distance_m: 0.080
+    planning_timeout_s: 15.0
+    max_solutions: 1
+    velocity_scaling: 0.05
+    acceleration_scaling: 0.05
+
+    max_board_pose_age_s: 2.0
+    max_joint_state_age_s: 2.0
+    plan_expiry_s: 60.0
+    start_state_tolerance_rad: 0.01
+    board_pose_position_tolerance_m: 0.002
+    board_pose_angular_tolerance_rad: 0.017453292519943295
+    future_stamp_tolerance_s: 0.1
+
+    # Execution is always explicit via ~/execute_plan and remains disabled unless
+    # both this parameter or launch override and operator intent set it true.
+    execution_allowed: false
+    controller_wait_timeout_s: 30.0
+    controller_goal_send_timeout_s: 5.0
+    execution_timeout_s: 120.0
+    controller_cancel_timeout_s: 5.0
+    post_execution_state_settle_s: 0.25
+
+    planning_scene_service: /get_planning_scene
+    planning_scene_topic: /planning_scene
+    planning_scene_world_topic: /planning_scene_world
+    collision_object_topic: /collision_object
+    planning_scene_state_wait_s: 2.0
+
+    # Empty disables record writing. Set to a writable directory to save JSON/CSV
+    # execution records after mock or deliberately authorized hardware runs.
+    output_directory: ""
+    record_format: json

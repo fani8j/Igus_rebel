@@ -3,21 +3,22 @@ box_h_cut_executor:
     planning_group: igus_rebel_arm
     # Perception canonicalizes carton geometry into this frame before planning.
     planning_frame: base_link
+    # Saved approach/combined targets predate the calibrated TCP; revalidate before reuse.
     tool_link: xeg32_tool_tip
     planning_pipeline: ompl
     chomp_pipeline: chomp
     pilz_pipeline: pilz_industrial_motion_planner
     # OMPL transit plus a Cartesian cut stroke plans the frozen snapshot.
     motion_profile: ompl_cartesian
-    snapshot_service: /box_perception/capture_snapshot
+    # Generated independently by camera_point_to_base_link.py; the planner never runs vision.
+    external_snapshot_file: /home/farhan/Igus_rebel/outputs/seam_3d_base_link.json
+    # Refuse a previous carton result if planning is not started promptly.
+    external_snapshot_max_age_s: 30.0
     # Collision box is derived from detected top-face corners; height extends below that plane.
     carton_collision_id: detected_carton
     carton_height_m: 0.20
-    # Empty selects the newest persisted perception result. Set a .json basename to reuse it.
-    saved_snapshot_dir: ~/box_snapshots
-    saved_snapshot_file: ""
-    # Fixed-fixture override approved by the operator: zero disables the file-age gate.
-    saved_snapshot_max_age_s: 0.0
+    # The external converter writes a complete canonical base_link snapshot atomically.
+    # The planner rejects missing or invalid points instead of estimating carton geometry.
     # middle_only runs the complete seam stroke. middle_entry_debug stops at seam_start after
     # the hover-entry, alignment, and direct descent stages; it never traverses the seam.
     cut_pattern: middle_only
@@ -31,7 +32,7 @@ box_h_cut_executor:
     approach_cut_start_xyz: [0.270446, -0.000835, 0.127984]
     approach_cut_orientation_xyzw: [0.679474, -0.371311, 0.538700, 0.332032]
     approach_cut_length_m: 0.0518
-    # Contact is permitted only between the carton and cutter link during bounded cutter strokes.
+    # No knife collision model is loaded; physical cutter clearance is not checked.
     # Before a middle seam cut, travel 10 mm along the seam's reverse direction at hover height,
     # align linearly to seam_start, then descend directly to the first cut point.
     middle_entry_alignment_m: 0.010

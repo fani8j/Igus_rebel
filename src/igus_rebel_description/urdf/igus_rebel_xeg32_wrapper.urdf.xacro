@@ -7,20 +7,9 @@
   <xacro:arg name="include_ros2_control" default="true"/>
   <xacro:arg name="attach_xeg32" default="true"/>
 
-  <!--
-    Fixed hardware mount, verified from the assembled XEG model. The gripper
-    itself is never moved by a knife-pose experiment. The 25 x 25 mm knife is
-    gripped at its CAD-verified jaw position; candidate poses may only change
-    the knife transform while retaining a physically valid jaw engagement.
-  -->
+  <!-- Retained rough gripper mount; not used to define the calibrated TCP. -->
   <xacro:arg name="xeg32_mount_xyz" default="0 0 0.052"/>
   <xacro:arg name="xeg32_mount_rpy" default="0 0 0.261799"/>
-  <xacro:arg name="attach_cutter" default="true"/>
-  <xacro:arg name="cutter_mount_xyz" default="-0.077 0 0.029"/>
-  <xacro:arg name="cutter_mount_rpy" default="0 0 0"/>
-  <xacro:arg name="cutter_length" default="0.1855"/>
-  <xacro:arg name="cutter_width" default="0.025"/>
-  <xacro:arg name="cutter_tip_length" default="0.015"/>
 
   <xacro:include filename="$(find igus_rebel_description)/urdf/igus_rebel2.urdf"/>
   <xacro:include filename="$(find igus_rebel_description)/urdf/igus_rebel2.control.xacro"/>
@@ -45,13 +34,27 @@
       parent_link="link6"
       prefix="xeg32_"
       flange_xyz="$(arg xeg32_mount_xyz)"
-      flange_rpy="$(arg xeg32_mount_rpy)"
-      attach_cutter="$(arg attach_cutter)"
-      cutter_mount_xyz="$(arg cutter_mount_xyz)"
-      cutter_mount_rpy="$(arg cutter_mount_rpy)"
-      cutter_length="$(arg cutter_length)"
-      cutter_width="$(arg cutter_width)"
-      cutter_tip_length="$(arg cutter_tip_length)"/>
+      flange_rpy="$(arg xeg32_mount_rpy)"/>
   </xacro:if>
-
+  <!-- Calibrated frames remain available even when gripper visuals are omitted. -->
+  <link name="igus_tool0"/>
+  <joint name="link6_to_igus_tool0" type="fixed">
+    <parent link="link6"/>
+    <child link="igus_tool0"/>
+    <origin xyz="0 0 0.0527" rpy="0 0 3.141592653589793"/>
+  </joint>
+  <link name="xeg32_tool_tip">
+    <visual>
+      <geometry><sphere radius="0.006"/></geometry>
+      <material name="xeg32_tool_tip_marker"><color rgba="0.1 1 0.1 1"/></material>
+    </visual>
+    <!-- Tip-only proxy: does not cover the attached cutter body. -->
+    <collision><geometry><sphere radius="0.006"/></geometry></collision>
+  </link>
+  <joint name="igus_tool0_to_xeg32_tool_tip" type="fixed">
+    <parent link="igus_tool0"/>
+    <child link="xeg32_tool_tip"/>
+    <!-- knivetool4_with_pose2 XML OFFSET, converted from millimetres to metres. -->
+    <origin xyz="0.068936 0.046766 0.127060" rpy="0 0 0"/>
+  </joint>
 </robot>

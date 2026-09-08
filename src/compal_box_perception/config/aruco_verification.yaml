@@ -1,0 +1,27 @@
+aruco_verification:
+  ros__parameters:
+    rgb_topic: /camera/color/image_raw
+    camera_info_topic: /camera/color/camera_info
+    use_compressed_rgb: false
+    robot_base_frame: base_link
+
+    # Required: set both explicitly for the printed marker in use.
+    marker_dictionary: "DICT_ARUCO_ORIGINAL"
+    marker_id: 36
+    marker_size_m: 0.060
+
+    stable_count: 5
+    max_stable_position_delta_m: 0.010
+    max_stable_rotation_delta_deg: 3.0
+    max_reprojection_error_px: 1.0
+    min_ippe_error_ratio: 1.5
+    min_marker_side_px: 30.0
+
+    max_image_age_s: 0.5
+    max_camera_info_delta_s: 0.5
+    tf_timeout_s: 0.20
+    max_tf_age_s: 0.5
+
+    publish_debug_image: true
+    publish_markers: true
+    marker_lifetime_s: 1.0

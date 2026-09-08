@@ -1,0 +1,13 @@
+/**:
+  ros__parameters:
+    # Raw TF emitted by aruco_opencv.
+    source_frame: camera_color_optical_frame
+    marker_frame: marker_13
+
+    # Always distinct from marker_frame; raw TF remains available for debugging.
+    filtered_frame: marker_13_filtered
+
+    # At approximately 11 Hz, this gives about 0.3 s of smoothing latency.
+    window_size: 7
+    max_position_jump_m: 0.010
+    max_rotation_jump_deg: 5.0

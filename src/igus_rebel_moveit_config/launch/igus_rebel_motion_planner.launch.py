@@ -3,7 +3,6 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
-from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 
@@ -26,19 +25,6 @@ def generate_launch_description():
         default_value="false",
         description="Execute the legacy PTP/LIN task; unrelated to box motion",
     )
-    run_perception_arg = DeclareLaunchArgument(
-        "run_box_perception",
-        default_value="true",
-        description="Start compressed RGB-D box perception",
-    )
-    publish_calibration_arg = DeclareLaunchArgument(
-        "publish_calibration",
-        default_value="true",
-        description="Publish the saved easy_handeye2 camera calibration",
-    )
-    calibration_name_arg = DeclareLaunchArgument(
-        "calibration_name", default_value="gemini336_world_v4_t"
-    )
     run_box_executor_arg = DeclareLaunchArgument(
         "run_box_motion_executor",
         default_value="false",
@@ -50,27 +36,12 @@ def generate_launch_description():
     run_h_cut_executor_arg = DeclareLaunchArgument(
         "run_box_h_cut_executor",
         default_value="true",
-        description="Start the frozen-snapshot plan-only H-cut MTC executor",
+        description="Start the external-snapshot plan-only H-cut MTC executor",
     )
     h_cut_delay_arg = DeclareLaunchArgument(
         "box_h_cut_start_delay", default_value="3.0"
     )
 
-    perception_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(
-                get_package_share_directory("compal_box_perception"),
-                "launch",
-                "box_perception.launch.py",
-            )
-        ),
-        condition=IfCondition(LaunchConfiguration("run_box_perception")),
-        launch_arguments={
-            "rviz": "false",
-            "publish_calibration": LaunchConfiguration("publish_calibration"),
-            "calibration_name": LaunchConfiguration("calibration_name"),
-        }.items(),
-    )
     moveit_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
@@ -107,14 +78,10 @@ def generate_launch_description():
             hardware_protocol_arg,
             run_mtc_program_arg,
             execute_mtc_arg,
-            run_perception_arg,
-            publish_calibration_arg,
-            calibration_name_arg,
             run_box_executor_arg,
             box_motion_delay_arg,
             run_h_cut_executor_arg,
             h_cut_delay_arg,
-            perception_launch,
             moveit_launch,
         ]
     )
