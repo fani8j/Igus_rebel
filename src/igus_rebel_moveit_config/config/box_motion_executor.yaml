@@ -3,7 +3,7 @@ box_motion_executor:
     planning_group: igus_rebel_arm
     tool_link: xeg32_tool_tip
     planning_pipeline: ompl
-    planner_id: ""
+    planner_id: "RRTConnectkConfigDefault"
 
     approach_offset_m: 0.10
     # WiFi image transport currently arrives several seconds behind wall time.

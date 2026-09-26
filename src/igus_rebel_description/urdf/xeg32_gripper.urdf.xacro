@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
-  <!-- Rough HIWIN XEG-32 gripper and camera-mount geometry; independent of TCP calibration. -->
+  <!-- Rough HIWIN XEG-32 gripper geometry; independent of TCP calibration. -->
   <xacro:macro name="xeg32_gripper" params="parent_link prefix flange_xyz flange_rpy lock_joints:=true">
     <joint name="${prefix}mount_joint" type="fixed">
       <origin xyz="${flange_xyz}" rpy="${flange_rpy}" />
@@ -25,7 +25,7 @@
       <collision>
         <origin xyz="0.049 -0 0.016" rpy="0 -0 -1.5708" />
         <geometry>
-          <mesh filename="package://igus_rebel_description/meshes/xeg32/part_1.stl" />
+          <mesh filename="package://igus_rebel_description/meshes/xeg32_collision/part_1.stl" />
         </geometry>
       </collision>
       <visual>
@@ -40,7 +40,7 @@
       <collision>
         <origin xyz="0.0065 -0 0.029" rpy="0 -0 -1.5708" />
         <geometry>
-          <mesh filename="package://igus_rebel_description/meshes/xeg32/xeg_base.stl" />
+          <mesh filename="package://igus_rebel_description/meshes/xeg32_collision/xeg_base.stl" />
         </geometry>
       </collision>
       <visual>
@@ -55,7 +55,7 @@
       <collision>
         <origin xyz="0 0 0" rpy="0 0 -1.5708" />
         <geometry>
-          <mesh filename="package://igus_rebel_description/meshes/xeg32/part_1__2.stl" />
+          <mesh filename="package://igus_rebel_description/meshes/xeg32_collision/part_1__2.stl" />
         </geometry>
       </collision>
     </link>
@@ -92,7 +92,7 @@
       <collision>
         <origin xyz="-2.30037e-07 -0.004 -0.00315591" rpy="-1.5708 0 0" />
         <geometry>
-          <mesh filename="package://igus_rebel_description/meshes/xeg32/part_1__3.stl" />
+          <mesh filename="package://igus_rebel_description/meshes/xeg32_collision/part_1__3.stl" />
         </geometry>
       </collision>
     </link>
@@ -114,7 +114,7 @@
       <collision>
         <origin xyz="-2.30037e-07 -0.004 -0.00315591" rpy="-1.5708 0 -0" />
         <geometry>
-          <mesh filename="package://igus_rebel_description/meshes/xeg32/part_1__3.stl" />
+          <mesh filename="package://igus_rebel_description/meshes/xeg32_collision/part_1__3.stl" />
         </geometry>
       </collision>
       <visual>
@@ -133,43 +133,6 @@
         </geometry>
       </collision>
     </link>
-    <link name="${prefix}camera_mount_link">
-      <inertial>
-        <origin xyz="0 0 0" rpy="0 0 0" />
-        <mass value="1e-09" />
-        <inertia ixx="1e-09" ixy="0" ixz="0" iyy="1e-09" iyz="0" izz="1e-09" />
-      </inertial>
-      <visual>
-        <origin xyz="-0.0120767 0.0750311 -0.0273242" rpy="1e-12 -1.56937 -1.5708" />
-        <geometry>
-          <mesh filename="package://igus_rebel_description/meshes/xeg32/00_mb2502_asm_1_1.stl" />
-        </geometry>
-        <material name="${prefix}00_mb2502_asm_1_1_material">
-          <color rgba="0.917647 0.917647 0.917647 1" />
-        </material>
-      </visual>
-      <collision>
-        <origin xyz="-0.0120767 0.0750311 -0.0273242" rpy="1e-12 -1.56937 -1.5708" />
-        <geometry>
-          <mesh filename="package://igus_rebel_description/meshes/xeg32/00_mb2502_asm_1_1.stl" />
-        </geometry>
-      </collision>
-      <visual>
-        <origin xyz="0 0.032 -0.009" rpy="-1.5708 -1.5708 0" />
-        <geometry>
-          <mesh filename="package://igus_rebel_description/meshes/xeg32/part_1__4.stl" />
-        </geometry>
-        <material name="${prefix}part_1_5_material">
-          <color rgba="0.647059 0.647059 0.647059 1" />
-        </material>
-      </visual>
-      <collision>
-        <origin xyz="0 0.032 -0.009" rpy="-1.5708 -1.5708 0" />
-        <geometry>
-          <mesh filename="package://igus_rebel_description/meshes/xeg32/part_1__4.stl" />
-        </geometry>
-      </collision>
-    </link>
     <!-- The ReBeL driver currently publishes arm states only. Lock the
          unactuated XEG joints in the planning model until a gripper controller
          publishes their states; this prevents an incomplete robot state. -->
@@ -183,11 +146,6 @@
         <origin xyz="-0.0312 -0.0334131 0.029" rpy="1.5708 1.5708 0" />
         <parent link="${prefix}base_link" />
         <child link="${prefix}right_carriage_link" />
-      </joint>
-      <joint name="${prefix}camera_tilt_joint" type="fixed">
-        <origin xyz="0.071 -0.0092 0.055" rpy="1.5708 -0.149605 -0" />
-        <parent link="${prefix}base_link" />
-        <child link="${prefix}camera_mount_link" />
       </joint>
     </xacro:if>
     <xacro:unless value="${lock_joints}">
@@ -205,13 +163,6 @@
         <axis xyz="0 0 1" />
         <limit effort="10" velocity="10" lower="-0.0116631" upper="0.00483688" />
         <mimic joint="${prefix}left_carriage_joint" multiplier="1.0" />
-      </joint>
-      <joint name="${prefix}camera_tilt_joint" type="revolute">
-        <origin xyz="0.071 -0.0092 0.055" rpy="1.5708 -0.149605 -0" />
-        <parent link="${prefix}base_link" />
-        <child link="${prefix}camera_mount_link" />
-        <axis xyz="0 0 1" />
-        <limit effort="10" velocity="10" lower="-0.062339" upper="0.373993" />
       </joint>
     </xacro:unless>
   </xacro:macro>

@@ -35,7 +35,7 @@ smoothing_filter_plugin_name: "online_signal_smoothing::ButterworthFilterPlugin"
 # which other nodes can use as a source for information about the planning environment.
 # NOTE: If a different node in your system is responsible for the "primary" planning scene instance (e.g. the MoveGroup node),
 # then is_primary_planning_scene_monitor needs to be set to false.
-is_primary_planning_scene_monitor: true
+is_primary_planning_scene_monitor: false
 check_octomap_collisions: false  # Check collision against the octomap (if a 3D sensor plugin is available)
 
 ## MoveIt properties
@@ -45,10 +45,9 @@ move_group_name: igus_rebel_arm  # Often 'manipulator' or 'arm'
 lower_singularity_threshold: 600.0  # Start decelerating when the condition number hits this (close to singularity)
 hard_stop_singularity_threshold: 900.0  # Stop when the condition number hits this
 leaving_singularity_threshold_multiplier: 10.0  # Multiply the hard stop limit by this when leaving singularity (see https://github.com/moveit/moveit2/pull/620)
-# Added as a buffer to joint variable position bounds [in that joint variable's respective units].
-# Can be of size 1, which applies the margin to all joints, or the same size as the number of degrees of freedom of the active joint group.
-# If moving quickly, make these values larger.
-joint_limit_margins: [0.12]
+# Added as a buffer to every joint position bound. Humble accepts one scalar margin.
+# 0.02617994 rad = 1.5 degrees; the hard URDF joint limits remain enforced.
+joint_limit_margins: [0.02617994]
 
 ## Topic names
 cartesian_command_in_topic: delta_twist_cmds  # Topic for incoming Cartesian twist commands

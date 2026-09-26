@@ -1,4 +1,4 @@
-teleop_joy_twist:
+servo_keyboard_input:
   ros__parameters:
     command_frame_id: "base_link"
     axis_linear_x: 1

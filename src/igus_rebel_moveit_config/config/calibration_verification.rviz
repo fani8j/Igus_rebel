@@ -45,6 +45,15 @@ Visualization Manager:
         Durability Policy: Transient Local
         History Policy: Keep Last
         Depth: 1
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Hover Targets
+      Value: true
+      Topic:
+        Value: /calibration_verification/hover_targets
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Depth: 1
   Enabled: true
   Global Options:
     Fixed Frame: base_link

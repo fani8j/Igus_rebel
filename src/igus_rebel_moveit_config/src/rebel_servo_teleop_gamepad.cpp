@@ -12,7 +12,8 @@
 #include <signal.h>
 #include <stdio.h>
 
-#define MAX_VEL 0.02
+#define MAX_LINEAR_VEL 0.10
+#define MAX_ANGULAR_VEL 0.5
 
 // Some constants used in the Servo Teleop demo
 namespace
@@ -124,12 +125,12 @@ void JoyServo::joyCallback(const sensor_msgs::msg::Joy::SharedPtr msg)
         // Enable button must be held to send commands
         if (msg->buttons[button_enable_])
         {
-            twist_msg->twist.linear.x = MAX_VEL * msg->axes[axis_linear_x_];
-            twist_msg->twist.linear.y = MAX_VEL * msg->axes[axis_linear_y_];
-            twist_msg->twist.linear.z = MAX_VEL * msg->axes[axis_linear_z_];
-            twist_msg->twist.angular.x = MAX_VEL * msg->axes[axis_angular_x_];
-            twist_msg->twist.angular.y = MAX_VEL * msg->axes[axis_angular_y_];
-            twist_msg->twist.angular.z = MAX_VEL * msg->axes[axis_angular_z_];
+            twist_msg->twist.linear.x = MAX_LINEAR_VEL * msg->axes[axis_linear_x_];
+            twist_msg->twist.linear.y = MAX_LINEAR_VEL * msg->axes[axis_linear_y_];
+            twist_msg->twist.linear.z = MAX_LINEAR_VEL * msg->axes[axis_linear_z_];
+            twist_msg->twist.angular.x = MAX_ANGULAR_VEL * msg->axes[axis_angular_x_];
+            twist_msg->twist.angular.y = MAX_ANGULAR_VEL * msg->axes[axis_angular_y_];
+            twist_msg->twist.angular.z = MAX_ANGULAR_VEL * msg->axes[axis_angular_z_];
         }
         else
         {

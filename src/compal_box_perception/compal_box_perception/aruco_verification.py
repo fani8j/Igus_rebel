@@ -144,6 +144,37 @@ def _marker_object_points(marker_size_m: float) -> np.ndarray:
     )
 
 
+# Hover-test chart (aruco_tcp_hover_test_A4.pdf): marker centre = origin,
+# marker-local X = right, Y = up (same convention as _marker_object_points).
+# (name, x_mm, y_mm) measured from the chart; all within 100 mm of centre.
+HOVER_TEST_POINTS_MM = (
+    ("CENTER", 0, 0),
+    ("TOP", 0, 60),
+    ("BOTTOM", 0, -60),
+    ("LEFT", -60, 0),
+    ("RIGHT", 60, 0),
+    ("P1", 45, 60),
+    ("P2", -70, 35),
+    ("P3", 20, -85),
+)
+
+
+def hover_test_points(
+    origin: np.ndarray, rotation: np.ndarray, hover_height_m: float
+) -> list:
+    """Return ``[(name, xyz)]`` hover targets above the chart in the pose frame.
+
+    Each target is the chart offset in marker-local X/Y raised by
+    ``hover_height_m`` along marker-local +Z (out of the paper), expressed in
+    the same frame as ``origin``/``rotation`` (the stable board pose frame).
+    """
+    points = []
+    for name, x_mm, y_mm in HOVER_TEST_POINTS_MM:
+        local = np.array([x_mm / 1000.0, y_mm / 1000.0, hover_height_m], dtype=np.float64)
+        points.append((name, origin + rotation @ local))
+    return points
+
+
 def _solve_marker_pose_ippe(
     corners: np.ndarray,
     camera_matrix: np.ndarray,
@@ -384,6 +415,8 @@ class ArucoVerificationNode(Node):
             "marker_dictionary",
             "marker_id",
             "marker_size_m",
+            "hover_height_m",
+            "publish_hover_targets",
             "stable_count",
             "max_stable_position_delta_m",
             "max_stable_rotation_delta_deg",
@@ -448,6 +481,11 @@ class ArucoVerificationNode(Node):
             "/calibration_verification/detection_markers",
             marker_qos,
         )
+        self._hover_pub = self.create_publisher(
+            MarkerArray,
+            "/calibration_verification/hover_targets",
+            marker_qos,
+        )
         self._debug_pub = self.create_publisher(Image, "~/debug_image", 10)
 
         self._use_compressed_rgb = bool(self._parameter("use_compressed_rgb"))
@@ -478,6 +516,8 @@ class ArucoVerificationNode(Node):
             "marker_dictionary": "",
             "marker_id": -1,
             "marker_size_m": 0.060,
+            "hover_height_m": 0.020,
+            "publish_hover_targets": True,
             "stable_count": 5,
             "max_stable_position_delta_m": 0.010,
             "max_stable_rotation_delta_deg": 3.0,
@@ -506,6 +546,8 @@ class ArucoVerificationNode(Node):
             )
         if float(self._parameter("marker_size_m")) <= 0.0:
             raise ValueError("marker_size_m must be positive")
+        if not 0.0 <= float(self._parameter("hover_height_m")) <= 0.5:
+            raise ValueError("hover_height_m must be in [0, 0.5]")
         if int(self._parameter("stable_count")) < 1:
             raise ValueError("stable_count must be positive")
         if float(self._parameter("max_stable_position_delta_m")) <= 0.0:
@@ -613,6 +655,8 @@ class ArucoVerificationNode(Node):
             self._last_published_pose = base_pose
             if bool(self._parameter("publish_markers")):
                 self._publish_markers(base_pose)
+            if bool(self._parameter("publish_hover_targets")):
+                self._publish_hover_targets(base_pose)
             status = (
                 f"published stable {confirmation_count}/{self._stable_window.required_count}; "
                 f"reprojection {estimate.reprojection_error_px:.2f} px"
@@ -1007,6 +1051,42 @@ class ArucoVerificationNode(Node):
         marker_array.markers.append(marker)
         self._marker_pub.publish(marker_array)
         self._markers_visible = False
+        if bool(self._parameter("publish_hover_targets")):
+            clear = MarkerArray()
+            wipe = Marker()
+            wipe.action = Marker.DELETEALL
+            clear.markers.append(wipe)
+            self._hover_pub.publish(clear)
+
+    def _publish_hover_targets(self, pose: PoseStamped) -> None:
+        lifetime = Duration(seconds=float(self._parameter("marker_lifetime_s"))).to_msg()
+        origin = _pose_position(pose)
+        rotation = _quaternion_to_matrix(_pose_quaternion(pose))
+        hover_h = float(self._parameter("hover_height_m"))
+        array = MarkerArray()
+        for index, (name, xyz) in enumerate(hover_test_points(origin, rotation, hover_h)):
+            sphere = Marker()
+            sphere.header = pose.header
+            sphere.ns = "tcp_hover_targets"
+            sphere.id = index
+            sphere.type = Marker.SPHERE
+            sphere.action = Marker.ADD
+            sphere.pose.position = _point_from_array(xyz)
+            sphere.pose.orientation.w = 1.0
+            sphere.scale.x = sphere.scale.y = sphere.scale.z = 0.008
+            sphere.color.r = 0.2
+            sphere.color.g = 1.0
+            sphere.color.b = 0.2
+            sphere.color.a = 1.0
+            sphere.lifetime = lifetime
+            array.markers.append(sphere)
+            array.markers.append(
+                self._text_marker(
+                    pose.header, xyz + rotation[:, 2] * 0.015, name,
+                    (0.2, 1.0, 0.2), 100 + index, lifetime, scale=0.015,
+                )
+            )
+        self._hover_pub.publish(array)
 
 
 def _transform_pose(pose: PoseStamped, transform: TransformStamped) -> PoseStamped:

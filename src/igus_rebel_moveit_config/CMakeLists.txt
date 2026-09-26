@@ -11,6 +11,7 @@ find_package(sensor_msgs REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(moveit_msgs REQUIRED)
+find_package(igus_rebel_msgs REQUIRED)
 find_package(shape_msgs REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
 find_package(moveit_core REQUIRED)
@@ -25,6 +26,7 @@ ament_target_dependencies(rebel_servo_teleop_keyboard
   control_msgs
   geometry_msgs
   moveit_msgs
+  igus_rebel_msgs
 )
 
 add_executable(rebel_servo_teleop_gamepad src/rebel_servo_teleop_gamepad.cpp)
@@ -87,6 +89,11 @@ install(TARGETS
   calibration_verification
   DESTINATION lib/${PROJECT_NAME}
 )
+install(PROGRAMS
+  scripts/camera_pole_collision.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 
 install(
   DIRECTORY launch config

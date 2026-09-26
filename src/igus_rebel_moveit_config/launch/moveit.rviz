@@ -27,7 +27,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: ""
+    SyncSource: PointCloud2
   - Class: moveit_task_constructor/Motion Planning Tasks
     Global Settings:
       Task View Settings:
@@ -75,7 +75,7 @@ Visualization Manager:
     - Attached Body Color: 150; 50; 150
       Class: moveit_rviz_plugin/RobotState
       Collision Enabled: false
-      Enabled: true
+      Enabled: false
       Links:
         All Links Enabled: true
         Expand Joint Details: false
@@ -155,11 +155,6 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
-        xeg32_camera_mount_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
         xeg32_left_carriage_link:
           Alpha: 1
           Show Axes: false
@@ -175,16 +170,21 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
+        xeg32_tool_tip_proposed:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
       Name: RobotState
       Robot Alpha: 1
       Robot Description: robot_description
       Robot State Topic: display_robot_state
       Show All Links: true
       Show Highlights: true
-      Value: true
+      Value: false
       Visual Enabled: true
     - Class: moveit_rviz_plugin/PlanningScene
-      Enabled: true
+      Enabled: false
       Move Group Namespace: ""
       Name: PlanningScene
       Planning Scene Topic: /monitored_planning_scene
@@ -192,7 +192,7 @@ Visualization Manager:
       Scene Geometry:
         Scene Alpha: 0.8999999761581421
         Scene Color: 50; 230; 50
-        Scene Display Time: 0.009999999776482582
+        Scene Display Time: 0.10000000149011612
         Show Scene Geometry: true
         Voxel Coloring: Z-Axis
         Voxel Rendering: Occupied Voxels
@@ -204,103 +204,10 @@ Visualization Manager:
           Expand Link Details: false
           Expand Tree: false
           Link Tree Style: Links in Alphabetic Order
-          base_link:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          igus_tool0:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-          link1:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          link2:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          link3:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          link4:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          link5:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          link6:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          motor1:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          motor2:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          motor3:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          motor4:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          motor5:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          world:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-          xeg32_base_link:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          xeg32_camera_mount_link:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          xeg32_left_carriage_link:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          xeg32_right_carriage_link:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          xeg32_tool_tip:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
         Robot Alpha: 1
         Show Robot Collision: false
         Show Robot Visual: true
-      Value: true
+      Value: false
     - Acceleration_Scaling_Factor: 0.1
       Class: moveit_rviz_plugin/MotionPlanning
       Enabled: true
@@ -312,7 +219,7 @@ Visualization Manager:
       MoveIt_Planning_Attempts: 10
       MoveIt_Planning_Time: 5
       MoveIt_Use_Cartesian_Path: false
-      MoveIt_Use_Constraint_Aware_IK: false
+      MoveIt_Use_Constraint_Aware_IK: true
       MoveIt_Workspace:
         Center:
           X: 0
@@ -405,11 +312,6 @@ Visualization Manager:
             Show Axes: false
             Show Trail: false
             Value: true
-          xeg32_camera_mount_link:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
           xeg32_left_carriage_link:
             Alpha: 1
             Show Axes: false
@@ -421,6 +323,11 @@ Visualization Manager:
             Show Trail: false
             Value: true
           xeg32_tool_tip:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          xeg32_tool_tip_proposed:
             Alpha: 1
             Show Axes: false
             Show Trail: false
@@ -459,7 +366,7 @@ Visualization Manager:
       Scene Geometry:
         Scene Alpha: 0.8999999761581421
         Scene Color: 50; 230; 50
-        Scene Display Time: 0.009999999776482582
+        Scene Display Time: 0.10000000149011612
         Show Scene Geometry: true
         Voxel Coloring: Z-Axis
         Voxel Rendering: Occupied Voxels
@@ -544,11 +451,6 @@ Visualization Manager:
             Show Axes: false
             Show Trail: false
             Value: true
-          xeg32_camera_mount_link:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
           xeg32_left_carriage_link:
             Alpha: 1
             Show Axes: false
@@ -564,13 +466,18 @@ Visualization Manager:
             Show Axes: false
             Show Trail: false
             Value: true
+          xeg32_tool_tip_proposed:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
         Robot Alpha: 1
         Show Robot Collision: false
         Show Robot Visual: true
       Value: true
       Velocity_Scaling_Factor: 0.1
     - Class: moveit_task_constructor/Motion Planning Tasks
-      Enabled: true
+      Enabled: false
       Interrupt Display: false
       Loop Animation: false
       Markers:
@@ -658,11 +565,6 @@ Visualization Manager:
             Show Axes: false
             Show Trail: false
             Value: true
-          xeg32_camera_mount_link:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
           xeg32_left_carriage_link:
             Alpha: 1
             Show Axes: false
@@ -674,6 +576,11 @@ Visualization Manager:
             Show Trail: false
             Value: true
           xeg32_tool_tip:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          xeg32_tool_tip_proposed:
             Alpha: 1
             Show Axes: false
             Show Trail: false
@@ -697,7 +604,7 @@ Visualization Manager:
       Tasks:
         {}
       Trail Step Size: 1
-      Value: true
+      Value: false
     - Alpha: 0.699999988079071
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -757,7 +664,7 @@ Visualization Manager:
         Value: /box_motion/markers
       Value: false
     - Class: rviz_default_plugins/MarkerArray
-      Enabled: false
+      Enabled: true
       Name: Snapshot-Relative H-Cut Dry Run
       Namespaces:
         {}
@@ -767,9 +674,9 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /box_motion/h_cut_markers
-      Value: false
+      Value: true
     - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
+      Enabled: false
       Name: MarkerArray
       Namespaces:
         {}
@@ -779,7 +686,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /seam_markers
-      Value: true
+      Value: false
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -805,19 +712,19 @@ Visualization Manager:
       Size (m): 0.009999999776482582
       Style: Points
       Topic:
-        Depth: 5
+        Depth: 1
         Durability Policy: Volatile
         Filter size: 10
         History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /camera/depth_registered/points
+        Reliability Policy: Best Effort
+        Value: /camera/points_table
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
-    Fixed Frame: world
+    Fixed Frame: base_link
     Frame Rate: 30
   Name: root
   Tools:
@@ -860,25 +767,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 1.9320621490478516
+      Distance: 1.8559589385986328
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.08788783103227615
-        Y: -0.4140155613422394
-        Z: 0.4607028067111969
+        X: 0.39128559827804565
+        Y: -0.13777770102024078
+        Z: 0.19020840525627136
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.48039862513542175
+      Pitch: 0.7597958445549011
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 3.49539852142334
+      Yaw: 1.8453915119171143
     Saved: ~
 Window Geometry:
   Displays:

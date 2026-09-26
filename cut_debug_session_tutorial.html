@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Operator tutorial for the igus ReBeL staged H-cut debug, MoveIt Servo, and teleop workflow.">
+  <title>ReBeL Staged Cut Debug Session</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #081018;
+      --panel: #101c28;
+      --panel-2: #152535;
+      --line: #294154;
+      --text: #edf7fb;
+      --muted: #9cb3c1;
+      --cyan: #55d6d1;
+      --blue: #66a9ff;
+      --amber: #ffc45b;
+      --red: #ff6f72;
+      --green: #69d391;
+      --shadow: 0 22px 60px rgba(0, 0, 0, .34);
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 12% 5%, rgba(85, 214, 209, .12), transparent 34rem),
+        radial-gradient(circle at 88% 15%, rgba(102, 169, 255, .11), transparent 30rem),
+        var(--bg);
+      font: 16px/1.62 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    a { color: var(--cyan); }
+    button, input, select { font: inherit; }
+    button, select, input[type="text"] { color: var(--text); }
+    .shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
+    header { padding: 60px 0 30px; }
+    .eyebrow {
+      display: inline-flex; gap: 8px; align-items: center;
+      color: var(--cyan); font-size: .78rem; font-weight: 800;
+      letter-spacing: .14em; text-transform: uppercase;
+    }
+    .eyebrow::before { content: ""; width: 26px; height: 2px; background: var(--cyan); }
+    h1 { max-width: 900px; margin: 12px 0 14px; font-size: clamp(2.25rem, 6vw, 4.8rem); line-height: 1.02; letter-spacing: -.055em; }
+    .lede { max-width: 840px; color: var(--muted); font-size: 1.12rem; }
+    .hero-grid, .layout, .two-col, .three-col { display: grid; gap: 18px; }
+    .hero-grid { grid-template-columns: 1.6fr 1fr; margin-top: 26px; }
+    .layout { grid-template-columns: 250px minmax(0, 1fr); align-items: start; padding-bottom: 80px; }
+    .two-col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .three-col { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .card, .step, .toc {
+      border: 1px solid var(--line); border-radius: var(--radius);
+      background: linear-gradient(160deg, rgba(21, 37, 53, .97), rgba(12, 23, 33, .96));
+      box-shadow: var(--shadow);
+    }
+    .card { padding: 22px; }
+    .card h2, .card h3, .step h2, .step h3 { margin-top: 0; }
+    .warning { border-color: rgba(255, 196, 91, .65); background: linear-gradient(160deg, rgba(70, 48, 17, .94), rgba(25, 27, 28, .96)); }
+    .danger { border-color: rgba(255, 111, 114, .7); background: linear-gradient(160deg, rgba(70, 25, 29, .94), rgba(25, 24, 29, .96)); }
+    .success { border-color: rgba(105, 211, 145, .55); }
+    .badge { display: inline-flex; align-items: center; padding: 4px 9px; border-radius: 999px; font-size: .72rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+    .badge.safe { background: rgba(105, 211, 145, .13); color: var(--green); border: 1px solid rgba(105, 211, 145, .35); }
+    .badge.motion { background: rgba(255, 111, 114, .13); color: #ff9a9c; border: 1px solid rgba(255, 111, 114, .4); }
+    .badge.inspect { background: rgba(85, 214, 209, .12); color: var(--cyan); border: 1px solid rgba(85, 214, 209, .35); }
+    .badge.terminal { background: rgba(102, 169, 255, .13); color: #9bc6ff; border: 1px solid rgba(102, 169, 255, .35); }
+    .muted { color: var(--muted); }
+    .controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    label.field { display: grid; gap: 6px; font-weight: 700; font-size: .86rem; }
+    select, input[type="text"] { width: 100%; border: 1px solid var(--line); border-radius: 10px; background: #08131d; padding: 10px 12px; outline: none; }
+    select:focus, input:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(85, 214, 209, .12); }
+    .toc { position: sticky; top: 16px; padding: 18px; }
+    .toc strong { display: block; margin-bottom: 9px; }
+    .toc a { display: block; padding: 6px 8px; border-radius: 8px; text-decoration: none; color: var(--muted); font-size: .9rem; }
+    .toc a:hover { color: var(--text); background: rgba(85, 214, 209, .08); }
+    main { min-width: 0; }
+    .step { position: relative; padding: 26px; margin-bottom: 20px; overflow: hidden; }
+    .step::before { content: attr(data-step); position: absolute; right: 20px; top: -12px; font-size: 5.2rem; line-height: 1; font-weight: 900; color: rgba(255,255,255,.035); }
+    .step-title { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+    .step-title h2 { margin-bottom: 4px; }
+    .chips { display: flex; gap: 7px; flex-wrap: wrap; }
+    .command { position: relative; margin: 14px 0; border: 1px solid #284252; border-radius: 13px; overflow: hidden; background: #050b10; }
+    .command-head { display: flex; justify-content: space-between; align-items: center; min-height: 42px; padding: 7px 8px 7px 14px; border-bottom: 1px solid #203541; color: #8faab8; font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; }
+    .copy { border: 1px solid #345469; border-radius: 8px; background: #122534; padding: 5px 10px; cursor: pointer; font-size: .76rem; text-transform: uppercase; letter-spacing: .05em; }
+    .copy:hover { border-color: var(--cyan); color: var(--cyan); }
+    pre { margin: 0; padding: 16px; overflow-x: auto; color: #cce8f1; font: 13px/1.58 "SFMono-Regular", Consolas, "Liberation Mono", monospace; white-space: pre; }
+    code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+    :not(pre) > code { border: 1px solid #284252; border-radius: 6px; background: #07121b; padding: 2px 6px; color: #cdebf1; }
+    .sequence { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 12px 0 2px; }
+    .node { border: 1px solid var(--line); border-radius: 999px; background: rgba(0,0,0,.18); padding: 7px 11px; font-size: .8rem; }
+    .arrow { color: var(--cyan); font-weight: 900; }
+    .checklist { display: grid; gap: 8px; }
+    .check { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border: 1px solid rgba(41,65,84,.8); border-radius: 10px; background: rgba(0,0,0,.12); }
+    .check input { margin-top: 5px; accent-color: var(--cyan); }
+    .check:has(input:checked) { opacity: .66; }
+    .check:has(input:checked) span { text-decoration: line-through; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: .9rem; }
+    th, td { text-align: left; border-bottom: 1px solid var(--line); padding: 10px 9px; vertical-align: top; }
+    th { color: var(--cyan); }
+    details { border: 1px solid var(--line); border-radius: 11px; margin: 10px 0; background: rgba(0,0,0,.13); }
+    summary { cursor: pointer; padding: 12px 14px; font-weight: 800; }
+    details > div { padding: 0 14px 14px; color: var(--muted); }
+    .callout { border-left: 4px solid var(--cyan); padding: 11px 14px; margin: 14px 0; background: rgba(85,214,209,.07); border-radius: 0 9px 9px 0; }
+    .callout.warn { border-color: var(--amber); background: rgba(255,196,91,.08); }
+    .callout.stop { border-color: var(--red); background: rgba(255,111,114,.08); }
+    .kbd { display: inline-block; min-width: 25px; padding: 2px 7px; border: 1px solid #3d5969; border-bottom-width: 3px; border-radius: 6px; background: #122331; color: var(--text); text-align: center; font: 700 .79rem/1.5 monospace; }
+    .footer { margin-top: 22px; padding: 22px; text-align: center; color: var(--muted); border-top: 1px solid var(--line); }
+    @media (max-width: 900px) {
+      .layout, .hero-grid { grid-template-columns: 1fr; }
+      .toc { position: static; }
+      .toc nav { columns: 2; }
+      .controls, .three-col { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      .shell { width: min(100% - 20px, 1180px); }
+      header { padding-top: 34px; }
+      .two-col { grid-template-columns: 1fr; }
+      .toc nav { columns: 1; }
+      .step, .card { padding: 18px; }
+      pre { font-size: 11.5px; }
+    }
+    @media print {
+      body { background: white; color: black; }
+      .toc, .copy { display: none; }
+      .layout { display: block; }
+      .step, .card { box-shadow: none; break-inside: avoid; background: white; color: black; }
+      pre { white-space: pre-wrap; color: black; background: #f2f2f2; }
+    }
+  </style>
+</head>
+<body>
+  <header class="shell">
+    <span class="eyebrow">igus ReBeL · ROS 2 Humble · operator guide</span>
+    <h1>Staged cut debug<br>with Servo teleop</h1>
+    <p class="lede">Plan one left, middle, or right cut point at a time; inspect it; explicitly dispatch it; correct the TCP with MoveIt Servo; save the observed full pose; then repeat at the endpoint before a separately authorized lift.</p>
+
+    <div class="hero-grid">
+      <section class="card warning">
+        <div class="chips"><span class="badge motion">Physical motion</span><span class="badge inspect">Read before running</span></div>
+        <h2>Commands here can move the robot</h2>
+        <p>The HTML is a static tutorial: buttons only copy text. A pasted <code>execute_planned_h_cut</code> call can move hardware when both executor gates are enabled. Servo teleop bypasses those executor gates; control Servo with its pause and unpause services.</p>
+        <p><strong>Use mock hardware for the complete first run.</strong> For a physical run, clear the workspace, verify the selected plan in RViz, use low speed, keep an emergency stop reachable, and keep only one active robot controller/client.</p>
+      </section>
+      <section class="card">
+        <h2>Session invariant</h2>
+        <div class="sequence" aria-label="Session state machine">
+          <span class="node">plan point</span><span class="arrow">→</span>
+          <span class="node">execute</span><span class="arrow">→</span>
+          <span class="node">teleop</span><span class="arrow">→</span>
+          <span class="node">save</span>
+        </div>
+        <p class="muted">Repeat for the endpoint. Saving the endpoint retains a lift-only plan. The lift still requires a final explicit execute call.</p>
+      </section>
+    </div>
+
+    <section class="card" style="margin-top:18px">
+      <h2>Configure command examples</h2>
+      <div class="controls">
+        <label class="field">Hardware
+          <select id="hardware">
+            <option value="mock_hardware" selected>Mock hardware — recommended first</option>
+            <option value="rebel">Physical ReBeL</option>
+          </select>
+        </label>
+        <label class="field">Cut
+          <select id="cut">
+            <option value="left">Left</option>
+            <option value="middle" selected>Middle</option>
+            <option value="right">Right</option>
+          </select>
+        </label>
+        <label class="field">External snapshot JSON
+          <input id="snapshot" type="text" value="/absolute/path/to/fresh_box_snapshot.json" spellcheck="false">
+        </label>
+      </div>
+      <p id="hardwareNotice" class="callout">Mock selection: commands exercise planning and controller transitions without a physical ReBeL.</p>
+    </section>
+  </header>
+
+  <div class="shell layout">
+    <aside class="toc" aria-label="Tutorial navigation">
+      <strong>Runbook</strong>
+      <nav>
+        <a href="#prerequisites">0 · Prerequisites</a>
+        <a href="#launch">1 · Launch MoveIt</a>
+        <a href="#interfaces">2 · Check interfaces</a>
+        <a href="#servo">3 · Start Servo</a>
+        <a href="#start">4 · Start-point stage</a>
+        <a href="#correct-start">5 · Correct start</a>
+        <a href="#endpoint">6 · Endpoint stage</a>
+        <a href="#lift">7 · Lift and finish</a>
+        <a href="#apply">8 · Apply corrections</a>
+        <a href="#abort">Abort and recovery</a>
+        <a href="#troubleshoot">Troubleshooting</a>
+        <a href="#checklist">Checklist</a>
+      </nav>
+    </aside>
+
+    <main>
+      <section class="step" id="prerequisites" data-step="0">
+        <div class="step-title"><div><h2>Prerequisites</h2><p class="muted">Build, source, perception, and collision geometry.</p></div><div class="chips"><span class="badge safe">No motion</span></div></div>
+        <ul>
+          <li>Build the workspace with ROS 2 Humble.</li>
+          <li>Provide a recent external snapshot JSON from a previously captured perception workflow (no live camera required). This repository consumes that file but does not contain the capture publisher.</li>
+          <li>Ensure the carton collision geometry is valid before planning. The camera is fixed outside the robot: no camera or holder is modeled on the gripper, but the external camera TF and required <code>camera_pole</code> collision object must be available. The green <code>xeg32_tool_tip</code> marker remains the kinematic TCP with no collision geometry of its own.</li>
+          <li>For physical use, position the controller in the intended operating mode and stop every competing CRI/controller client.</li>
+        </ul>
+        <div class="command"><div class="command-head"><span>Terminal 1 · build</span><button class="copy">Copy</button></div><pre><code>cd /home/farhan/igus_rebel_ros2
+source /opt/ros/humble/setup.bash
+colcon build --symlink-install --packages-select igus_rebel_moveit_config
+source install/setup.bash</code></pre></div>
+        <div class="callout warn"><strong>Snapshot freshness:</strong> the executor defaults to a 30-second maximum file and acquisition age. If the carton has remained fixed, you may explicitly allow the old snapshot before starting the session:</div>
+        <div class="command"><div class="command-head"><span>Optional · fixed carton only</span><button class="copy">Copy</button></div><pre><code>ros2 param set /box_h_cut_executor debug_allow_stale_snapshot true</code></pre></div>
+        <p class="muted">This age override applies to the staged cut-debug session only; normal retained plans still refuse stale execution. Set it only after confirming that the carton has not moved. Snapshot schema, geometry, frame, collision checks, Servo ownership, and both execution gates still apply. Restore freshness enforcement afterward with <code>ros2 param set /box_h_cut_executor debug_allow_stale_snapshot false</code>.</p>
+      </section>
+
+      <section class="step" id="launch" data-step="1">
+        <div class="step-title"><div><h2>Launch MoveIt, Servo, and the H-cut executor</h2><p class="muted">Keep this terminal running.</p></div><div class="chips"><span class="badge terminal">Terminal 1</span><span class="badge safe">Launch only</span></div></div>
+        <div class="command"><div class="command-head"><span>Launch selected hardware</span><button class="copy">Copy</button></div><pre><code data-dynamic>cd /home/farhan/igus_rebel_ros2
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+ros2 launch igus_rebel_moveit_config move_group.launch.py \
+  hardware_protocol:=__HARDWARE__ \
+  use_gui:=true \
+  run_teleop:=true \
+  run_mtc_program:=false \
+  run_box_motion_executor:=false \
+  run_box_h_cut_executor:=true</code></pre></div>
+        <p><code>run_teleop:=true</code> launches the MoveIt Servo node, joystick node, and gamepad teleop. The keyboard teleop is a separate executable started later.</p>
+        <div class="callout stop" id="physicalLaunchWarning" hidden><strong>Physical hardware selected.</strong> Launching with <code>hardware_protocol:=rebel</code> connects to the controller. Do not continue if another CRI client is active.</div>
+      </section>
+
+      <section class="step" id="interfaces" data-step="2">
+        <div class="step-title"><div><h2>Set the snapshot and verify interfaces</h2><p class="muted">Fail here before enabling either motion path.</p></div><div class="chips"><span class="badge terminal">Terminal 2</span><span class="badge safe">No motion</span></div></div>
+        <div class="command"><div class="command-head"><span>Source and configure</span><button class="copy">Copy</button></div><pre><code data-dynamic>cd /home/farhan/igus_rebel_ros2
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+
+ros2 param set /box_h_cut_executor external_snapshot_file __SNAPSHOT__
+ros2 param set /box_h_cut_executor cut_debug_cut __CUT__
+
+ros2 service type /box_h_cut_executor/start_cut_debug_session
+ros2 service type /box_h_cut_executor/execute_planned_h_cut
+ros2 service type /box_h_cut_executor/save_cut_debug_point
+ros2 service type /box_h_cut_executor/clear_plan
+ros2 service type /servo_node/start_servo
+ros2 topic hz /joint_states</code></pre></div>
+        <p>Expected service type: <code>std_srvs/srv/Trigger</code>. Stop if `/joint_states` is absent, incomplete, or stale. The executor requires every model joint and rejects samples older than one second.</p>
+        <div class="command"><div class="command-head"><span>Optional snapshot section diagnosis</span><button class="copy">Copy</button></div><pre><code>ros2 service call \
+  /box_h_cut_executor/diagnose_external_snapshot_sections \
+  std_srvs/srv/Trigger {}</code></pre></div>
+      </section>
+
+      <section class="step" id="servo" data-step="3">
+        <div class="step-title"><div><h2>Start Servo and choose a teleop device</h2><p class="muted">Start the server once; pause it whenever a retained MoveIt plan executes.</p></div><div class="chips"><span class="badge terminal">Terminals 2–3</span><span class="badge motion">Teleop can move</span></div></div>
+        <div class="command"><div class="command-head"><span>Terminal 2 · start Servo, then park it</span><button class="copy">Copy</button></div><pre><code>ros2 service call /servo_node/start_servo std_srvs/srv/Trigger {}
+ros2 service call /servo_node/pause_servo std_srvs/srv/Trigger {}</code></pre></div>
+        <div class="two-col">
+          <article class="card">
+            <h3>Keyboard</h3>
+            <div class="command"><div class="command-head"><span>Terminal 3</span><button class="copy">Copy</button></div><pre><code>cd /home/farhan/igus_rebel_ros2
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+ros2 run igus_rebel_moveit_config rebel_servo_teleop_keyboard</code></pre></div>
+            <p>Run this after the launch. It stays waiting while Servo is paused.</p>
+          </article>
+          <article class="card">
+            <h3>Gamepad</h3>
+            <p>The joystick and gamepad teleop are already started by <code>run_teleop:=true</code>. Do not use keyboard and gamepad simultaneously.</p>
+            <p class="muted">Both publish Servo commands on <code>delta_twist_cmds</code> and <code>delta_joint_cmds</code>.</p>
+          </article>
+        </div>
+        <h3>Keyboard controls</h3>
+        <table>
+          <thead><tr><th>Key</th><th>Mode/action</th><th>Use</th></tr></thead>
+          <tbody>
+            <tr><td><span class="kbd">t</span></td><td>Cartesian twist</td><td>TCP correction mode</td></tr>
+            <tr><td><span class="kbd">j</span></td><td>Joint jog</td><td>Joint-by-joint correction</td></tr>
+            <tr><td><span class="kbd">w</span></td><td><code>base_link</code> frame</td><td>World-aligned Cartesian jog</td></tr>
+            <tr><td><span class="kbd">e</span></td><td><code>xeg32_tool_tip</code> frame</td><td>Tool-aligned Cartesian jog</td></tr>
+            <tr><td>Arrows</td><td>X/Y translation</td><td>Move in the selected command frame</td></tr>
+            <tr><td><span class="kbd">.</span> / <span class="kbd">;</span></td><td>−Z / +Z</td><td>Move down/up in selected frame</td></tr>
+            <tr><td><span class="kbd">1</span>–<span class="kbd">6</span></td><td>Joint selection/jog</td><td>Used in joint mode</td></tr>
+            <tr><td><span class="kbd">r</span></td><td>Reverse joint direction</td><td>Used in joint mode</td></tr>
+            <tr><td><span class="kbd">Q</span></td><td>Quit</td><td>Stop keyboard publisher</td></tr>
+          </tbody>
+        </table>
+        <div class="command"><div class="command-head"><span>Optional Cartesian increment · default 0.001 m</span><button class="copy">Copy</button></div><pre><code>ros2 service call \
+  /servo_keyboard_input/set_cartesian_increment \
+  igus_rebel_msgs/srv/SetCartesianIncrement \
+  "{increment_meters: 0.001}"</code></pre></div>
+        <p class="muted">Accepted increment: greater than 0 and no more than 0.01 m. Start at 0.001 m. Smaller increments are preferable near the carton.</p>
+        <div class="callout stop"><strong>Two independent motion paths:</strong> <code>execution_enabled</code> and <code>debug_motion_execution_enabled</code> gate the executor only. They do not block Servo commands. Pause Servo before every planned dispatch; unpause it only for the correction interval.</div>
+      </section>
+
+      <section class="step" id="start" data-step="4">
+        <div class="step-title"><div><h2>Plan, inspect, and execute the start point</h2><p class="muted">The session begins with one retained point-to-point plan.</p></div><div class="chips"><span class="badge inspect">Plan first</span><span class="badge motion">Explicit dispatch</span></div></div>
+        <div class="command"><div class="command-head"><span>Select cut and plan configured start</span><button class="copy">Copy</button></div><pre><code data-dynamic>ros2 param set /box_h_cut_executor cut_debug_cut __CUT__
+ros2 service call \
+  /box_h_cut_executor/start_cut_debug_session \
+  std_srvs/srv/Trigger {}</code></pre></div>
+        <div class="callout"><strong>Inspect before continuing.</strong> In RViz, verify the selected cut, start target, approach direction, carton collision geometry, and trajectory. If a correction record is active, it seeds this target; the newly saved record still references uncorrected geometry and replaces it as a standalone correction. This call never dispatches motion.</div>
+        <div class="command"><div class="command-head"><span>Authorize exactly this planned dispatch</span><button class="copy">Copy</button></div><pre><code>ros2 service call /servo_node/pause_servo std_srvs/srv/Trigger {}
+ros2 param set /box_h_cut_executor execution_enabled true
+ros2 param set /box_h_cut_executor debug_motion_execution_enabled true
+ros2 service call \
+  /box_h_cut_executor/execute_planned_h_cut \
+  std_srvs/srv/Trigger {}
+ros2 param set /box_h_cut_executor debug_motion_execution_enabled false</code></pre></div>
+        <p class="muted">The execute service returns after dispatching to the controller. Confirm the response reports success and the robot has stopped at the intended point before unpausing Servo.</p>
+      </section>
+
+      <section class="step" id="correct-start" data-step="5">
+        <div class="step-title"><div><h2>Teleop-correct and save the start</h2><p class="muted">Capture full observed TCP pose from fresh joint-state FK.</p></div><div class="chips"><span class="badge motion">Servo motion</span><span class="badge inspect">Save and replan</span></div></div>
+        <div class="command"><div class="command-head"><span>Open correction interval</span><button class="copy">Copy</button></div><pre><code>ros2 service call /servo_node/unpause_servo std_srvs/srv/Trigger {}</code></pre></div>
+        <ol>
+          <li>Use keyboard or gamepad at low speed.</li>
+          <li>Inspect the TCP position and knife facing from multiple RViz views.</li>
+          <li>Stop input and wait until the robot is stationary.</li>
+          <li>Pause Servo before saving.</li>
+        </ol>
+        <div class="command"><div class="command-head"><span>Close correction interval and save</span><button class="copy">Copy</button></div><pre><code>ros2 service call /servo_node/pause_servo std_srvs/srv/Trigger {}
+ros2 service call \
+  /box_h_cut_executor/save_cut_debug_point \
+  std_srvs/srv/Trigger {}</code></pre></div>
+        <p>Saving writes the start observation and correction delta, invalidates the old plan, and retains an endpoint-only plan from the live corrected state. It does not move the robot.</p>
+      </section>
+
+      <section class="step" id="endpoint" data-step="6">
+        <div class="step-title"><div><h2>Inspect, execute, and correct the endpoint</h2><p class="muted">Same gates; same Servo ownership rule.</p></div><div class="chips"><span class="badge motion">Two motion intervals</span></div></div>
+        <div class="callout"><strong>First inspect the endpoint-only plan in RViz.</strong> If it is wrong, call <code>clear_plan</code>; do not execute and do not try to repair a structurally wrong plan with teleop.</div>
+        <div class="command"><div class="command-head"><span>Dispatch endpoint with Servo paused</span><button class="copy">Copy</button></div><pre><code>ros2 service call /servo_node/pause_servo std_srvs/srv/Trigger {}
+ros2 param set /box_h_cut_executor debug_motion_execution_enabled true
+ros2 service call \
+  /box_h_cut_executor/execute_planned_h_cut \
+  std_srvs/srv/Trigger {}
+ros2 param set /box_h_cut_executor debug_motion_execution_enabled false</code></pre></div>
+        <div class="command"><div class="command-head"><span>Correct endpoint, pause Servo, and save</span><button class="copy">Copy</button></div><pre><code>ros2 service call /servo_node/unpause_servo std_srvs/srv/Trigger {}
+# Teleop only after the planned endpoint motion has finished.
+# Stop input and confirm the robot is stationary, then:
+ros2 service call /servo_node/pause_servo std_srvs/srv/Trigger {}
+ros2 service call \
+  /box_h_cut_executor/save_cut_debug_point \
+  std_srvs/srv/Trigger {}</code></pre></div>
+        <p>If the endpoint was already correct, do not jog it; still call save. That records the observed pose and creates the lift-only retained plan.</p>
+      </section>
+
+      <section class="step" id="lift" data-step="7">
+        <div class="step-title"><div><h2>Inspect and explicitly execute the lift</h2><p class="muted">Saving never auto-lifts.</p></div><div class="chips"><span class="badge motion">Final dispatch</span></div></div>
+        <div class="callout warn">Verify in RViz that the retained path moves only from the corrected endpoint to the configured hover clearance. Servo must remain paused.</div>
+        <div class="command"><div class="command-head"><span>Execute lift and close motion gates</span><button class="copy">Copy</button></div><pre><code>ros2 service call /servo_node/pause_servo std_srvs/srv/Trigger {}
+ros2 param set /box_h_cut_executor debug_motion_execution_enabled true
+ros2 service call \
+  /box_h_cut_executor/execute_planned_h_cut \
+  std_srvs/srv/Trigger {}
+ros2 param set /box_h_cut_executor debug_motion_execution_enabled false
+ros2 param set /box_h_cut_executor execution_enabled false
+ros2 service call /servo_node/stop_servo std_srvs/srv/Trigger {}</code></pre></div>
+        <p>After a successful lift, the session returns to idle. Repeat Steps 4–7 for the other cuts, using a fresh snapshot when required by the age limit.</p>
+      </section>
+
+      <section class="step" id="apply" data-step="8">
+        <div class="step-title"><div><h2>Apply saved corrections to later planning</h2><p class="muted">Explicit opt-in; one validated file slot per cut.</p></div><div class="chips"><span class="badge safe">Planning configuration</span></div></div>
+        <p>Completed records are normally written beneath <code>$HOME/cut_debug_corrections</code> as <code>&lt;cut&gt;_&lt;snapshot_id&gt;.json</code>. Inspect each JSON before loading it.</p>
+        <div class="command"><div class="command-head"><span>Set independent correction records</span><button class="copy">Copy</button></div><pre><code>ros2 param set /box_h_cut_executor \
+  cut_debug_left_correction_file \
+  /absolute/path/to/left_snapshot.json
+ros2 param set /box_h_cut_executor \
+  cut_debug_middle_correction_file \
+  /absolute/path/to/middle_snapshot.json
+ros2 param set /box_h_cut_executor \
+  cut_debug_right_correction_file \
+  /absolute/path/to/right_snapshot.json
+ros2 param set /box_h_cut_executor \
+  cut_debug_correction_enabled true</code></pre></div>
+        <p>A combined H-cut applies each matching record only to its own segment. Empty slots remain nominal. The stored <code>along</code>, <code>across</code>, and <code>normal</code> deltas rotate with a newly detected cut; they are not fixed world XYZ offsets.</p>
+        <div class="command"><div class="command-head"><span>Disable learned corrections</span><button class="copy">Copy</button></div><pre><code>ros2 param set /box_h_cut_executor cut_debug_correction_enabled false</code></pre></div>
+        <div class="callout warn">An enabled configuration with all three paths empty fails closed. A nonempty malformed, incomplete, mismatched, non-absolute, or non-finite record also rejects planning. Translation values must be finite; there is no per-axis magnitude limit. Orientation correction accepts the full finite unit-quaternion range, but application still fails closed unless the corrected tool points into the carton surface.</div>
+      </section>
+
+      <section class="step danger" id="abort" data-step="!">
+        <div class="step-title"><div><h2>Abort and recovery</h2><p>Stop command production first; then clear the retained executor state.</p></div><div class="chips"><span class="badge motion">Stop procedure</span></div></div>
+        <div class="command"><div class="command-head"><span>Software stop and clear</span><button class="copy">Copy</button></div><pre><code>ros2 service call /servo_node/pause_servo std_srvs/srv/Trigger {}
+ros2 service call /servo_node/stop_servo std_srvs/srv/Trigger {}
+ros2 param set /box_h_cut_executor debug_motion_execution_enabled false
+ros2 param set /box_h_cut_executor execution_enabled false
+ros2 service call /box_h_cut_executor/clear_plan std_srvs/srv/Trigger {}</code></pre></div>
+        <ul>
+          <li>Use the hardware emergency stop for immediate danger. ROS service calls are not an emergency-stop substitute.</li>
+          <li><code>clear_plan</code> discards the retained plan and active debug session without commanding motion.</li>
+          <li>After an execution failure, the stage does not advance and the executable plan is removed. Clear the session, diagnose the controller/scene, and start a new session.</li>
+          <li>Never resume from an assumed stage. Read every service response.</li>
+        </ul>
+      </section>
+
+      <section class="step" id="troubleshoot" data-step="?">
+        <div class="step-title"><div><h2>Troubleshooting</h2><p class="muted">Treat rejections as safety information, not obstacles to bypass.</p></div><div class="chips"><span class="badge safe">No workaround flags</span></div></div>
+        <details><summary><code>external_snapshot_file is required</code> or snapshot is stale</summary><div>Set an absolute snapshot <code>.json</code> path. Normally, provide a new previously captured perception snapshot. If the carton is known to be unchanged, set <code>debug_allow_stale_snapshot</code> to <code>true</code> before starting the debug session. Set it back to <code>false</code> if it can move.</div></details>
+        <details><summary>Planning scene is missing a required obstacle</summary><div>Check that the external snapshot path is valid and <code>detected_carton</code> is present. Also confirm the fixed external camera publishes <code>camera_link</code> and <code>camera_color_optical_frame</code>; <code>camera_pole_collision.py</code> must publish the required <code>camera_pole</code> object before H-cut planning.</div></details>
+        <details><summary>Servo service exists but teleop does not move</summary><div>Check the response from <code>start_servo</code>, call <code>unpause_servo</code>, select keyboard twist mode with <span class="kbd">t</span>, and confirm the teleop process publishes on the configured Servo command topic. On physical hardware, also verify controller state—but do not bypass safety stops.</div></details>
+        <details><summary>Executor reports that execution is disabled</summary><div>This is expected until both executor gates are true. Inspect the retained plan before enabling them. These gates are independent from Servo pause state.</div></details>
+        <details><summary>Save is rejected</summary><div>Save is legal only after that stage executed successfully. Confirm fresh, finite, complete joint states and wait for the robot to become stationary. A save-before-execute or double-save is intentionally rejected.</div></details>
+        <details><summary>Planning or parameters are rejected during a session</summary><div>Cut, snapshot, geometry, and correction parameters are frozen while a session is active. Finish it or call <code>clear_plan</code>, then change configuration and start over.</div></details>
+        <details><summary>A correction file is rejected</summary><div>Use an absolute <code>.json</code> path and a complete <code>box_h_cut_correction/v1</code> record matching the parameter slot, planning frame, and tool. Do not edit a record to suppress validation; teach the point again.</div></details>
+      </section>
+
+      <section class="step" id="checklist" data-step="✓">
+        <div class="step-title"><div><h2>Persistent run checklist</h2><p class="muted">Stored only in this browser. Reset when beginning a new physical session.</p></div><button id="resetChecklist" class="copy">Reset</button></div>
+        <div class="checklist">
+          <label class="check"><input type="checkbox" data-check="mock"><span>Complete the entire workflow once on mock hardware.</span></label>
+          <label class="check"><input type="checkbox" data-check="single-controller"><span>Confirm only one physical robot controller/CRI client is active.</span></label>
+          <label class="check"><input type="checkbox" data-check="estop"><span>Verify emergency stop access and clear the robot workspace.</span></label>
+          <label class="check"><input type="checkbox" data-check="snapshot"><span>Generate and select a fresh external snapshot.</span></label>
+          <label class="check"><input type="checkbox" data-check="tf"><span>Verify carton planning geometry.</span></label>
+          <label class="check"><input type="checkbox" data-check="joint-states"><span>Verify fresh, complete `/joint_states`.</span></label>
+          <label class="check"><input type="checkbox" data-check="servo-paused"><span>Pause Servo before every retained-plan execution.</span></label>
+          <label class="check"><input type="checkbox" data-check="rviz"><span>Inspect every start, endpoint, and lift plan in RViz.</span></label>
+          <label class="check"><input type="checkbox" data-check="low-speed"><span>Use low-speed, small-increment teleop corrections.</span></label>
+          <label class="check"><input type="checkbox" data-check="gates-off"><span>Disable both executor gates and stop Servo after the session.</span></label>
+          <label class="check"><input type="checkbox" data-check="records"><span>Inspect saved correction JSON before enabling it in future plans.</span></label>
+        </div>
+      </section>
+
+      <footer class="footer">
+        Static operator tutorial for <code>box_h_cut_executor</code>. Copy buttons never connect to ROS and never run commands.
+      </footer>
+    </main>
+  </div>
+
+  <script>
+    (() => {
+      const hardware = document.getElementById('hardware');
+      const cut = document.getElementById('cut');
+      const snapshot = document.getElementById('snapshot');
+      const notice = document.getElementById('hardwareNotice');
+      const physicalWarning = document.getElementById('physicalLaunchWarning');
+      const dynamicBlocks = [...document.querySelectorAll('code[data-dynamic]')];
+      const templates = new Map(dynamicBlocks.map(block => [block, block.textContent]));
+
+      function renderCommands() {
+        for (const block of dynamicBlocks) {
+          block.textContent = templates.get(block)
+            .replaceAll('__HARDWARE__', hardware.value)
+            .replaceAll('__CUT__', cut.value)
+            .replaceAll('__SNAPSHOT__', snapshot.value.trim() || '/absolute/path/to/fresh_box_snapshot.json');
+        }
+        const physical = hardware.value === 'rebel';
+        notice.className = physical ? 'callout stop' : 'callout';
+        notice.innerHTML = physical
+          ? '<strong>Physical selection:</strong> launch connects to the ReBeL controller; pasted execute and Servo commands can cause motion.'
+          : 'Mock selection: commands exercise planning and controller transitions without a physical ReBeL.';
+        physicalWarning.hidden = !physical;
+      }
+
+      [hardware, cut, snapshot].forEach(control => control.addEventListener('input', renderCommands));
+      renderCommands();
+
+      document.querySelectorAll('.copy').forEach(button => {
+        if (button.id === 'resetChecklist') return;
+        button.addEventListener('click', async () => {
+          const code = button.closest('.command')?.querySelector('code');
+          if (!code) return;
+          const original = button.textContent;
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            button.textContent = 'Copied';
+          } catch (_) {
+            const selection = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(code);
+            selection.removeAllRanges();
+            selection.addRange(range);
+            button.textContent = 'Select text';
+          }
+          window.setTimeout(() => { button.textContent = original; }, 1400);
+        });
+      });
+
+      const storageKey = 'rebel-cut-debug-checklist-v1';
+      const checks = [...document.querySelectorAll('[data-check]')];
+      let saved = {};
+      try { saved = JSON.parse(localStorage.getItem(storageKey) || '{}'); } catch (_) { saved = {}; }
+      for (const box of checks) {
+        box.checked = Boolean(saved[box.dataset.check]);
+        box.addEventListener('change', () => {
+          const state = Object.fromEntries(checks.map(item => [item.dataset.check, item.checked]));
+          localStorage.setItem(storageKey, JSON.stringify(state));
+        });
+      }
+      document.getElementById('resetChecklist').addEventListener('click', () => {
+        checks.forEach(box => { box.checked = false; });
+        localStorage.removeItem(storageKey);
+      });
+    })();
+  </script>
+</body>
+</html>

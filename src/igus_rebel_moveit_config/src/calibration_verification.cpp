@@ -260,6 +260,9 @@ public:
     tool_link_ = declare_parameter<std::string>("tool_link", "xeg32_tool_tip");
     planning_pipeline_ = declare_parameter<std::string>("planning_pipeline", "ompl");
     planner_id_ = declare_parameter<std::string>("planner_id", "RRTConnectkConfigDefault");
+    camera_pole_required_ = declare_parameter<bool>("camera_pole_required", true);
+    camera_pole_topic_ = declare_parameter<std::string>(
+      "camera_pole_topic", "/box_motion/camera_pole_collision");
     controller_name_ = declare_parameter<std::string>(
       "controller", "rebel_arm_trajectory_controller");
     controller_action_ = declare_parameter<std::string>(
@@ -293,6 +296,10 @@ public:
     point_1_xy_m_ = declare_parameter<std::vector<double>>("point_1_xy_m", std::vector<double>{});
     point_2_xy_m_ = declare_parameter<std::vector<double>>("point_2_xy_m", std::vector<double>{});
     point_3_xy_m_ = declare_parameter<std::vector<double>>("point_3_xy_m", std::vector<double>{});
+    point_4_xy_m_ = declare_parameter<std::vector<double>>("point_4_xy_m", std::vector<double>{});
+    point_5_xy_m_ = declare_parameter<std::vector<double>>("point_5_xy_m", std::vector<double>{});
+    point_6_xy_m_ = declare_parameter<std::vector<double>>("point_6_xy_m", std::vector<double>{});
+    point_7_xy_m_ = declare_parameter<std::vector<double>>("point_7_xy_m", std::vector<double>{});
     board_target_height_m_ = declare_parameter<double>("board_target_height_m", 0.0);
     preapproach_only_ = declare_parameter<bool>("preapproach_only", false);
     retract_after_approach_ = declare_parameter<bool>("retract_after_approach", true);
@@ -391,6 +398,21 @@ public:
         latest_joint_state_ = LatestJointState{*message, now()};
       },
       subscription_options);
+    camera_pole_sub_ = create_subscription<moveit_msgs::msg::CollisionObject>(
+      camera_pole_topic_, rclcpp::QoS(1).reliable().transient_local(),
+      [this](moveit_msgs::msg::CollisionObject::SharedPtr message) {
+        if (message->id != "camera_pole" || message->header.frame_id != planning_frame_ ||
+            message->operation != moveit_msgs::msg::CollisionObject::ADD ||
+            message->primitives.size() != 1U || message->primitive_poses.size() != 1U ||
+            message->primitives.front().type != shape_msgs::msg::SolidPrimitive::BOX ||
+            message->primitives.front().dimensions.size() != 3U) {
+          RCLCPP_ERROR(get_logger(), "Rejected invalid camera pole collision object");
+          return;
+        }
+        std::lock_guard<std::mutex> lock(camera_pole_mutex_);
+        camera_pole_ = *message;
+      },
+      subscription_options);
 
     marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(
       "/calibration_verification/markers", rclcpp::QoS(1).reliable().transient_local());
@@ -417,6 +439,10 @@ public:
     plan_point_1_service_ = createPlanService("~/plan_point_1", TargetKind::POINT_1);
     plan_point_2_service_ = createPlanService("~/plan_point_2", TargetKind::POINT_2);
     plan_point_3_service_ = createPlanService("~/plan_point_3", TargetKind::POINT_3);
+    plan_point_4_service_ = createPlanService("~/plan_point_4", TargetKind::POINT_4);
+    plan_point_5_service_ = createPlanService("~/plan_point_5", TargetKind::POINT_5);
+    plan_point_6_service_ = createPlanService("~/plan_point_6", TargetKind::POINT_6);
+    plan_point_7_service_ = createPlanService("~/plan_point_7", TargetKind::POINT_7);
     plan_cube_service_ = createPlanService("~/plan_cube", TargetKind::CUBE);
 
     execute_service_ = create_service<std_srvs::srv::Trigger>(
@@ -478,6 +504,10 @@ private:
     POINT_1,
     POINT_2,
     POINT_3,
+    POINT_4,
+    POINT_5,
+    POINT_6,
+    POINT_7,
     CUBE
   };
 
@@ -556,6 +586,9 @@ private:
     require_nonempty_string(planning_frame_, "planning_frame");
     require_nonempty_string(tool_link_, "tool_link");
     require_nonempty_string(planning_pipeline_, "planning_pipeline");
+    if (camera_pole_required_ && camera_pole_topic_.empty()) {
+      throw std::invalid_argument("camera_pole_topic must not be empty when camera_pole_required is true");
+    }
     require_nonempty_string(controller_name_, "controller");
     require_nonempty_string(controller_action_, "controller_action");
     require_nonempty_string(board_collision_id_, "board_collision_id");
@@ -574,6 +607,10 @@ private:
     validateOptionalVector(point_1_xy_m_, 2U, "point_1_xy_m");
     validateOptionalVector(point_2_xy_m_, 2U, "point_2_xy_m");
     validateOptionalVector(point_3_xy_m_, 2U, "point_3_xy_m");
+    validateOptionalVector(point_4_xy_m_, 2U, "point_4_xy_m");
+    validateOptionalVector(point_5_xy_m_, 2U, "point_5_xy_m");
+    validateOptionalVector(point_6_xy_m_, 2U, "point_6_xy_m");
+    validateOptionalVector(point_7_xy_m_, 2U, "point_7_xy_m");
     validateOptionalVector(board_to_tcp_orientation_xyzw_, 4U, "board_to_tcp_orientation_xyzw");
     validateOptionalVector(board_to_tcp_rpy_rad_, 3U, "board_to_tcp_rpy_rad");
     validateOptionalVector(board_box_center_xyz_m_, 3U, "board_box_center_xyz_m");
@@ -605,6 +642,10 @@ private:
     validateOptionalPosition(point_1_xy_m_, "point_1_xy_m");
     validateOptionalPosition(point_2_xy_m_, "point_2_xy_m");
     validateOptionalPosition(point_3_xy_m_, "point_3_xy_m");
+    validateOptionalPosition(point_4_xy_m_, "point_4_xy_m");
+    validateOptionalPosition(point_5_xy_m_, "point_5_xy_m");
+    validateOptionalPosition(point_6_xy_m_, "point_6_xy_m");
+    validateOptionalPosition(point_7_xy_m_, "point_7_xy_m");
     validateOptionalPosition(board_box_center_xyz_m_, "board_box_center_xyz_m");
     validateOptionalPosition(table_box_center_xyz_m_, "table_box_center_xyz_m");
     validateOptionalPosition(cube_pose_xyz_m_, "cube_pose_xyz_m");
@@ -857,6 +898,20 @@ private:
     for (const auto& object : collision_objects) {
       add_scene->addObject(object);
     }
+    {
+      std::optional<moveit_msgs::msg::CollisionObject> camera_pole;
+      {
+        std::lock_guard<std::mutex> lock(camera_pole_mutex_);
+        camera_pole = camera_pole_;
+      }
+      if (camera_pole_required_ && !camera_pole) {
+        throw std::runtime_error(
+          "camera pole collision object is unavailable; wait for camera_pole_collision.py");
+      }
+      if (camera_pole) {
+        add_scene->addObject(*camera_pole);
+      }
+    }
     task->add(std::move(add_scene));
 
     auto ptp_planner = std::make_shared<mtc::solvers::PipelinePlanner>(
@@ -1051,6 +1106,14 @@ private:
         return buildOptionalBoardTarget("point_2", point_2_xy_m_, board, target, message);
       case TargetKind::POINT_3:
         return buildOptionalBoardTarget("point_3", point_3_xy_m_, board, target, message);
+      case TargetKind::POINT_4:
+        return buildOptionalBoardTarget("point_4", point_4_xy_m_, board, target, message);
+      case TargetKind::POINT_5:
+        return buildOptionalBoardTarget("point_5", point_5_xy_m_, board, target, message);
+      case TargetKind::POINT_6:
+        return buildOptionalBoardTarget("point_6", point_6_xy_m_, board, target, message);
+      case TargetKind::POINT_7:
+        return buildOptionalBoardTarget("point_7", point_7_xy_m_, board, target, message);
       case TargetKind::CUBE:
         return buildCubeTarget(board, target, message);
     }
@@ -1908,7 +1971,9 @@ private:
     addAxisMarkers(array, base_reference, "captured_board", 0, 0.075);
     const std::vector<std::pair<std::string, std::vector<double>>> points{
       {"center", {0.0, 0.0}}, {"point_1", point_1_xy_m_},
-      {"point_2", point_2_xy_m_}, {"point_3", point_3_xy_m_}};
+      {"point_2", point_2_xy_m_}, {"point_3", point_3_xy_m_},
+      {"point_4", point_4_xy_m_}, {"point_5", point_5_xy_m_},
+      {"point_6", point_6_xy_m_}, {"point_7", point_7_xy_m_}};
     int point_id = 300;
     for (const auto& [name, xy] : points) {
       if (xy.size() != 2U) continue;
@@ -2066,6 +2131,7 @@ private:
   std::mutex plan_mutex_;
   std::mutex execution_mutex_;
   std::mutex scene_monitor_mutex_;
+  std::mutex camera_pole_mutex_;
 
   std::optional<LatestBoardPose> latest_board_pose_;
   std::optional<CapturedBoardPose> captured_board_pose_;
@@ -2081,6 +2147,8 @@ private:
   rclcpp::CallbackGroup::SharedPtr callback_group_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr board_pose_sub_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;
+  rclcpp::Subscription<moveit_msgs::msg::CollisionObject>::SharedPtr camera_pole_sub_;
+  std::optional<moveit_msgs::msg::CollisionObject> camera_pole_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_pub_;
   rclcpp_action::Client<FollowJointTrajectory>::SharedPtr controller_client_;
   planning_scene_monitor::PlanningSceneMonitorPtr planning_scene_monitor_;
@@ -2090,6 +2158,10 @@ private:
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr plan_point_1_service_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr plan_point_2_service_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr plan_point_3_service_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr plan_point_4_service_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr plan_point_5_service_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr plan_point_6_service_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr plan_point_7_service_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr plan_cube_service_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr execute_service_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr clear_service_;
@@ -2100,6 +2172,8 @@ private:
   std::string tool_link_;
   std::string planning_pipeline_;
   std::string planner_id_;
+  bool camera_pole_required_{true};
+  std::string camera_pole_topic_;
   std::string controller_name_;
   std::string controller_action_;
   std::string board_collision_id_;
@@ -2116,6 +2190,10 @@ private:
   std::vector<double> point_1_xy_m_;
   std::vector<double> point_2_xy_m_;
   std::vector<double> point_3_xy_m_;
+  std::vector<double> point_4_xy_m_;
+  std::vector<double> point_5_xy_m_;
+  std::vector<double> point_6_xy_m_;
+  std::vector<double> point_7_xy_m_;
   std::vector<double> board_to_tcp_orientation_xyzw_;
   std::vector<double> board_to_tcp_rpy_rad_;
   std::vector<double> board_box_center_xyz_m_;

@@ -120,7 +120,6 @@ def opaque_func(context, *args, **kwargs):
             "default_planner_request_adapters/AddTimeOptimalParameterization",
         ])
         ompl_pipeline.pop("response_adapters", None)
-    ompl = {"ompl": ompl_context}
     executor_ompl_context = dict(ompl_context["move_group"])
     executor_ompl_context["planner_configs"] = ompl_context["planner_configs"]
     executor_ompl_context["igus_rebel_arm"] = ompl_context["igus_rebel_arm"]
@@ -168,7 +167,8 @@ def opaque_func(context, *args, **kwargs):
         "publish_planning_scene": True,
         "publish_geometry_updates": True,
         "publish_state_updates": True,
-        "publish_transforms_updates": True,
+        "publish_transforms_updates": False,
+        "publish_planning_scene_hz": 2.0,
     }
     
     kinematics_config = load_yaml(Path(robot_description_kinematics_file.perform(context)))
@@ -182,11 +182,16 @@ def opaque_func(context, *args, **kwargs):
         moveit_controllers,
         planning_scene_monitor_parameters,
         {
+            "trajectory_execution.allowed_execution_duration_scaling": 1.2,
+            "trajectory_execution.allowed_goal_duration_margin": 0.5,
+            "trajectory_execution.allowed_start_tolerance": 0.01,
+            "trajectory_execution.execution_duration_monitoring": False,
             "publish_robot_description": True,
             "publish_robot_description_semantic": True,
             "publish_geometry_updates": True,
             "publish_state_updates": True,
-            "publish_transforms_updates": True,
+            "publish_transforms_updates": False,
+            "publish_planning_scene_hz": 2.0,
             "capabilities": "move_group/ExecuteTaskSolutionCapability",
         },
         executor_ompl,
@@ -279,6 +284,13 @@ def opaque_func(context, *args, **kwargs):
     delayed_box_h_cut_node = TimerAction(
         period=box_h_cut_start_delay, actions=[box_h_cut_node]
     )
+    camera_pole_node = Node(
+        package="igus_rebel_moveit_config",
+        executable="camera_pole_collision.py",
+        namespace=namespace,
+        parameters=[{"use_sim_time": use_sim_time}],
+        output="screen",
+    )
 
     calibration_params = load_yaml(Path(
         LaunchConfiguration("calibration_verification_config").perform(context)
@@ -343,7 +355,7 @@ def opaque_func(context, *args, **kwargs):
 
     # Launch gamepad
     joy_node = Node(
-        condition=IfCondition(LaunchConfiguration("run_teleop")),
+        condition=IfCondition(LaunchConfiguration("run_gamepad")),
         package="joy",
         executable="joy_node",
         parameters=[{'use_sim_time': use_sim_time}],
@@ -358,7 +370,7 @@ def opaque_func(context, *args, **kwargs):
         ]
     )
     teleop_twist_joy_node = Node(
-        condition=IfCondition(LaunchConfiguration("run_teleop")),
+        condition=IfCondition(LaunchConfiguration("run_gamepad")),
         package="igus_rebel_moveit_config",
         executable="rebel_servo_teleop_gamepad",
         parameters=[{'use_sim_time': use_sim_time}, teleop_joy_twist_file],
@@ -386,6 +398,7 @@ def opaque_func(context, *args, **kwargs):
     
     return [
         move_group_node,
+        camera_pole_node,
         calibration_node,
         servo_node,
         joy_node,
@@ -452,6 +465,9 @@ def generate_launch_description():
     ld = LaunchDescription()
     ld.add_action(use_sim_time_arg)
     ld.add_action(DeclareLaunchArgument("run_teleop", default_value="true"))
+    ld.add_action(DeclareLaunchArgument(
+        "run_gamepad", default_value="false",
+        description="Start joy_node + gamepad teleop; keyboard teleop is a separate manual node"))
     ld.add_action(DeclareLaunchArgument("rviz_config", default_value=os.path.join(
         get_package_share_directory("igus_rebel_moveit_config"), "launch", "moveit.rviz")))
     ld.add_action(DeclareLaunchArgument("run_calibration_verification", default_value="false"))

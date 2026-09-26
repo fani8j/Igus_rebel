@@ -9,7 +9,8 @@ calibration_verification:
     tool_link: xeg32_tool_tip
     planning_pipeline: ompl
     planner_id: RRTConnectkConfigDefault
-
+    camera_pole_required: true
+    camera_pole_topic: /box_motion/camera_pole_collision
     controller: rebel_arm_trajectory_controller
     controller_action: /rebel_arm_trajectory_controller/follow_joint_trajectory
     joint_states_topic: /joint_states
@@ -20,19 +21,23 @@ calibration_verification:
     # assuming a board, cube, marker, or user fixture.
     # Measurement origin relative to the detected marker center, in marker axes.
     # All point XY offsets below are relative to this origin.
-    reference_origin_xyz_m: [0.004286, 0.004286, 0.0]
-    point_1_xy_m: [0.0, -0.064585]
-    point_2_xy_m: [-0.07530, -0.064585]
-    # point_3_xy_m: [-0.079586,  -0.002]
-    point_3_xy_m: [-0.07530,  -0.002]
+    # marker centre = origin (chart)
+    reference_origin_xyz_m: [0.0, 0.0, 0.0]
+    point_1_xy_m: [0.0, 0.060]
+    point_2_xy_m: [0.045, 0.060]
+    point_3_xy_m: [0.020, -0.085]
+    point_4_xy_m: [0.0, -0.060]  # BOTTOM
+    point_5_xy_m: [-0.060, 0.0]  # LEFT
+    point_6_xy_m: [0.060, 0.0]  # RIGHT
+    point_7_xy_m: [-0.070, 0.035]  # P2
     board_target_height_m: 0.0
-    # board_to_tcp_orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
     board_to_tcp_rpy_rad: [3.141592653589793, 0.0, 0.0]
 
     # Platform in the original marker frame, with reference shift applied once.
+    # A4 paper thin board centred on marker
     board_collision_id: calibration_platform
-    board_box_center_xyz_m: [0.045714, 0.091664, 0.001]
-    board_box_dimensions_xyz_m: [0.100, 0.100, 0.002]
+    board_box_center_xyz_m: [0.0, 0.0, -0.0005]
+    board_box_dimensions_xyz_m: [0.210, 0.297, 0.001]
     # Below-base keep-out volume in planning_frame (base_link), top at Z=0.
     table_collision_id: below_base
     table_box_center_xyz_m: [0.0, 0.0, -1.0]
@@ -42,13 +47,9 @@ calibration_verification:
     # approach direction are expressed in the cube frame. Leave omitted until the
     # actual cube/corner/face and safe approach are known.
     cube_collision_id: calibration_cube
-    cube_pose_xyz_m: [0.045714, 0.091664, 0.027]
+    cube_pose_xyz_m: [0.105, 0.1485, 0.0]
     cube_pose_rpy_rad: [0.0, 0.0, 0.0]
     cube_dimensions_xyz_m: [0.050, 0.050, 0.050]
-    # cube_reference_xyz_m: [0.0, 0.0, 0.0]
-    # cube_approach_direction_xyz: [0.0, 0.0, 1.0]
-    # cube_to_tcp_orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
-    # cube_to_tcp_rpy_rad: [0.0, 0.0, 0.0]
 
     # Plan a final non-contact Cartesian descent after the target standoff.
     target_standoff_m: 0.02

@@ -6,9 +6,11 @@ aruco_verification:
     robot_base_frame: base_link
 
     # Required: set both explicitly for the printed marker in use.
-    marker_dictionary: "DICT_ARUCO_ORIGINAL"
-    marker_id: 36
-    marker_size_m: 0.060
+    marker_dictionary: "DICT_4X4_50"
+    marker_id: 13
+    marker_size_m: 0.059
+    hover_height_m: 0.02
+    publish_hover_targets: true
 
     stable_count: 5
     max_stable_position_delta_m: 0.010
@@ -17,8 +19,8 @@ aruco_verification:
     min_ippe_error_ratio: 1.5
     min_marker_side_px: 30.0
 
-    max_image_age_s: 0.5
-    max_camera_info_delta_s: 0.5
+    max_image_age_s: 3.5
+    max_camera_info_delta_s: 3.5
     tf_timeout_s: 0.20
     max_tf_age_s: 0.5
 

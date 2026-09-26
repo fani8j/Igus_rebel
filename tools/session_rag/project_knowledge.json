@@ -1,0 +1,194 @@
+{
+  "schema_version": 1,
+  "source_session_id": "019f7e48-c7da-7000-b26e-f43fca9bc004",
+  "generated_from": "workspace_scan_artifacts/omp_session_map_20260913.json",
+  "topics": [
+    {
+      "id": "robot_description",
+      "patterns": [
+        "urdf",
+        "xacro",
+        "mesh",
+        "cad",
+        "step",
+        "collada",
+        "robotviewer",
+        "isaac"
+      ]
+    },
+    {
+      "id": "ros_compatibility",
+      "patterns": [
+        "humble",
+        "jazzy",
+        "ubuntu",
+        "colcon",
+        "rosdep",
+        "build"
+      ]
+    },
+    {
+      "id": "cri_network",
+      "patterns": [
+        "cri",
+        "192\\.168",
+        "socket",
+        "firmware",
+        "dout",
+        "din",
+        "wifi",
+        "network"
+      ]
+    },
+    {
+      "id": "motion_control",
+      "patterns": [
+        "moveit",
+        "servo",
+        "trajectory",
+        "mtc",
+        "teleop",
+        "planner"
+      ]
+    },
+    {
+      "id": "calibration_tcp",
+      "patterns": [
+        "aruco",
+        "calibrat",
+        "tcp",
+        "handeye",
+        "marker",
+        "transform",
+        "tf"
+      ]
+    },
+    {
+      "id": "xeg32_tool",
+      "patterns": [
+        "xeg",
+        "gripper",
+        "knife",
+        "cutter",
+        "tool.tip",
+        "suction"
+      ]
+    },
+    {
+      "id": "pid_tuning",
+      "patterns": [
+        "pid",
+        "gain",
+        "overshoot",
+        "controller\\.yaml"
+      ]
+    },
+    {
+      "id": "h_cut_workspace",
+      "patterns": [
+        "h-cut",
+        "h cut",
+        "carton",
+        "rgbd",
+        "workspace",
+        "roll",
+        "collision"
+      ]
+    }
+  ],
+  "verified_facts": [
+    "Native ROS 2 Humble/Ubuntu 22.04 builds succeeded; the canonical runtime model is igus_rebel2, not legacy igus_rebel.",
+    "D00617809.zip had a valid CRC and SHA-256 9a965e59b119cdf382753d60ca18e17a782a6d190d97906d29b55afd8631984b.",
+    "The STEP-derived robot visuals contain 863047 triangles, 14 native STEP palette materials and smooth CAD normals.",
+    "The final distal visual offset applied to motor4, link4, motor5, link5 and link6 is xyz [0.0013449814287804, 0, -0.0005195] with zero RPY; it is a visual correction only.",
+    "check_urdf reported 12 links, 5 fixed joints, 6 revolute joints and root base_link; joint5 is bounded revolute.",
+    "The physical controller is reachable at 192.168.50.133:3920 and identified as igus-REBEL/REBEL-6DOF-03, firmware V980-15-000-2.",
+    "The CRI DOUT mask 8000000000000000 crash was fixed by full-width uint64 hexadecimal parsing; five parser tests passed and no repeat stoi crash was observed.",
+    "The latest active xeg32_tool_tip origin from knivetool4.xml is xyz [0.068936, 0.046766, 0.127060] m, rpy [0, 0, 0]; it supersedes earlier TCP values.",
+    "ArUco marker size is 0.060 m across the outer black square; the configured shifted reference origin is [-0.004286, -0.004286, 0] m.",
+    "Calibration plans use an 82 mm preapproach, then 2 mm standoff, then 1 mm final non-contact clearance; center and points 1-3 planned successfully, but execute_plan was not called.",
+    "Live CameraInfo with eight plumb_bob coefficients is accepted only when the last three entries are zero; ten detector tests passed.",
+    "Keyboard Servo requires /servo_node/start_servo. Its Cartesian increment defaults to 0.001 m, can be set at runtime to greater than zero through 0.01 m, and resets on node restart.",
+    "Installed PID gains are joint1 P4.0/I0/D0.010/FF1.0; joint2 P4.0/I0/D0.005/FF0.9; joint3 P4.0/I0/D0.005/FF1.0; joint4 P4.0/I0/D0.050/FF0.9; joint5 P3.0/I0/D0.050/FF1.0; joint6 P4.0/I0/D0.005/FF1.0.",
+    "PID selection came from 216 physical trials at 5% velocity and acceleration, with home restoration before each trial and joint change.",
+    "For the scanned H-cut data, 59 cartons were planner-valid. A +0.140 m base-Y fixture shift gave 59/59 complete plans twice; the validated region was X 0.200-0.225 m, Y -0.175 to -0.125 m, yaw -45 to +30 degrees.",
+    "Right roll -5 degrees achieved 52/59 full validations, correcting an earlier 59/59 claim. Right roll -2.5 degrees fails because detected_carton collides with xeg32_camera_mount_link.",
+    "No collision bypass, blind knife-contact trajectory or force/contact-based stop was implemented."
+  ],
+  "unresolved_items": [
+    "Confirm exact geometric differences between the REBEL-6DOF-01 CAD basis and the physical REBEL-6DOF-03 variant.",
+    "Execute the underlay/overlay migration and remove or otherwise resolve the duplicate igus_rebel_description package.",
+    "Parameterize the CRI target IP and address blocking connect/unlimited retry behavior; public defaults still differ from the local robot endpoint.",
+    "Physically validate the latest TCP, tool orientation, marker/reference transform, fixture dimensions and 1 mm model clearance before calibration execution.",
+    "Model and validate the complete physical cutter envelope; the current 6 mm TCP sphere does not protect the knife body.",
+    "Keep intentional board contact unsupported until force/contact sensing or another safe contact-stop mechanism exists.",
+    "Rewrite and redeploy the hand-eye bridge as base_link to camera_link; the observed base_link to camera_color_optical_frame transform creates a double-parent TF topology.",
+    "Relaunch keyboard teleoperation after exit code 137 and ensure the rebuilt workspace overlay is sourced for SetCartesianIncrement.",
+    "Confirm whether left -10/right -7.5 degrees and the recommended carton workspace were persisted in box_h_cut_executor.yaml; all H-cut results remain plan-only rather than physical cutting validation.",
+    "Resolve remaining RViz GPU saturation and confirm the final location/state of gamma-corrected Isaac-only meshes.",
+    "Confirm suction-gripper mass, inertia, mounting transform, collision fidelity and physical calibration if that hardware is added.",
+    "Physical hand-guiding/freedrive remains undocumented; only jog-and-Touch-Up teaching is established."
+  ],
+  "improvements": [
+    {
+      "id": "focused_sessions",
+      "problem": "One historical session grew to 49.4 MB, 8,853 records, 162 user turns, and 361 user/assistant knowledge events across unrelated workstreams.",
+      "action": "Use one OMP session per bounded workstream and archive it after its acceptance criteria pass. Link sessions through RAG instead of carrying the entire transcript.",
+      "benefit": "Smaller context, less stale-state interference, faster model/tool turns."
+    },
+    {
+      "id": "retrieve_before_explore",
+      "problem": "Repeated discovery across URDF, CRI, calibration, PID, and H-cut topics caused high tool churn.",
+      "action": "Run the project RAG query before globbing or reading files; use returned source paths and line ranges as the initial evidence set.",
+      "benefit": "Avoids reopening unrelated files and recreating already verified conclusions."
+    },
+    {
+      "id": "structured_incident_packet",
+      "problem": "Several debugging requests began with a symptom but lacked a single normalized reproduction record.",
+      "action": "Record command, exact error, expected behavior, environment, active commit/worktree state, relevant runtime endpoints, and the smallest safe reproduction before editing.",
+      "benefit": "Separates configuration, environment, data, and source defects earlier."
+    },
+    {
+      "id": "evidence_state",
+      "problem": "The long session contained corrected claims, especially planning success counts and physical-versus-plan-only results.",
+      "action": "Tag knowledge as observed, verified, inference, superseded, or unresolved; preserve correction edges rather than rewriting history silently.",
+      "benefit": "Prevents stale measurements from being reused as current truth."
+    },
+    {
+      "id": "source_fingerprint",
+      "problem": "Generated artifacts, installed ROS files, source files, and live runtime state changed across multi-day investigations.",
+      "action": "Store source path, SHA-256, timestamp, ROS distro, hardware/firmware identity, and whether evidence came from source, build, simulation, or physical hardware.",
+      "benefit": "Detects drift before comparing results produced from different states."
+    },
+    {
+      "id": "reproduce_then_fix",
+      "problem": "Broad investigations sometimes preceded a minimal reproduction.",
+      "action": "First reproduce the exact failing path, then inspect the nearest responsible symbol/configuration, implement the source fix, and rerun the same reproduction.",
+      "benefit": "Reduces speculative edits and makes verification directly comparable."
+    },
+    {
+      "id": "semantic_code_navigation",
+      "problem": "The historical session used 1,455 eval calls, 236 shell calls, 224 reads, and 58 searches.",
+      "action": "Use LSP references/definitions for symbols, targeted grep for text, and RAG only for semantic history. Never use RAG as a replacement for compiler-accurate callsites.",
+      "benefit": "Fewer scans and fewer missed callers."
+    },
+    {
+      "id": "safety_boundary",
+      "problem": "Planning, simulation, connectivity, and physical motion evidence were sometimes adjacent in the same workstream.",
+      "action": "Represent plan-only, simulation-verified, zero-motion hardware, bounded-motion hardware, and physically executed results as separate evidence levels.",
+      "benefit": "Prevents a planning result from being mistaken for physical validation."
+    },
+    {
+      "id": "artifact_lifecycle",
+      "problem": "Many dated scans, videos, screenshots, YAML variants, and generated models accumulated without a single machine-readable latest-state pointer.",
+      "action": "Give each experiment an immutable result artifact and maintain one current recommendation record that points to its evidence hashes and superseded predecessors.",
+      "benefit": "Faster selection of the authoritative result and safer cleanup."
+    },
+    {
+      "id": "close_loop",
+      "problem": "Some changes ended with unresolved deployment, sourcing, YAML persistence, or physical-validation steps.",
+      "action": "At task completion, persist changed files, verification command/output, remaining risks, and the next safe action into the RAG knowledge records.",
+      "benefit": "Future sessions resume from an explicit state rather than reconstructing it."
+    }
+  ]
+}

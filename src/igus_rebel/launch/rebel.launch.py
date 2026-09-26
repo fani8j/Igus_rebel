@@ -65,8 +65,6 @@ def generate_launch_description():
         parameters=[
             robot_description,
             controller_config_path],
-        remappings=[
-        ],
         output="both",
     )
     
@@ -74,11 +72,8 @@ def generate_launch_description():
         package="robot_state_publisher",
         executable="robot_state_publisher",
         parameters=[robot_description],
-        remappings=[],
         output="both",
     )
-
-    print("robot state publisher started")
 
     joint_state_broadcaster_spawner = Node(
         package="controller_manager",

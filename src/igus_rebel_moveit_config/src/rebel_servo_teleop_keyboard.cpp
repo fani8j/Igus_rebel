@@ -38,9 +38,13 @@
  *      Author    : Adam Pettinger, V Mohammed Ibrahim
  */
 
+#include <algorithm>
+#include <atomic>
+#include <cmath>
 #include <chrono>
 #include <control_msgs/msg/joint_jog.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
+#include <igus_rebel_msgs/srv/set_cartesian_increment.hpp>
 #if __has_include(<moveit_msgs/srv/servo_command_type.hpp>)
 #include <moveit_msgs/srv/servo_command_type.hpp>
 #define IGUS_REBEL_HAS_SERVO_COMMAND_TYPE 1
@@ -57,9 +61,18 @@
 #include <conio.h>
 #endif
 
-// A keypress is accepted by Servo for `incoming_command_timeout` (0.3 s).
-// Keep a single Cartesian keypress to approximately 1 mm.
-constexpr double MAX_VEL = 0.001 / 0.3;
+// Servo applies each command for its incoming-command timeout.
+constexpr double SERVO_COMMAND_TIMEOUT_S = 0.3;
+constexpr double DEFAULT_CARTESIAN_INCREMENT_M = 0.005;
+constexpr double MAX_CARTESIAN_INCREMENT_M = 0.03;
+constexpr double DEFAULT_LINEAR_VELOCITY_MPS =
+    DEFAULT_CARTESIAN_INCREMENT_M / SERVO_COMMAND_TIMEOUT_S;
+constexpr double DEFAULT_ANGULAR_VELOCITY_RPS = 0.15;
+constexpr double MIN_LINEAR_VELOCITY_MPS = 0.001;
+constexpr double MAX_LINEAR_VELOCITY_MPS = 0.10;
+constexpr double MIN_ANGULAR_VELOCITY_RPS = 0.01;
+constexpr double MAX_ANGULAR_VELOCITY_RPS = 0.5;
+constexpr double SPEED_SCALE_FACTOR = 1.25;
 
 // Define used keys
 namespace
@@ -84,6 +97,14 @@ constexpr int8_t KEYCODE_T = 0x74;
 constexpr int8_t KEYCODE_W = 0x77;
 constexpr int8_t KEYCODE_E = 0x65;
 constexpr int8_t KEYCODE_S = 0x73;
+constexpr int8_t KEYCODE_I = 0x69;
+constexpr int8_t KEYCODE_K = 0x6b;
+constexpr int8_t KEYCODE_N = 0x6e;
+constexpr int8_t KEYCODE_M = 0x6d;
+constexpr int8_t KEYCODE_U = 0x75;
+constexpr int8_t KEYCODE_O = 0x6f;
+constexpr int8_t KEYCODE_MINUS = 0x2d;
+constexpr int8_t KEYCODE_EQUAL = 0x3d;
 }  // namespace
 
 // Some constants used in the Servo Teleop demo
@@ -148,31 +169,66 @@ public:
   int keyLoop();
 
 private:
+  void setCartesianIncrement(
+    const std::shared_ptr<igus_rebel_msgs::srv::SetCartesianIncrement::Request> request,
+    std::shared_ptr<igus_rebel_msgs::srv::SetCartesianIncrement::Response> response);
   void spin();
 
   rclcpp::Node::SharedPtr nh_;
 
   rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_pub_;
   rclcpp::Publisher<control_msgs::msg::JointJog>::SharedPtr joint_pub_;
+  rclcpp::Service<igus_rebel_msgs::srv::SetCartesianIncrement>::SharedPtr increment_service_;
 #if IGUS_REBEL_HAS_SERVO_COMMAND_TYPE
   rclcpp::Client<moveit_msgs::srv::ServoCommandType>::SharedPtr switch_input_;
   std::shared_ptr<moveit_msgs::srv::ServoCommandType::Request> request_;
 #endif
+  std::atomic<double> cartesian_velocity_mps_;
+  std::atomic<double> angular_velocity_rps_;
   double joint_vel_cmd_;
   std::string command_frame_id_;
 };
 
-KeyboardServo::KeyboardServo() : joint_vel_cmd_(1.0), command_frame_id_{ "base_link" }
+KeyboardServo::KeyboardServo()
+  : cartesian_velocity_mps_(DEFAULT_LINEAR_VELOCITY_MPS),
+    angular_velocity_rps_(DEFAULT_ANGULAR_VELOCITY_RPS),
+    joint_vel_cmd_(1.0), command_frame_id_{ "base_link" }
 {
   nh_ = rclcpp::Node::make_shared("servo_keyboard_input");
 
   twist_pub_ = nh_->create_publisher<geometry_msgs::msg::TwistStamped>(TWIST_TOPIC, ROS_QUEUE_SIZE);
   joint_pub_ = nh_->create_publisher<control_msgs::msg::JointJog>(JOINT_TOPIC, ROS_QUEUE_SIZE);
+  increment_service_ = nh_->create_service<igus_rebel_msgs::srv::SetCartesianIncrement>(
+    "~/set_cartesian_increment",
+    [this](
+      const std::shared_ptr<igus_rebel_msgs::srv::SetCartesianIncrement::Request> request,
+      std::shared_ptr<igus_rebel_msgs::srv::SetCartesianIncrement::Response> response)
+    {
+      setCartesianIncrement(request, response);
+    });
 
 #if IGUS_REBEL_HAS_SERVO_COMMAND_TYPE
   // MoveIt 2.10 and newer require explicitly selecting the active command type.
   switch_input_ = nh_->create_client<moveit_msgs::srv::ServoCommandType>("servo_node/switch_command_type");
 #endif
+}
+
+void KeyboardServo::setCartesianIncrement(
+  const std::shared_ptr<igus_rebel_msgs::srv::SetCartesianIncrement::Request> request,
+  std::shared_ptr<igus_rebel_msgs::srv::SetCartesianIncrement::Response> response)
+{
+  const double increment = request->increment_meters;
+  if (!std::isfinite(increment) || increment <= 0.0 || increment > MAX_CARTESIAN_INCREMENT_M)
+  {
+    response->success = false;
+    response->message = "increment_meters must be finite and in the range (0, 0.01]";
+    return;
+  }
+
+  cartesian_velocity_mps_.store(increment / SERVO_COMMAND_TIMEOUT_S, std::memory_order_relaxed);
+  response->success = true;
+  response->message = "Cartesian keyboard increment set to " + std::to_string(increment) + " m";
+  RCLCPP_INFO(nh_->get_logger(), "%s", response->message.c_str());
 }
 
 KeyboardReader input;
@@ -217,12 +273,15 @@ int KeyboardServo::keyLoop()
 
   puts("Reading from keyboard");
   puts("---------------------------");
-  puts("All commands are in the planning frame");
+  puts("Twist commands use the selected command frame ('w': base_link, 'e': xeg32_tool_tip)");
   puts("Use arrow keys and the '.' and ';' keys to Cartesian jog");
+  puts("Use i/k for TCP roll, n/m for TCP pitch, and u/o for TCP yaw (press 'e' first)");
+  puts("Use '-' and '=' to decrease/increase Cartesian linear and angular speed");
   puts("Use 1|2|3|4|5|6|7 keys to joint jog. 'r' to reverse the direction of jogging.");
   puts("Use 'j' to select joint jog. ");
   puts("Use 't' to select twist ");
   puts("Use 'w' and 'e' to switch between sending command in planning frame or end effector frame");
+  puts("Change the Cartesian increment with the set_cartesian_increment service (default 0.001 m)");
   puts("'Q' to quit.");
 
   for (;;)
@@ -250,37 +309,40 @@ int KeyboardServo::keyLoop()
 
     joint_msg->velocities.resize(6);
     std::fill(joint_msg->velocities.begin(), joint_msg->velocities.end(), 0.0);
+    const double cartesian_velocity_mps =
+      cartesian_velocity_mps_.load(std::memory_order_relaxed);
+    const double angular_velocity_rps = angular_velocity_rps_.load(std::memory_order_relaxed);
     // Use read key-press
     switch (c)
     {
       case KEYCODE_LEFT:
         RCLCPP_DEBUG(nh_->get_logger(), "LEFT");
-        twist_msg->twist.linear.y = -MAX_VEL;
+        twist_msg->twist.linear.y = -cartesian_velocity_mps;
         publish_twist = true;
         break;
       case KEYCODE_RIGHT:
         RCLCPP_DEBUG(nh_->get_logger(), "RIGHT");
-        twist_msg->twist.linear.y = MAX_VEL;
+        twist_msg->twist.linear.y = cartesian_velocity_mps;
         publish_twist = true;
         break;
       case KEYCODE_UP:
         RCLCPP_DEBUG(nh_->get_logger(), "UP");
-        twist_msg->twist.linear.x = MAX_VEL;
+        twist_msg->twist.linear.x = cartesian_velocity_mps;
         publish_twist = true;
         break;
       case KEYCODE_DOWN:
         RCLCPP_DEBUG(nh_->get_logger(), "DOWN");
-        twist_msg->twist.linear.x = -MAX_VEL;
+        twist_msg->twist.linear.x = -cartesian_velocity_mps;
         publish_twist = true;
         break;
       case KEYCODE_PERIOD:
         RCLCPP_DEBUG(nh_->get_logger(), "PERIOD");
-        twist_msg->twist.linear.z = -MAX_VEL;
+        twist_msg->twist.linear.z = -cartesian_velocity_mps;
         publish_twist = true;
         break;
       case KEYCODE_SEMICOLON:
         RCLCPP_DEBUG(nh_->get_logger(), "SEMICOLON");
-        twist_msg->twist.linear.z = MAX_VEL;
+        twist_msg->twist.linear.z = cartesian_velocity_mps;
         publish_twist = true;
         break;
       case KEYCODE_S:
@@ -290,6 +352,50 @@ int KeyboardServo::keyLoop()
         twist_msg->twist.linear.z = 0.0;
         publish_twist = true;
         break;
+      case KEYCODE_I:
+        RCLCPP_DEBUG(nh_->get_logger(), "I");
+        twist_msg->twist.angular.x = angular_velocity_rps;
+        publish_twist = true;
+        break;
+      case KEYCODE_K:
+        RCLCPP_DEBUG(nh_->get_logger(), "K");
+        twist_msg->twist.angular.x = -angular_velocity_rps;
+        publish_twist = true;
+        break;
+      case KEYCODE_N:
+        RCLCPP_DEBUG(nh_->get_logger(), "N");
+        twist_msg->twist.angular.y = angular_velocity_rps;
+        publish_twist = true;
+        break;
+      case KEYCODE_M:
+        RCLCPP_DEBUG(nh_->get_logger(), "M");
+        twist_msg->twist.angular.y = -angular_velocity_rps;
+        publish_twist = true;
+        break;
+      case KEYCODE_U:
+        RCLCPP_DEBUG(nh_->get_logger(), "U");
+        twist_msg->twist.angular.z = angular_velocity_rps;
+        publish_twist = true;
+        break;
+      case KEYCODE_O:
+        RCLCPP_DEBUG(nh_->get_logger(), "O");
+        twist_msg->twist.angular.z = -angular_velocity_rps;
+        publish_twist = true;
+        break;
+      case KEYCODE_MINUS:
+      case KEYCODE_EQUAL:
+      {
+        const double scale = c == KEYCODE_MINUS ? 1.0 / SPEED_SCALE_FACTOR : SPEED_SCALE_FACTOR;
+        const double linear_speed = std::clamp(
+          cartesian_velocity_mps * scale, MIN_LINEAR_VELOCITY_MPS, MAX_LINEAR_VELOCITY_MPS);
+        const double angular_speed = std::clamp(
+          angular_velocity_rps * scale, MIN_ANGULAR_VELOCITY_RPS, MAX_ANGULAR_VELOCITY_RPS);
+        cartesian_velocity_mps_.store(linear_speed, std::memory_order_relaxed);
+        angular_velocity_rps_.store(angular_speed, std::memory_order_relaxed);
+        RCLCPP_INFO(
+          nh_->get_logger(), "Cartesian speeds: %.4f m/s, %.3f rad/s", linear_speed, angular_speed);
+        break;
+      }
       case KEYCODE_1:
         RCLCPP_DEBUG(nh_->get_logger(), "1");
         joint_msg->velocities[0] = joint_vel_cmd_;
