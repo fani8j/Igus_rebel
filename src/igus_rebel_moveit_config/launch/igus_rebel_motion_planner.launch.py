@@ -6,24 +6,20 @@ from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 
+# Arguments forwarded unchanged to move_group.launch.py.
+FORWARDED_ARGUMENTS = (
+    "hardware_protocol",
+    "use_sim_time",
+    "use_gui",
+    "run_teleop",
+    "run_gamepad",
+    "run_camera_pole",
+    "run_box_h_cut_executor",
+    "box_h_cut_start_delay",
+)
+
 
 def generate_launch_description():
-    use_gui_arg = DeclareLaunchArgument("use_gui", default_value="false")
-    use_sim_time_arg = DeclareLaunchArgument("use_sim_time", default_value="false")
-    hardware_protocol_arg = DeclareLaunchArgument(
-        "hardware_protocol",
-        default_value="rebel",
-        choices=["mock_hardware", "gazebo", "rebel"],
-    )
-    run_h_cut_executor_arg = DeclareLaunchArgument(
-        "run_box_h_cut_executor",
-        default_value="true",
-        description="Start the external-snapshot plan-only H-cut MTC executor",
-    )
-    h_cut_delay_arg = DeclareLaunchArgument(
-        "box_h_cut_start_delay", default_value="3.0"
-    )
-
     moveit_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
@@ -33,25 +29,34 @@ def generate_launch_description():
             )
         ),
         launch_arguments={
-            "hardware_protocol": LaunchConfiguration("hardware_protocol"),
-            "use_sim_time": LaunchConfiguration("use_sim_time"),
-            "use_gui": LaunchConfiguration("use_gui"),
-            "run_box_h_cut_executor": LaunchConfiguration(
-                "run_box_h_cut_executor"
-            ),
-            "box_h_cut_start_delay": LaunchConfiguration(
-                "box_h_cut_start_delay"
-            ),
+            name: LaunchConfiguration(name) for name in FORWARDED_ARGUMENTS
         }.items(),
     )
 
     return LaunchDescription(
         [
-            use_gui_arg,
-            use_sim_time_arg,
-            hardware_protocol_arg,
-            run_h_cut_executor_arg,
-            h_cut_delay_arg,
+            DeclareLaunchArgument("use_gui", default_value="false"),
+            DeclareLaunchArgument("use_sim_time", default_value="false"),
+            DeclareLaunchArgument(
+                "hardware_protocol",
+                default_value="rebel",
+                choices=["mock_hardware", "gazebo", "rebel"],
+            ),
+            DeclareLaunchArgument(
+                "run_teleop", default_value="false",
+                description="Start MoveIt Servo (needed by keyboard and gamepad teleop)"),
+            DeclareLaunchArgument(
+                "run_gamepad", default_value="false",
+                description="Start joy_node + gamepad teleop (also needs run_teleop:=true)"),
+            DeclareLaunchArgument(
+                "run_camera_pole", default_value="true",
+                description="Maintain the external camera_pole collision object"),
+            DeclareLaunchArgument(
+                "run_box_h_cut_executor",
+                default_value="true",
+                description="Start the external-snapshot plan-only H-cut MTC executor",
+            ),
+            DeclareLaunchArgument("box_h_cut_start_delay", default_value="3.0"),
             moveit_launch,
         ]
     )

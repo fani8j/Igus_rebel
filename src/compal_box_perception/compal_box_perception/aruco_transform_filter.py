@@ -13,6 +13,8 @@ from rclpy.node import Node
 from tf2_msgs.msg import TFMessage
 from tf2_ros import TransformBroadcaster
 
+from .geometry import average_quaternions, normalize_quaternion, quaternion_angle_deg
+
 
 class TransformMedianFilter:
     """Reject pose outliers and median-filter translation and orientation."""
@@ -38,48 +40,22 @@ class TransformMedianFilter:
         self, translation: Sequence[float], quaternion: Sequence[float]
     ) -> Optional[Tuple[np.ndarray, np.ndarray]]:
         position = np.asarray(translation, dtype=np.float64).reshape(3)
-        rotation = _normalize_quaternion(quaternion)
+        rotation = normalize_quaternion(quaternion)
         if not np.all(np.isfinite(position)):
             raise ValueError("Translation must be finite")
         if self._translations:
             reference_position = np.median(np.stack(self._translations), axis=0)
-            reference_rotation = _average_quaternions(self._quaternions)
+            reference_rotation = average_quaternions(self._quaternions)
             if np.linalg.norm(position - reference_position) > self.max_position_jump_m:
                 return None
-            if _quaternion_angle_deg(rotation, reference_rotation) > self.max_rotation_jump_deg:
+            if quaternion_angle_deg(rotation, reference_rotation) > self.max_rotation_jump_deg:
                 return None
         self._translations.append(position)
         self._quaternions.append(rotation)
         return (
             np.median(np.stack(self._translations), axis=0),
-            _average_quaternions(self._quaternions),
+            average_quaternions(self._quaternions),
         )
-
-
-def _normalize_quaternion(quaternion: Sequence[float]) -> np.ndarray:
-    value = np.asarray(quaternion, dtype=np.float64).reshape(4)
-    norm = float(np.linalg.norm(value))
-    if not np.isfinite(norm) or norm <= 0.0:
-        raise ValueError("Quaternion must have a finite non-zero length")
-    value = value / norm
-    return -value if value[3] < 0.0 else value
-
-
-def _quaternion_angle_deg(first: Sequence[float], second: Sequence[float]) -> float:
-    dot = abs(float(np.dot(_normalize_quaternion(first), _normalize_quaternion(second))))
-    return float(np.degrees(2.0 * np.arccos(np.clip(dot, -1.0, 1.0))))
-
-
-def _average_quaternions(quaternions: Sequence[np.ndarray]) -> np.ndarray:
-    reference = _normalize_quaternion(quaternions[0])
-    accumulator = np.zeros((4, 4), dtype=np.float64)
-    for quaternion in quaternions:
-        aligned = _normalize_quaternion(quaternion)
-        if np.dot(aligned, reference) < 0.0:
-            aligned = -aligned
-        accumulator += np.outer(aligned, aligned)
-    _, vectors = np.linalg.eigh(accumulator)
-    return _normalize_quaternion(vectors[:, -1])
 
 
 class ArucoTransformFilterNode(Node):

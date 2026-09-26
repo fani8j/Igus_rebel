@@ -3,6 +3,13 @@
 ## Snapshot-relative combined plan
 A fixed canonical plan derived from one selected carton snapshot: left midpoint cut, collision-aware transition, complete middle seam, collision-aware transition, then right midpoint cut. Planning publishes to RViz and retains a plan only when every stage succeeds.
 
+## T-cut
+The default `cut_pattern` (`t_cut`): the full left side cut, the left-to-middle
+transition (lateral withdrawal, surface-normal lift, collision restore, free-space
+transit), then the complete middle seam. `t_cut_handoff` is the same first-arm plan
+but stops the middle seam at a declared handoff fraction for a second arm (not
+implemented). `h`/`combined` add the right side cut.
+
 ## Canonical side cut
 A side stroke through the detected midpoint pair, back first (`back_middle_left -> front_middle_left` or `back_middle_right -> front_middle_right`). The knife faces 180 degrees opposite travel while its local Z remains directed into the carton surface. No camera or holder is mounted on the XEG-32 gripper. The XEG-32 base/carriage meshes and detected carton remain collision-checked, and the fixed external camera pole remains a required `camera_pole` planning-scene obstacle derived from the external camera TF. `xeg32_tool_tip` is a collisionless kinematic/visual marker.
 
@@ -16,10 +23,15 @@ plans the configured start target and never dispatches motion. Existing correcti
 seed repeat teaching, while persisted deltas always use the uncorrected geometry
 baseline so every record is standalone. Each `execute_planned_h_cut` dispatch
 inside a session requires both `execution_enabled` and
-`debug_motion_execution_enabled`. `save_cut_debug_point` captures the full
-observed TCP pose after teleop correction, persists the nominal/observed/delta
-record, clears the stale plan, and retains the next stage: endpoint-only after the
-start save, lift-only (corrected endpoint to hover clearance) after the end save.
+`debug_motion_execution_enabled`. Only the start plan is ever retained and
+executed. Stages: `start_planned` -> `start_executed` (after a successful explicit
+dispatch) -> `start_saved`. `save_cut_debug_point` captures the full observed TCP pose
+from fresh joint-state FK and persists the nominal/observed/delta record: the first
+save records the teleop-corrected start (`start_saved`); the operator then teleoperates
+to the endpoint and the second save records it, writes the `complete` record and ends
+the session. No save plans or retains an endpoint or lift plan, and no save dispatches
+motion. The session snapshot must be fresh when the session starts and is then frozen;
+a session started under `debug_allow_stale_snapshot` can never be executed.
 Any out-of-order call is rejected; no stale plan survives a teleop/save step.
 
 ## Cut-local correction
@@ -28,4 +40,6 @@ A translation expressed in the detected cut's own basis (`along` the cut,
 delta in that basis. Applying a record to a new snapshot rotates the same
 local components onto the newly detected basis, so the correction follows the
 cut. Application is opt-in (`cut_debug_correction_enabled`, default `false`)
-and fails closed on schema/cut/frame/tool mismatch or unbounded values.
+and fails closed on a schema, status or cut-slot mismatch, a missing or mismatched
+`planning_frame`/`tool_link`, a non-orthonormal recorded basis, non-finite values, or a
+mapped penetration axis that no longer points into the carton.

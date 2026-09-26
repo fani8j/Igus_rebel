@@ -75,9 +75,9 @@ detect_tape_seam.py
   4 個角點。
 
 使用方式：
-  python3 detect_tape_seam.py --image /path/to/frame.png
-  python3 detect_tape_seam.py --image /path/to/other_frame.png --roi 500 80 900 320
-  python3 detect_tape_seam.py --image /path/to/frame.png --debug   # 額外印出每條邊的分類過程，方便除錯
+  ros2 run compal_box_perception detect_tape_seam --image /path/to/frame.png
+  python3 -m compal_box_perception.detect_tape_seam --image /path/to/other_frame.png --roi 500 80 900 320
+  python3 -m compal_box_perception.detect_tape_seam --image /path/to/frame.png --debug   # 額外印出每條邊的分類過程，方便除錯
 
 必要套件：
   pip install opencv-python-headless numpy --break-system-packages

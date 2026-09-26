@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TCP Hover Verification — Interactive Guide</title>
+<style>
+:root { --bg:#14171c; --panel:#1d2129; --line:#2c333f; --txt:#e8ecf1; --dim:#9aa4b2;
+  --grn:#3fb950; --amb:#d29922; --red:#f85149; --blu:#58a6ff; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--txt); font:14px/1.55 system-ui,sans-serif; }
+header { padding:18px 22px; border-bottom:1px solid var(--line); }
+header h1 { margin:0 0 4px; font-size:20px; }
+header p { margin:0; color:var(--dim); }
+main { display:grid; grid-template-columns:250px 1fr; gap:0; min-height:calc(100vh - 90px); }
+nav { border-right:1px solid var(--line); padding:14px; }
+nav button { display:block; width:100%; text-align:left; margin:0 0 6px; padding:9px 10px;
+  background:var(--panel); color:var(--txt); border:1px solid var(--line); border-radius:8px; cursor:pointer; }
+nav button.active, nav button:hover { border-color:var(--blu); }
+nav button .n { display:inline-block; width:22px; height:22px; text-align:center; line-height:22px;
+  border-radius:50%; background:var(--line); margin-right:8px; font-size:12px; }
+nav button.done .n { background:var(--grn); color:#04120a; }
+section { padding:18px 24px; max-width:860px; }
+.step { display:none; }
+.step.active { display:block; }
+.step h2 { margin-top:0; }
+pre { background:#0d1117; border:1px solid var(--line); border-radius:8px; padding:12px;
+  overflow-x:auto; position:relative; }
+code.cmd { color:#ffd479; }
+.copy { position:absolute; top:8px; right:8px; background:var(--line); color:var(--txt);
+  border:0; border-radius:6px; padding:4px 10px; cursor:pointer; }
+.copy:hover { background:var(--blu); }
+.check { margin-top:12px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--panel); }
+.check b.ok { color:var(--grn); } .check b.bad { color:var(--red); }
+.navrow { margin-top:16px; display:flex; gap:10px; }
+.navrow button { padding:9px 18px; border-radius:8px; border:1px solid var(--line);
+  background:var(--panel); color:var(--txt); cursor:pointer; }
+.navrow button.primary { background:var(--blu); border-color:var(--blu); color:#04121f; font-weight:600; }
+table { border-collapse:collapse; width:100%; margin:10px 0; }
+th, td { border:1px solid var(--line); padding:7px 10px; text-align:left; font-size:13px; }
+th { background:var(--panel); }
+.warn { border-left:4px solid var(--amb); padding:8px 12px; background:var(--panel); margin:12px 0; }
+.foot { color:var(--dim); font-size:12px; margin-top:26px; }
+#progress { height:6px; background:var(--line); border-radius:3px; margin:10px 0 0; }
+#progress i { display:block; height:100%; width:0; background:var(--grn); border-radius:3px; transition:width .3s; }
+</style>
+</head>
+<body>
+<header>
+<h1>TCP Hover Verification — Interactive Guide</h1>
+<p>ArUco chart hover test &middot; 8 targets &middot; plan-only first, explicit execution &middot; pole-aware planning</p>
+<div id="progress"><i></i></div>
+</header>
+<main>
+<nav id="steps"></nav>
+<section id="body"></section>
+</main>
+<script>
+const ENV = "source /opt/ros/humble/setup.bash; source install/setup.bash; export ROS_DOMAIN_ID=11 ROS_LOCALHOST_ONLY=0";
+const steps = [
+{ t:"1 · Launch stack", h:`
+<h2>1 · Launch the verification stack</h2>
+<p>Close any <code>move_group.launch.py</code> first — two move_groups fight over the arm.
+This launch brings driver + detector + planner + RViz profile. Pass
+<code>hardware_protocol:=rebel</code> explicitly (default is mock).</p>
+<pre><button class="copy">copy</button><code class="cmd">cd /home/farhan/igus_rebel_ros2
+${ENV}
+ros2 launch igus_rebel_moveit_config calibration_verification.launch.py hardware_protocol:=rebel use_gui:=true execution_allowed:=false</code></pre>
+<div class="check">Expect: <b class="ok">calibration_verification ready ... execution_allowed=false</b>,
+camera_pole <b class="ok">Applying camera_pole</b>, no spawner exit-1. If a spawner dies with
+<em>Controller already loaded</em>, kill the stale driver (<code>ps | grep rebel.launch</code>) and relaunch.</div>
+<div class="warn">Keep <code>execution_allowed:=false</code> until a plan looks right in RViz. Plans never auto-execute.</div>` },
+{ t:"2 · Check marker", h:`
+<h2>2 · Confirm the chart is detected</h2>
+<p>Lay <code>aruco_tcp_hover_test_A4.pdf</code> flat (100% scale).
+Detector wants DICT_4X4_50 ID&nbsp;13, stable 5/5.</p>
+<div class="warn"><b>Open question — marker size:</b> <code>marker_size_m</code> in
+<code>compal_box_perception/config/aruco_verification.yaml</code> is <code>0.059</code> (59&nbsp;mm),
+while this guide previously stated a 60&nbsp;mm marker edge. Measure the printed black marker
+edge with a ruler and set <code>marker_size_m</code> to the measured value before trusting any
+hover miss; a 1&nbsp;mm size error scales the detected distance by about 1.7&nbsp;%.</div>
+<pre><button class="copy">copy</button><code class="cmd">ros2 topic echo /calibration_verification/board_pose --once
+ros2 topic hz /camera/color/image_raw</code></pre>
+<div class="check">Pass: board_pose publishes, image rate <b class="ok">&gt;5&nbsp;Hz</b>.
+Staleness gate is currently <code>max_image_age_s: 3.5</code> (relaxed for slow drivers).
+If <em>Image is stale</em> persists: point the RViz cloud at <code>/camera/points_table</code>
+(filtered, fast — see step 5) or turn the raw cloud display off.</div>` },
+{ t:"3 · Capture board", h:`
+<h2>3 · Capture the board frame</h2>
+<pre><button class="copy">copy</button><code class="cmd">ros2 service call /calibration_verification/capture std_srvs/srv/Trigger</code></pre>
+<div class="check">Pass: <b class="ok">captured fresh board pose snapshot N</b>.
+Fail-closed if no fresh <code>/calibration_verification/board_pose</code> (re-do step 2).</div>` },
+{ t:"4 · Plan hovers", h:`
+<h2>4 · Plan the hover targets</h2>
+<table><tr><th>Service</th><th>Chart point</th></tr>
+<tr><td><code>~/plan_center</code></td><td>CENTER (marker middle)</td></tr>
+<tr><td><code>~/plan_point_1</code></td><td>TOP (0,+60) cross arm</td></tr>
+<tr><td><code>~/plan_point_2</code></td><td>P1 (+45,+60)</td></tr>
+<tr><td><code>~/plan_point_3</code></td><td>P3 (+20,−85)</td></tr>
+<tr><td><code>~/plan_point_4</code></td><td>BOTTOM (0,−60) cross arm</td></tr>
+<tr><td><code>~/plan_point_5</code></td><td>LEFT (−60,0) cross arm</td></tr>
+<tr><td><code>~/plan_point_6</code></td><td>RIGHT (+60,0) cross arm</td></tr>
+<tr><td><code>~/plan_point_7</code></td><td>P2 (−70,+35)</td></tr>
+<tr><td><code>~/plan_cube</code></td><td>paper-corner cube (A4 corner). Fails closed with the supplied config: <code>cube_reference_xyz_m</code> and <code>cube_approach_direction_xyz</code> are not set</td></tr></table>
+<p>Each plan: PTP transit to 100&nbsp;mm above the point, Cartesian approach to 20&nbsp;mm, Cartesian final descent to 10&nbsp;mm; no retract.</p>
+<pre><button class="copy">copy</button><code class="cmd">ros2 service call /calibration_verification/plan_center std_srvs/srv/Trigger
+ros2 service call /calibration_verification/plan_point_1 std_srvs/srv/Trigger
+ros2 service call /calibration_verification/plan_point_2 std_srvs/srv/Trigger
+ros2 service call /calibration_verification/plan_point_3 std_srvs/srv/Trigger
+ros2 service call /calibration_verification/plan_point_4 std_srvs/srv/Trigger
+ros2 service call /calibration_verification/plan_point_5 std_srvs/srv/Trigger
+ros2 service call /calibration_verification/plan_point_6 std_srvs/srv/Trigger
+ros2 service call /calibration_verification/plan_point_7 std_srvs/srv/Trigger</code></pre>
+<div class="check">Pass per call: <b class="ok">planned and retained ... inspect in RViz before ~/execute_plan</b>.
+Pole-aware: fails closed with <em>camera pole collision object is unavailable</em> if camera TFs drop.</div>` },
+{ t:"5 · Inspect in RViz", h:`
+<h2>5 · Inspect before anything moves</h2>
+<h3>5a · Filtered table cloud (start this first)</h3>
+<p>The raw cloud is ~1.4M points / ~30&nbsp;MB per message and pins RViz to ~5&nbsp;FPS.
+The <code>table_cloud_filter</code> crops to the table box and keeps color at ~36k points (~580&nbsp;KB).</p>
+<pre><button class="copy">copy</button><code class="cmd">ros2 run compal_box_perception table_cloud_filter
+# new terminal, same env:
+ros2 topic hz /camera/points_table
+# in RViz enable the PointCloud2 display (topic /camera/points_table, RGB8)</code></pre>
+<div class="check">Pass: <code>/camera/points_table</code> publishes xyz+<b class="ok">rgb</b>
+(point_step 16) at camera rate. Live-tunable:
+<code>ros2 param set /table_cloud_filter voxel_m 0.005</code> (sparser/faster) or
+<code>0.0</code> (crop-only, densest). Defaults: voxel 2&nbsp;mm, cap 150k,
+box x[0.05,0.55] y[−0.45,0.15] z[−0.05,0.30] in <code>base_link</code>.</div>
+<h3>5b · Hover targets</h3>
+<p>Ghost robot + green hover spheres (<code>/calibration_verification/hover_targets</code>)
+should sit over the chart +marks at ~20&nbsp;mm height. Check topics:</p>
+<pre><button class="copy">copy</button><code class="cmd">ros2 topic echo /calibration_verification/hover_targets --once | grep -c "ns: tcp_hover_targets"</code></pre>
+<div class="check">Prints <b class="ok">8</b>: the 8 spheres use namespace <code>tcp_hover_targets</code>;
+their 8 text labels (16 markers in total) use <code>aruco_verification_labels</code>.
+This launch does not start MoveIt Servo (<code>run_teleop</code> is false), so there is no
+<code>/servo_node/collision_velocity_scale</code> here; the verification plans are checked by
+MoveIt collision checking, including the <code>camera_pole</code>.</div>` },
+{ t:"6 · Execute (gated)", h:`
+<h2>6 · Execute — explicit gate only</h2>
+<div class="warn">Relaunch with <code>execution_allowed:=true</code>, then re-capture + re-plan
+(plans don't survive the restart and expire after 60&nbsp;s). One target at a time. Execution consumes the plan; re-plan before each retry.</div>
+<pre><button class="copy">copy</button><code class="cmd">ros2 service call /calibration_verification/execute_plan std_srvs/srv/Trigger</code></pre>
+<div class="check">Pass: trajectory dispatches to <code>rebel_arm_trajectory_controller</code>.
+Abort mid-run: <code>~/stop</code>. Between targets: <code>~/clear_plan</code>.</div>` },
+{ t:"7 · Read the miss", h:`
+<h2>7 · Read the TCP miss</h2>
+<p>Hover each +mark, look straight down, log miss direction/magnitude with a ruler:</p>
+<table><tr><th>Pattern</th><th>Meaning</th><th>Fix</th></tr>
+<tr><td>Same offset all 8</td><td>translation error</td><td>shift tip by −error</td></tr>
+<tr><td>Grows to one side</td><td>rotation/frame error</td><td>recheck hand-eye</td></tr>
+<tr><td>Center good, cross off</td><td>tip length/angle</td><td>adjust tip xyz</td></tr>
+<tr><td>Scattered</td><td>flex / slip</td><td>fix mechanics, not numbers</td></tr></table>
+<pre><button class="copy">copy</button><code class="cmd">ros2 service call /calibration_verification/clear_plan std_srvs/srv/Trigger
+ros2 service call /calibration_verification/stop std_srvs/srv/Trigger</code></pre>
+<div class="foot">Services: ~/capture ~/plan_center ~/plan_point_1 ~/plan_point_2 ~/plan_point_3 ~/plan_point_4 ~/plan_point_5 ~/plan_point_6 ~/plan_point_7 ~/plan_cube ~/execute_plan ~/clear_plan ~/stop &middot;
+Topics: /calibration_verification/board_pose /calibration_verification/hover_targets /calibration_verification/markers &middot;
+Safety: execution_allowed=false default · pole fail-closed · 60&nbsp;s plan expiry · stale board pose/joint state fail-closed. (Servo's 2&nbsp;cm scene-collision deceleration and singularity scaling apply only to Servo teleop, which this launch does not start.)</div>` }
+];
+const nav = document.getElementById('steps'), body = document.getElementById('body'),
+      bar = document.querySelector('#progress i');
+let cur = 0; const done = new Set();
+function render() {
+  nav.innerHTML = steps.map((s,i)=>`<button data-i="${i}" class="${i===cur?'active':''} ${done.has(i)?'done':''}"><span class="n">${done.has(i)?'✓':i+1}</span>${s.t}</button>`).join('');
+  body.innerHTML = `<div class="step active">${steps[cur].h}
+    <div class="navrow">${cur>0?'<button id="back">← Back</button>':''}
+    ${cur<steps.length-1?'<button class="primary" id="next">Next →</button>':`<button class="primary" id="fin">Done ✓</button>`}</div></div>`;
+  bar.style.width = (done.size/steps.length*100)+'%';
+  nav.querySelectorAll('button').forEach(b=>b.onclick=()=>{cur=+b.dataset.i;render();});
+  body.querySelectorAll('.copy').forEach(b=>b.onclick=()=>{navigator.clipboard.writeText(b.nextElementSibling.innerText);b.textContent='copied!';setTimeout(()=>b.textContent='copy',1200);});
+  const nx=document.getElementById('next'), bk=document.getElementById('back'), fn=document.getElementById('fin');
+  if(nx)nx.onclick=()=>{done.add(cur);cur=Math.min(cur+1,steps.length-1);render();};
+  if(bk)bk.onclick=()=>{cur=Math.max(cur-1,0);render();};
+  if(fn)fn.onclick=()=>{done.add(cur);render();};
+}
+render();
+</script>
+</body>
+</html>

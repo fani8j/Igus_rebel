@@ -41,7 +41,7 @@ source install/setup.bash
 The `rosdep install` step installs MoveIt Task Constructor and the other
 distribution-specific dependencies required by `igus_rebel_moveit_config`.
 
-The ros node expects to reach the robot at the IP and port `192.168.50.133:3920`, this IP is fixed in **src/igus_rebel/include/igus_rebel/Rebel.hpp**, line 88. You can change the IP here, make sure to build the code by `colcon build` after changes.
+The ros node expects to reach the robot at the IP and port `192.168.50.133:3920`, this IP is fixed in **src/igus_rebel/include/igus_rebel/Rebel.hpp**, line 119 (`const std::string ip`). You can change the IP here, make sure to build the code by `colcon build` after changes.
 
 ## Installation: Using docker ##
 
@@ -50,7 +50,8 @@ Docker is optional; the supported Ubuntu and ROS 2 combinations above can run na
 To build docker image:
 
 ```bash
-sudo docker compose build
+sudo docker compose build                       # Humble (default)
+sudo ROS_DISTRO=jazzy docker compose build      # Jazzy
 ```
 
 ## Docker usage ##
@@ -64,23 +65,72 @@ sudo docker compose up
 To entry docker container environment, use the following command on each new terminal:
 
 ```bash
-sudo docker exec -it ros2_jazzy_rebel_dev bash
+sudo docker exec -it ros2_rebel_dev bash
 ```
 
 You can freely modify the code inside src folder in host computer and build by `colcon build` inside docker container.
 
 ## Usage: on real ReBel robot
 
-Launch hardware interface, controller:
+Launch hardware interface, controller. `hardware_protocol` defaults to `rebel` (the
+real robot) in `rebel.launch.py`, `move_group.launch.py` and
+`igus_rebel_motion_planner.launch.py`; always pass it explicitly so a mock/sim session
+never connects to the controller by accident. Accepted values are `rebel`,
+`mock_hardware`, `gazebo` and (for `rebel.launch.py`) `isaac_topic`:
 ```bash
-ros2 launch igus_rebel rebel.launch.py
+ros2 launch igus_rebel rebel.launch.py hardware_protocol:=rebel
 ```
 
-Launch moveit motionn planner and teleoperation mode:
+What the real-robot driver (`Igus::Rebel`) does:
+
+- On every (re)connect it sends `SetActive true`, `Reset`, `Enable`, `MotionTypeJoint`
+  and then `Override 100.0`, so the arm moves at the commanded (planned) speed. The log
+  shows `Connected to ReBeL at <ip>:3920`, `Sent CRI 'Override 100.0' ...`, and a
+  `Rebel accepted command: ...` or `Rebel did not accept command: ...` line per command.
+  The override reported in STATUS is logged as `Robot velocity override is X %` (first
+  value and every change); a value other than 100 % is repeated as a warning.
+- `on_init` waits up to 5 s for the first valid STATUS and fails otherwise; on success it
+  logs `First STATUS: joints [deg] ... override ... %`. The initial state is seeded from
+  that STATUS, never from an all-zero pose.
+- Jog commands are clamped to +/-100 % and non-finite values are sent as 0. If no fresh
+  `write()` arrives for 50 ms the ALIVEJOG thread sends zero jog.
+- `read()` returns ERROR (and the jog is forced to zero) if no valid STATUS arrived for
+  more than 200 ms, or after any reconnect. ros2_control then stops the component, so
+  the driver must be restarted after checking the robot; motion never resumes on its own.
+
+Launch the MoveIt motion planner. `igus_rebel_motion_planner.launch.py` forwards to
+`move_group.launch.py` with these defaults: `use_gui:=false`,
+`run_box_h_cut_executor:=true` (the plan-only H-cut executor starts), `run_teleop:=false`
+(add `true` for MoveIt Servo), `run_gamepad:=false` (add `true` for `joy_node` plus the
+gamepad teleop; it also needs `run_teleop:=true`), `run_camera_pole:=true`
+(`false` skips the camera-pole collision object):
 
 ```bash
-ros2 launch igus_rebel_moveit_config igus_rebel_motion_planner.launch.py use_gui:=true
+ros2 launch igus_rebel_moveit_config igus_rebel_motion_planner.launch.py \
+  hardware_protocol:=rebel use_gui:=true
 ```
+
+MoveIt joint limits (`config/joint_limits.yaml`, and the URDF `velocity` limits) use the
+igus/CPR values for the ReBeL: 0.785 rad/s and 5.24 rad/s² per joint. Velocity and
+acceleration scaling factors are fractions of these limits. The Pilz `cartesian_limits`
+(`max_trans_vel` 0.01817 m/s, `max_trans_acc` 0.0524 m/s², `max_rot_vel` 0.0727 rad/s)
+were rescaled together with the H-cut scalings so physical speeds are unchanged.
+`trajectory_execution.allowed_start_tolerance` is 0.02 rad (not smaller than the
+trajectory controller's 0.02 rad goal tolerance).
+
+The trajectory controller (`config/controller.yaml`) uses P gains 4.0 with D gains 0 and
+aborts a goal on a path error above 0.25 rad per joint, a final error above 0.02 rad, a
+settle time above 3.0 s, or a residual velocity above 0.05 rad/s.
+
+IK uses KDL with a 0.25 s timeout (`config/kinematics.yaml`). A commented TRAC-IK block
+is provided; enabling it needs `sudo apt install ros-humble-trac-ik-kinematics-plugin`
+and a mock regression before physical use. Ruckig time parameterization was evaluated
+and is not enabled: it did not change the H-cut plans, lengthened OMPL plans, and no
+manufacturer jerk limit is available.
+
+Known issue: stopping `move_group` with Ctrl-C on Humble can print a segmentation
+fault during shutdown. This is an upstream MoveIt Humble shutdown bug, not a driver
+fault.
 
 ## Usage: on simulation
 
@@ -90,8 +140,8 @@ To simulate the robot in Gazebo and control the simulated robot with MoveIt run:
 ros2 launch igus_rebel_moveit_config igus_rebel_simulated.launch.py
 ```
 
-Note: the Gazebo model (`igus_rebel_robot2.urdf.xacro`) does not include the XEG-32, so
-`xeg32_tool_tip` has no TF in simulation.
+The simulation uses the same XEG-32 wrapper model as MoveIt, so `xeg32_tool_tip` is
+available. For a headless Gazebo server pass `gz_args:="-r -s empty.sdf"`.
 
 ## Calibrated TCP and visual comparison
 
@@ -108,7 +158,9 @@ remains absent from collision checking. Do not treat planning success as
 physical cutter-clearance validation.
 
 For an isolated mock comparison, source ROS and this workspace in both terminals
-and set `export ROS_DOMAIN_ID=91` in both. Start the robot/TF publisher first:
+and set `export ROS_DOMAIN_ID=91 ROS_LOCALHOST_ONLY=1` in both (an unused domain,
+localhost only, so nothing reaches the physical robot's domain). Start the robot/TF
+publisher first:
 
 ```bash
 ros2 launch igus_rebel rebel.launch.py hardware_protocol:=mock_hardware
@@ -137,7 +189,8 @@ marker with no collision geometry of its own.
 The fixed external camera pole remains a required planning-scene obstacle.
 `move_group.launch.py` starts `camera_pole_collision.py`, which derives the
 upright 0.15 x 0.15 x 1.0 m `camera_pole` box from the external
-`camera_link` and `camera_color_optical_frame` transforms. H-cut planning waits
+`camera_link` and `camera_color_optical_frame` transforms and re-applies it to
+`move_group` every 5 s (`reapply_period_s`). H-cut planning waits
 until that collision object is available. A saved perception snapshot may be
 used without acquiring a new image, but the fixed camera TF must still be
 available so the pole is collision-checked.
@@ -159,32 +212,44 @@ Mock launch used for validation:
 ```bash
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-ROS_DOMAIN_ID=92 ros2 launch igus_rebel_moveit_config calibration_verification.launch.py \
+export ROS_DOMAIN_ID=92 ROS_LOCALHOST_ONLY=1
+ros2 launch igus_rebel_moveit_config calibration_verification.launch.py \
   hardware_protocol:=mock_hardware \
   start_control:=true \
   use_gui:=true \
   execution_allowed:=false
 ```
 
-The supplied motion configuration enables measured obstacles (`preview_only: false`)
-with `preapproach_only: false` and `retract_after_approach: false`. Plans transit
-to 90 mm above the reference, approach to 10 mm planned clearance, and end there.
-There is no automatic retract/home move. `execution_allowed` remains false by default.
-The 100 x 100 x 2 mm platform and 50 mm cube are marker-relative; the below-base
-4 x 4 x 2 m keep-out box is in `planning_frame`, with its top at Z=0.
+The supplied motion configuration (`config/calibration_verification.yaml`) enables
+measured obstacles (`preview_only: false`) with `preapproach_only: false` and
+`retract_after_approach: false`. Each plan is a PTP transit to the pre-approach pose
+100 mm above the reference (`target_standoff_m` 0.02 + `preapproach_distance_m` 0.08),
+a Cartesian approach to 20 mm, and a Cartesian final descent to 10 mm planned clearance
+(`final_standoff_m` 0.01), and ends there. There is no automatic retract/home move.
+`execution_allowed` remains false by default. Scalings are 0.13758 (velocity) and
+0.09542 (acceleration) of the joint limits, the same physical speed as the former 0.05.
+The platform is an A4 sheet (0.210 x 0.297 x 0.001 m, centered on the marker, top at
+the marker plane) and the 50 mm cube is placed at the A4 corner `[0.105, 0.1485, 0]` m;
+both are marker-relative. The below-base 4 x 4 x 2 m keep-out box is in
+`planning_frame`, with its top at Z=0.
 Setting `preview_only: true` omits these fixture objects and blocks execution.
 The supplied orientation is `[pi, 0, 0]` relative to the marker: TCP +Z points
 toward the board. This is a preview alignment, not a physical calibration result.
 The verification executor declares the shared launch parameter overrides so
 MoveIt uses the same named OMPL planner settings as the default launch.
-Capture publishes labeled center/point_1/point_2/point_3 markers on
+Capture publishes labeled `center` and `point_1` .. `point_7` markers on
 `/calibration_verification/markers` (RViz **Verification targets**).
 `reference_origin_xyz_m` selects a measurement origin relative to the detected
-marker center, expressed in marker axes (currently `[-0.004286, -0.004286, 0]` m).
+marker center, expressed in marker axes (currently `[0, 0, 0]`: the marker center).
 The center target, captured-reference axes, and all point XY offsets use this
-origin. Detector pose and platform/cube geometry remain marker-centered;
-`table_box_center_xyz_m` is in `planning_frame`, not the marker frame.
+origin. The configured points (marker axes, metres) are `point_1` `[0, 0.060]` (TOP),
+`point_2` `[0.045, 0.060]` (P1), `point_3` `[0.020, -0.085]` (P3), `point_4`
+`[0, -0.060]` (BOTTOM), `point_5` `[-0.060, 0]` (LEFT), `point_6` `[0.060, 0]` (RIGHT)
+and `point_7` `[-0.070, 0.035]` (P2). Detector pose and platform/cube geometry remain
+marker-centered; `table_box_center_xyz_m` is in `planning_frame`, not the marker frame.
 Do not include the origin shift again in point offsets measured from this origin.
+`plan_cube` fails closed with the supplied file because `cube_reference_xyz_m` and
+`cube_approach_direction_xyz` are not set; configure them from the real cube first.
 Physical execution requires confirming the actual start state and inspected plan.
 Stale poses/states and plan mismatches still fail closed. The TCP marker has no
 collision geometry, so there is no tip collision coverage; the attached cutter
@@ -201,6 +266,7 @@ ros2 service call /calibration_verification/plan_center std_srvs/srv/Trigger {}
 ros2 service call /calibration_verification/plan_point_1 std_srvs/srv/Trigger {}
 ros2 service call /calibration_verification/plan_point_2 std_srvs/srv/Trigger {}
 ros2 service call /calibration_verification/plan_point_3 std_srvs/srv/Trigger {}
+# plan_point_4 .. plan_point_7 work the same way
 ros2 service call /calibration_verification/plan_cube std_srvs/srv/Trigger {}
 ros2 service call /calibration_verification/clear_plan std_srvs/srv/Trigger {}
 ros2 service call /calibration_verification/stop std_srvs/srv/Trigger {}
@@ -220,11 +286,36 @@ Plans expire after 60 seconds, and restarting the launch loses the retained plan
 The launch merges the execution opt-in into the motion parameters before passing
 them to the node, avoiding node-specific YAML overriding the explicit launch flag.
 
-The mock smoke in this workspace used `motion_config:=/tmp/calibration_verification_fixture.yaml`
-with poses generated by `/tmp/calibration_fixture.py`; it validated
-`plan_center`, `plan_point_1`, `plan_point_2`, `plan_point_3`, `plan_cube`, and
-mock `execute_plan` on `ROS_DOMAIN_ID=92`. That fixture is synthetic and is not a
-source of real board, cube, marker, or TCP calibration values.
+An earlier mock smoke validated `plan_center`, `plan_point_1` .. `plan_point_3`,
+`plan_cube` and mock `execute_plan` with a synthetic motion config and board poses
+that were kept only in `/tmp` and are no longer available. Such a fixture is not a
+source of real board, cube, marker, or TCP calibration values. The launch with the
+supplied config was re-checked in mock on 2026-09-27
+(`scan_results/p0p1_regression_20260927/moveit_config/f_calibration/`).
+
+## H-cut executor parameters and gates
+
+`box_h_cut_executor` (`config/box_h_cut_executor.yaml`, `cut_pattern` default `t_cut`)
+plans with `~/plan_h_cut` and dispatches only through `~/execute_planned_h_cut`
+(`execution_enabled`, default `false`). Its parameters have three scopes (listed at the
+top of the YAML):
+
+- Read-only (startup only; `ros2 param set` is rejected, edit the YAML and restart):
+  frames, pipelines, clearances, `left_lateral_standoff_m`, `external_snapshot_max_age_s`,
+  `cartesian_step_m`, `planning_timeout_s`, all `*_scaling` values, and others.
+- Planning (validated, then applied and any retained plan cleared): `cut_pattern`,
+  `motion_profile`, side tilts, correction files, `debug_allow_stale_snapshot`, and
+  others. They are rejected with `busy: ...` while a plan/diagnose/cut-debug/execute call
+  runs or a trajectory executes, and while a cut-debug session is active.
+- Runtime (never blocked): `execution_enabled`, `debug_motion_execution_enabled`,
+  `left_roll_diagnostics_enabled`, `external_snapshot_file`.
+
+Every numeric value must be finite. Snapshots older than `external_snapshot_max_age_s`
+(240 s in the supplied YAML; allowed range `(0, 600]` s) are refused.
+`debug_allow_stale_snapshot=true` allows planning from an older snapshot for RViz
+inspection only: `execute_planned_h_cut` refuses any plan or cut-debug session loaded
+with it (and anything while it is true), before every other gate. `clear_plan` answers
+`busy` instead of waiting while planning or execution is active.
 
 ## Staged per-cut correction workflow (plan-only by default)
 
@@ -261,7 +352,14 @@ retained plan is cleared) and never dispatches motion. The operator teleoperates
 endpoint separately and calls the same save service; the final record is complete after
 that endpoint save. Start and end observations are therefore persisted independently.
 Only `complete` records are loadable as corrections; `start_saved` is an intermediate.
-Left approaches and retracts 10 mm laterally toward the detected carton exterior,
+Session stages are `start_planned` -> `start_executed` (after a successful explicit
+dispatch) -> `start_saved`; the endpoint save completes the record and ends the session.
+The session snapshot must pass the normal freshness check when the session starts
+(`external_snapshot_max_age_s`, 240 s in the supplied YAML); after that the session
+freezes its snapshot. A session started with `debug_allow_stale_snapshot=true` can
+never be executed.
+Left approaches and retracts laterally toward the detected carton exterior by
+`left_lateral_standoff_m` (25 mm in the supplied YAML; allowed range 5-25 mm),
 without shifting either cutting endpoint. Middle and right retain surface-normal
 hover/retract. Each save persists a schema-versioned record (`box_h_cut_correction/v1`,
 `<cut>_<snapshot_id>.json`, atomic temp-file plus rename) with the snapshot ID,
@@ -279,8 +377,10 @@ unchanged at the capture pose and follows later carton rotation without being re
 from a nominal knife frame. A taught left pose may validly use tool local X or
 tool local Z as its penetration axis; at least one of the two must point into
 the surface. Middle and right use tool local Z only. Records are validated for
-schema, matching cut slot and frame/tool, finite orthonormal cut bases, finite
-translation values, and unit-length orientation quaternions. Application fails
+schema, `complete` status, matching cut slot, a present `planning_frame` and
+`tool_link` equal to the executor's active values (a record missing either field is
+refused), finite orthonormal cut bases, finite translation values, and unit-length
+orientation quaternions. Application fails
 closed unless the mapped penetration axis (left: X or Z; middle/right: Z) points
 into the carton surface. With opt-in off, plans remain purely geometry-derived
 even when paths are set.
@@ -295,7 +395,11 @@ steps (defaults 45.0/5.0). Every candidate must pass the existing left X-or-Z
 penetration gate plus IK and collision feasibility at the final target poses;
 the probe is a bounded prefilter that only screens out unreachable or colliding
 mapped poses under the current carton/pole scene constraints and does not
-guarantee a full plan. Hover/approach candidates must be fully collision-free;
+guarantee a full plan. The search runs once per planning request (the automatic
+`t_cut_handoff` search reuses its result for every probe). Each candidate logs a
+one-line `Left roll diag` result; `left_roll_diagnostics_enabled:=true` (runtime,
+default `false`) adds expensive per-pose IK/collision detail without changing the
+selection. Hover/approach candidates must be fully collision-free;
 cut-target candidates honor the scoped tool/carton contact allowance while
 every other contact still fails. The search checks the same detected carton and
 external camera pole as the MTC task, including robot self-collision; collision-blind
@@ -304,27 +408,45 @@ collision checking remain the final authority and may still reject a selected
 orientation; both execution gates stay mandatory. If no candidate passes,
 planning fails closed with candidate diagnostics. Middle and right corrections
 keep their rigid mapped orientation. The saved September 2026 left record predates
-the current TCP: a mock replay may opt into it, but a physical cut requires a
-freshly taught correction on the current tool before enabling this opt-in.
+the current TCP: its translations put the blade about 30 mm above the carton on the
+current TCP, so only an orientation-only derivative
+(`left_capture_frame_000001_20260916_235239_389784_orient_only_tcp20260924.json`,
+zero translation deltas) is used in mock. A mock replay may opt into it, but a
+physical cut requires operator verification of the blade pose on the current tool
+before enabling this opt-in. On the replay carton the taught angle itself is
+unreachable (joint3 limit) and the search selects +45 degrees.
 
 ## H-cut free-space transit consistency (plan-only by default)
 
 Free-space transits (initial approach and inter-segment finish-to-approach
 moves) use dedicated `transit_velocity_scaling` /
-`transit_acceleration_scaling` (default 0.15, raised from 0.05 with operator approval on 2026-09-26; finite values in `(0, 1]` only,
-out-of-range fails closed). Contact descend/traverse/retract strokes keep the
-0.05 `velocity_scaling` / `acceleration_scaling`, and
-`pre_cut_stabilization_duration_s` stays 1.0 s, so cutting speed is unchanged. Each free-space transit tries a direct collision-checked
-joint interpolation first via MultiPlanner ordering ([joint interpolation,
-existing transit]), falling back to the original transit solver. Full cut
+`transit_acceleration_scaling` (0.4127 / 0.2863 of the 0.785 rad/s / 5.24 rad/s²
+joint limits = 0.324 rad/s / 1.50 rad/s², the physical speed of the
+operator-approved 0.15 transit scaling of 2026-09-26 at the former limits).
+Contact descend/traverse/retract strokes use `velocity_scaling` /
+`acceleration_scaling` 0.1376 / 0.0954 (0.108 rad/s / 0.50 rad/s², the physical speed
+of the former 0.05), and `pre_cut_stabilization_duration_s` stays 1.0 s, so cutting
+speed is unchanged. All four scalings are finite values in `(0, 1]` and read-only:
+edit `box_h_cut_executor.yaml` and restart the executor to change them.
+Each free-space transit first resolves a pose goal to the exact-pose, collision-free
+IK branch nearest the propagated start state (`NearestBranchTransitPlanner`: seeds
+from the start and its equivalent spherical-wrist branches, prefers branches with
+joint6 change <= pi, then the smallest joint distance). It then tries a direct
+collision-checked joint interpolation and, if that fails, the profile's pipeline
+planner (MultiPlanner order [joint interpolation, existing transit]). If every IK
+branch fails, the original pose goal is retried once. All attempts of one transit
+share a single `planning_timeout_s` budget (15 s). Full cut
 poses, `min_fraction=1.0` acceptance, the scoped tool/carton contact policy,
 and the fixed external `camera_pole` requirement are unchanged. A free-space
 solution whose joint6 travel exceeds pi rad, summed over every consecutive
 waypoint of its free-space transit subtrajectories, is rejected before the
 plan is retained, published, or executed; there is no silent fallback after
-this check. The pre-TCP-change taught left correction on the saved carton was
-rejected at 4.806 rad of middle-transition joint6 travel in isolated mock
-planning; re-teach it on the current TCP before physical use.
+this check. The guard also fails closed if the number of examined transit
+trajectories does not match the transits recorded while building the task. Before
+the nearest-branch planner, the pre-TCP-change taught left correction on the saved
+carton was rejected at 4.806 rad of middle-transition joint6 travel; with it, the same
+corrected `t_cut` planned 5/5 in isolated mock (left-to-middle joint6 1.66 rad,
+`scan_results/hcut_wrist_branch_20260926/`). This is mock planning evidence only.
 Faster transit shortens only non-contact portions and is no
 guarantee of a fast plan or a physically safe stale TCP: the correction
 opt-in (`cut_debug_correction_enabled`, default `false`) and both execution
@@ -347,9 +469,12 @@ pose. The retained middle traverse is therefore an executable first-arm prefix,
 not the complete seam; no second arm is implemented. Execution still requires the
 normal gates.
 `t_cut_middle_handoff_fraction` selects the stop fraction along the middle seam:
-`0.0` (default) selects automatic mode: bounded bisection over `[0.05, 0.95]`
-finds the largest fully reachable declared prefix with `<=0.01` fraction tolerance,
-keeping `min_fraction=1.0` for every candidate. A nonzero value in `[0.05, 0.95]`
+`0.0` (default) selects automatic mode: the maximum 0.95 is probed first and used if
+it fully plans; otherwise 0.05 must plan (else the search fails closed) and a bounded
+bisection over `[0.05, 0.95)` (at most 7 probes) finds the largest fully reachable
+declared prefix with `<=0.01` fraction tolerance, keeping `min_fraction=1.0` for every
+candidate. The left-cut roll search runs once per request and is reused by every
+probe. A nonzero value in `[0.05, 0.95]`
 is a manual override stop fraction; out-of-range nonzero values fail closed.
 Full `t_cut` stays the full left cut plus the full middle seam and is unaffected,
 and full `t_cut`/`combined` continue to retract above the cut and restore
@@ -368,7 +493,7 @@ bounded prefix; the middle tool-Z penetration gate is revalidated unchanged.
 
 At `https://viewer.robotsfan.com/`, choose **Load Files** and select:
 
-- `src/igus_rebel_description/urdf/igus_rebel2_robotviewer.urdf`
+- `src/igus_rebel_description/urdf/igus_rebel2.urdf` (its mesh URIs are `package://`)
 - all twelve `.dae` files in
   `src/igus_rebel_description/meshes/rebel_d00617809/`
 
@@ -392,7 +517,8 @@ first import so the ROS link hierarchy remains visible. The twelve visual meshes
 are tessellated from the igus `D00617809` STEP assembly and preserve its native
 CAD material regions. Collisions, inertias, and joint frames remain those of
 the version-two robot.
-Regenerate the USD after changes instead of using the pre-generated USD files.
+No pre-generated USD files are kept in this repository; generate the USD in Isaac Sim
+from this URDF, and regenerate it after model changes.
 
 ## Set digital outputs
 
@@ -412,11 +538,20 @@ The service output is defined as
 bool success
 string message
 ```
-`success` is always True, `message` is always empty.
+`success` is True when the `DOUT` command was sent to the controller (it does not wait
+for the controller's acknowledgement; check the driver log for `Rebel accepted command`).
+It is False with `message` `not connected to the robot` when the command could not be
+sent. The service is provided by the real-robot driver (`hardware_protocol:=rebel`) only.
 
 ## Teleoperation
 
-You can use a teleop keyboard program or a gamepad to control the arm manually. The gamepad node (`servo_gamepad_input`, mapping in `config/gamepad.yaml`) starts with the MoveIt launch when `run_gamepad:=true` is passed (default `false`).
+You can use a teleop keyboard program or a gamepad to control the arm manually. Both
+need MoveIt Servo, which the MoveIt launch starts only with `run_teleop:=true` (default
+`false`). The gamepad (`joy_node` plus `servo_gamepad_input`, mapping in
+`config/gamepad.yaml`, enable button 7 must be held) starts with the MoveIt launch when
+`run_gamepad:=true` is also passed (default `false`); it publishes Cartesian twist only.
+On Humble, Servo stays idle until `/servo_node/start_servo` is called; the keyboard and
+gamepad nodes call it themselves when they start.
 
 You can also run the following command to start teleop_keyboard:
 
@@ -424,16 +559,21 @@ You can also run the following command to start teleop_keyboard:
 ros2 run igus_rebel_moveit_config rebel_servo_teleop_keyboard
 ```
 
-Type "w" and "t" to control the TCP in world frame. Then use arrow keys and ".", ";" to move the TCP forth/back/left/right/down/up
+Keys: arrow keys move the TCP along X/Y and `.` / `;` along -Z / +Z of the selected
+command frame (`w`: `base_link`, `e`: `xeg32_tool_tip`); `s` sends a zero linear twist;
+`i`/`k`, `n`/`m`, `u`/`o` rotate about X, Y, Z; `-` / `=` decrease / increase the
+Cartesian linear and angular speed together; `1`-`6` jog a joint and `r` reverses the
+joint direction; `q` or Ctrl-C quits. `t` / `j` select twist / joint-jog mode on Jazzy;
+Humble Servo accepts both command types at any time, so the keys have no effect there.
 
-The Cartesian keyboard increment defaults to 1 mm per keypress. Change it at runtime with:
+The Cartesian keyboard increment defaults to 5 mm per keypress. Change it at runtime with:
 
 ```bash
 ros2 service call /servo_keyboard_input/set_cartesian_increment \
   igus_rebel_msgs/srv/SetCartesianIncrement "{increment_meters: 0.002}"
 ```
 
-The accepted range is greater than 0 m through 0.01 m. The service affects Cartesian
+The accepted range is greater than 0 m through 0.03 m. The service affects Cartesian
 arrow, period, and semicolon commands; joint-jog speed is unchanged.
 
 

@@ -134,7 +134,7 @@
   <header class="shell">
     <span class="eyebrow">igus ReBeL · ROS 2 Humble · operator guide</span>
     <h1>Staged cut debug<br>with Servo teleop</h1>
-    <p class="lede">Plan one left, middle, or right cut point at a time; inspect it; explicitly dispatch it; correct the TCP with MoveIt Servo; save the observed full pose; then repeat at the endpoint before a separately authorized lift.</p>
+    <p class="lede">Plan the start point of one left, middle, or right cut; inspect it; explicitly dispatch it; correct the TCP with MoveIt Servo; save the observed full pose; then teleoperate to the endpoint and save it. Only the start is ever planned and executed by the executor.</p>
 
     <div class="hero-grid">
       <section class="card warning">
@@ -151,7 +151,7 @@
           <span class="node">teleop</span><span class="arrow">→</span>
           <span class="node">save</span>
         </div>
-        <p class="muted">Repeat for the endpoint. Saving the endpoint retains a lift-only plan. The lift still requires a final explicit execute call.</p>
+        <p class="muted">Then teleop to the endpoint and save again. Stages: <code>start_planned</code> &rarr; <code>start_executed</code> &rarr; <code>start_saved</code>; the endpoint save writes the <code>complete</code> record and ends the session. No save plans, retains, or executes anything; there is no lift stage.</p>
       </section>
     </div>
 
@@ -189,8 +189,8 @@
         <a href="#servo">3 · Start Servo</a>
         <a href="#start">4 · Start-point stage</a>
         <a href="#correct-start">5 · Correct start</a>
-        <a href="#endpoint">6 · Endpoint stage</a>
-        <a href="#lift">7 · Lift and finish</a>
+        <a href="#endpoint">6 · Endpoint by teleop</a>
+        <a href="#lift">7 · Finish and close gates</a>
         <a href="#apply">8 · Apply corrections</a>
         <a href="#abort">Abort and recovery</a>
         <a href="#troubleshoot">Troubleshooting</a>
@@ -211,14 +211,18 @@
 source /opt/ros/humble/setup.bash
 colcon build --symlink-install --packages-select igus_rebel_moveit_config
 source install/setup.bash</code></pre></div>
-        <div class="callout warn"><strong>Snapshot freshness:</strong> the executor defaults to a 30-second maximum file and acquisition age. If the carton has remained fixed, you may explicitly allow the old snapshot before starting the session:</div>
-        <div class="command"><div class="command-head"><span>Optional · fixed carton only</span><button class="copy">Copy</button></div><pre><code>ros2 param set /box_h_cut_executor debug_allow_stale_snapshot true</code></pre></div>
-        <p class="muted">This age override applies to the staged cut-debug session only; normal retained plans still refuse stale execution. Set it only after confirming that the carton has not moved. Snapshot schema, geometry, frame, collision checks, Servo ownership, and both execution gates still apply. Restore freshness enforcement afterward with <code>ros2 param set /box_h_cut_executor debug_allow_stale_snapshot false</code>.</p>
+        <div class="callout warn"><strong>Snapshot freshness:</strong> <code>start_cut_debug_session</code> refuses a snapshot older than <code>external_snapshot_max_age_s</code> (240&nbsp;s in the supplied <code>box_h_cut_executor.yaml</code>; read-only, allowed range (0,&nbsp;600]&nbsp;s). Once the session has started, its snapshot is frozen and the later teleop/save steps are not age-checked.</div>
+        <p class="muted"><code>debug_allow_stale_snapshot</code> is a plan-only override for inspecting an old snapshot in RViz. A session or plan loaded with it (or anything while it is <code>true</code>) is refused by <code>execute_planned_h_cut</code> before every other gate, so it cannot be used for a session you intend to execute. For a real session, produce a fresh snapshot and start within the age limit.</p>
       </section>
 
       <section class="step" id="launch" data-step="1">
         <div class="step-title"><div><h2>Launch MoveIt, Servo, and the H-cut executor</h2><p class="muted">Keep this terminal running.</p></div><div class="chips"><span class="badge terminal">Terminal 1</span><span class="badge safe">Launch only</span></div></div>
-        <div class="command"><div class="command-head"><span>Launch selected hardware</span><button class="copy">Copy</button></div><pre><code data-dynamic>cd /home/farhan/igus_rebel_ros2
+        <p>Use the same <code>ROS_DOMAIN_ID</code> in every terminal. For mock hardware use an unused domain with <code>ROS_LOCALHOST_ONLY=1</code> (for example <code>export ROS_DOMAIN_ID=165 ROS_LOCALHOST_ONLY=1</code>) so nothing reaches the physical robot's domain. <code>move_group.launch.py</code> does not start the robot driver; start <code>rebel.launch.py</code> first.</p>
+        <div class="command"><div class="command-head"><span>Terminal 0 · robot driver and controllers</span><button class="copy">Copy</button></div><pre><code data-dynamic>cd /home/farhan/igus_rebel_ros2
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+ros2 launch igus_rebel rebel.launch.py hardware_protocol:=__HARDWARE__</code></pre></div>
+        <div class="command"><div class="command-head"><span>Terminal 1 · MoveIt, Servo, executor</span><button class="copy">Copy</button></div><pre><code data-dynamic>cd /home/farhan/igus_rebel_ros2
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 ros2 launch igus_rebel_moveit_config move_group.launch.py \
@@ -226,7 +230,7 @@ ros2 launch igus_rebel_moveit_config move_group.launch.py \
   use_gui:=true \
   run_teleop:=true \
   run_box_h_cut_executor:=true</code></pre></div>
-        <p><code>run_teleop:=true</code> launches the MoveIt Servo node; add <code>run_gamepad:=true</code> for the joystick and gamepad teleop. The keyboard teleop is a separate executable started later.</p>
+        <p><code>run_teleop:=true</code> launches the MoveIt Servo node; add <code>run_gamepad:=true</code> for <code>joy_node</code> and the gamepad teleop. The keyboard teleop is a separate executable started later. Always pass <code>hardware_protocol</code> explicitly: both launch files default to <code>rebel</code>. The external camera TF (<code>camera_link</code>, <code>camera_color_optical_frame</code>) must exist for the required <code>camera_pole</code>; in mock, publish it with static transforms (see <code>HANDOFF.md</code>).</p>
         <div class="callout stop" id="physicalLaunchWarning" hidden><strong>Physical hardware selected.</strong> Launching with <code>hardware_protocol:=rebel</code> connects to the controller. Do not continue if another CRI client is active.</div>
       </section>
 
@@ -245,15 +249,16 @@ ros2 service type /box_h_cut_executor/save_cut_debug_point
 ros2 service type /box_h_cut_executor/clear_plan
 ros2 service type /servo_node/start_servo
 ros2 topic hz /joint_states</code></pre></div>
-        <p>Expected service type: <code>std_srvs/srv/Trigger</code>. Stop if `/joint_states` is absent, incomplete, or stale. The executor requires every model joint and rejects samples older than one second.</p>
+        <p>Expected service type: <code>std_srvs/srv/Trigger</code>. Stop if <code>/joint_states</code> is absent, incomplete, or stale. The save step requires every planning-group joint with finite positions and rejects samples older than one second. On mock hardware, confirm <code>ros2 control list_hardware_components</code> shows <code>mock_components/GenericSystem</code> before any execute.</p>
         <div class="command"><div class="command-head"><span>Optional snapshot section diagnosis</span><button class="copy">Copy</button></div><pre><code>ros2 service call \
   /box_h_cut_executor/diagnose_external_snapshot_sections \
   std_srvs/srv/Trigger {}</code></pre></div>
       </section>
 
       <section class="step" id="servo" data-step="3">
-        <div class="step-title"><div><h2>Start Servo and choose a teleop device</h2><p class="muted">Start the server once; pause it whenever a retained MoveIt plan executes.</p></div><div class="chips"><span class="badge terminal">Terminals 2–3</span><span class="badge motion">Teleop can move</span></div></div>
-        <div class="command"><div class="command-head"><span>Terminal 2 · start Servo, then park it</span><button class="copy">Copy</button></div><pre><code>ros2 service call /servo_node/start_servo std_srvs/srv/Trigger {}
+        <div class="step-title"><div><h2>Start Servo and choose a teleop device</h2><p class="muted">Start the teleop node first, then park Servo; pause it whenever a retained MoveIt plan executes.</p></div><div class="chips"><span class="badge terminal">Terminals 2–3</span><span class="badge motion">Teleop can move</span></div></div>
+        <p>On Humble, Servo stays idle until <code>/servo_node/start_servo</code> is called, and the keyboard and gamepad nodes call it themselves when they start (the gamepad node at launch). Start the teleop device first, then call start/pause below so Servo ends up paused.</p>
+        <div class="command"><div class="command-head"><span>Terminal 2 · after the teleop node is running: start Servo, then park it</span><button class="copy">Copy</button></div><pre><code>ros2 service call /servo_node/start_servo std_srvs/srv/Trigger {}
 ros2 service call /servo_node/pause_servo std_srvs/srv/Trigger {}</code></pre></div>
         <div class="two-col">
           <article class="card">
@@ -262,34 +267,36 @@ ros2 service call /servo_node/pause_servo std_srvs/srv/Trigger {}</code></pre></
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 ros2 run igus_rebel_moveit_config rebel_servo_teleop_keyboard</code></pre></div>
-            <p>Run this after the launch. It stays waiting while Servo is paused.</p>
+            <p>Run this after the launch and before parking Servo. Key presses do nothing while Servo is paused.</p>
           </article>
           <article class="card">
             <h3>Gamepad</h3>
-            <p>The joystick and gamepad teleop are already started by <code>run_teleop:=true</code>. Do not use keyboard and gamepad simultaneously.</p>
-            <p class="muted">Both publish Servo commands on <code>delta_twist_cmds</code> and <code>delta_joint_cmds</code>.</p>
+            <p><code>joy_node</code> and the gamepad node (<code>servo_gamepad_input</code>, mapping in <code>config/gamepad.yaml</code>) start only with <code>run_gamepad:=true</code> (plus <code>run_teleop:=true</code> for Servo). Hold the enable button (button 7) to send commands. Do not use keyboard and gamepad simultaneously.</p>
+            <p class="muted">The keyboard publishes on <code>delta_twist_cmds</code> and <code>delta_joint_cmds</code>; the gamepad publishes Cartesian twist on <code>delta_twist_cmds</code> only.</p>
           </article>
         </div>
         <h3>Keyboard controls</h3>
         <table>
           <thead><tr><th>Key</th><th>Mode/action</th><th>Use</th></tr></thead>
           <tbody>
-            <tr><td><span class="kbd">t</span></td><td>Cartesian twist</td><td>TCP correction mode</td></tr>
-            <tr><td><span class="kbd">j</span></td><td>Joint jog</td><td>Joint-by-joint correction</td></tr>
             <tr><td><span class="kbd">w</span></td><td><code>base_link</code> frame</td><td>World-aligned Cartesian jog</td></tr>
             <tr><td><span class="kbd">e</span></td><td><code>xeg32_tool_tip</code> frame</td><td>Tool-aligned Cartesian jog</td></tr>
             <tr><td>Arrows</td><td>X/Y translation</td><td>Move in the selected command frame</td></tr>
             <tr><td><span class="kbd">.</span> / <span class="kbd">;</span></td><td>−Z / +Z</td><td>Move down/up in selected frame</td></tr>
-            <tr><td><span class="kbd">1</span>–<span class="kbd">6</span></td><td>Joint selection/jog</td><td>Used in joint mode</td></tr>
-            <tr><td><span class="kbd">r</span></td><td>Reverse joint direction</td><td>Used in joint mode</td></tr>
-            <tr><td><span class="kbd">Q</span></td><td>Quit</td><td>Stop keyboard publisher</td></tr>
+            <tr><td><span class="kbd">s</span></td><td>Zero linear twist</td><td>Stop a Cartesian jog</td></tr>
+            <tr><td><span class="kbd">i</span>/<span class="kbd">k</span>, <span class="kbd">n</span>/<span class="kbd">m</span>, <span class="kbd">u</span>/<span class="kbd">o</span></td><td>± rotation about X, Y, Z</td><td>Orientation correction (select <span class="kbd">e</span> first for tool axes)</td></tr>
+            <tr><td><span class="kbd">-</span> / <span class="kbd">=</span></td><td>Slower / faster</td><td>Scales Cartesian linear and angular speed together</td></tr>
+            <tr><td><span class="kbd">1</span>–<span class="kbd">6</span></td><td>Joint jog</td><td>Jog one joint</td></tr>
+            <tr><td><span class="kbd">r</span></td><td>Reverse joint direction</td><td>For <span class="kbd">1</span>–<span class="kbd">6</span></td></tr>
+            <tr><td><span class="kbd">t</span> / <span class="kbd">j</span></td><td>Twist / joint-jog mode</td><td>Jazzy only; Humble Servo accepts both at any time, so these keys do nothing there</td></tr>
+            <tr><td><span class="kbd">q</span> or Ctrl-C</td><td>Quit</td><td>Stop keyboard publisher</td></tr>
           </tbody>
         </table>
-        <div class="command"><div class="command-head"><span>Optional Cartesian increment · default 0.001 m</span><button class="copy">Copy</button></div><pre><code>ros2 service call \
+        <div class="command"><div class="command-head"><span>Optional Cartesian increment · default 0.005 m</span><button class="copy">Copy</button></div><pre><code>ros2 service call \
   /servo_keyboard_input/set_cartesian_increment \
   igus_rebel_msgs/srv/SetCartesianIncrement \
   "{increment_meters: 0.001}"</code></pre></div>
-        <p class="muted">Accepted increment: greater than 0 and no more than 0.01 m. Start at 0.001 m. Smaller increments are preferable near the carton.</p>
+        <p class="muted">Accepted increment: greater than 0 and no more than 0.03 m (default 0.005 m per key press). Near the carton, reduce it, for example to 0.001 m as above.</p>
         <div class="callout stop"><strong>Two independent motion paths:</strong> <code>execution_enabled</code> and <code>debug_motion_execution_enabled</code> gate the executor only. They do not block Servo commands. Pause Servo before every planned dispatch; unpause it only for the correction interval.</div>
       </section>
 
@@ -307,11 +314,11 @@ ros2 service call \
   /box_h_cut_executor/execute_planned_h_cut \
   std_srvs/srv/Trigger {}
 ros2 param set /box_h_cut_executor debug_motion_execution_enabled false</code></pre></div>
-        <p class="muted">The execute service returns after dispatching to the controller. Confirm the response reports success and the robot has stopped at the intended point before unpausing Servo.</p>
+        <p class="muted">The execute service returns when the dispatch is accepted, not when motion completes. Confirm the executor logs <code>H-cut trajectory execution completed</code> and the robot has stopped at the intended point before unpausing Servo. If execution fails, the stage is not marked executed and the session must be cleared and restarted.</p>
       </section>
 
       <section class="step" id="correct-start" data-step="5">
-        <div class="step-title"><div><h2>Teleop-correct and save the start</h2><p class="muted">Capture full observed TCP pose from fresh joint-state FK.</p></div><div class="chips"><span class="badge motion">Servo motion</span><span class="badge inspect">Save and replan</span></div></div>
+        <div class="step-title"><div><h2>Teleop-correct and save the start</h2><p class="muted">Capture full observed TCP pose from fresh joint-state FK.</p></div><div class="chips"><span class="badge motion">Servo motion</span><span class="badge inspect">Save, no plan</span></div></div>
         <div class="command"><div class="command-head"><span>Open correction interval</span><button class="copy">Copy</button></div><pre><code>ros2 service call /servo_node/unpause_servo std_srvs/srv/Trigger {}</code></pre></div>
         <ol>
           <li>Use keyboard or gamepad at low speed.</li>
@@ -323,40 +330,30 @@ ros2 param set /box_h_cut_executor debug_motion_execution_enabled false</code></
 ros2 service call \
   /box_h_cut_executor/save_cut_debug_point \
   std_srvs/srv/Trigger {}</code></pre></div>
-        <p>Saving writes the start observation and correction delta, invalidates the old plan, and retains an endpoint-only plan from the live corrected state. It does not move the robot.</p>
+        <p>Saving writes the start observation and correction delta (record status <code>start_saved</code>) and moves the session to stage <code>start_saved</code>. No plan is retained and nothing is planned for the endpoint. It does not move the robot.</p>
       </section>
 
       <section class="step" id="endpoint" data-step="6">
-        <div class="step-title"><div><h2>Inspect, execute, and correct the endpoint</h2><p class="muted">Same gates; same Servo ownership rule.</p></div><div class="chips"><span class="badge motion">Two motion intervals</span></div></div>
-        <div class="callout"><strong>First inspect the endpoint-only plan in RViz.</strong> If it is wrong, call <code>clear_plan</code>; do not execute and do not try to repair a structurally wrong plan with teleop.</div>
-        <div class="command"><div class="command-head"><span>Dispatch endpoint with Servo paused</span><button class="copy">Copy</button></div><pre><code>ros2 service call /servo_node/pause_servo std_srvs/srv/Trigger {}
-ros2 param set /box_h_cut_executor debug_motion_execution_enabled true
-ros2 service call \
-  /box_h_cut_executor/execute_planned_h_cut \
-  std_srvs/srv/Trigger {}
-ros2 param set /box_h_cut_executor debug_motion_execution_enabled false</code></pre></div>
-        <div class="command"><div class="command-head"><span>Correct endpoint, pause Servo, and save</span><button class="copy">Copy</button></div><pre><code>ros2 service call /servo_node/unpause_servo std_srvs/srv/Trigger {}
-# Teleop only after the planned endpoint motion has finished.
+        <div class="step-title"><div><h2>Teleoperate to the endpoint and save it</h2><p class="muted">No executor plan; Servo only.</p></div><div class="chips"><span class="badge motion">Servo motion</span></div></div>
+        <div class="callout">The executor does not plan or execute the traverse to the endpoint. Move the TCP along the cut with Servo at low speed and small increments, watching the blade and the carton.</div>
+        <div class="command"><div class="command-head"><span>Teleop to the endpoint, pause Servo, and save</span><button class="copy">Copy</button></div><pre><code>ros2 service call /servo_node/unpause_servo std_srvs/srv/Trigger {}
+# Teleop the TCP to the cut endpoint.
 # Stop input and confirm the robot is stationary, then:
 ros2 service call /servo_node/pause_servo std_srvs/srv/Trigger {}
 ros2 service call \
   /box_h_cut_executor/save_cut_debug_point \
   std_srvs/srv/Trigger {}</code></pre></div>
-        <p>If the endpoint was already correct, do not jog it; still call save. That records the observed pose and creates the lift-only retained plan.</p>
+        <p>The second save records the observed endpoint, writes the record with status <code>complete</code>, and ends the session (the executor returns to idle). It retains no plan and never moves the robot.</p>
       </section>
 
       <section class="step" id="lift" data-step="7">
-        <div class="step-title"><div><h2>Inspect and explicitly execute the lift</h2><p class="muted">Saving never auto-lifts.</p></div><div class="chips"><span class="badge motion">Final dispatch</span></div></div>
-        <div class="callout warn">Verify in RViz that the retained path moves only from the corrected endpoint to the configured hover clearance. Servo must remain paused.</div>
-        <div class="command"><div class="command-head"><span>Execute lift and close motion gates</span><button class="copy">Copy</button></div><pre><code>ros2 service call /servo_node/pause_servo std_srvs/srv/Trigger {}
-ros2 param set /box_h_cut_executor debug_motion_execution_enabled true
-ros2 service call \
-  /box_h_cut_executor/execute_planned_h_cut \
-  std_srvs/srv/Trigger {}
+        <div class="step-title"><div><h2>Finish and close the gates</h2><p class="muted">There is no executor lift stage.</p></div><div class="chips"><span class="badge motion">Servo motion</span></div></div>
+        <div class="callout warn">The TCP is still at the endpoint, possibly in contact with the carton. Withdraw it with Servo (for example <span class="kbd">;</span> in <code>base_link</code> for +Z), then close the gates.</div>
+        <div class="command"><div class="command-head"><span>Close motion gates and stop Servo</span><button class="copy">Copy</button></div><pre><code>ros2 service call /servo_node/pause_servo std_srvs/srv/Trigger {}
 ros2 param set /box_h_cut_executor debug_motion_execution_enabled false
 ros2 param set /box_h_cut_executor execution_enabled false
 ros2 service call /servo_node/stop_servo std_srvs/srv/Trigger {}</code></pre></div>
-        <p>After a successful lift, the session returns to idle. Repeat Steps 4–7 for the other cuts, using a fresh snapshot when required by the age limit.</p>
+        <p>Repeat Steps 4–7 for the other cuts, using a fresh snapshot within the age limit.</p>
       </section>
 
       <section class="step" id="apply" data-step="8">
@@ -373,9 +370,9 @@ ros2 param set /box_h_cut_executor \
   /absolute/path/to/right_snapshot.json
 ros2 param set /box_h_cut_executor \
   cut_debug_correction_enabled true</code></pre></div>
-        <p>A combined H-cut applies each matching record only to its own segment. Empty slots remain nominal. The stored <code>along</code>, <code>across</code>, and <code>normal</code> deltas rotate with a newly detected cut; they are not fixed world XYZ offsets.</p>
+        <p>A combined or <code>h</code> plan applies each matching record only to its own segment; <code>t_cut</code> and <code>t_cut_handoff</code> (the default pattern is <code>t_cut</code>) contain only left and middle segments, so a set right record is loaded, validated, and left unused. Empty slots remain nominal. The stored <code>along</code>, <code>across</code>, and <code>normal</code> deltas rotate with a newly detected cut; they are not fixed world XYZ offsets.</p>
         <div class="command"><div class="command-head"><span>Disable learned corrections</span><button class="copy">Copy</button></div><pre><code>ros2 param set /box_h_cut_executor cut_debug_correction_enabled false</code></pre></div>
-        <div class="callout warn">An enabled configuration with all three paths empty fails closed. A nonempty malformed, incomplete, mismatched, non-absolute, or non-finite record also rejects planning. Translation values must be finite; there is no per-axis magnitude limit. Orientation correction accepts the full finite unit-quaternion range, but application still fails closed unless the corrected tool points into the carton surface.</div>
+        <div class="callout warn">An enabled configuration with all three paths empty fails closed. A nonempty malformed, incomplete, mismatched, non-absolute, or non-finite record also rejects planning. Each record must contain <code>planning_frame</code> and <code>tool_link</code> equal to the executor's active values; a record missing either is refused. Correction parameters cannot be changed while a session is active or a plan/execution is running (the change is rejected as busy). Translation values must be finite; there is no per-axis magnitude limit. Orientation correction accepts the full finite unit-quaternion range, but application still fails closed unless the corrected tool points into the carton surface.</div>
       </section>
 
       <section class="step danger" id="abort" data-step="!">
@@ -387,7 +384,7 @@ ros2 param set /box_h_cut_executor execution_enabled false
 ros2 service call /box_h_cut_executor/clear_plan std_srvs/srv/Trigger {}</code></pre></div>
         <ul>
           <li>Use the hardware emergency stop for immediate danger. ROS service calls are not an emergency-stop substitute.</li>
-          <li><code>clear_plan</code> discards the retained plan and active debug session without commanding motion.</li>
+          <li><code>clear_plan</code> discards the retained plan and active debug session without commanding motion. While planning or a trajectory execution is running it answers busy instead of waiting; it cannot stop motion (use the emergency stop).</li>
           <li>After an execution failure, the stage does not advance and the executable plan is removed. Clear the session, diagnose the controller/scene, and start a new session.</li>
           <li>Never resume from an assumed stage. Read every service response.</li>
         </ul>
@@ -395,12 +392,12 @@ ros2 service call /box_h_cut_executor/clear_plan std_srvs/srv/Trigger {}</code><
 
       <section class="step" id="troubleshoot" data-step="?">
         <div class="step-title"><div><h2>Troubleshooting</h2><p class="muted">Treat rejections as safety information, not obstacles to bypass.</p></div><div class="chips"><span class="badge safe">No workaround flags</span></div></div>
-        <details><summary><code>external_snapshot_file is required</code> or snapshot is stale</summary><div>Set an absolute snapshot <code>.json</code> path. Normally, provide a new previously captured perception snapshot. If the carton is known to be unchanged, set <code>debug_allow_stale_snapshot</code> to <code>true</code> before starting the debug session. Set it back to <code>false</code> if it can move.</div></details>
+        <details><summary><code>external_snapshot_file is required</code> or snapshot is stale</summary><div>Set an absolute snapshot <code>.json</code> path and provide a new perception snapshot; the session must start within <code>external_snapshot_max_age_s</code> (240&nbsp;s in the supplied YAML). <code>debug_allow_stale_snapshot=true</code> only allows RViz inspection: execution of anything loaded with it is refused. Set it back to <code>false</code>, call <code>clear_plan</code>, and start again from a fresh snapshot.</div></details>
         <details><summary>Planning scene is missing a required obstacle</summary><div>Check that the external snapshot path is valid and <code>detected_carton</code> is present. Also confirm the fixed external camera publishes <code>camera_link</code> and <code>camera_color_optical_frame</code>; <code>camera_pole_collision.py</code> must publish the required <code>camera_pole</code> object before H-cut planning.</div></details>
-        <details><summary>Servo service exists but teleop does not move</summary><div>Check the response from <code>start_servo</code>, call <code>unpause_servo</code>, select keyboard twist mode with <span class="kbd">t</span>, and confirm the teleop process publishes on the configured Servo command topic. On physical hardware, also verify controller state—but do not bypass safety stops.</div></details>
-        <details><summary>Executor reports that execution is disabled</summary><div>This is expected until both executor gates are true. Inspect the retained plan before enabling them. These gates are independent from Servo pause state.</div></details>
-        <details><summary>Save is rejected</summary><div>Save is legal only after that stage executed successfully. Confirm fresh, finite, complete joint states and wait for the robot to become stationary. A save-before-execute or double-save is intentionally rejected.</div></details>
-        <details><summary>Planning or parameters are rejected during a session</summary><div>Cut, snapshot, geometry, and correction parameters are frozen while a session is active. Finish it or call <code>clear_plan</code>, then change configuration and start over.</div></details>
+        <details><summary>Servo service exists but teleop does not move</summary><div>Check the response from <code>start_servo</code>, call <code>unpause_servo</code>, hold the gamepad enable button if you use the gamepad, and confirm the teleop process publishes on <code>delta_twist_cmds</code> (the Servo command topic in <code>config/servo.yaml</code>). On physical hardware, also verify controller state—but do not bypass safety stops.</div></details>
+        <details><summary>Executor reports that execution is disabled or blocked</summary><div>This is expected until both executor gates are true. Inspect the retained plan before enabling them. These gates are independent from Servo pause state. A message about <code>debug_allow_stale_snapshot</code> means the session was loaded under the plan-only override and can never be executed; clear it and start over from a fresh snapshot.</div></details>
+        <details><summary>Save is rejected</summary><div>The first save is legal only after the start dispatch completed successfully (stage <code>start_executed</code>); the second save follows the first. Confirm fresh (under one second), finite, complete joint states and wait for the robot to become stationary. A save before the start has executed, or after a failed dispatch, is intentionally rejected.</div></details>
+        <details><summary>Planning or parameters are rejected during a session</summary><div>Planning and correction parameters (cut, pattern, tilts, correction files and similar) are frozen while a session is active and rejected as busy while a service call or execution runs. Geometry, clearance, frame and scaling parameters are read-only at any time: edit <code>box_h_cut_executor.yaml</code> and restart the executor. Finish the session or call <code>clear_plan</code>, then change configuration and start over.</div></details>
         <details><summary>A correction file is rejected</summary><div>Use an absolute <code>.json</code> path and a complete <code>box_h_cut_correction/v1</code> record matching the parameter slot, planning frame, and tool. Do not edit a record to suppress validation; teach the point again.</div></details>
       </section>
 
@@ -412,9 +409,9 @@ ros2 service call /box_h_cut_executor/clear_plan std_srvs/srv/Trigger {}</code><
           <label class="check"><input type="checkbox" data-check="estop"><span>Verify emergency stop access and clear the robot workspace.</span></label>
           <label class="check"><input type="checkbox" data-check="snapshot"><span>Generate and select a fresh external snapshot.</span></label>
           <label class="check"><input type="checkbox" data-check="tf"><span>Verify carton planning geometry.</span></label>
-          <label class="check"><input type="checkbox" data-check="joint-states"><span>Verify fresh, complete `/joint_states`.</span></label>
+          <label class="check"><input type="checkbox" data-check="joint-states"><span>Verify fresh, complete <code>/joint_states</code>.</span></label>
           <label class="check"><input type="checkbox" data-check="servo-paused"><span>Pause Servo before every retained-plan execution.</span></label>
-          <label class="check"><input type="checkbox" data-check="rviz"><span>Inspect every start, endpoint, and lift plan in RViz.</span></label>
+          <label class="check"><input type="checkbox" data-check="rviz"><span>Inspect the start plan in RViz before executing it.</span></label>
           <label class="check"><input type="checkbox" data-check="low-speed"><span>Use low-speed, small-increment teleop corrections.</span></label>
           <label class="check"><input type="checkbox" data-check="gates-off"><span>Disable both executor gates and stop Servo after the session.</span></label>
           <label class="check"><input type="checkbox" data-check="records"><span>Inspect saved correction JSON before enabling it in future plans.</span></label>

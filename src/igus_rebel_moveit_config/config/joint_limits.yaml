@@ -2,40 +2,46 @@
 # Specific joint properties can be changed with the keys [max_position, min_position, max_velocity, max_acceleration]
 # Joint limits can be turned off with [has_velocity_limits, has_acceleration_limits]
 # robot_description_planning:
+# Joint velocity/acceleration are the igus/CPR ReBeL values (0.785 rad/s = 45 deg/s,
+# 5.24 rad/s^2 = 300 deg/s^2). The previous 2.16 rad/s / 10 rad/s^2 exceeded what the
+# controller can follow (2.6 rad/s commands raised LAG errors). Planner/executor scaling
+# factors are relative to these limits.
 joint_limits:
   joint1:
     has_velocity_limits: true
-    max_velocity: 2.16
+    max_velocity: 0.785
     has_acceleration_limits: true
-    max_acceleration: 10.0
+    max_acceleration: 5.24
   joint2:
     has_velocity_limits: true
-    max_velocity: 2.16
+    max_velocity: 0.785
     has_acceleration_limits: true
-    max_acceleration: 10.0
+    max_acceleration: 5.24
   joint3:
     has_velocity_limits: true
-    max_velocity: 2.16
+    max_velocity: 0.785
     has_acceleration_limits: true
-    max_acceleration: 10.0
+    max_acceleration: 5.24
   joint4:
     has_velocity_limits: true
-    max_velocity: 2.16
+    max_velocity: 0.785
     has_acceleration_limits: true
-    max_acceleration: 10.0
+    max_acceleration: 5.24
   joint5:
     has_velocity_limits: true
-    max_velocity: 2.16
+    max_velocity: 0.785
     has_acceleration_limits: true
-    max_acceleration: 10.0
+    max_acceleration: 5.24
   joint6:
     has_velocity_limits: true
-    max_velocity: 2.16
+    max_velocity: 0.785
     has_acceleration_limits: true
-    max_acceleration: 10.0
+    max_acceleration: 5.24
 
+# Pilz LIN/CIRC limits. Scaled with the executor scalings (0.1376 vel / 0.0954 acc) so
+# the physical Cartesian speed equals the pre-2026-09-27 values (0.05 m/s at 0.05 scaling).
 cartesian_limits:
-  max_trans_vel: 0.05
-  max_trans_acc: 0.1
-  max_trans_dec: -0.1
-  max_rot_vel: 0.2
+  max_trans_vel: 0.01817
+  max_trans_acc: 0.0524
+  max_trans_dec: -0.0524
+  max_rot_vel: 0.0727

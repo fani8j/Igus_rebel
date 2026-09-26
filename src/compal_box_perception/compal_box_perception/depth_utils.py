@@ -1,8 +1,9 @@
 """Pure geometry and depth helpers for the live seam detector."""
 
 from __future__ import annotations
-import math
 
+import math
+from dataclasses import dataclass
 from typing import Iterable, Optional, Sequence, Tuple
 
 import cv2
@@ -65,9 +66,16 @@ def build_xyzrgb_points(
     scale: float,
     stride: int,
 ) -> np.ndarray:
-    """Build an organized, strided XYZ/RGB array for PointCloud2 publication."""
+    """Build an organized, strided XYZ/RGB array for PointCloud2 publication.
+
+    ``bgr`` is either registered at full depth resolution (it is strided here)
+    or already decoded at the strided grid size (e.g. a reduced JPEG decode).
+    """
     sampled_depth = np.asarray(depth[::stride, ::stride], dtype=np.float32) * scale
-    sampled_bgr = bgr[::stride, ::stride]
+    if bgr.shape[:2] == sampled_depth.shape:
+        sampled_bgr = bgr
+    else:
+        sampled_bgr = bgr[::stride, ::stride]
     if sampled_depth.shape != normalized_rays.shape[:2]:
         raise ValueError("normalized point-cloud rays do not match sampled depth")
     if sampled_bgr.shape[:2] != sampled_depth.shape:
@@ -95,7 +103,26 @@ def build_xyzrgb_points(
     return points
 
 
-def fit_top_plane_quad(
+@dataclass(frozen=True)
+class TopPlaneFit:
+    """Dominant upper plane in the camera optical frame.
+
+    ``normal . p + offset = 0`` for points ``p`` on the plane. ``inlier_ratio``
+    and ``rms_m`` are measured over the classification ROI. ``classify_mask``
+    marks sampled classification-ROI pixels on the plane (255) and is only
+    needed for the optional image quadrilateral (:func:`top_plane_quadrilateral`).
+    """
+
+    normal: np.ndarray
+    offset: float
+    inlier_ratio: float
+    rms_m: float
+    classify_mask: np.ndarray
+    classify_origin: Tuple[int, int]
+    sample_stride: int
+
+
+def fit_top_plane(
     depth: np.ndarray,
     camera_matrix: Sequence[float],
     distortion: Iterable[float],
@@ -110,12 +137,12 @@ def fit_top_plane_quad(
     min_inlier_ratio: float = 0.25,
     expected_normal: Optional[Sequence[float]] = None,
     max_normal_deviation_deg: float = 20.0,
-) -> Tuple[np.ndarray, np.ndarray, float, float, float]:
-    """Fit the dominant upper plane and return its image quadrilateral.
+) -> TopPlaneFit:
+    """Fit the dominant upper plane by RANSAC + SVD refinement.
 
-    The plane is estimated only in ``fit_roi`` but classified throughout
+    The plane is estimated only in ``fit_roi`` but evaluated throughout
     ``classify_roi``. This keeps the vertical carton face out of plane fitting
-    while retaining the complete top boundary for quadrilateral extraction.
+    while the reported inlier ratio and RMS cover the complete top region.
     """
     if depth.ndim != 2:
         raise ValueError("depth image must be two-dimensional")
@@ -156,20 +183,15 @@ def fit_top_plane_quad(
             np.float64
         )
         if pixels.size == 0:
-            return (
-                np.empty((0, 3), dtype=np.float64),
-                valid,
-                grid_x,
-                grid_y,
-            )
+            return np.empty((0, 3), dtype=np.float64), valid
         rays = cv2.undistortPoints(
             pixels.reshape(-1, 1, 2), matrix, coefficients
         ).reshape(-1, 2)
         z = sampled_depth[valid]
         points = np.column_stack((rays[:, 0] * z, rays[:, 1] * z, z))
-        return points, valid, grid_x, grid_y
+        return points, valid
 
-    fit_points, _, _, _ = sample_points(fit_bounds)
+    fit_points, _ = sample_points(fit_bounds)
     if fit_points.shape[0] < min_inliers:
         raise ValueError(
             f"only {fit_points.shape[0]} valid points available for plane fitting"
@@ -220,12 +242,37 @@ def fit_top_plane_quad(
         normal = -normal
     offset = -float(np.dot(normal, centroid))
 
-    classify_points, classify_valid, grid_x, grid_y = sample_points(classify_bounds)
+    classify_points, classify_valid = sample_points(classify_bounds)
     residuals = np.abs(classify_points @ normal + offset)
     classify_inliers = residuals <= distance_threshold_m
+    if not np.any(classify_inliers):
+        raise ValueError("no classification-ROI points lie on the fitted plane")
     mask = np.zeros(classify_valid.shape, dtype=np.uint8)
     mask[classify_valid] = classify_inliers.astype(np.uint8) * 255
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+    rms = float(np.sqrt(np.mean(residuals[classify_inliers] ** 2)))
+    classify_ratio = float(
+        np.count_nonzero(classify_inliers) / max(classify_points.shape[0], 1)
+    )
+    return TopPlaneFit(
+        normal=normal,
+        offset=offset,
+        inlier_ratio=classify_ratio,
+        rms_m=rms,
+        classify_mask=mask,
+        classify_origin=(classify_bounds[0], classify_bounds[1]),
+        sample_stride=sample_stride,
+    )
+
+
+def top_plane_quadrilateral(plane: TopPlaneFit) -> np.ndarray:
+    """Simplify the plane's largest connected image region to four corners.
+
+    Returns a ``(4, 2)`` array of full-image pixel coordinates. Raises
+    ``ValueError`` when the region does not simplify to a quadrilateral.
+    """
+    mask = cv2.morphologyEx(
+        plane.classify_mask, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8)
+    )
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not contours:
         raise ValueError("top plane has no connected image contour")
@@ -234,23 +281,16 @@ def fit_top_plane_quad(
     perimeter = cv2.arcLength(hull, True)
     quadrilateral = None
     for epsilon_ratio in np.arange(0.01, 0.12, 0.005):
-        approximation = cv2.approxPolyDP(
-            hull, epsilon_ratio * perimeter, True
-        )
+        approximation = cv2.approxPolyDP(hull, epsilon_ratio * perimeter, True)
         if len(approximation) == 4:
             quadrilateral = approximation.reshape(-1, 2).astype(np.float64)
             break
     if quadrilateral is None:
         raise ValueError("top-plane contour does not simplify to four corners")
-
-    classify_x0, classify_y0, _, _ = classify_bounds
-    quadrilateral[:, 0] = classify_x0 + quadrilateral[:, 0] * sample_stride
-    quadrilateral[:, 1] = classify_y0 + quadrilateral[:, 1] * sample_stride
-    rms = float(np.sqrt(np.mean(residuals[classify_inliers] ** 2)))
-    classify_ratio = float(
-        np.count_nonzero(classify_inliers) / max(classify_points.shape[0], 1)
-    )
-    return quadrilateral, normal, offset, classify_ratio, rms
+    origin_x, origin_y = plane.classify_origin
+    quadrilateral[:, 0] = origin_x + quadrilateral[:, 0] * plane.sample_stride
+    quadrilateral[:, 1] = origin_y + quadrilateral[:, 1] * plane.sample_stride
+    return quadrilateral
 
 
 def get_median_depth(

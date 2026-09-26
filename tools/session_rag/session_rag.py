@@ -22,7 +22,7 @@ from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Iterator, Sequence
+from typing import Any, Iterator, Sequence
 
 SCHEMA_VERSION = 1
 DEFAULT_INDEX = Path("workspace_scan_artifacts/project_rag.sqlite3")

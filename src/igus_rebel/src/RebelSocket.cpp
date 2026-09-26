@@ -1,286 +1,307 @@
 #include "igus_rebel/RebelSocket.hpp"
-#include "igus_rebel/CriKeywords.hpp"
-
-#include "rclcpp/rclcpp.hpp"
 
 #include <arpa/inet.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <sys/socket.h>
+#include <sys/time.h>
 #include <unistd.h>
+
+#include <cerrno>
 #include <cstring>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace Igus
 {
-    //
-    // Constructor(s)/ Destructor(s)
-    //
-    RebelSocket::RebelSocket(const std::string &ip, const int &port)
-        : sock(0),
-          ip(ip),
-          port(port),
-          unprocessedMessages(),
-          fragmentBuffer{0}
-    {
-    }
-
-    RebelSocket::~RebelSocket()
-    {
-        Stop();
-    }
-
-    //
-    // private functions
-    //
-    void RebelSocket::MakeConnection()
-    {
-        // Make sure that we do not try to establish the same connection multiple times
-        // at the same time.
-        std::lock_guard<std::mutex> lockGuard(connectionLock);
-
-        while (connectionNeeded)
-        {
-            sock = 0;
-            struct sockaddr_in serv_addr;
-
-            if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-            {
-                RCLCPP_ERROR(rclcpp::get_logger("igus_rebel"), "Socket creation error.");
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                continue;
-            }
-
-            serv_addr.sin_family = AF_INET;
-            serv_addr.sin_port = htons(port);
-
-            // Convert IPv4 and IPv6 addresses from text to binary form
-            if (inet_pton(AF_INET, ip.c_str(), &serv_addr.sin_addr) <= 0)
-            {
-                RCLCPP_ERROR(rclcpp::get_logger("igus_rebel"), "Invalid robot IP address / Address not supported.");
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                continue;
-            }
-
-            if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
-            {
-                RCLCPP_ERROR(rclcpp::get_logger("igus_rebel"), "Connection Failed.");
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                continue;
-            }
-
-            connectionNeeded = false;
-            RCLCPP_INFO(rclcpp::get_logger("igus_rebel"), "Connected to ReBeL at %s:%d", ip.c_str(), port);
-        }
-    }
-
-    void RebelSocket::SeparateMessages(const char *msg)
-    {
-        const char *start;
-        const char *end = msg;
-
-        while (true)
-        {
-            start = std::strstr(end, CriKeywords::START.c_str());
-
-            if (start == nullptr)
-            {
-                break;
-            }
-
-            end = std::strstr(start, CriKeywords::END.c_str());
-
-            if (end == nullptr)
-            {
-                // Found a start without end.
-                const char *remainingStart = start + CriKeywords::START.size();
-                const char *remainingEnd = std::strchr(remainingStart, '\0');
-
-                if (remainingEnd != nullptr)
-                {
-                    fragmentLength = remainingEnd - remainingStart;
-
-                    for (int i = 0; i < fragmentLength; i++)
-                    {
-                        fragmentBuffer[i] = *(remainingStart + i);
-                    }
-                }
-                else
-                {
-                    RCLCPP_ERROR(rclcpp::get_logger("igus_rebel"), "Socket read was not null-terminated, somehow.");
-                }
-
-                break;
-            }
-
-            {
-                std::lock_guard<std::mutex> lockGuard(messageLock);
-                unprocessedMessages.push_front(
-                    std::string(
-                        start + CriKeywords::START.size() + 1,
-                        end - (start + CriKeywords::START.size() + 1) - 1));
-            }
-        }
-    }
-
-    void RebelSocket::ReceiveThreadFunction()
-    {
-        RCLCPP_DEBUG(rclcpp::get_logger("igus_rebel"), "Starting to receive messages from robot.");
-
-        char buffer[bufferSize * 2] = {0};
-
-        while (continueReceive)
-        {
-            if (connectionNeeded)
-            {
-                MakeConnection();
-            }
-
-            int valread = read(sock, buffer + fragmentLength, bufferSize);
-
-            if (!IsSocketOk())
-            {
-                connectionNeeded = true;
-            }
-            else
-            {
-                if (valread == 0)
-                {
-                    RCLCPP_WARN(rclcpp::get_logger("igus_rebel"), "Empty message received");
-                    connectionNeeded = true;
-                }
-                else
-                {
-                    if (fragmentLength > 0)
-                    {
-                        for (int i = 0; i < fragmentLength; i++)
-                        {
-                            buffer[i] = fragmentBuffer[i];
-                        }
-                        fragmentLength = 0;
-                    }
-
-                    SeparateMessages(buffer);
-                    for (int i = 0; i < bufferSize * 2; i++)
-                    {
-                        buffer[i] = 0;
-                    }
-                }
-            }
-        }
-
-        RCLCPP_DEBUG(rclcpp::get_logger("igus_rebel"), "Stopped to receive messages from robot.");
-    }
-
-    // Make sure that we do not fill our entire memory with messages from the robot in case something
-    // goes wrong with processing them.
-    // Also, later we should just stop the robot here, because this could be unsafe.
-    void RebelSocket::ListCheckThreadFunction()
-    {
-        RCLCPP_DEBUG(rclcpp::get_logger("igus_rebel"), "Starting to check if the message list is being processed.");
-
-        while (continueReceive)
-        {
-            if (unprocessedMessages.size() > maxUnprocessedMessages)
-            {
-                RCLCPP_WARN(rclcpp::get_logger("igus_rebel"), "Robot messages are not processed fast enough. Discarding messages.");
-
-                while (unprocessedMessages.size() > (maxUnprocessedMessages * 0.9))
-                {
-                    unprocessedMessages.pop_back();
-                }
-            }
-
-            std::this_thread::sleep_for(std::chrono::milliseconds(listCheckWaitMs));
-        }
-
-        RCLCPP_DEBUG(rclcpp::get_logger("igus_rebel"), "Stopped to check if the message list is being processed.");
-    }
-
-    bool RebelSocket::IsSocketOk()
-    {
-        int error = 0;
-        socklen_t len = sizeof(error);
-        int retval = getsockopt(sock, SOL_SOCKET, SO_ERROR, &error, &len);
-
-        if (retval != 0)
-        {
-            RCLCPP_ERROR(rclcpp::get_logger("igus_rebel"), "Error getting socket error code: %s", strerror(retval));
-            return false;
-        }
-
-        if (error != 0)
-        {
-            RCLCPP_ERROR(rclcpp::get_logger("igus_rebel"), "Socket error: %s", strerror(error));
-            return false;
-        }
-
-        return true;
-    }
-
-    //
-    // public functions
-    //
-    void RebelSocket::Start()
-    {
-        connectionNeeded = true;
-        continueReceive = true;
-
-        listCheckThread = std::thread(&RebelSocket::ListCheckThreadFunction, this);
-        receiveThread = std::thread(&RebelSocket::ReceiveThreadFunction, this);
-    }
-
-    void RebelSocket::Stop()
-    {
-        connectionNeeded = false;
-        continueReceive = false;
-
-        if (receiveThread.joinable())
-        {
-            receiveThread.join();
-        }
-
-        if (listCheckThread.joinable())
-        {
-            listCheckThread.join();
-        }
-    }
-
-    bool RebelSocket::HasMessage()
-    {
-        return unprocessedMessages.size() > 0;
-    }
-
-    std::string RebelSocket::GetMessage()
-    {
-        std::lock_guard<std::mutex> lockGuard(messageLock);
-
-        if (!HasMessage())
-        {
-            return "";
-        }
-
-        std::string msg = unprocessedMessages.back();
-        unprocessedMessages.pop_back();
-
-        return msg;
-    }
-
-    void RebelSocket::SendMessage(const std::string &msg)
-    {
-        std::lock_guard<std::mutex> lockGuard(socketWriteLock);
-
-        if (connectionNeeded)
-        {
-            MakeConnection();
-        }
-
-        int sent = send(sock, msg.c_str(), msg.length(), 0);
-
-        if (!IsSocketOk())
-        {
-            connectionNeeded = true;
-        }
-
-        if (sent < 0)
-        {
-            connectionNeeded = true;
-        }
-    }
+namespace
+{
+timeval ToTimeval(std::chrono::milliseconds duration)
+{
+  timeval tv{};
+  tv.tv_sec = static_cast<time_t>(duration.count() / 1000);
+  tv.tv_usec = static_cast<suseconds_t>((duration.count() % 1000) * 1000);
+  return tv;
 }
+}  // namespace
+
+RebelSocket::RebelSocket(const std::string & ip, const int & port)
+: ip(ip),
+  port(port),
+  logger(rclcpp::get_logger("igus_rebel"))
+{
+}
+
+RebelSocket::~RebelSocket()
+{
+  Stop();
+}
+
+void RebelSocket::SetConnectedCallback(ConnectedCallback callback)
+{
+  connectedCallback = std::move(callback);
+}
+
+bool RebelSocket::TryConnect()
+{
+  const int fd = ::socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+  if (fd < 0) {
+    RCLCPP_ERROR_THROTTLE(
+      logger, throttleClock, 5000, "Socket creation error: %s", std::strerror(errno));
+    return false;
+  }
+
+  const timeval sendTimeout = ToTimeval(kSendTimeout);
+  const timeval receiveTimeout = ToTimeval(kReceiveTimeout);
+  const int enable = 1;
+  const int keepIdleS = 2;
+  const int keepIntervalS = 1;
+  const int keepCount = 3;
+  const bool optionsOk =
+    ::setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &sendTimeout, sizeof(sendTimeout)) == 0 &&
+    ::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &receiveTimeout, sizeof(receiveTimeout)) == 0 &&
+    ::setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &enable, sizeof(enable)) == 0 &&
+    ::setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &keepIdleS, sizeof(keepIdleS)) == 0 &&
+    ::setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &keepIntervalS, sizeof(keepIntervalS)) == 0 &&
+    ::setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &keepCount, sizeof(keepCount)) == 0 &&
+    ::setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &enable, sizeof(enable)) == 0;
+  if (!optionsOk) {
+    RCLCPP_ERROR_THROTTLE(
+      logger, throttleClock, 5000, "Failed to set socket options: %s", std::strerror(errno));
+    ::close(fd);
+    return false;
+  }
+
+  sockaddr_in serverAddress{};
+  serverAddress.sin_family = AF_INET;
+  serverAddress.sin_port = htons(static_cast<uint16_t>(port));
+  if (::inet_pton(AF_INET, ip.c_str(), &serverAddress.sin_addr) <= 0) {
+    RCLCPP_ERROR_THROTTLE(
+      logger, throttleClock, 5000, "Invalid robot IP address / Address not supported: %s",
+      ip.c_str());
+    ::close(fd);
+    return false;
+  }
+
+  if (::connect(fd, reinterpret_cast<sockaddr *>(&serverAddress), sizeof(serverAddress)) < 0) {
+    RCLCPP_ERROR_THROTTLE(
+      logger, throttleClock, 5000, "Connection to ReBeL at %s:%d failed: %s", ip.c_str(), port,
+      std::strerror(errno));
+    ::close(fd);
+    return false;
+  }
+
+  {
+    std::lock_guard<std::mutex> lockGuard(socketWriteLock);
+    sock = fd;
+  }
+  framer.Reset();
+  connected = true;
+  ++connectionCount;
+  RCLCPP_INFO(logger, "Connected to ReBeL at %s:%d", ip.c_str(), port);
+  return true;
+}
+
+void RebelSocket::CloseSocket()
+{
+  std::lock_guard<std::mutex> lockGuard(socketWriteLock);
+  connected = false;
+  if (sock >= 0) {
+    ::shutdown(sock, SHUT_RDWR);
+    ::close(sock);
+    sock = -1;
+  }
+}
+
+void RebelSocket::PushMessages(std::vector<std::string> && messages)
+{
+  if (messages.empty()) {
+    return;
+  }
+
+  std::size_t dropped = 0;
+  {
+    std::lock_guard<std::mutex> lockGuard(messageLock);
+    for (auto & message : messages) {
+      // Keep the newest messages if the message thread falls behind.
+      if (unprocessedMessages.size() >= kMaxUnprocessedMessages) {
+        unprocessedMessages.pop_front();
+        ++dropped;
+      }
+      unprocessedMessages.push_back(std::move(message));
+    }
+  }
+  messageCondition.notify_one();
+
+  if (dropped > 0) {
+    RCLCPP_WARN_THROTTLE(
+      logger, throttleClock, 5000,
+      "Robot messages are not processed fast enough. Discarded %zu old message(s).", dropped);
+  }
+}
+
+void RebelSocket::InterruptibleSleep(std::chrono::milliseconds duration)
+{
+  const auto deadline = std::chrono::steady_clock::now() + duration;
+  while (continueReceive && std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+}
+
+void RebelSocket::ReceiveThreadFunction()
+{
+  RCLCPP_DEBUG(logger, "Starting to receive messages from robot.");
+
+  char buffer[4096];
+
+  while (continueReceive) {
+    if (!connected) {
+      if (!reconnectAllowed) {
+        InterruptibleSleep(kReconnectDelay);
+        continue;
+      }
+      const bool reconnect = connectionCount.load() > 0;
+      if (!TryConnect()) {
+        InterruptibleSleep(kReconnectDelay);
+        continue;
+      }
+      if (connectedCallback && reconnectAllowed && continueReceive) {
+        try {
+          connectedCallback(reconnect);
+        } catch (const std::exception & e) {
+          RCLCPP_ERROR(logger, "Connected callback failed: %s", e.what());
+        }
+      }
+      continue;
+    }
+
+    const ssize_t received = ::recv(sock, buffer, sizeof(buffer), 0);
+    if (received > 0) {
+      PushMessages(framer.Feed(buffer, static_cast<std::size_t>(received)));
+      const std::size_t discarded = framer.TakeDiscardedBytes();
+      if (discarded > 0) {
+        RCLCPP_WARN_THROTTLE(
+          logger, throttleClock, 5000, "Discarded %zu byte(s) of unframed CRI data", discarded);
+      }
+    } else if (received == 0) {
+      if (continueReceive) {
+        RCLCPP_WARN(logger, "Connection to ReBeL closed; reconnecting");
+      }
+      CloseSocket();
+    } else if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
+      continue;
+    } else {
+      if (continueReceive) {
+        RCLCPP_ERROR(
+          logger, "Receiving from ReBeL failed: %s; reconnecting", std::strerror(errno));
+      }
+      CloseSocket();
+    }
+  }
+
+  CloseSocket();
+  RCLCPP_DEBUG(logger, "Stopped to receive messages from robot.");
+}
+
+void RebelSocket::Start()
+{
+  if (receiveThread.joinable()) {
+    return;
+  }
+  {
+    std::lock_guard<std::mutex> lockGuard(messageLock);
+    stopRequested = false;
+  }
+  continueReceive = true;
+  reconnectAllowed = true;
+  receiveThread = std::thread(&RebelSocket::ReceiveThreadFunction, this);
+}
+
+void RebelSocket::DisableReconnect()
+{
+  reconnectAllowed = false;
+}
+
+void RebelSocket::Stop()
+{
+  reconnectAllowed = false;
+  continueReceive = false;
+
+  {
+    // Wake a blocking recv(); the receive thread closes the descriptor.
+    std::lock_guard<std::mutex> lockGuard(socketWriteLock);
+    if (sock >= 0) {
+      ::shutdown(sock, SHUT_RDWR);
+    }
+  }
+
+  if (receiveThread.joinable()) {
+    receiveThread.join();
+  }
+
+  {
+    std::lock_guard<std::mutex> lockGuard(messageLock);
+    stopRequested = true;
+  }
+  messageCondition.notify_all();
+}
+
+bool RebelSocket::HasMessage()
+{
+  std::lock_guard<std::mutex> lockGuard(messageLock);
+  return !unprocessedMessages.empty();
+}
+
+std::string RebelSocket::GetMessage()
+{
+  std::lock_guard<std::mutex> lockGuard(messageLock);
+  if (unprocessedMessages.empty()) {
+    return "";
+  }
+  std::string msg = std::move(unprocessedMessages.front());
+  unprocessedMessages.pop_front();
+  return msg;
+}
+
+bool RebelSocket::WaitForMessage(std::string & message, std::chrono::milliseconds timeout)
+{
+  std::unique_lock<std::mutex> lock(messageLock);
+  messageCondition.wait_for(
+    lock, timeout, [this]() {return !unprocessedMessages.empty() || stopRequested;});
+  if (unprocessedMessages.empty()) {
+    return false;
+  }
+  message = std::move(unprocessedMessages.front());
+  unprocessedMessages.pop_front();
+  return true;
+}
+
+bool RebelSocket::SendMessage(const std::string & msg)
+{
+  std::lock_guard<std::mutex> lockGuard(socketWriteLock);
+
+  if (sock < 0 || !connected) {
+    return false;
+  }
+
+  std::size_t sent = 0;
+  while (sent < msg.size()) {
+    const ssize_t result = ::send(sock, msg.data() + sent, msg.size() - sent, MSG_NOSIGNAL);
+    if (result > 0) {
+      sent += static_cast<std::size_t>(result);
+      continue;
+    }
+    if (result < 0 && errno == EINTR) {
+      continue;
+    }
+    RCLCPP_ERROR_THROTTLE(
+      logger, throttleClock, 1000, "Sending to ReBeL failed: %s; reconnecting",
+      result < 0 ? std::strerror(errno) : "no bytes written");
+    // Let the receive thread notice, close and reconnect.
+    ::shutdown(sock, SHUT_RDWR);
+    return false;
+  }
+  return true;
+}
+}  // namespace Igus

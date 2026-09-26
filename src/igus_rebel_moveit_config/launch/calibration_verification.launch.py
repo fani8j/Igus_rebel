@@ -29,7 +29,7 @@ def generate_launch_description():
                               description="Allows explicit execute_plan requests; never auto-executes"),
         DeclareLaunchArgument("publish_calibration", default_value="true",
                               description="False if this camera TF already has a publisher"),
-        DeclareLaunchArgument("calibration_name", default_value="gemini336_world_v4_t"),
+        DeclareLaunchArgument("calibration_name", default_value="rebel_handeye_h_v2"),
         DeclareLaunchArgument("detector_config", default_value=os.path.join(
             perception, "config", "aruco_verification.yaml")),
         DeclareLaunchArgument("motion_config", default_value=os.path.join(

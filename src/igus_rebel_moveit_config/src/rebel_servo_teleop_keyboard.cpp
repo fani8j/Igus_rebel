@@ -40,8 +40,18 @@
 
 #include <algorithm>
 #include <atomic>
-#include <cmath>
+#include <cerrno>
 #include <chrono>
+#include <cmath>
+#include <csignal>
+#include <cstdio>
+#include <cstring>
+#include <future>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <thread>
+
 #include <control_msgs/msg/joint_jog.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include <igus_rebel_msgs/srv/set_cartesian_increment.hpp>
@@ -50,11 +60,11 @@
 #define IGUS_REBEL_HAS_SERVO_COMMAND_TYPE 1
 #else
 #define IGUS_REBEL_HAS_SERVO_COMMAND_TYPE 0
+#include <std_srvs/srv/trigger.hpp>
 #endif
 #include <rclcpp/rclcpp.hpp>
-#include <signal.h>
-#include <stdio.h>
 #ifndef WIN32
+#include <poll.h>
 #include <termios.h>
 #include <unistd.h>
 #else
@@ -89,7 +99,6 @@ constexpr int8_t KEYCODE_3 = 0x33;
 constexpr int8_t KEYCODE_4 = 0x34;
 constexpr int8_t KEYCODE_5 = 0x35;
 constexpr int8_t KEYCODE_6 = 0x36;
-constexpr int8_t KEYCODE_7 = 0x37;
 constexpr int8_t KEYCODE_Q = 0x71;
 constexpr int8_t KEYCODE_R = 0x72;
 constexpr int8_t KEYCODE_J = 0x6A;
@@ -115,42 +124,88 @@ const std::string JOINT_TOPIC = "delta_joint_cmds";
 const size_t ROS_QUEUE_SIZE = 10;
 const std::string PLANNING_FRAME_ID = "base_link";
 const std::string EE_FRAME_ID = "xeg32_tool_tip";
+constexpr auto SERVICE_WAIT_TIMEOUT = std::chrono::seconds(5);
+constexpr auto SERVICE_RESPONSE_TIMEOUT = std::chrono::seconds(2);
+constexpr int KEY_POLL_TIMEOUT_MS = 100;
+
+// Set by the SIGINT/SIGTERM handler; the key loop polls it. The handler only
+// touches this lock-free flag (async-signal-safe).
+volatile std::sig_atomic_t g_quit_requested = 0;
+
+void requestQuit(int /*signal*/)
+{
+  g_quit_requested = 1;
+}
 }  // namespace
 
-// A class for reading the key inputs from the terminal
+// Puts the terminal in raw mode for its lifetime and restores it on destruction.
 class KeyboardReader
 {
 public:
   KeyboardReader() : file_descriptor_(0)
   {
 #ifndef WIN32
-    // get the console in raw mode
-    tcgetattr(file_descriptor_, &cooked_);
-    struct termios raw;
-    memcpy(&raw, &cooked_, sizeof(struct termios));
-    raw.c_lflag &= ~(ICANON | ECHO);
-    // Setting a new line, then end of file
-    raw.c_cc[VEOL] = 1;
-    raw.c_cc[VEOF] = 2;
-    tcsetattr(file_descriptor_, TCSANOW, &raw);
+    if (tcgetattr(file_descriptor_, &cooked_) == 0)
+    {
+      struct termios raw;
+      std::memcpy(&raw, &cooked_, sizeof(struct termios));
+      raw.c_lflag &= ~(ICANON | ECHO);
+      // Setting a new line, then end of file
+      raw.c_cc[VEOL] = 1;
+      raw.c_cc[VEOF] = 2;
+      terminal_configured_ = tcsetattr(file_descriptor_, TCSANOW, &raw) == 0;
+    }
 #endif
   }
-  void readOne(char* c)
+  ~KeyboardReader()
+  {
+    shutdown();
+  }
+  KeyboardReader(const KeyboardReader&) = delete;
+  KeyboardReader& operator=(const KeyboardReader&) = delete;
+
+  // Returns true when a key was read, false when the poll timed out or was
+  // interrupted by a signal. Throws on read errors or end of input.
+  bool readOne(char* c, int timeout_ms)
   {
 #ifndef WIN32
-    int rc = read(file_descriptor_, c, 1);
+    struct pollfd descriptor
+    {
+      file_descriptor_, POLLIN, 0
+    };
+    const int ready = poll(&descriptor, 1, timeout_ms);
+    if (ready < 0)
+    {
+      if (errno == EINTR)
+        return false;
+      throw std::runtime_error(std::string("poll failed: ") + std::strerror(errno));
+    }
+    if (ready == 0)
+      return false;
+    const ssize_t rc = read(file_descriptor_, c, 1);
     if (rc < 0)
     {
-      throw std::runtime_error("read failed");
+      if (errno == EINTR)
+        return false;
+      throw std::runtime_error(std::string("read failed: ") + std::strerror(errno));
     }
+    if (rc == 0)
+      throw std::runtime_error("keyboard input closed");
+    return true;
 #else
+    (void)timeout_ms;
     *c = static_cast<char>(_getch());
+    return true;
 #endif
   }
   void shutdown()
   {
 #ifndef WIN32
-    tcsetattr(file_descriptor_, TCSANOW, &cooked_);
+    if (terminal_configured_)
+    {
+      tcsetattr(file_descriptor_, TCSANOW, &cooked_);
+      terminal_configured_ = false;
+    }
 #endif
   }
 
@@ -158,6 +213,7 @@ private:
   int file_descriptor_;
 #ifndef WIN32
   struct termios cooked_;
+  bool terminal_configured_{ false };
 #endif
 };
 
@@ -166,22 +222,32 @@ class KeyboardServo
 {
 public:
   KeyboardServo();
-  int keyLoop();
+  ~KeyboardServo();
+  int keyLoop(KeyboardReader& input);
 
 private:
   void setCartesianIncrement(
     const std::shared_ptr<igus_rebel_msgs::srv::SetCartesianIncrement::Request> request,
     std::shared_ptr<igus_rebel_msgs::srv::SetCartesianIncrement::Response> response);
-  void spin();
+  void stopSpinning();
+#if IGUS_REBEL_HAS_SERVO_COMMAND_TYPE
+  void switchCommandType(int8_t command_type, const char* label);
+#else
+  void startServo();
+#endif
 
   rclcpp::Node::SharedPtr nh_;
+  rclcpp::executors::SingleThreadedExecutor executor_;
+  std::thread spin_thread_;
+  std::atomic<bool> spin_finished_{ false };
 
   rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_pub_;
   rclcpp::Publisher<control_msgs::msg::JointJog>::SharedPtr joint_pub_;
   rclcpp::Service<igus_rebel_msgs::srv::SetCartesianIncrement>::SharedPtr increment_service_;
 #if IGUS_REBEL_HAS_SERVO_COMMAND_TYPE
   rclcpp::Client<moveit_msgs::srv::ServoCommandType>::SharedPtr switch_input_;
-  std::shared_ptr<moveit_msgs::srv::ServoCommandType::Request> request_;
+#else
+  rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr start_servo_;
 #endif
   std::atomic<double> cartesian_velocity_mps_;
   std::atomic<double> angular_velocity_rps_;
@@ -192,7 +258,7 @@ private:
 KeyboardServo::KeyboardServo()
   : cartesian_velocity_mps_(DEFAULT_LINEAR_VELOCITY_MPS),
     angular_velocity_rps_(DEFAULT_ANGULAR_VELOCITY_RPS),
-    joint_vel_cmd_(1.0), command_frame_id_{ "base_link" }
+    joint_vel_cmd_(1.0), command_frame_id_{ PLANNING_FRAME_ID }
 {
   nh_ = rclcpp::Node::make_shared("servo_keyboard_input");
 
@@ -210,8 +276,95 @@ KeyboardServo::KeyboardServo()
 #if IGUS_REBEL_HAS_SERVO_COMMAND_TYPE
   // MoveIt 2.10 and newer require explicitly selecting the active command type.
   switch_input_ = nh_->create_client<moveit_msgs::srv::ServoCommandType>("servo_node/switch_command_type");
+#else
+  // Humble's servo_node stays idle until ~/start_servo is called.
+  start_servo_ = nh_->create_client<std_srvs::srv::Trigger>("servo_node/start_servo");
 #endif
+
+  // Service callbacks and client responses are handled on a dedicated thread,
+  // which is joined in the destructor.
+  executor_.add_node(nh_);
+  spin_thread_ = std::thread([this]() {
+    executor_.spin();
+    spin_finished_.store(true);
+  });
 }
+
+KeyboardServo::~KeyboardServo()
+{
+  stopSpinning();
+}
+
+void KeyboardServo::stopSpinning()
+{
+  if (!spin_thread_.joinable())
+  {
+    return;
+  }
+  // cancel() is a no-op if spin() has not started yet, so repeat until it returns.
+  while (!spin_finished_.load())
+  {
+    executor_.cancel();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  spin_thread_.join();
+}
+
+#if IGUS_REBEL_HAS_SERVO_COMMAND_TYPE
+void KeyboardServo::switchCommandType(int8_t command_type, const char* label)
+{
+  auto request = std::make_shared<moveit_msgs::srv::ServoCommandType::Request>();
+  request->command_type = command_type;
+  if (!switch_input_->wait_for_service(std::chrono::seconds(1)))
+  {
+    RCLCPP_WARN(nh_->get_logger(), "servo_node/switch_command_type unavailable; input not switched to %s",
+                label);
+    return;
+  }
+  auto result = switch_input_->async_send_request(request);
+  if (result.wait_for(SERVICE_RESPONSE_TIMEOUT) != std::future_status::ready)
+  {
+    switch_input_->remove_pending_request(result);
+    RCLCPP_WARN(nh_->get_logger(), "Timed out switching input to %s", label);
+  }
+  else if (result.get()->success)
+  {
+    RCLCPP_INFO(nh_->get_logger(), "Switched to input type: %s", label);
+  }
+  else
+  {
+    RCLCPP_WARN(nh_->get_logger(), "Could not switch input to: %s", label);
+  }
+}
+#else
+void KeyboardServo::startServo()
+{
+  if (!start_servo_->wait_for_service(SERVICE_WAIT_TIMEOUT))
+  {
+    RCLCPP_WARN(nh_->get_logger(),
+                "servo_node/start_servo not available after %ld s; start Servo manually "
+                "(ros2 service call /servo_node/start_servo std_srvs/srv/Trigger) before jogging",
+                static_cast<long>(SERVICE_WAIT_TIMEOUT.count()));
+    return;
+  }
+  auto result = start_servo_->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+  if (result.wait_for(SERVICE_RESPONSE_TIMEOUT) != std::future_status::ready)
+  {
+    start_servo_->remove_pending_request(result);
+    RCLCPP_WARN(nh_->get_logger(), "Timed out waiting for servo_node/start_servo response");
+    return;
+  }
+  const auto response = result.get();
+  if (response->success)
+  {
+    RCLCPP_INFO(nh_->get_logger(), "Servo started");
+  }
+  else
+  {
+    RCLCPP_WARN(nh_->get_logger(), "servo_node/start_servo failed: %s", response->message.c_str());
+  }
+}
+#endif
 
 void KeyboardServo::setCartesianIncrement(
   const std::shared_ptr<igus_rebel_msgs::srv::SetCartesianIncrement::Request> request,
@@ -221,7 +374,8 @@ void KeyboardServo::setCartesianIncrement(
   if (!std::isfinite(increment) || increment <= 0.0 || increment > MAX_CARTESIAN_INCREMENT_M)
   {
     response->success = false;
-    response->message = "increment_meters must be finite and in the range (0, 0.01]";
+    response->message = "increment_meters must be finite and in the range (0, " +
+                        std::to_string(MAX_CARTESIAN_INCREMENT_M) + "] m";
     return;
   }
 
@@ -231,45 +385,33 @@ void KeyboardServo::setCartesianIncrement(
   RCLCPP_INFO(nh_->get_logger(), "%s", response->message.c_str());
 }
 
-KeyboardReader input;
-
-void quit(int sig)
-{
-  (void)sig;
-  input.shutdown();
-  rclcpp::shutdown();
-  exit(0);
-}
-
 int main(int argc, char** argv)
 {
-  rclcpp::init(argc, argv);
-  KeyboardServo keyboard_servo;
+  // The key loop owns SIGINT/SIGTERM handling so the terminal is always restored
+  // and the spin thread is joined before rclcpp shuts down.
+  rclcpp::init(argc, argv, rclcpp::InitOptions(), rclcpp::SignalHandlerOptions::None);
+  std::signal(SIGINT, requestQuit);
+  std::signal(SIGTERM, requestQuit);
 
-  signal(SIGINT, quit);
-
-  int rc = keyboard_servo.keyLoop();
-  input.shutdown();
+  int rc = 0;
+  {
+    KeyboardReader input;
+    KeyboardServo keyboard_servo;
+    rc = keyboard_servo.keyLoop(input);
+  }
   rclcpp::shutdown();
-
   return rc;
 }
 
-void KeyboardServo::spin()
-{
-  while (rclcpp::ok())
-  {
-    rclcpp::spin_some(nh_);
-  }
-}
-
-int KeyboardServo::keyLoop()
+int KeyboardServo::keyLoop(KeyboardReader& input)
 {
   char c;
   bool publish_twist = false;
   bool publish_joint = false;
 
-  std::thread{ [this]() { return spin(); } }.detach();
+#if !IGUS_REBEL_HAS_SERVO_COMMAND_TYPE
+  startServo();
+#endif
 
   puts("Reading from keyboard");
   puts("---------------------------");
@@ -277,23 +419,28 @@ int KeyboardServo::keyLoop()
   puts("Use arrow keys and the '.' and ';' keys to Cartesian jog");
   puts("Use i/k for TCP roll, n/m for TCP pitch, and u/o for TCP yaw (press 'e' first)");
   puts("Use '-' and '=' to decrease/increase Cartesian linear and angular speed");
-  puts("Use 1|2|3|4|5|6|7 keys to joint jog. 'r' to reverse the direction of jogging.");
+  puts("Use 1|2|3|4|5|6 keys to joint jog. 'r' to reverse the direction of jogging.");
   puts("Use 'j' to select joint jog. ");
   puts("Use 't' to select twist ");
   puts("Use 'w' and 'e' to switch between sending command in planning frame or end effector frame");
-  puts("Change the Cartesian increment with the set_cartesian_increment service (default 0.001 m)");
-  puts("'Q' to quit.");
+  printf("Change the Cartesian increment with the set_cartesian_increment service "
+         "(default %.3f m, max %.3f m)\n",
+         DEFAULT_CARTESIAN_INCREMENT_M, MAX_CARTESIAN_INCREMENT_M);
+  puts("'q' or Ctrl-C to quit.");
 
-  for (;;)
+  while (!g_quit_requested && rclcpp::ok())
   {
     // get the next event from the keyboard
     try
     {
-      input.readOne(&c);
+      if (!input.readOne(&c, KEY_POLL_TIMEOUT_MS))
+      {
+        continue;
+      }
     }
-    catch (const std::runtime_error&)
+    catch (const std::runtime_error& error)
     {
-      perror("read():");
+      fprintf(stderr, "%s\n", error.what());
       return -1;
     }
 
@@ -303,7 +450,6 @@ int KeyboardServo::keyLoop()
     auto twist_msg = std::make_unique<geometry_msgs::msg::TwistStamped>();
     auto joint_msg = std::make_unique<control_msgs::msg::JointJog>();
 
-    joint_msg->joint_names.resize(6);
     joint_msg->joint_names = { "joint1", "joint2", "joint3", "joint4",
                                "joint5", "joint6"};
 
@@ -426,11 +572,6 @@ int KeyboardServo::keyLoop()
         joint_msg->velocities[5] = joint_vel_cmd_;
         publish_joint = true;
         break;
-      // case KEYCODE_7:
-      //   RCLCPP_DEBUG(nh_->get_logger(), "7");
-      //   joint_msg->velocities[6] = joint_vel_cmd_;
-      //   publish_joint = true;
-      //   break;
       case KEYCODE_R:
         RCLCPP_DEBUG(nh_->get_logger(), "r");
         joint_vel_cmd_ *= -1;
@@ -438,39 +579,13 @@ int KeyboardServo::keyLoop()
       case KEYCODE_J:
         RCLCPP_DEBUG(nh_->get_logger(), "j");
 #if IGUS_REBEL_HAS_SERVO_COMMAND_TYPE
-        request_ = std::make_shared<moveit_msgs::srv::ServoCommandType::Request>();
-        request_->command_type = moveit_msgs::srv::ServoCommandType::Request::JOINT_JOG;
-        if (switch_input_->wait_for_service(std::chrono::seconds(1)))
-        {
-          auto result = switch_input_->async_send_request(request_);
-          if (result.get()->success)
-          {
-            RCLCPP_INFO_STREAM(nh_->get_logger(), "Switched to input type: JointJog");
-          }
-          else
-          {
-            RCLCPP_WARN_STREAM(nh_->get_logger(), "Could not switch input to: JointJog");
-          }
-        }
+        switchCommandType(moveit_msgs::srv::ServoCommandType::Request::JOINT_JOG, "JointJog");
 #endif
         break;
       case KEYCODE_T:
         RCLCPP_DEBUG(nh_->get_logger(), "t");
 #if IGUS_REBEL_HAS_SERVO_COMMAND_TYPE
-        request_ = std::make_shared<moveit_msgs::srv::ServoCommandType::Request>();
-        request_->command_type = moveit_msgs::srv::ServoCommandType::Request::TWIST;
-        if (switch_input_->wait_for_service(std::chrono::seconds(1)))
-        {
-          auto result = switch_input_->async_send_request(request_);
-          if (result.get()->success)
-          {
-            RCLCPP_INFO_STREAM(nh_->get_logger(), "Switched to input type: Twist");
-          }
-          else
-          {
-            RCLCPP_WARN_STREAM(nh_->get_logger(), "Could not switch input to: Twist");
-          }
-        }
+        switchCommandType(moveit_msgs::srv::ServoCommandType::Request::TWIST, "Twist");
 #endif
         break;
       case KEYCODE_W:

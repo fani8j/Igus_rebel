@@ -57,8 +57,10 @@ calibration_verification:
     preapproach_distance_m: 0.080
     planning_timeout_s: 15.0
     max_solutions: 1
-    velocity_scaling: 0.05
-    acceleration_scaling: 0.05
+    # Rescaled 2026-09-27 for joint_limits.yaml 0.785 rad/s / 5.24 rad/s^2 so physical
+    # speeds match the previous 0.05 x 2.16 rad/s and 0.05 x 10 rad/s^2 (0.108 rad/s, 0.5 rad/s^2).
+    velocity_scaling: 0.13758  # 0.05 * 2.16 / 0.785
+    acceleration_scaling: 0.09542  # 0.05 * 10 / 5.24
 
     max_board_pose_age_s: 2.0
     max_joint_state_age_s: 2.0

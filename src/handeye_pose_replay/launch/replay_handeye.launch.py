@@ -5,7 +5,20 @@ from launch.conditions import IfCondition, UnlessCondition
 from launch_ros.actions import Node
 
 
+REPLAY_PARAMETER_NAMES = (
+    "planning_group",
+    "model_source_node",
+    "wait_for_enter",
+    "velocity_scale",
+    "acceleration_scale",
+    "settle_seconds",
+)
+
+
 def generate_launch_description():
+    replay_parameters = {
+        name: LaunchConfiguration(name) for name in REPLAY_PARAMETER_NAMES
+    }
     return LaunchDescription([
         DeclareLaunchArgument(
             "planning_group",
@@ -20,7 +33,10 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "wait_for_enter",
             default_value="true",
-            description="Require ENTER before each pose",
+            description=(
+                "Require ENTER before each pose; the node refuses to start if "
+                "stdin is not a terminal"
+            ),
         ),
         DeclareLaunchArgument(
             "velocity_scale",
@@ -41,7 +57,10 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "interactive_terminal",
             default_value="true",
-            description="Open replay in GNOME Terminal so ENTER reaches the replay process",
+            description=(
+                "Open replay in GNOME Terminal so ENTER reaches the replay process; "
+                "with false, wait_for_enter:=true is refused unless stdin is a terminal"
+            ),
         ),
         Node(
             condition=IfCondition(LaunchConfiguration("interactive_terminal")),
@@ -50,14 +69,7 @@ def generate_launch_description():
             name="handeye_pose_replay",
             output="screen",
             prefix="gnome-terminal --wait -- bash -ic 'exec \"$@\"' --",
-            parameters=[{
-                "planning_group": LaunchConfiguration("planning_group"),
-                "model_source_node": LaunchConfiguration("model_source_node"),
-                "wait_for_enter": LaunchConfiguration("wait_for_enter"),
-                "velocity_scale": LaunchConfiguration("velocity_scale"),
-                "acceleration_scale": LaunchConfiguration("acceleration_scale"),
-                "settle_seconds": LaunchConfiguration("settle_seconds"),
-            }],
+            parameters=[replay_parameters],
         ),
         Node(
             condition=UnlessCondition(LaunchConfiguration("interactive_terminal")),
@@ -66,13 +78,6 @@ def generate_launch_description():
             name="handeye_pose_replay",
             output="screen",
             emulate_tty=True,
-            parameters=[{
-                "planning_group": LaunchConfiguration("planning_group"),
-                "model_source_node": LaunchConfiguration("model_source_node"),
-                "wait_for_enter": LaunchConfiguration("wait_for_enter"),
-                "velocity_scale": LaunchConfiguration("velocity_scale"),
-                "acceleration_scale": LaunchConfiguration("acceleration_scale"),
-                "settle_seconds": LaunchConfiguration("settle_seconds"),
-            }],
+            parameters=[replay_parameters],
         ),
     ])

@@ -1,13 +1,9 @@
 """Plain pytest checks for rebel_tcp_gui.tcp_solver (no ROS imports)."""
 
 import math
-import os
-import sys
 
 import numpy as np
 import pytest
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from rebel_tcp_gui.tcp_solver import solve_tcp
 

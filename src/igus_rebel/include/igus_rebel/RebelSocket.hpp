@@ -1,57 +1,102 @@
 #ifndef REBEL_SOCKET_HPP_
 #define REBEL_SOCKET_HPP_
-#include "rclcpp/rclcpp.hpp"
-#include <stdio.h>
-#include <sys/socket.h>
-#include <string>
-#include <list>
 
-#include <thread>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <cstdint>
+#include <deque>
+#include <functional>
 #include <mutex>
+#include <string>
+#include <thread>
+#include <vector>
+
+#include "rclcpp/rclcpp.hpp"
+
+#include "igus_rebel/CriFraming.hpp"
 
 namespace Igus
 {
-    class RebelSocket
-    {
-    private:
-        int sock;
-        std::string ip;
-        int port;
-        std::list<std::string> unprocessedMessages;
+// TCP client for the CRI interface.
+//
+// A single receive thread owns (re)connecting, reading and closing the socket. Complete
+// message bodies are queued for GetMessage()/WaitForMessage(). SendMessage() never blocks
+// on (re)connecting: while disconnected it returns false immediately, so shutdown cannot
+// hang on an unreachable robot. After every successful connect the connected callback
+// runs on the receive thread (used to re-send the start-up command sequence).
+class RebelSocket
+{
+public:
+  using ConnectedCallback = std::function<void (bool reconnect)>;
 
-        bool continueReceive = false;
-        std::thread receiveThread;
-        std::thread listCheckThread;
-        std::mutex socketWriteLock;
-        std::mutex connectionLock;
-        std::mutex messageLock;
-        unsigned long maxUnprocessedMessages = 25;
-        int listCheckWaitMs = 500;
+  // Socket timeouts: connect() and send() are bounded by kSendTimeout (Linux applies
+  // SO_SNDTIMEO to connect), recv() wakes up every kReceiveTimeout to check for Stop().
+  static constexpr std::chrono::milliseconds kSendTimeout{1000};
+  static constexpr std::chrono::milliseconds kReceiveTimeout{100};
+  static constexpr std::chrono::milliseconds kReconnectDelay{100};
+  static constexpr std::size_t kMaxUnprocessedMessages = 25;
 
-        bool connectionNeeded = false;
-        static const int bufferSize = 4096;
+  RebelSocket(const std::string & ip, const int & port);
+  ~RebelSocket();
 
-        char fragmentBuffer[bufferSize];
-        int fragmentLength = 0;
+  RebelSocket(const RebelSocket &) = delete;
+  RebelSocket & operator=(const RebelSocket &) = delete;
 
-        void MakeConnection();
-        void SeparateMessages(const char *);
+  // Must be set before Start().
+  void SetConnectedCallback(ConnectedCallback callback);
 
-        void ReceiveThreadFunction();
-        void ListCheckThreadFunction();
+  void Start();
+  // Stops further (re)connect attempts and callbacks; an open connection stays usable.
+  void DisableReconnect();
+  // Stops the receive thread and closes the socket. Bounded by kSendTimeout + kReceiveTimeout.
+  void Stop();
 
-        bool IsSocketOk();
+  bool IsConnected() const {return connected.load();}
+  std::uint64_t ConnectionCount() const {return connectionCount.load();}
 
-    public:
-        RebelSocket(const std::string &, const int &);
-        ~RebelSocket();
+  bool HasMessage();
+  std::string GetMessage();
+  // Waits up to timeout for a message. Returns false on timeout or after Stop().
+  bool WaitForMessage(std::string & message, std::chrono::milliseconds timeout);
 
-        void Start();
-        void Stop();
-        bool HasMessage();
-        std::string GetMessage();
-        void SendMessage(const std::string &);
-    };
-}
+  // Returns false if not connected or the send failed (the connection is then shut down
+  // and the receive thread reconnects).
+  bool SendMessage(const std::string &);
+
+private:
+  std::string ip;
+  int port;
+
+  // Written only by the receive thread, under socketWriteLock. The receive thread reads it
+  // without the lock (it is the only writer); senders read it under the lock.
+  int sock = -1;
+  std::mutex socketWriteLock;
+
+  std::atomic<bool> continueReceive{false};
+  std::atomic<bool> reconnectAllowed{false};
+  std::atomic<bool> connected{false};
+  std::atomic<std::uint64_t> connectionCount{0};
+  std::thread receiveThread;
+
+  ConnectedCallback connectedCallback;
+
+  std::mutex messageLock;
+  std::condition_variable messageCondition;
+  std::deque<std::string> unprocessedMessages;
+  bool stopRequested = false;  // guarded by messageLock
+
+  CriFrameParser framer;  // receive thread only
+
+  rclcpp::Logger logger;
+  rclcpp::Clock throttleClock{RCL_STEADY_TIME};
+
+  bool TryConnect();
+  void CloseSocket();
+  void PushMessages(std::vector<std::string> && messages);
+  void ReceiveThreadFunction();
+  void InterruptibleSleep(std::chrono::milliseconds duration);
+};
+}  // namespace Igus
 
 #endif

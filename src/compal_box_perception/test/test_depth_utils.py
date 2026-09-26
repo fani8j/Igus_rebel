@@ -7,11 +7,12 @@ from compal_box_perception.depth_utils import (
     decode_compressed_depth,
     depth_scale_for_encoding,
     depth_from_plane_at_pixel,
-    fit_top_plane_quad,
+    fit_top_plane,
     get_median_depth,
     inset_segment,
     normalized_camera_rays,
     pixel_to_camera_xyz,
+    top_plane_quadrilateral,
 )
 
 
@@ -54,7 +55,7 @@ def test_depth_plane_recovers_top_face_without_background_plane():
     depth[25:66, 25:76] = 1000
     camera_matrix = [100.0, 0.0, 50.0, 0.0, 100.0, 50.0, 0.0, 0.0, 1.0]
 
-    corners, normal, offset, inlier_ratio, rms = fit_top_plane_quad(
+    plane = fit_top_plane(
         depth,
         camera_matrix,
         (),
@@ -67,23 +68,67 @@ def test_depth_plane_recovers_top_face_without_background_plane():
         min_inliers=100,
         min_inlier_ratio=0.30,
     )
+    corners = top_plane_quadrilateral(plane)
 
     assert corners.shape == (4, 2)
     assert np.min(corners[:, 0]) == pytest.approx(26, abs=2)
     assert np.max(corners[:, 0]) == pytest.approx(74, abs=2)
     assert np.min(corners[:, 1]) == pytest.approx(26, abs=2)
     assert np.max(corners[:, 1]) == pytest.approx(64, abs=2)
-    assert abs(normal[2]) == pytest.approx(1.0, abs=1e-3)
-    assert abs(abs(offset) - 1.0) < 1e-3
-    assert inlier_ratio > 0.4
-    assert rms < 1e-6
+    assert abs(plane.normal[2]) == pytest.approx(1.0, abs=1e-3)
+    assert abs(abs(plane.offset) - 1.0) < 1e-3
+    assert plane.inlier_ratio > 0.4
+    assert plane.rms_m < 1e-6
+
+
+def test_plane_fit_does_not_require_a_quadrilateral_region():
+    # A triangular top region is a valid plane but never simplifies to four
+    # corners. The node only consumes the plane, so fitting must succeed and
+    # only the optional quad extraction may fail.
+    depth = np.full((100, 100), 2000, dtype=np.uint16)
+    triangle = np.array([[20, 20], [80, 20], [50, 80]], dtype=np.int32)
+    cv2.fillPoly(depth, [triangle], 1000)
+    camera_matrix = [100.0, 0.0, 50.0, 0.0, 100.0, 50.0, 0.0, 0.0, 1.0]
+
+    plane = fit_top_plane(
+        depth,
+        camera_matrix,
+        (),
+        scale=0.001,
+        fit_roi=(30, 22, 70, 45),
+        classify_roi=(10, 10, 90, 90),
+        sample_stride=2,
+        distance_threshold_m=0.005,
+        iterations=50,
+        min_inliers=50,
+        min_inlier_ratio=0.30,
+        expected_normal=(0.0, 0.0, -1.0),
+    )
+
+    np.testing.assert_allclose(plane.normal, (0.0, 0.0, -1.0), atol=1e-6)
+    assert plane.offset == pytest.approx(1.0, abs=1e-6)
+    assert plane.rms_m < 1e-6
+    with pytest.raises(ValueError, match="four corners"):
+        top_plane_quadrilateral(plane)
+
+
+def test_pointcloud_accepts_color_already_decoded_at_stride():
+    depth = np.full((4, 6), 1000, dtype=np.uint16)
+    reduced_bgr = np.zeros((2, 3, 3), dtype=np.uint8)
+    reduced_bgr[1, 2] = (1, 2, 3)
+    rays = normalized_camera_rays(
+        6, 4, [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0], (), 2
+    )
+    points = build_xyzrgb_points(depth, reduced_bgr, rays, scale=0.001, stride=2)
+    assert points.shape == (2, 3)
+    assert points["rgb"].view(np.uint32)[1, 2] == 0x030201
 
 
 def test_plane_fit_rejects_wrong_surface_orientation():
     depth = np.full((80, 80), 1000, dtype=np.uint16)
     camera_matrix = [100.0, 0.0, 40.0, 0.0, 100.0, 40.0, 0.0, 0.0, 1.0]
     with pytest.raises(ValueError, match="RANSAC"):
-        fit_top_plane_quad(
+        fit_top_plane(
             depth,
             camera_matrix,
             (),

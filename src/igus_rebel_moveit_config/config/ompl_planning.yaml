@@ -140,8 +140,6 @@ planner_configs:
     sparse_delta_fraction: 0.25
     dense_delta_fraction: 0.001
     max_failures: 5000
-  TrajOptDefault:
-    type: geometric::TrajOpt
 igus_rebel_arm:
   planner_configs:
   - APSConfigDefault
@@ -168,7 +166,3 @@ igus_rebel_arm:
   - LazyPRMstarkConfigDefault
   - SPARSkConfigDefault
   - SPARStwokConfigDefault
-  - TrajOptDefault
-xeg32_gripper:
-  planner_configs:
-  - RRTConnectkConfigDefault

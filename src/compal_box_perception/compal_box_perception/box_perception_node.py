@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
-import threading
-from pathlib import Path
 import math
-from typing import Dict, Iterable, Tuple
+import threading
+import time
+from pathlib import Path
+from typing import Dict, Iterable, Optional, Tuple
 
 import cv2
 import message_filters
@@ -19,7 +20,7 @@ from cv_bridge import CvBridge, CvBridgeError
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 from geometry_msgs.msg import PointStamped, Vector3Stamped
 from rclpy.duration import Duration
-from rclpy.time import Time
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import (
     DurabilityPolicy,
@@ -27,28 +28,33 @@ from rclpy.qos import (
     ReliabilityPolicy,
     qos_profile_sensor_data,
 )
+from rclpy.time import Time
 from sensor_msgs.msg import CameraInfo, CompressedImage, Image, PointCloud2, PointField
 from tf2_ros import Buffer, TransformException, TransformListener
 from visualization_msgs.msg import Marker, MarkerArray
 from std_srvs.srv import Trigger
 
-import detect_tape_seam
-
+from . import detect_tape_seam
 from .depth_utils import (
     build_xyzrgb_points,
     decode_compressed_depth,
     depth_scale_for_encoding,
     depth_from_plane_at_pixel,
-    fit_top_plane_quad,
+    fit_top_plane,
     get_median_depth,
     inset_segment,
     normalized_camera_rays,
     pixel_to_camera_xyz,
 )
-from .stability import (
-    TemporalArrayMedian,
-    TemporalUnitVectorMedian,
-)
+from .geometry import normalize, quaternion_to_matrix
+
+# JPEG decoders can emit a 1/N-scale image directly, which is far cheaper than
+# a full decode followed by striding for the visual-only point cloud.
+_REDUCED_COLOR_DECODE_FLAGS = {
+    2: cv2.IMREAD_REDUCED_COLOR_2,
+    4: cv2.IMREAD_REDUCED_COLOR_4,
+    8: cv2.IMREAD_REDUCED_COLOR_8,
+}
 
 
 class DetectionRejected(RuntimeError):
@@ -56,8 +62,8 @@ class DetectionRejected(RuntimeError):
 
 
 class BoxPerceptionNode(Node):
-    def __init__(self) -> None:
-        super().__init__("box_perception")
+    def __init__(self, **kwargs) -> None:
+        super().__init__("box_perception", **kwargs)
         self._declare_parameters()
         self._validate_parameters()
 
@@ -70,19 +76,11 @@ class BoxPerceptionNode(Node):
         self._pointcloud_geometry_key = None
         self._pointcloud_rays = None
         self._last_search_roi = None
-        self._corner_filter = TemporalArrayMedian(
-            window_size=int(self._parameter("corner_filter_window")),
-            max_point_jump=float(self._parameter("max_corner_jump_px")),
-        )
-        self._normal_filter = TemporalUnitVectorMedian(
-            window_size=int(self._parameter("normal_filter_window")),
-            max_angle_jump_deg=float(self._parameter("max_normal_jump_deg")),
-        )
         self._last_detection_roi = None
+        self._last_cloud_publish_s = None
         self._rgbd_lock = threading.Lock()
         self._original_detector_lock = threading.Lock()
         self._latest_rgbd = None
-        self._last_raw_rgb = None
         self._start_pub = self.create_publisher(PointStamped, "/box_seam/start", 10)
         self._end_pub = self.create_publisher(PointStamped, "/box_seam/end", 10)
         self._center_pub = self.create_publisher(PointStamped, "/box_seam/center", 10)
@@ -161,8 +159,6 @@ class BoxPerceptionNode(Node):
             "auto_roi_search_margin_ratio": 0.25,
             "sync_queue_size": 10,
             "sync_slop_s": 0.05,
-            "corner_filter_window": 15,
-            "max_corner_jump_px": 10.0,
             "use_depth_plane_top_face": True,
             "plane_fit_height_ratio": 0.65,
             "plane_max_normal_deviation_deg": 20.0,
@@ -182,13 +178,12 @@ class BoxPerceptionNode(Node):
             "min_top_face_area_ratio": 0.005,
             "max_top_face_height_width_ratio": 0.70,
             "max_opposite_edge_angle_difference_deg": 15.0,
-            "normal_filter_window": 15,
-            "max_normal_jump_deg": 10.0,
             "tf_timeout_s": 0.20,
             "marker_lifetime_s": 30.0,
             "publish_debug_image": True,
             "publish_local_pointcloud": True,
             "pointcloud_stride": 4,
+            "pointcloud_max_rate_hz": 10.0,
             "snapshot_output_dir": "~/box_snapshots",
             "snapshot_max_receipt_age_s": 1.0,
             "publish_markers": True,
@@ -208,10 +203,6 @@ class BoxPerceptionNode(Node):
             int(value) <= 0 for value in roi_reference_size
         ):
             raise ValueError("manual_roi_reference_size must contain positive width, height")
-        if int(self._parameter("corner_filter_window")) < 1:
-            raise ValueError("corner_filter_window must be positive")
-        if float(self._parameter("max_corner_jump_px")) <= 0.0:
-            raise ValueError("max_corner_jump_px must be positive")
         search_margin = float(self._parameter("auto_roi_search_margin_ratio"))
         if search_margin < 0.0:
             raise ValueError("auto_roi_search_margin_ratio must be non-negative")
@@ -222,16 +213,14 @@ class BoxPerceptionNode(Node):
             raise ValueError("plane_fit_height_ratio must be in (0.0, 1.0]")
         if int(self._parameter("plane_sample_stride")) < 1:
             raise ValueError("plane_sample_stride must be positive")
-        if int(self._parameter("normal_filter_window")) < 1:
-            raise ValueError("normal_filter_window must be positive")
-        if not 0.0 < float(self._parameter("max_normal_jump_deg")) <= 180.0:
-            raise ValueError("max_normal_jump_deg must be in (0, 180]")
         if int(self._parameter("sync_queue_size")) < 1:
             raise ValueError("sync_queue_size must be positive")
         if int(self._parameter("depth_patch_radius")) < 0:
             raise ValueError("depth_patch_radius must be non-negative")
         if int(self._parameter("pointcloud_stride")) < 1:
             raise ValueError("pointcloud_stride must be positive")
+        if float(self._parameter("pointcloud_max_rate_hz")) < 0.0:
+            raise ValueError("pointcloud_max_rate_hz must be non-negative (0 = unlimited)")
         if float(self._parameter("snapshot_max_receipt_age_s")) <= 0.0:
             raise ValueError("snapshot_max_receipt_age_s must be positive")
         if int(self._parameter("min_valid_depth_samples")) < 1:
@@ -264,11 +253,18 @@ class BoxPerceptionNode(Node):
         if (
             not bool(self._parameter("publish_local_pointcloud"))
             or self._cloud_pub.get_subscription_count() == 0
+            or not self._pointcloud_due()
         ):
             return
         try:
-            rgb, depth, depth_encoding = self._decode_rgbd(rgb_msg, depth_msg)
-            self._validate_rgbd_geometry(rgb, depth, depth_msg, info_msg)
+            stride = int(self._parameter("pointcloud_stride"))
+            depth, depth_encoding = self._decode_depth(depth_msg)
+            rgb = self._decode_reduced_rgb(rgb_msg, stride, depth.shape)
+            if rgb is None:
+                rgb = self._decode_rgb(rgb_msg)
+                self._validate_rgbd_geometry(rgb, depth, depth_msg, info_msg)
+            else:
+                self._validate_depth_geometry(depth, depth_msg, info_msg)
             self._publish_local_pointcloud(
                 depth, rgb, depth_encoding, depth_msg.header, info_msg
             )
@@ -277,29 +273,66 @@ class BoxPerceptionNode(Node):
                 f"Point-cloud publication failed: {exc}", throttle_duration_sec=2.0
             )
 
+    def _pointcloud_due(self) -> bool:
+        """Rate-limit the visual-only cloud; snapshots never depend on it."""
+        max_rate_hz = float(self._parameter("pointcloud_max_rate_hz"))
+        now_s = time.monotonic()
+        if (
+            max_rate_hz > 0.0
+            and self._last_cloud_publish_s is not None
+            and now_s - self._last_cloud_publish_s < 1.0 / max_rate_hz
+        ):
+            return False
+        self._last_cloud_publish_s = now_s
+        return True
+
+    def _decode_rgb(self, rgb_msg: Image | CompressedImage) -> np.ndarray:
+        if self._use_compressed_rgb:
+            return self._bridge.compressed_imgmsg_to_cv2(
+                rgb_msg, desired_encoding="bgr8"
+            )
+        return self._bridge.imgmsg_to_cv2(rgb_msg, desired_encoding="bgr8")
+
+    def _decode_depth(self, depth_msg: Image | CompressedImage) -> Tuple[np.ndarray, str]:
+        if self._use_compressed_depth:
+            return decode_compressed_depth(bytes(depth_msg.data), depth_msg.format)
+        depth = self._bridge.imgmsg_to_cv2(depth_msg, desired_encoding="passthrough")
+        return depth, depth_msg.encoding
+
+    def _decode_reduced_rgb(
+        self, rgb_msg: Image | CompressedImage, stride: int, depth_shape: tuple
+    ) -> Optional[np.ndarray]:
+        """Decode compressed RGB directly at 1/stride scale, or return None.
+
+        Only used for the visual point cloud. Returns None (caller falls back to
+        a full decode) unless the reduced image exactly matches the strided
+        depth grid.
+        """
+        flag = _REDUCED_COLOR_DECODE_FLAGS.get(stride)
+        if not self._use_compressed_rgb or flag is None:
+            return None
+        reduced = cv2.imdecode(np.frombuffer(rgb_msg.data, dtype=np.uint8), flag)
+        sampled_shape = (
+            -(-depth_shape[0] // stride),
+            -(-depth_shape[1] // stride),
+        )
+        if reduced is None or reduced.shape[:2] != sampled_shape:
+            return None
+        return reduced
+
     def _decode_rgbd(
         self, rgb_msg: Image | CompressedImage, depth_msg: Image | CompressedImage
     ) -> Tuple[np.ndarray, np.ndarray, str]:
-        if self._use_compressed_rgb:
-            rgb = self._bridge.compressed_imgmsg_to_cv2(
-                rgb_msg, desired_encoding="bgr8"
-            )
-        else:
-            rgb = self._bridge.imgmsg_to_cv2(rgb_msg, desired_encoding="bgr8")
-        if self._use_compressed_depth:
-            depth, depth_encoding = decode_compressed_depth(
-                bytes(depth_msg.data), depth_msg.format
-            )
-        else:
-            depth = self._bridge.imgmsg_to_cv2(
-                depth_msg, desired_encoding="passthrough"
-            )
-            depth_encoding = depth_msg.encoding
+        rgb = self._decode_rgb(rgb_msg)
+        depth, depth_encoding = self._decode_depth(depth_msg)
         return rgb, depth, depth_encoding
 
-    @staticmethod
+    @classmethod
     def _validate_rgbd_geometry(
-        rgb: np.ndarray, depth: np.ndarray, depth_msg: Image | CompressedImage,
+        cls,
+        rgb: np.ndarray,
+        depth: np.ndarray,
+        depth_msg: Image | CompressedImage,
         info_msg: CameraInfo,
     ) -> str:
         if rgb.shape[:2] != depth.shape[:2]:
@@ -307,7 +340,13 @@ class BoxPerceptionNode(Node):
                 f"RGB/depth dimensions differ: {rgb.shape[1]}x{rgb.shape[0]} versus "
                 f"{depth.shape[1]}x{depth.shape[0]}"
             )
-        if (info_msg.height, info_msg.width) != rgb.shape[:2]:
+        return cls._validate_depth_geometry(depth, depth_msg, info_msg)
+
+    @staticmethod
+    def _validate_depth_geometry(
+        depth: np.ndarray, depth_msg: Image | CompressedImage, info_msg: CameraInfo
+    ) -> str:
+        if (info_msg.height, info_msg.width) != depth.shape[:2]:
             raise DetectionRejected("CameraInfo dimensions do not match synchronized images")
         source_frame = depth_msg.header.frame_id
         if not source_frame or info_msg.header.frame_id != source_frame:
@@ -327,11 +366,14 @@ class BoxPerceptionNode(Node):
         np.ndarray,
         Dict[str, PointStamped],
         np.ndarray,
+        np.ndarray,
         Dict[str, float],
     ]:
+        """Detect one frame; returns points, normal, corners, rgb, debug, metrics."""
         rgb, depth, depth_encoding = self._decode_rgbd(rgb_msg, depth_msg)
+        # The detector and draw_visualization() never modify ``rgb`` in place,
+        # so the raw frame can be kept for the snapshot without a copy.
         self._last_rgb = rgb
-        self._last_raw_rgb = rgb.copy()
         source_frame = self._validate_rgbd_geometry(
             rgb, depth, depth_msg, info_msg
         )
@@ -351,7 +393,9 @@ class BoxPerceptionNode(Node):
             fit_y1 = y0 + round(
                 (y1 - y0) * float(self._parameter("plane_fit_height_ratio"))
             )
-            _, plane_normal, plane_offset, inlier_ratio, plane_rms = fit_top_plane_quad(
+            # Only the plane (normal/offset/ratio/RMS) is needed; the 2D carton
+            # geometry comes from the RGB detector, so no quad extraction here.
+            plane = fit_top_plane(
                 depth,
                 info_msg.k,
                 info_msg.d,
@@ -370,9 +414,11 @@ class BoxPerceptionNode(Node):
                     self._parameter("plane_max_normal_deviation_deg")
                 ),
             )
+            plane_normal = plane.normal
+            plane_offset = plane.offset
             plane_metrics = {
-                "plane_inlier_ratio": inlier_ratio,
-                "plane_rms_m": plane_rms,
+                "plane_inlier_ratio": plane.inlier_ratio,
+                "plane_rms_m": plane.rms_m,
                 "plane_normal_x": float(plane_normal[0]),
                 "plane_normal_y": float(plane_normal[1]),
                 "plane_normal_z": float(plane_normal[2]),
@@ -460,10 +506,11 @@ class BoxPerceptionNode(Node):
             "end_v": float(end_uv[1]),
         }
         metrics.update(plane_metrics)
+        # One-shot snapshot: the normal comes from this frame only. No temporal
+        # state may carry a previous carton's normal into a new capture.
         normal_base = self._surface_normal_to_base(
             plane_normal, source_frame, depth_msg.header.stamp
         )
-        normal_base = self._normal_filter.update(normal_base)
         corners_base = self._transform_result_corners(
             result,
             info_msg,
@@ -474,7 +521,7 @@ class BoxPerceptionNode(Node):
             target_frame,
             timeout,
         )
-        return points, normal_base, corners_base, detection_debug, metrics
+        return points, normal_base, corners_base, rgb, detection_debug, metrics
 
     def _transform_result_corners(
         self,
@@ -513,6 +560,7 @@ class BoxPerceptionNode(Node):
         normal: np.ndarray,
         corners: Dict[str, PointStamped],
         metrics: Dict[str, float],
+        rgb: np.ndarray,
         debug_image: np.ndarray,
     ) -> dict:
         snapshot = BoxSnapshot()
@@ -532,11 +580,7 @@ class BoxPerceptionNode(Node):
         snapshot.surface_normal.z = float(normal[2])
         snapshot.plane_rms_m = float(metrics["plane_rms_m"])
         snapshot.confirmation_count = 1
-        return {
-            "message": snapshot,
-            "rgb": self._last_raw_rgb.copy(),
-            "debug": debug_image.copy(),
-        }
+        return {"message": snapshot, "rgb": rgb, "debug": debug_image}
 
     def _run_original_detector(self, _request, response):
         """Run the unmodified RGB detector on the newest synchronized RGB frame."""
@@ -549,14 +593,7 @@ class BoxPerceptionNode(Node):
                 return response
             rgb_msg = cached_rgbd[0]
             try:
-                if self._use_compressed_rgb:
-                    rgb = self._bridge.compressed_imgmsg_to_cv2(
-                        rgb_msg, desired_encoding="bgr8"
-                    )
-                else:
-                    rgb = self._bridge.imgmsg_to_cv2(
-                        rgb_msg, desired_encoding="bgr8"
-                    )
+                rgb = self._decode_rgb(rgb_msg)
                 roi = self._resolve_roi(rgb)
                 result = detect_tape_seam.detect_seam(rgb, roi)
                 if result is None or "seam_line" not in result:
@@ -597,7 +634,7 @@ class BoxPerceptionNode(Node):
             response.message = f"Latest synchronized RGB-D frame is {age:.2f}s old"
             return response
         try:
-            points, normal, corners, debug_image, metrics = self._process(
+            points, normal, corners, rgb, debug_image, metrics = self._process(
                 rgb_msg, depth_msg, info_msg
             )
             if bool(self._parameter("publish_debug_image")):
@@ -607,7 +644,7 @@ class BoxPerceptionNode(Node):
             self._publish_points(points)
             self._publish_surface_normal(normal, points["start"].header)
             candidate = self._make_snapshot_candidate(
-                points, normal, corners, metrics, debug_image
+                points, normal, corners, metrics, rgb, debug_image
             )
             if bool(self._parameter("publish_markers")):
                 self._publish_markers(points)
@@ -615,7 +652,6 @@ class BoxPerceptionNode(Node):
         except (DetectionRejected, ValueError, CvBridgeError, TransformException) as exc:
             self.get_logger().warning(str(exc))
             self._publish_failure_debug(rgb_msg.header)
-            self._reset_geometry_filters()
             self._clear_markers()
             self._publish_diagnostic(DiagnosticStatus.WARN, str(exc), {})
             response.success = False
@@ -624,7 +660,6 @@ class BoxPerceptionNode(Node):
         except Exception as exc:
             self.get_logger().error(f"Detection failed: {exc}")
             self._publish_failure_debug(rgb_msg.header)
-            self._reset_geometry_filters()
             self._clear_markers()
             self._publish_diagnostic(DiagnosticStatus.ERROR, str(exc), {})
             response.success = False
@@ -632,17 +667,36 @@ class BoxPerceptionNode(Node):
             return response
 
         snapshot = candidate["message"]
-        output_dir = Path(
-            str(self._parameter("snapshot_output_dir"))
-        ).expanduser()
+        try:
+            report_path = self._save_snapshot(
+                snapshot, candidate["rgb"], candidate["debug"]
+            )
+        except (OSError, RuntimeError, cv2.error) as exc:
+            message = f"Snapshot {snapshot.snapshot_id} detected but not saved: {exc}"
+            self.get_logger().error(message)
+            response.success = False
+            response.message = message
+            return response
+        response.success = True
+        response.message = (
+            f"Captured frozen snapshot {snapshot.snapshot_id} ({report_path})"
+        )
+        response.snapshot = snapshot
+        return response
+
+    def _save_snapshot(
+        self, snapshot: BoxSnapshot, rgb: np.ndarray, debug_image: np.ndarray
+    ) -> Path:
+        """Write RGB, debug image and JSON report; raise on any IO failure."""
+        output_dir = Path(str(self._parameter("snapshot_output_dir"))).expanduser()
         output_dir.mkdir(parents=True, exist_ok=True)
         prefix = output_dir / snapshot.snapshot_id
         rgb_path = prefix.with_name(f"{prefix.name}_rgb.png")
         debug_path = prefix.with_name(f"{prefix.name}_debug.png")
         json_path = prefix.with_suffix(".json")
-        if not cv2.imwrite(str(rgb_path), candidate["rgb"]):
+        if not cv2.imwrite(str(rgb_path), rgb):
             raise RuntimeError(f"Failed to save {rgb_path}")
-        if not cv2.imwrite(str(debug_path), candidate["debug"]):
+        if not cv2.imwrite(str(debug_path), debug_image):
             raise RuntimeError(f"Failed to save {debug_path}")
 
         def coordinates(point):
@@ -669,10 +723,7 @@ class BoxPerceptionNode(Node):
             "debug_path": str(debug_path),
         }
         json_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
-        response.success = True
-        response.message = f"Captured frozen snapshot {snapshot.snapshot_id}"
-        response.snapshot = snapshot
-        return response
+        return json_path
 
     def _expected_top_normal_camera(self, camera_frame: str, stamp) -> np.ndarray:
         transform = self._tf_buffer.lookup_transform(
@@ -682,15 +733,8 @@ class BoxPerceptionNode(Node):
             timeout=Duration(seconds=float(self._parameter("tf_timeout_s"))),
         )
         rotation = transform.transform.rotation
-        x, y, z, w = rotation.x, rotation.y, rotation.z, rotation.w
-        return np.array(
-            [
-                2.0 * (x * z + y * w),
-                2.0 * (y * z - x * w),
-                1.0 - 2.0 * (x * x + y * y),
-            ],
-            dtype=np.float64,
-        )
+        # Base +Z expressed in the camera frame (third column of R_camera_base).
+        return quaternion_to_matrix((rotation.x, rotation.y, rotation.z, rotation.w))[:, 2]
 
     def _surface_normal_to_base(
         self, normal_camera: np.ndarray, camera_frame: str, stamp
@@ -703,19 +747,9 @@ class BoxPerceptionNode(Node):
             Time.from_msg(stamp),
             timeout=Duration(seconds=float(self._parameter("tf_timeout_s"))),
         )
-        return self._rotate_vector(normal_camera, transform.transform.rotation)
-
-    @staticmethod
-    def _rotate_vector(vector: np.ndarray, quaternion) -> np.ndarray:
-        q = np.array(
-            [quaternion.x, quaternion.y, quaternion.z, quaternion.w],
-            dtype=np.float64,
-        )
-        q_xyz = q[:3]
-        return (
-            vector
-            + 2.0 * np.cross(q_xyz, np.cross(q_xyz, vector) + q[3] * vector)
-        )
+        rotation = transform.transform.rotation
+        matrix = quaternion_to_matrix((rotation.x, rotation.y, rotation.z, rotation.w))
+        return normalize(matrix @ np.asarray(normal_camera, dtype=np.float64))
 
     def _publish_surface_normal(self, normal: np.ndarray, header) -> None:
         message = Vector3Stamped()
@@ -724,31 +758,6 @@ class BoxPerceptionNode(Node):
         message.vector.y = float(normal[1])
         message.vector.z = float(normal[2])
         self._normal_pub.publish(message)
-
-    def _reset_geometry_filters(self) -> None:
-        self._corner_filter.reset()
-        self._normal_filter.reset()
-
-    @staticmethod
-    def _result_from_corners(roi, corners: np.ndarray) -> dict:
-        geometry = detect_tape_seam.order_quad_and_find_seam(corners)
-
-        def as_list(value):
-            return np.asarray(value, dtype=float).tolist()
-
-        return {
-            "roi": tuple(int(value) for value in roi),
-            "top_face_corners": as_list(geometry["corners_ordered"]),
-            "left_edge": as_list(geometry["left_edge"]),
-            "right_edge": as_list(geometry["right_edge"]),
-            "back_edge": as_list(geometry["back_edge"]),
-            "front_edge": as_list(geometry["front_edge"]),
-            "seam_line": as_list(geometry["seam_line"]),
-            "back_left": as_list(geometry["back_left"]),
-            "back_right": as_list(geometry["back_right"]),
-            "front_left": as_list(geometry["front_left"]),
-            "front_right": as_list(geometry["front_right"]),
-        }
 
     def _scaled_manual_roi(self, rgb: np.ndarray) -> Tuple[int, int, int, int]:
         reference_width, reference_height = (
@@ -1038,11 +1047,12 @@ def main(args=None) -> None:
     node = BoxPerceptionNode()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":

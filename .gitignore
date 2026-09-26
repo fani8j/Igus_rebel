@@ -1,12 +1,10 @@
+# colcon workspaces (any level)
 build*/
 install*/
 log*/
-**/build/*
-**/install/*
-**/log/*
 
 **/.vscode/*
-/*.zip
+
 # Python byproducts
 __pycache__/
 *.py[cod]
@@ -21,8 +19,4 @@ frames_*.gv
 frames_*.pdf
 symlink_install_manifest.txt
 scan_results/
-isaac_exports/
-backups/
-docs/
-workspace_scan_artifacts/*.sqlite3
-workspace_scan_artifacts/*.jsonl
+workspace_scan_artifacts/

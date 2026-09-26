@@ -3,7 +3,7 @@ import inspect
 import cv2
 import numpy as np
 
-import detect_tape_seam
+from compal_box_perception import detect_tape_seam
 
 
 def test_estimate_auto_roi_uses_position_prior_api():

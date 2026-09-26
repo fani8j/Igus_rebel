@@ -19,199 +19,123 @@ from launch_param_builder import load_yaml
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
+PACKAGE = "igus_rebel_moveit_config"
+IS_HUMBLE = os.environ.get("ROS_DISTRO") == "humble"
+
+# Humble takes one planning plugin and a whitespace-delimited request-adapter chain
+# (post-processing runs from the last adapter to the first, so time parameterization
+# is listed last to run first). The *.yaml files use the Jazzy list format.
+HUMBLE_OMPL_REQUEST_ADAPTERS = (
+    "default_planner_request_adapters/ResolveConstraintFrames",
+    "default_planner_request_adapters/FixWorkspaceBounds",
+    "default_planner_request_adapters/FixStartStateBounds",
+    "default_planner_request_adapters/FixStartStateCollision",
+    "default_planner_request_adapters/FixStartStatePathConstraints",
+    "default_planner_request_adapters/AddTimeOptimalParameterization",
+)
+HUMBLE_CHOMP_REQUEST_ADAPTERS = HUMBLE_OMPL_REQUEST_ADAPTERS
+HUMBLE_PILZ_REQUEST_ADAPTERS = (
+    "default_planner_request_adapters/FixWorkspaceBounds",
+    "default_planner_request_adapters/FixStartStateBounds",
+    "default_planner_request_adapters/FixStartStateCollision",
+)
+
+
+def package_file(package, *parts):
+    return PathJoinSubstitution([FindPackageShare(package), *parts])
+
+
+def config_file(filename):
+    return package_file(PACKAGE, "config", filename)
+
+
+def load_config(context, filename):
+    return load_yaml(Path(config_file(filename).perform(context)))
+
+
+def to_humble_pipeline(pipeline, request_adapters):
+    """Translate a Jazzy-format planning pipeline dict to Humble parameter names."""
+    pipeline["planning_plugin"] = pipeline.pop("planning_plugins")[0]
+    pipeline["request_adapters"] = " ".join(request_adapters)
+    pipeline.pop("response_adapters", None)
+    return pipeline
+
+
 def opaque_func(context, *args, **kwargs):
-    
-    namespace = LaunchConfiguration("namespace")
-    hardware_protocol = LaunchConfiguration('hardware_protocol')
-    use_sim_time = LaunchConfiguration('use_sim_time')
-    run_box_h_cut_executor = LaunchConfiguration("run_box_h_cut_executor")
-    box_h_cut_start_delay = LaunchConfiguration("box_h_cut_start_delay")
+    hardware_protocol = LaunchConfiguration("hardware_protocol")
+    use_sim_time = LaunchConfiguration("use_sim_time")
 
-    joint_limits_file = PathJoinSubstitution(
-        [
-            FindPackageShare("igus_rebel_moveit_config"),
-            "config",
-            "joint_limits.yaml",
-        ]
-    )
-
-    robot_description_file = PathJoinSubstitution(
-        [
-            FindPackageShare("igus_rebel_description"),
-            "urdf",
-            "igus_rebel_xeg32_wrapper.urdf.xacro",
-        ]
-    )
     robot_description = Command(
         [
             FindExecutable(name="xacro"),
             " ",
-            robot_description_file,
+            package_file("igus_rebel_description", "urdf", "igus_rebel_xeg32_wrapper.urdf.xacro"),
             " hardware_protocol:=",
             hardware_protocol,
         ]
-    )
-    
-    robot_description_semantic_file = PathJoinSubstitution(
-        [
-            FindPackageShare("igus_rebel_moveit_config"),
-            "config",
-            "igus_rebel2.srdf",
-        ]
-    )
-    
-    robot_description_semantic = Command(
-        [
-            FindExecutable(name="cat"),
-            " ",
-            robot_description_semantic_file,
-        ]
-    )
+    ).perform(context)
+    robot_description_semantic = Path(
+        config_file("igus_rebel2.srdf").perform(context)
+    ).read_text()
+    kinematics_config = load_config(context, "kinematics.yaml")
+    joint_limits_config = load_config(context, "joint_limits.yaml")
 
-    controllers_file = PathJoinSubstitution(
-        [
-            FindPackageShare("igus_rebel_moveit_config"),
-            "config",
-            "moveit_controllers.yaml",   
-        ]
-    )
-
-    controllers_dict = load_yaml(Path(controllers_file.perform(context)))
-
-    ompl_file = PathJoinSubstitution(
-        [
-            FindPackageShare("igus_rebel_moveit_config"),
-            "config",
-            "ompl_planning.yaml",
-        ]
-    )
-    chomp_file = PathJoinSubstitution(
-        [
-            FindPackageShare("igus_rebel_moveit_config"),
-            "config",
-            "chomp_planning.yaml",
-        ]
-    )
-    pilz_file = PathJoinSubstitution(
-        [
-            FindPackageShare("igus_rebel_moveit_config"),
-            "config",
-            "pilz_industrial_motion_planner_planning.yaml",
-        ]
-    )
-    ompl_context = load_yaml(Path(ompl_file.perform(context)))
-    if os.environ.get("ROS_DISTRO") == "humble":
-        # Humble accepts one planner plugin and a whitespace-delimited request-adapter chain.
-        ompl_pipeline = ompl_context["move_group"]
-        ompl_pipeline["planning_plugin"] = ompl_pipeline.pop("planning_plugins")[0]
-        ompl_pipeline["request_adapters"] = " ".join([
-            "default_planner_request_adapters/ResolveConstraintFrames",
-            "default_planner_request_adapters/FixWorkspaceBounds",
-            "default_planner_request_adapters/FixStartStateBounds",
-            "default_planner_request_adapters/FixStartStateCollision",
-            "default_planner_request_adapters/FixStartStatePathConstraints",
-            "default_planner_request_adapters/AddTimeOptimalParameterization",
-        ])
-        ompl_pipeline.pop("response_adapters", None)
-    executor_ompl_context = dict(ompl_context["move_group"])
+    ompl_context = load_config(context, "ompl_planning.yaml")
+    ompl_pipeline = ompl_context["move_group"]
+    if IS_HUMBLE:
+        to_humble_pipeline(ompl_pipeline, HUMBLE_OMPL_REQUEST_ADAPTERS)
+    executor_ompl_context = dict(ompl_pipeline)
     executor_ompl_context["planner_configs"] = ompl_context["planner_configs"]
     executor_ompl_context["igus_rebel_arm"] = ompl_context["igus_rebel_arm"]
-    executor_ompl = {"ompl": executor_ompl_context}
-    chomp_context = load_yaml(Path(chomp_file.perform(context)))
-    pilz_context = load_yaml(Path(pilz_file.perform(context)))
-    if os.environ.get("ROS_DISTRO") == "humble":
-        pilz_context["planning_plugin"] = pilz_context.pop("planning_plugins")[0]
-        pilz_context["request_adapters"] = " ".join(
-            [
-                "default_planner_request_adapters/FixWorkspaceBounds",
-                "default_planner_request_adapters/FixStartStateBounds",
-                "default_planner_request_adapters/FixStartStateCollision",
-            ]
-        )
-    named_pipelines = {
-        "planning_pipelines": [
-            "ompl",
-            "chomp",
-            "pilz_industrial_motion_planner",
-        ],
-        "default_planning_pipeline": "ompl",
-        "chomp": chomp_context,
-        "pilz_industrial_motion_planner": pilz_context,
-    }
 
-    moveit_controllers = {
-        "moveit_simple_controller_manager": controllers_dict,
+    chomp_context = load_config(context, "chomp_planning.yaml")
+    pilz_context = load_config(context, "pilz_industrial_motion_planner_planning.yaml")
+    if IS_HUMBLE:
+        to_humble_pipeline(chomp_context, HUMBLE_CHOMP_REQUEST_ADAPTERS)
+        to_humble_pipeline(pilz_context, HUMBLE_PILZ_REQUEST_ADAPTERS)
+
+    moveit_args = {
+        "robot_description": robot_description,
+        "robot_description_semantic": robot_description_semantic,
+        "robot_description_kinematics": kinematics_config,
+        "robot_description_planning": joint_limits_config,
+        "moveit_simple_controller_manager": load_config(context, "moveit_controllers.yaml"),
         "moveit_controller_manager": "moveit_simple_controller_manager/MoveItSimpleControllerManager",
-    }
-
-    robot_description_kinematics_file = PathJoinSubstitution(
-        [
-            FindPackageShare("igus_rebel_moveit_config"),
-            "config",
-            "kinematics.yaml",
-        ]
-    )
-
-    planning_scene_monitor_parameters = {
         "publish_planning_scene": True,
         "publish_geometry_updates": True,
         "publish_state_updates": True,
         "publish_transforms_updates": False,
         "publish_planning_scene_hz": 2.0,
+        "trajectory_execution.allowed_execution_duration_scaling": 1.2,
+        "trajectory_execution.allowed_goal_duration_margin": 0.5,
+        "trajectory_execution.allowed_start_tolerance": 0.02,  # >= JTC goal tolerance
+        "trajectory_execution.execution_duration_monitoring": False,
+        # The H-cut executor dispatches retained MTC solutions through this capability.
+        "capabilities": "move_group/ExecuteTaskSolutionCapability",
+        # All pipelines stay loaded so the executor's motion_profile can pick OMPL, CHOMP or Pilz.
+        "planning_pipelines": ["ompl", "chomp", "pilz_industrial_motion_planner"],
+        "default_planning_pipeline": "ompl",
+        "ompl": executor_ompl_context,
+        "chomp": chomp_context,
+        "pilz_industrial_motion_planner": pilz_context,
     }
-    
-    kinematics_config = load_yaml(Path(robot_description_kinematics_file.perform(context)))
-    joint_limits_config = load_yaml(Path(joint_limits_file.perform(context)))
+    if not IS_HUMBLE:
+        # move_group parameters introduced after Humble.
+        moveit_args["publish_robot_description"] = True
+        moveit_args["publish_robot_description_semantic"] = True
 
-    moveit_args_not_concatenated = [
-        {"robot_description": robot_description.perform(context)},
-        {"robot_description_semantic": robot_description_semantic.perform(context)},
-        {"robot_description_kinematics": kinematics_config},
-        {"robot_description_planning": joint_limits_config},
-        moveit_controllers,
-        planning_scene_monitor_parameters,
-        {
-            "trajectory_execution.allowed_execution_duration_scaling": 1.2,
-            "trajectory_execution.allowed_goal_duration_margin": 0.5,
-            "trajectory_execution.allowed_start_tolerance": 0.01,
-            "trajectory_execution.execution_duration_monitoring": False,
-            "publish_robot_description": True,
-            "publish_robot_description_semantic": True,
-            "capabilities": "move_group/ExecuteTaskSolutionCapability",
-        },
-        executor_ompl,
-        named_pipelines,
-    ]
-
-    # Concatenate all dictionaries together, else moveitpy won't read all parameters
-    moveit_args = dict()
-    for d in moveit_args_not_concatenated:
-        moveit_args.update(d)
-                        
     move_group_node = Node(
         package="moveit_ros_move_group",
         executable="move_group",
-        namespace=namespace,
-        parameters=[
-            {'use_sim_time': use_sim_time},
-            moveit_args,
-        ],
+        parameters=[{"use_sim_time": use_sim_time}, moveit_args],
     )
 
-    box_h_cut_params_file = PathJoinSubstitution(
-        [
-            FindPackageShare("igus_rebel_moveit_config"),
-            "config",
-            "box_h_cut_executor.yaml",
-        ]
-    )
     box_h_cut_node = Node(
-        condition=IfCondition(run_box_h_cut_executor),
-        package="igus_rebel_moveit_config",
+        condition=IfCondition(LaunchConfiguration("run_box_h_cut_executor")),
+        package=PACKAGE,
         executable="box_h_cut_executor",
-        namespace=namespace,
         parameters=[
-            box_h_cut_params_file,
+            config_file("box_h_cut_executor.yaml"),
             {"use_sim_time": use_sim_time},
             moveit_args,
         ],
@@ -219,12 +143,12 @@ def opaque_func(context, *args, **kwargs):
         output="screen",
     )
     delayed_box_h_cut_node = TimerAction(
-        period=box_h_cut_start_delay, actions=[box_h_cut_node]
+        period=LaunchConfiguration("box_h_cut_start_delay"), actions=[box_h_cut_node]
     )
     camera_pole_node = Node(
-        package="igus_rebel_moveit_config",
+        condition=IfCondition(LaunchConfiguration("run_camera_pole")),
+        package=PACKAGE,
         executable="camera_pole_collision.py",
-        namespace=namespace,
         parameters=[{"use_sim_time": use_sim_time}],
         output="screen",
     )
@@ -235,25 +159,14 @@ def opaque_func(context, *args, **kwargs):
     calibration_params["execution_allowed"] = LaunchConfiguration("calibration_execution_allowed")
     calibration_node = Node(
         condition=IfCondition(LaunchConfiguration("run_calibration_verification")),
-        package="igus_rebel_moveit_config",
+        package=PACKAGE,
         executable="calibration_verification",
-        parameters=[
-            moveit_args,
-            calibration_params,
-            {"use_sim_time": use_sim_time},
-        ],
+        parameters=[moveit_args, calibration_params, {"use_sim_time": use_sim_time}],
         output="screen",
     )
 
-    servo_params_file = PathJoinSubstitution(
-        [
-            FindPackageShare("igus_rebel_moveit_config"),
-            "config",
-            "servo.yaml",
-        ]
-    )
-    servo_context = load_yaml(Path(servo_params_file.perform(context)))
-    if os.environ.get("ROS_DISTRO") == "humble":
+    servo_context = load_config(context, "servo.yaml")
+    if IS_HUMBLE:
         # Translate parameters renamed or removed after Humble's MoveIt Servo release.
         joint_limit_margins = servo_context.pop("joint_limit_margins", [0.1])
         servo_context["joint_limit_margin"] = joint_limit_margins[0]
@@ -263,11 +176,6 @@ def opaque_func(context, *args, **kwargs):
         servo_context["ee_frame_name"] = "xeg32_tool_tip"
         servo_context["robot_link_command_frame"] = "base_link"
         servo_context["use_gazebo"] = hardware_protocol.perform(context) == "gazebo"
-    servo_params = {
-        "moveit_servo": servo_context
-    }
-    # This sets the update rate and planning group name for the acceleration limiting filter.
-    planning_group_name = {"planning_group_name": "igus_rebel_arm"}
 
     moveit_servo_libexec = os.path.join(get_package_prefix("moveit_servo"), "lib", "moveit_servo")
     servo_executable = (
@@ -275,54 +183,34 @@ def opaque_func(context, *args, **kwargs):
         if os.path.exists(os.path.join(moveit_servo_libexec, "servo_node"))
         else "servo_node_main"
     )
-
     servo_node = Node(
         condition=IfCondition(LaunchConfiguration("run_teleop")),
         package="moveit_servo",
         executable=servo_executable,
-        namespace=namespace,
         parameters=[
-            {'use_sim_time': use_sim_time},
-            servo_params,
-            planning_group_name,
+            {"use_sim_time": use_sim_time},
+            {"moveit_servo": servo_context},
+            # Planning group for the acceleration-limiting filter.
+            {"planning_group_name": "igus_rebel_arm"},
             moveit_args,
         ],
         output="screen",
     )
 
-    # Launch gamepad
     joy_node = Node(
         condition=IfCondition(LaunchConfiguration("run_gamepad")),
         package="joy",
         executable="joy_node",
-        parameters=[{'use_sim_time': use_sim_time}],
+        parameters=[{"use_sim_time": use_sim_time}],
         output="screen",
-    )
-    
-    teleop_joy_twist_file = PathJoinSubstitution(
-        [
-            FindPackageShare("igus_rebel_moveit_config"),
-            "config",
-            "gamepad.yaml",
-        ]
     )
     teleop_twist_joy_node = Node(
         condition=IfCondition(LaunchConfiguration("run_gamepad")),
-        package="igus_rebel_moveit_config",
+        package=PACKAGE,
         executable="rebel_servo_teleop_gamepad",
-        parameters=[{'use_sim_time': use_sim_time}, teleop_joy_twist_file],
+        parameters=[{"use_sim_time": use_sim_time}, config_file("gamepad.yaml")],
         output="screen",
     )
-
-    
-    rviz_parameters = [
-        {
-            "robot_description_kinematics": kinematics_config,
-            "robot_description_semantic": robot_description_semantic.perform(context),
-            "robot_description_planning": joint_limits_config,
-            "robot_description": robot_description.perform(context),
-        },
-    ]
 
     launch_rviz = Node(
         condition=IfCondition(LaunchConfiguration("use_gui")),
@@ -330,9 +218,16 @@ def opaque_func(context, *args, **kwargs):
         executable="rviz2",
         output={"both": "log"},
         arguments=["-d", LaunchConfiguration("rviz_config")],
-        parameters=rviz_parameters,
+        parameters=[
+            {
+                "robot_description": robot_description,
+                "robot_description_semantic": robot_description_semantic,
+                "robot_description_kinematics": kinematics_config,
+                "robot_description_planning": joint_limits_config,
+            },
+        ],
     )
-    
+
     return [
         move_group_node,
         camera_pole_node,
@@ -341,56 +236,49 @@ def opaque_func(context, *args, **kwargs):
         joy_node,
         teleop_twist_joy_node,
         delayed_box_h_cut_node,
-        launch_rviz
+        launch_rviz,
     ]
 
 
 def generate_launch_description():
-    namespace_arg = DeclareLaunchArgument("namespace", default_value="")
-    use_gui_arg = DeclareLaunchArgument("use_gui", default_value="true")
-    run_box_h_cut_executor_arg = DeclareLaunchArgument(
-        "run_box_h_cut_executor",
-        default_value="false",
-        description="Start the frozen-snapshot plan-only H-cut MTC executor",
-    )
-    box_h_cut_start_delay_arg = DeclareLaunchArgument(
-        "box_h_cut_start_delay",
-        default_value="3.0",
-        description="Seconds to wait for MoveIt before starting the H-cut executor",
-    )
-    
-    use_sim_time_arg = DeclareLaunchArgument(
-        'use_sim_time', 
-        default_value='false', 
-        description='Use sim time if true')
-
-    hardware_protocol_arg = DeclareLaunchArgument(
-        "hardware_protocol",
-        default_value="rebel",
-        choices=["mock_hardware", "gazebo", "rebel"],
-        description="Which hardware protocol or mock hardware should be used",
-    )
-
-    ld = LaunchDescription()
-    ld.add_action(use_sim_time_arg)
-    ld.add_action(DeclareLaunchArgument("run_teleop", default_value="true"))
-    ld.add_action(DeclareLaunchArgument(
-        "run_gamepad", default_value="false",
-        description="Start joy_node + gamepad teleop; keyboard teleop is a separate manual node"))
-    ld.add_action(DeclareLaunchArgument("rviz_config", default_value=os.path.join(
-        get_package_share_directory("igus_rebel_moveit_config"), "launch", "moveit.rviz")))
-    ld.add_action(DeclareLaunchArgument("run_calibration_verification", default_value="false"))
-    ld.add_action(DeclareLaunchArgument("calibration_execution_allowed", default_value="false"))
-    ld.add_action(DeclareLaunchArgument(
-        "calibration_verification_config",
-        default_value=os.path.join(get_package_share_directory("igus_rebel_moveit_config"),
-                                   "config", "calibration_verification.yaml")))
-    ld.add_action(namespace_arg)
-    ld.add_action(use_gui_arg)
-    ld.add_action(hardware_protocol_arg)
-    ld.add_action(run_box_h_cut_executor_arg)
-    ld.add_action(box_h_cut_start_delay_arg)
-
-    ld.add_action(OpaqueFunction(function=opaque_func))
-
-    return ld
+    share = get_package_share_directory(PACKAGE)
+    return LaunchDescription([
+        DeclareLaunchArgument("use_sim_time", default_value="false",
+                              description="Use sim time if true"),
+        DeclareLaunchArgument(
+            "hardware_protocol",
+            default_value="rebel",
+            choices=["mock_hardware", "gazebo", "rebel"],
+            description="Which hardware protocol or mock hardware should be used",
+        ),
+        DeclareLaunchArgument("use_gui", default_value="true"),
+        DeclareLaunchArgument("rviz_config",
+                              default_value=os.path.join(share, "launch", "moveit.rviz")),
+        DeclareLaunchArgument(
+            "run_teleop", default_value="false",
+            description="Start MoveIt Servo (needed by keyboard and gamepad teleop)"),
+        DeclareLaunchArgument(
+            "run_gamepad", default_value="false",
+            description="Start joy_node + gamepad teleop (also needs run_teleop:=true); "
+                        "keyboard teleop is a separate manual node"),
+        DeclareLaunchArgument(
+            "run_camera_pole", default_value="true",
+            description="Maintain the external camera_pole collision object from camera TF "
+                        "(required by H-cut and calibration verification planning)"),
+        DeclareLaunchArgument(
+            "run_box_h_cut_executor",
+            default_value="false",
+            description="Start the frozen-snapshot plan-only H-cut MTC executor",
+        ),
+        DeclareLaunchArgument(
+            "box_h_cut_start_delay",
+            default_value="3.0",
+            description="Seconds to wait for MoveIt before starting the H-cut executor",
+        ),
+        DeclareLaunchArgument("run_calibration_verification", default_value="false"),
+        DeclareLaunchArgument("calibration_execution_allowed", default_value="false"),
+        DeclareLaunchArgument(
+            "calibration_verification_config",
+            default_value=os.path.join(share, "config", "calibration_verification.yaml")),
+        OpaqueFunction(function=opaque_func),
+    ])

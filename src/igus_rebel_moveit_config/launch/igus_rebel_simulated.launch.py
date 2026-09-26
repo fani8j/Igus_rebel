@@ -1,79 +1,63 @@
-from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo
-from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch_ros.actions import Node
-from launch.substitutions import LaunchConfiguration, Command, FindExecutable
-
 import os
+
 from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import Command, FindExecutable, LaunchConfiguration
+from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
+
 
 def generate_launch_description():
-    # Declare launch arguments
-    use_gui_arg = DeclareLaunchArgument(
-        'use_gui', default_value='true', description='')
-    hardware_protocol_arg = DeclareLaunchArgument(
-        "hardware_protocol",
-        default_value="gazebo",
-        choices=["mock_hardware", "gazebo", "rebel"],
-        description="Which hardware protocol or mock hardware should be used",)
-    use_sim_time_arg = DeclareLaunchArgument(
-        'use_sim_time', 
-        default_value='true', 
-        description='Use sim time if true')
-    
-    hardware_protocol = LaunchConfiguration('hardware_protocol')
-    use_sim_time = LaunchConfiguration('use_sim_time')
-    use_gui = LaunchConfiguration('use_gui')
-    
-    robot_description_file = os.path.join(
-        get_package_share_directory('igus_rebel_description'),
-        'urdf',
-        'igus_rebel_robot2.urdf.xacro'
-    )
+    moveit_config_share = get_package_share_directory("igus_rebel_moveit_config")
+    use_sim_time = LaunchConfiguration("use_sim_time")
 
-    robot_description = Command(
-        [
+    # Same arm + XEG-32 + TCP model as the real/mock stack, with gz_ros2_control hardware.
+    robot_description = ParameterValue(
+        Command([
             FindExecutable(name="xacro"),
             " ",
-            robot_description_file,
-            " hardware_protocol:=",
-            hardware_protocol,
-        ]
+            os.path.join(get_package_share_directory("igus_rebel_description"),
+                         "urdf", "igus_rebel_xeg32_wrapper.urdf.xacro"),
+            " hardware_protocol:=gazebo",
+        ]),
+        value_type=str,
     )
-    
-    # Launch gazebo simulator and spwan the robot
+
     gazebo_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(get_package_share_directory('igus_rebel_moveit_config'), 'launch', 'gazebo.launch.py')
-        ),
+            os.path.join(moveit_config_share, "launch", "gazebo.launch.py")),
+        launch_arguments={
+            "use_sim_time": use_sim_time,
+            "gz_args": LaunchConfiguration("gz_args"),
+        }.items(),
     )
-    
+
     robot_state_pub_node = Node(
         package="robot_state_publisher",
         executable="robot_state_publisher",
-        parameters=[{'robot_description': robot_description,
-                     'use_sim_time': use_sim_time}],
-        remappings=[],
+        parameters=[{"robot_description": robot_description, "use_sim_time": use_sim_time}],
         output="both",
     )
-    
+
     moveit_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(get_package_share_directory('igus_rebel_moveit_config'), 'launch', 'move_group.launch.py')
-        ),
+            os.path.join(moveit_config_share, "launch", "move_group.launch.py")),
         launch_arguments={
-            'hardware_protocol': hardware_protocol,
-            'use_sim_time': use_sim_time,
-            'use_gui': use_gui,
+            "hardware_protocol": "gazebo",
+            "use_sim_time": use_sim_time,
+            "use_gui": LaunchConfiguration("use_gui"),
         }.items(),
     )
-    
+
     return LaunchDescription([
-        use_gui_arg,
-        hardware_protocol_arg,
-        use_sim_time_arg,
+        DeclareLaunchArgument("use_gui", default_value="true", description="Start RViz"),
+        DeclareLaunchArgument("use_sim_time", default_value="true",
+                              description="Use sim time if true"),
+        DeclareLaunchArgument("gz_args", default_value="-r empty.sdf",
+                              description="Gazebo arguments; add -s for a headless server"),
         gazebo_launch,
         robot_state_pub_node,
         moveit_launch,
     ])
-    

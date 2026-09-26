@@ -1,5 +1,25 @@
 box_h_cut_executor:
   ros__parameters:
+    # Parameter change semantics (`ros2 param set /box_h_cut_executor ...`):
+    # - READ-ONLY (applied at startup only; `param set` is rejected): planning_group,
+    #   planning_frame, tool_link, *_pipeline, external_snapshot_max_age_s,
+    #   carton_collision_id, carton_height_m, allow_tool_carton_contact,
+    #   camera_pole_required, camera_pole_topic, hover/cut/middle_cut clearances,
+    #   left_lateral_standoff_m, middle_entry_alignment_m, side_cut_orientation_mode,
+    #   debug_motion_distance_m, debug_motion_clearance_m, approach_joint_degrees,
+    #   cartesian_step_m, planning_timeout_s, all *_scaling values and max_solutions.
+    #   Edit this file and restart the executor to change them.
+    # - PLANNING (validated, then applied and any retained plan cleared): motion_profile,
+    #   cut_pattern, t_cut_middle_handoff_fraction, debug_fixed_orientation,
+    #   debug_allow_stale_snapshot, pre_cut_stabilization_duration_s, side tilts,
+    #   left_adaptive_orientation_*, cut_debug_cut, cut_debug_correction_enabled,
+    #   cut_debug_*_correction_file and cut_debug_output_dir. Rejected with "busy" while a
+    #   plan/diagnose/cut-debug/execute call is running, during trajectory execution, and
+    #   while a cut debug session is active (call clear_plan first).
+    # - RUNTIME (read when used, never blocked): execution_enabled,
+    #   debug_motion_execution_enabled, left_roll_diagnostics_enabled, external_snapshot_file.
+    # Every numeric value must be finite; out-of-range values fail closed at startup and
+    # are rejected at runtime.
     planning_group: igus_rebel_arm
     # Perception canonicalizes carton geometry into this frame before planning.
     planning_frame: base_link
@@ -8,13 +28,19 @@ box_h_cut_executor:
     planning_pipeline: ompl
     chomp_pipeline: chomp
     pilz_pipeline: pilz_industrial_motion_planner
-    # OMPL transit plus a Cartesian cut stroke plans the frozen snapshot.
+    # ompl_cartesian: free-space transits try the exact-pose IK branch nearest the
+    # current state with joint interpolation first and OMPL as fallback; every contact
+    # stroke is a Cartesian path (min_fraction=1.0). ompl_pilz / pilz_only / chomp_pilz
+    # use Pilz LIN strokes instead (their Cartesian speed also follows cartesian_limits
+    # in joint_limits.yaml).
     motion_profile: ompl_cartesian
     # Generated independently by camera_point_to_base_link.py; the planner never runs vision.
     external_snapshot_file: /home/farhan/Igus_rebel/outputs/seam_3d_base_link.json
-    # Refuse a previous carton result if planning is not started promptly.
+    # Refuse a previous carton result if planning is not started promptly. (0, 600] s.
     external_snapshot_max_age_s: 240.0
-    # Plan-only override for inspecting an old snapshot in RViz. Execution is blocked while true.
+    # Plan-only override for inspecting an old snapshot in RViz. Execution is blocked while
+    # true: execute_planned_h_cut refuses any retained plan or cut debug session whose
+    # snapshot was loaded with the override, before every other execution gate.
     # ros2 param set /box_h_cut_executor debug_allow_stale_snapshot true
     debug_allow_stale_snapshot: false
     # Collision box is derived from detected top-face corners; height extends below that plane.
@@ -22,12 +48,19 @@ box_h_cut_executor:
     carton_height_m: 0.20
     # Allow only the TCP proxy to contact the detected carton, only during canonical
     # descend, traverse, and retract stages. Every other collision pair stays checked.
+    # The TCP is a 6 mm visual marker with no collision geometry.
     allow_tool_carton_contact: true
+    # The fixed external camera pole (camera_pole_collision.py) must be present before
+    # any H-cut plan; planning fails closed without it.
+    camera_pole_required: true
+    camera_pole_topic: /box_motion/camera_pole_collision
     # The external converter writes a complete canonical base_link snapshot atomically.
     # The planner rejects missing or invalid points instead of estimating carton geometry.
     # Fixed waypoint modes: left_only, middle_only, right_only, h, combined, t_cut,
     # or t_cut_handoff (plus the plan-only middle_entry_debug/middle_debug_short aids).
     # t_cut is the full first-arm left cut plus the full middle seam.
+    # middle_entry_debug stops at seam_start before traversal.
+    # middle_debug_short uses fixed XYZW=(0,1,0,0) for a short stroke above seam center.
     cut_pattern: t_cut
     # t_cut_handoff is first-arm-only: the full left cut plus an executable bounded
     # middle-seam prefix ending at the declared handoff endpoint
@@ -43,31 +76,34 @@ box_h_cut_executor:
     # complete seam. Full t_cut/combined continue to retract above the cut and restore
     # collision checking; no second arm is implemented. Execution still requires
     # normal gates.
-    # middle_entry_debug stops at seam_start before traversal.
-    # middle_debug_short uses fixed XYZW=(0,1,0,0) for a short stroke above seam center.
-    # Fraction along the middle seam where t_cut_handoff stops. 0.0 (default)
-    # selects automatic mode: bounded bisection over [0.05, 0.95] finds the
-    # largest fully reachable declared prefix with <=0.01 fraction tolerance,
-    # keeping min_fraction=1.0 for every candidate. A nonzero value in
-    # [0.05, 0.95] is a manual override stop fraction. Out-of-range nonzero
-    # values fail closed. Full t_cut stays the full left cut plus the full
-    # middle seam and is unaffected.
     # t_cut_handoff applies the same left and middle correction slots as t_cut; a set
     # right record loads but stays unused because the plan has no right segment.
     # Middle translation end deltas are fraction-interpolated and the taught middle
     # end orientation is slerp-interpolated by the resolved fraction for the bounded
     # prefix; the middle tool-Z penetration gate is revalidated unchanged.
-    # Plan-only orientation override; normal cuts remain geometry-derived.
+    # Fraction along the middle seam where t_cut_handoff stops. 0.0 (default)
+    # selects automatic mode: the maximum 0.95 is probed first; if it does not fully
+    # plan, 0.05 must plan and a bounded bisection over [0.05, 0.95) finds the largest
+    # fully reachable declared prefix with <=0.01 fraction tolerance. Every candidate
+    # keeps min_fraction=1.0, and the left roll search runs once per request. A nonzero
+    # value in [0.05, 0.95] is a manual override stop fraction. Out-of-range nonzero
+    # values fail closed. Full t_cut stays the full left cut plus the full middle seam
+    # and is unaffected.
+    t_cut_middle_handoff_fraction: 0.0
+    # Plan-only orientation override; normal cuts remain geometry-derived. Execution is
+    # blocked while true.
     debug_fixed_orientation: false
+    # middle_debug_short stroke length and surface clearance.
     debug_motion_distance_m: 0.010
     debug_motion_clearance_m: 0.030
-    t_cut_middle_handoff_fraction: 0.0
     # Supplied joint-space transit used only by cut_pattern h before its first cut.
     approach_joint_degrees: [51.52, 15.99, 124.79, -65.84, 94.37, 125.94]
-    # The TCP is a 6 mm visual marker with no collision geometry; scoped carton contact is controlled above.
+    # Middle seam only: the free-space approach ends this far before seam_start (against
+    # the seam direction), then a short aligned stroke reaches the hover start pose.
+    middle_entry_alignment_m: 0.010
     # Before each descend/cut stage, settle motion at the final collision-checked
     # approach pose. The hold is encoded in the trajectory, not as a callback sleep.
-    middle_entry_alignment_m: 0.010
+    # Finite, within [0, 10] s.
     pre_cut_stabilization_duration_s: 1.0
     # Every cut orientation is derived from detected cut direction and surface normal.
     # Roll each side independently about the blade axis. Batch scans over 59 valid
@@ -100,16 +136,24 @@ box_h_cut_executor:
     # then restore of knife-tip collision checking, then free-space transit/rotation
     # to the middle approach. No current-plan serialization is implemented: the retained
     # plan lives only in the running executor until restart. No second-arm behavior changes.
-    # Per-stage planner bound; prevents a saved-snapshot dry run from hanging.
+    # Planning time bound: each pipeline (OMPL/Pilz/CHOMP) call is capped at this value,
+    # and each free-space transit shares one budget of this value across all of its IK
+    # branch attempts and the final original-pose retry. It is not a whole-task timeout.
     planning_timeout_s: 15.0
-    velocity_scaling: 0.05
-    acceleration_scaling: 0.05
-    # Free-space transit speed only; contact descend/traverse/retract keep the
-    # 0.05 contact stroke scaling above, and pre_cut_stabilization_duration_s
-    # stays 1.0 s. Finite values in (0, 1] only; out-of-range fails closed.
-    # Raised from 0.05 with operator approval (2026-09-26); contact strokes unchanged.
-    transit_velocity_scaling: 0.15
-    transit_acceleration_scaling: 0.15
+    # Cartesian contact-stroke interpolation step.
+    cartesian_step_m: 0.003
+    # Scalings are fractions of joint_limits.yaml (0.785 rad/s, 5.24 rad/s^2 per joint).
+    # Contact descend/traverse/retract strokes: 0.1376 * 0.785 = 0.108 rad/s and
+    # 0.0954 * 5.24 = 0.50 rad/s^2, the same physical limits as the former 0.05 at
+    # 2.16 rad/s / 10 rad/s^2 (operator-approved rescale, 2026-09-27). Finite, in (0, 1].
+    velocity_scaling: 0.1376
+    acceleration_scaling: 0.0954
+    # Free-space transit speed only: 0.4127 * 0.785 = 0.324 rad/s and
+    # 0.2863 * 5.24 = 1.50 rad/s^2, i.e. the operator-approved 0.15 transit scaling
+    # (2026-09-26) at the former limits. Contact strokes keep the scaling above and
+    # pre_cut_stabilization_duration_s stays 1.0 s. Finite values in (0, 1] only.
+    transit_velocity_scaling: 0.4127
+    transit_acceleration_scaling: 0.2863
     max_solutions: 1
     # Physical trajectory dispatch stays disabled until an operator deliberately enables it.
     execution_enabled: false
@@ -139,13 +183,14 @@ box_h_cut_executor:
     # contain only left and middle segments, so a set right record loads but stays unused.
     # Individual plans apply only their cut's slot. Empty means no correction for that cut.
     # Every nonempty record is validated for schema box_h_cut_correction/v1, matching cut
-    # slot and planning frame/tool, finite translation values and unit orientation quaternions.
+    # slot, REQUIRED planning_frame and tool_link equal to the active values, finite
+    # translation values and unit orientation quaternions.
     # Orientation has no fixed angular cap. Application still requires the mapped
     # penetration axis (left: tool X or tool Z, at least one into the carton;
     # middle/right: tool Z) to point into the carton.
     # Mismatches and malformed records fail closed. Deltas are cut-local
     # (along/across/normal) and rotated onto the newly detected cut.
-    cut_debug_left_correction_file: "/home/farhan/cut_debug_corrections/left_capture_frame_000001_20260916_235239_389784.json"
+    cut_debug_left_correction_file: "/home/farhan/cut_debug_corrections/left_capture_frame_000001_20260916_235239_389784_orient_only_tcp20260924.json"
     cut_debug_middle_correction_file: "/home/farhan/cut_debug_corrections/middle_capture_frame_000001_20260914_200444_020309.json"
     cut_debug_right_correction_file: ""
     # Directory for staged-session records (<cut>_<snapshot_id>.json, atomic temp+rename).

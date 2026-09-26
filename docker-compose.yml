@@ -3,8 +3,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ros2_jazzy_rebel
-    container_name: ros2_jazzy_rebel_dev
+      args:
+        ROS_DISTRO: ${ROS_DISTRO:-humble}
+    image: ros2_${ROS_DISTRO:-humble}_rebel
+    container_name: ros2_rebel_dev
 
     volumes:
       - ./:/ros2_ws

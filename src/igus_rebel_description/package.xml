@@ -10,9 +10,11 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
   <exec_depend>xacro</exec_depend>
 
-  <depend>ros_gz_bridge</depend>
-  <depend>gz_ros2_control</depend>
-  <depend>topic_based_ros2_control</depend>
+  <!-- Runtime-only: referenced by the ros2_control/Gazebo xacro and launch
+       files; nothing in this package is compiled against them. -->
+  <exec_depend>ros_gz_bridge</exec_depend>
+  <exec_depend>gz_ros2_control</exec_depend>
+  <exec_depend>topic_based_ros2_control</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from collections import deque
 from dataclasses import dataclass
 from typing import Optional, Sequence, Tuple
@@ -14,6 +13,7 @@ from cv_bridge import CvBridge, CvBridgeError
 from geometry_msgs.msg import Point, PoseStamped, Quaternion, TransformStamped
 from rcl_interfaces.msg import SetParametersResult
 from rclpy.duration import Duration
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import (
     DurabilityPolicy,
@@ -25,6 +25,14 @@ from rclpy.time import Time
 from sensor_msgs.msg import CameraInfo, CompressedImage, Image
 from tf2_ros import Buffer, TransformException, TransformListener
 from visualization_msgs.msg import Marker, MarkerArray
+
+from .geometry import (
+    normalize_quaternion,
+    quaternion_angle_deg,
+    quaternion_from_matrix,
+    quaternion_multiply,
+    quaternion_to_matrix,
+)
 
 
 class DetectionRejected(RuntimeError):
@@ -85,7 +93,7 @@ class StablePoseWindow:
         )
         if position_delta > self.max_position_delta_m:
             return False
-        angle_delta = _quaternion_angle_deg(
+        angle_delta = quaternion_angle_deg(
             _pose_quaternion(first), _pose_quaternion(second)
         )
         return angle_delta <= self.max_rotation_delta_deg
@@ -280,7 +288,7 @@ def _pose_from_estimate(
     pose.pose.position.x = float(estimate.tvec[0, 0])
     pose.pose.position.y = float(estimate.tvec[1, 0])
     pose.pose.position.z = float(estimate.tvec[2, 0])
-    qx, qy, qz, qw = _quaternion_from_matrix(estimate.rotation_matrix)
+    qx, qy, qz, qw = quaternion_from_matrix(estimate.rotation_matrix)
     pose.pose.orientation = Quaternion(x=qx, y=qy, z=qz, w=qw)
     return pose
 
@@ -292,97 +300,8 @@ def _pose_position(pose: PoseStamped) -> np.ndarray:
 
 def _pose_quaternion(pose: PoseStamped) -> np.ndarray:
     orientation = pose.pose.orientation
-    return _normalize_quaternion(
-        np.array(
-            [orientation.x, orientation.y, orientation.z, orientation.w],
-            dtype=np.float64,
-        )
-    )
-
-
-def _quaternion_angle_deg(first: np.ndarray, second: np.ndarray) -> float:
-    dot = abs(float(np.dot(_normalize_quaternion(first), _normalize_quaternion(second))))
-    dot = min(1.0, max(-1.0, dot))
-    return math.degrees(2.0 * math.acos(dot))
-
-
-def _normalize_quaternion(quaternion: np.ndarray) -> np.ndarray:
-    norm = float(np.linalg.norm(quaternion))
-    if norm <= 0.0 or not math.isfinite(norm):
-        raise ValueError("Invalid zero-length quaternion")
-    normalized = quaternion / norm
-    if normalized[3] < 0.0:
-        normalized = -normalized
-    return normalized
-
-
-def _quaternion_from_matrix(rotation_matrix: np.ndarray) -> np.ndarray:
-    matrix = np.asarray(rotation_matrix, dtype=np.float64).reshape(3, 3)
-    trace = float(np.trace(matrix))
-    if trace > 0.0:
-        scale = math.sqrt(trace + 1.0) * 2.0
-        qw = 0.25 * scale
-        qx = (matrix[2, 1] - matrix[1, 2]) / scale
-        qy = (matrix[0, 2] - matrix[2, 0]) / scale
-        qz = (matrix[1, 0] - matrix[0, 1]) / scale
-    elif matrix[0, 0] > matrix[1, 1] and matrix[0, 0] > matrix[2, 2]:
-        scale = math.sqrt(1.0 + matrix[0, 0] - matrix[1, 1] - matrix[2, 2]) * 2.0
-        qw = (matrix[2, 1] - matrix[1, 2]) / scale
-        qx = 0.25 * scale
-        qy = (matrix[0, 1] + matrix[1, 0]) / scale
-        qz = (matrix[0, 2] + matrix[2, 0]) / scale
-    elif matrix[1, 1] > matrix[2, 2]:
-        scale = math.sqrt(1.0 + matrix[1, 1] - matrix[0, 0] - matrix[2, 2]) * 2.0
-        qw = (matrix[0, 2] - matrix[2, 0]) / scale
-        qx = (matrix[0, 1] + matrix[1, 0]) / scale
-        qy = 0.25 * scale
-        qz = (matrix[1, 2] + matrix[2, 1]) / scale
-    else:
-        scale = math.sqrt(1.0 + matrix[2, 2] - matrix[0, 0] - matrix[1, 1]) * 2.0
-        qw = (matrix[1, 0] - matrix[0, 1]) / scale
-        qx = (matrix[0, 2] + matrix[2, 0]) / scale
-        qy = (matrix[1, 2] + matrix[2, 1]) / scale
-        qz = 0.25 * scale
-    return _normalize_quaternion(np.array([qx, qy, qz, qw], dtype=np.float64))
-
-
-def _quaternion_to_matrix(quaternion: Sequence[float]) -> np.ndarray:
-    x, y, z, w = _normalize_quaternion(np.asarray(quaternion, dtype=np.float64))
-    return np.array(
-        [
-            [
-                1.0 - 2.0 * (y * y + z * z),
-                2.0 * (x * y - z * w),
-                2.0 * (x * z + y * w),
-            ],
-            [
-                2.0 * (x * y + z * w),
-                1.0 - 2.0 * (x * x + z * z),
-                2.0 * (y * z - x * w),
-            ],
-            [
-                2.0 * (x * z - y * w),
-                2.0 * (y * z + x * w),
-                1.0 - 2.0 * (x * x + y * y),
-            ],
-        ],
-        dtype=np.float64,
-    )
-
-
-def _quaternion_multiply(first: Sequence[float], second: Sequence[float]) -> np.ndarray:
-    x1, y1, z1, w1 = _normalize_quaternion(np.asarray(first, dtype=np.float64))
-    x2, y2, z2, w2 = _normalize_quaternion(np.asarray(second, dtype=np.float64))
-    return _normalize_quaternion(
-        np.array(
-            [
-                w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
-                w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
-                w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
-                w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
-            ],
-            dtype=np.float64,
-        )
+    return normalize_quaternion(
+        (orientation.x, orientation.y, orientation.z, orientation.w)
     )
 
 
@@ -595,23 +514,29 @@ class ArucoVerificationNode(Node):
         self._camera_info = info_msg
 
     def _on_image(self, image_msg: Image | CompressedImage) -> None:
+        # Decode once; the failure path reuses the decoded frame for its debug image.
+        rgb = None
         try:
-            self._process_image(image_msg)
+            rgb = self._decode_rgb(image_msg)
+            self._process_image(image_msg, rgb)
         except (DetectionRejected, TransformException, ValueError, CvBridgeError) as exc:
             self._stable_window.reset()
             self._last_published_pose = None
             self._clear_markers()
             self.get_logger().warning(str(exc), throttle_duration_sec=2.0)
-            self._publish_failure_debug(image_msg, str(exc))
+            self._publish_failure_debug(image_msg, rgb, str(exc))
         except Exception as exc:
             self._stable_window.reset()
             self._last_published_pose = None
             self._clear_markers()
             self.get_logger().error(f"ArUco verification failed: {exc}")
-            self._publish_failure_debug(image_msg, f"ArUco verification failed: {exc}")
+            self._publish_failure_debug(
+                image_msg, rgb, f"ArUco verification failed: {exc}"
+            )
 
-    def _process_image(self, image_msg: Image | CompressedImage) -> Optional[PoseStamped]:
-        rgb = self._decode_rgb(image_msg)
+    def _process_image(
+        self, image_msg: Image | CompressedImage, rgb: np.ndarray
+    ) -> Optional[PoseStamped]:
         if not self._configured:
             self._stable_window.reset()
             self._last_published_pose = None
@@ -842,7 +767,9 @@ class ArucoVerificationNode(Node):
     ) -> None:
         if not bool(self._parameter("publish_debug_image")):
             return
-        debug = rgb.copy()
+        # ``rgb`` is a per-callback decoded frame that is not reused afterwards,
+        # so annotate it in place unless the decoder returned a read-only view.
+        debug = rgb if rgb.flags.writeable else rgb.copy()
         if corners is not None:
             polygon = corners.reshape(-1, 1, 2).astype(np.int32)
             cv2.polylines(debug, [polygon], True, (0, 255, 255), 2)
@@ -877,12 +804,13 @@ class ArucoVerificationNode(Node):
         debug_msg.header = header
         self._debug_pub.publish(debug_msg)
 
-    def _publish_failure_debug(self, image_msg: Image | CompressedImage, status: str) -> None:
-        if not bool(self._parameter("publish_debug_image")):
-            return
-        try:
-            rgb = self._decode_rgb(image_msg)
-        except Exception:
+    def _publish_failure_debug(
+        self,
+        image_msg: Image | CompressedImage,
+        rgb: Optional[np.ndarray],
+        status: str,
+    ) -> None:
+        if not bool(self._parameter("publish_debug_image")) or rgb is None:
             return
         self._publish_debug_image(
             rgb,
@@ -923,7 +851,7 @@ class ArucoVerificationNode(Node):
         marker_array = MarkerArray()
         lifetime = Duration(seconds=float(self._parameter("marker_lifetime_s"))).to_msg()
         origin = _pose_position(pose)
-        rotation = _quaternion_to_matrix(_pose_quaternion(pose))
+        rotation = quaternion_to_matrix(_pose_quaternion(pose))
         half = float(self._parameter("marker_size_m")) / 2.0
         corners_local = np.array(
             [
@@ -1061,7 +989,7 @@ class ArucoVerificationNode(Node):
     def _publish_hover_targets(self, pose: PoseStamped) -> None:
         lifetime = Duration(seconds=float(self._parameter("marker_lifetime_s"))).to_msg()
         origin = _pose_position(pose)
-        rotation = _quaternion_to_matrix(_pose_quaternion(pose))
+        rotation = quaternion_to_matrix(_pose_quaternion(pose))
         hover_h = float(self._parameter("hover_height_m"))
         array = MarkerArray()
         for index, (name, xyz) in enumerate(hover_test_points(origin, rotation, hover_h)):
@@ -1100,12 +1028,12 @@ def _transform_pose(pose: PoseStamped, transform: TransformStamped) -> PoseStamp
         ],
         dtype=np.float64,
     )
-    rotation = _quaternion_to_matrix(transform_q)
+    rotation = quaternion_to_matrix(transform_q)
     position = rotation @ _pose_position(pose) + np.array(
         [translation.x, translation.y, translation.z], dtype=np.float64
     )
     pose_q = _pose_quaternion(pose)
-    transformed_q = _quaternion_multiply(transform_q, pose_q)
+    transformed_q = quaternion_multiply(transform_q, pose_q)
 
     transformed = PoseStamped()
     transformed.header.stamp = pose.header.stamp
@@ -1133,9 +1061,12 @@ def main(args=None) -> None:
     node = ArucoVerificationNode()
     try:
         rclpy.spin(node)
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":

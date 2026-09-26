@@ -1,37 +1,17 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="utf-8"?>
 <robot name="igus_rebel_with_xeg32">
+    <!--
+      The URDF root is the fixed "world" link (world_joint: world -> base_link), so no
+      virtual joint is declared. The XEG-32 carriage joints are fixed in the URDF, so no
+      passive joints are declared either.
+    -->
     <group name="igus_rebel_arm">
-        <link name="world" />
-        <link name="base_link" />
-        <link name="link1" />
-        <link name="motor1" />
-        <link name="link2" />
-        <link name="motor2" />
-        <link name="link3" />
-        <link name="motor3" />
-        <link name="link4" />
-        <link name="motor4" />
-        <link name="link5" />
-        <link name="motor5" />
-        <link name="link6" />
-        <joint name="joint1" />
-        <joint name="J_motor1" />
-        <joint name="joint2" />
-        <joint name="J_motor2" />
-        <joint name="joint3" />
-        <joint name="J_motor3" />
-        <joint name="joint4" />
-        <joint name="J_motor4" />
-        <joint name="joint5" />
-        <joint name="J_motor5" />
-        <joint name="joint6" />
         <chain base_link="world" tip_link="link6" />
     </group>
     <group name="xeg32_gripper">
         <link name="xeg32_base_link" />
         <link name="xeg32_left_carriage_link" />
         <link name="xeg32_right_carriage_link" />
-        <joint name="xeg32_left_carriage_joint" />
     </group>
     <group_state name="home" group="igus_rebel_arm">
         <joint name="joint1" value="0" />
@@ -41,34 +21,97 @@
         <joint name="joint5" value="0" />
         <joint name="joint6" value="0" />
     </group_state>
-    <group_state name="zeros" group="igus_rebel_arm">
-        <joint name="joint1" value="0" />
-        <joint name="joint2" value="0" />
-        <joint name="joint3" value="0" />
-        <joint name="joint4" value="0" />
-        <joint name="joint5" value="0" />
-        <joint name="joint6" value="0" />
-    </group_state>
-    <passive_joint name="xeg32_right_carriage_joint" />
     <end_effector name="xeg32" parent_link="link6" group="xeg32_gripper" parent_group="igus_rebel_arm" />
-    <virtual_joint name="virtual_joint" type="fixed" parent_frame="world" child_link="base_link" />
+    <!--
+      Self-collision matrix regenerated 2026-09-27 with MoveIt Setup Assistant's
+      moveit_setup::srdf_setup::computeDefaultCollisions (Humble 2.5.10), 100000 random
+      states, min_collision_fraction 0.95, from
+      igus_rebel_xeg32_wrapper.urdf.xacro hardware_protocol:=mock_hardware.
+      Collision geometry: primitive cylinders/boxes for base_link..link6; gripper meshes
+      xeg32_collision/{part_1,xeg_base,part_1__2}.stl (xeg32_base_link) and
+      xeg32_collision/{right_carriage,part_1__3}.stl (both carriage links; right_carriage.stl
+      is the convex-hull carriage added 2026-09-27). Regenerate if any collision geometry
+      changes.
+      "Adjacent" additionally covers link1-link2, link2-link3 and link4-link5: each pair is
+      one revolute joint apart once the rigidly fixed motor link (motor2, motor3, motor5) is
+      merged into its parent, and the coarse primitives at that joint overlap in most states.
+      Every pair not listed here (for example link2-motor4, base_link-link4 and
+      base_link-motor5) collided in at least one sample and stays checked.
+    -->
     <disable_collisions link1="base_link" link2="motor1" reason="Adjacent" />
-    <disable_collisions link1="motor1" link2="link1" reason="Adjacent" />
-    <disable_collisions link1="motor2" link2="link1" reason="Adjacent" />
     <disable_collisions link1="link1" link2="link2" reason="Adjacent" />
-    <disable_collisions link1="motor2" link2="link2" reason="Adjacent" />
-    <disable_collisions link1="motor3" link2="link2" reason="Adjacent" />
+    <disable_collisions link1="link1" link2="motor1" reason="Adjacent" />
+    <disable_collisions link1="link1" link2="motor2" reason="Adjacent" />
     <disable_collisions link1="link2" link2="link3" reason="Adjacent" />
-    <disable_collisions link1="motor3" link2="link3" reason="Adjacent" />
-    <disable_collisions link1="motor4" link2="link3" reason="Adjacent" />
-    <disable_collisions link1="motor4" link2="link4" reason="Adjacent" />
-    <disable_collisions link1="motor5" link2="link4" reason="Adjacent" />
+    <disable_collisions link1="link2" link2="motor2" reason="Adjacent" />
+    <disable_collisions link1="link2" link2="motor3" reason="Adjacent" />
+    <disable_collisions link1="link3" link2="motor3" reason="Adjacent" />
+    <disable_collisions link1="link3" link2="motor4" reason="Adjacent" />
     <disable_collisions link1="link4" link2="link5" reason="Adjacent" />
-    <disable_collisions link1="link4" link2="link6" reason="Adjacent" />
-    <disable_collisions link1="motor5" link2="link5" reason="Adjacent" />
+    <disable_collisions link1="link4" link2="motor4" reason="Adjacent" />
+    <disable_collisions link1="link4" link2="motor5" reason="Adjacent" />
     <disable_collisions link1="link5" link2="link6" reason="Adjacent" />
+    <disable_collisions link1="link5" link2="motor5" reason="Adjacent" />
     <disable_collisions link1="link6" link2="xeg32_base_link" reason="Adjacent" />
     <disable_collisions link1="xeg32_base_link" link2="xeg32_left_carriage_link" reason="Adjacent" />
     <disable_collisions link1="xeg32_base_link" link2="xeg32_right_carriage_link" reason="Adjacent" />
-    <disable_collisions link1="xeg32_left_carriage_link" link2="xeg32_right_carriage_link" reason="Adjacent" />
+    <disable_collisions link1="base_link" link2="link1" reason="Never" />
+    <disable_collisions link1="base_link" link2="link2" reason="Never" />
+    <disable_collisions link1="base_link" link2="motor2" reason="Never" />
+    <disable_collisions link1="base_link" link2="motor3" reason="Never" />
+    <disable_collisions link1="link1" link2="link3" reason="Never" />
+    <disable_collisions link1="link1" link2="motor3" reason="Never" />
+    <disable_collisions link1="link1" link2="motor4" reason="Never" />
+    <disable_collisions link1="link1" link2="motor5" reason="Never" />
+    <disable_collisions link1="link2" link2="link4" reason="Never" />
+    <disable_collisions link1="link2" link2="link5" reason="Never" />
+    <disable_collisions link1="link2" link2="link6" reason="Never" />
+    <disable_collisions link1="link2" link2="motor5" reason="Never" />
+    <disable_collisions link1="link2" link2="xeg32_base_link" reason="Never" />
+    <disable_collisions link1="link2" link2="xeg32_left_carriage_link" reason="Never" />
+    <disable_collisions link1="link2" link2="xeg32_right_carriage_link" reason="Never" />
+    <disable_collisions link1="link3" link2="link4" reason="Never" />
+    <disable_collisions link1="link3" link2="link5" reason="Never" />
+    <disable_collisions link1="link3" link2="link6" reason="Never" />
+    <disable_collisions link1="link3" link2="motor1" reason="Never" />
+    <disable_collisions link1="link3" link2="motor2" reason="Never" />
+    <disable_collisions link1="link3" link2="motor5" reason="Never" />
+    <disable_collisions link1="link3" link2="xeg32_base_link" reason="Never" />
+    <disable_collisions link1="link3" link2="xeg32_left_carriage_link" reason="Never" />
+    <disable_collisions link1="link3" link2="xeg32_right_carriage_link" reason="Never" />
+    <disable_collisions link1="link4" link2="link6" reason="Never" />
+    <disable_collisions link1="link4" link2="motor2" reason="Never" />
+    <disable_collisions link1="link4" link2="motor3" reason="Never" />
+    <disable_collisions link1="link4" link2="xeg32_base_link" reason="Never" />
+    <disable_collisions link1="link4" link2="xeg32_left_carriage_link" reason="Never" />
+    <disable_collisions link1="link4" link2="xeg32_right_carriage_link" reason="Never" />
+    <disable_collisions link1="link5" link2="motor2" reason="Never" />
+    <disable_collisions link1="link5" link2="motor3" reason="Never" />
+    <disable_collisions link1="link5" link2="motor4" reason="Never" />
+    <disable_collisions link1="link5" link2="xeg32_base_link" reason="Never" />
+    <disable_collisions link1="link5" link2="xeg32_left_carriage_link" reason="Never" />
+    <disable_collisions link1="link5" link2="xeg32_right_carriage_link" reason="Never" />
+    <disable_collisions link1="link6" link2="motor3" reason="Never" />
+    <disable_collisions link1="link6" link2="motor4" reason="Never" />
+    <disable_collisions link1="link6" link2="motor5" reason="Never" />
+    <disable_collisions link1="link6" link2="xeg32_left_carriage_link" reason="Never" />
+    <disable_collisions link1="link6" link2="xeg32_right_carriage_link" reason="Never" />
+    <disable_collisions link1="motor1" link2="motor2" reason="Never" />
+    <disable_collisions link1="motor1" link2="motor3" reason="Never" />
+    <disable_collisions link1="motor2" link2="motor3" reason="Never" />
+    <disable_collisions link1="motor2" link2="motor4" reason="Never" />
+    <disable_collisions link1="motor2" link2="motor5" reason="Never" />
+    <disable_collisions link1="motor3" link2="motor4" reason="Never" />
+    <disable_collisions link1="motor3" link2="motor5" reason="Never" />
+    <disable_collisions link1="motor3" link2="xeg32_base_link" reason="Never" />
+    <disable_collisions link1="motor3" link2="xeg32_left_carriage_link" reason="Never" />
+    <disable_collisions link1="motor3" link2="xeg32_right_carriage_link" reason="Never" />
+    <disable_collisions link1="motor4" link2="motor5" reason="Never" />
+    <disable_collisions link1="motor4" link2="xeg32_base_link" reason="Never" />
+    <disable_collisions link1="motor4" link2="xeg32_left_carriage_link" reason="Never" />
+    <disable_collisions link1="motor4" link2="xeg32_right_carriage_link" reason="Never" />
+    <disable_collisions link1="motor5" link2="xeg32_base_link" reason="Never" />
+    <disable_collisions link1="motor5" link2="xeg32_left_carriage_link" reason="Never" />
+    <disable_collisions link1="motor5" link2="xeg32_right_carriage_link" reason="Never" />
+    <disable_collisions link1="xeg32_left_carriage_link" link2="xeg32_right_carriage_link" reason="Never" />
 </robot>

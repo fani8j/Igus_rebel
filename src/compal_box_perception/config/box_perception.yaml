@@ -24,8 +24,6 @@ box_perception:
     plane_ransac_iterations: 100
     plane_min_inliers: 80
     plane_min_inlier_ratio: 0.25
-    corner_filter_window: 15
-    max_corner_jump_px: 10.0
     sync_slop_s: 0.10
 
     seam_inset_ratio: 0.10
@@ -39,15 +37,15 @@ box_perception:
     min_top_face_area_ratio: 0.005
     max_top_face_height_width_ratio: 0.70
     max_opposite_edge_angle_difference_deg: 15.0
-    normal_filter_window: 15
-    max_normal_jump_deg: 10.0
 
     tf_timeout_s: 0.20
     marker_lifetime_s: 30.0
     snapshot_output_dir: ~/box_snapshots
-    # Mock-controller test: permit an explicitly bounded stale confirmed result.
-    snapshot_max_receipt_age_s: 120.0
+    # Reject snapshots whose newest synchronized RGB-D pair is older than this.
+    snapshot_max_receipt_age_s: 1.0
     publish_debug_image: true
     publish_local_pointcloud: true
     pointcloud_stride: 4
+    # Visual-only cloud rate limit (0 = publish every synchronized frame).
+    pointcloud_max_rate_hz: 10.0
     publish_markers: true

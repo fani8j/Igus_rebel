@@ -16,12 +16,25 @@ def calibration_nodes(context):
     path = os.path.expanduser(
         f"~/.ros2/easy_handeye2/calibrations/{name}.calib"
     )
-    with open(path, encoding="utf-8") as stream:
-        calibration = yaml.safe_load(stream)
-    parameters = calibration["parameters"]
-    transform = calibration["transform"]
-    translation = transform["translation"]
-    rotation = transform["rotation"]
+    if not os.path.isfile(path):
+        raise RuntimeError(
+            f"publish_calibration:=true but the hand-eye calibration file {path} "
+            "does not exist. Pass calibration_name:=<name> for an existing "
+            "easy_handeye2 calibration, or publish_calibration:=false if the "
+            "camera TF is provided elsewhere."
+        )
+    try:
+        with open(path, encoding="utf-8") as stream:
+            calibration = yaml.safe_load(stream)
+        parameters = calibration["parameters"]
+        transform = calibration["transform"]
+        translation = transform["translation"]
+        rotation = transform["rotation"]
+    except (OSError, yaml.YAMLError, KeyError, TypeError) as exc:
+        raise RuntimeError(
+            f"Cannot read hand-eye calibration {path}: {exc!r}. Expected an "
+            "easy_handeye2 .calib YAML with 'parameters' and 'transform' sections."
+        ) from exc
     return [
         Node(
             package="tf2_ros",
@@ -55,11 +68,14 @@ def generate_launch_description():
     calibration_arg = DeclareLaunchArgument(
         "publish_calibration",
         default_value="true",
-        description="Publish the saved eye-on-base calibration",
+        description=(
+            "Publish the saved eye-on-base calibration "
+            "(~/.ros2/easy_handeye2/calibrations/<calibration_name>.calib) as a static TF"
+        ),
     )
     calibration_name_arg = DeclareLaunchArgument(
         "calibration_name",
-        default_value="gemini336_world_v4_t",
+        default_value="rebel_handeye_h_v2",
         description="Saved easy_handeye2 calibration name",
     )
     return LaunchDescription(
@@ -67,7 +83,14 @@ def generate_launch_description():
             config_arg,
             rviz_arg,
             calibration_arg,
-            DeclareLaunchArgument("run_detection", default_value="true"),
+            DeclareLaunchArgument(
+                "run_detection",
+                default_value="true",
+                description=(
+                    "Start box_perception_node (snapshot service, point cloud); "
+                    "false publishes only the calibration TF and optional RViz"
+                ),
+            ),
             calibration_name_arg,
             OpaqueFunction(function=calibration_nodes),
             Node(

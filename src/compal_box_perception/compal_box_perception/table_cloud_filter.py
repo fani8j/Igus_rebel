@@ -10,11 +10,15 @@ from __future__ import annotations
 import numpy as np
 
 import rclpy
+from rclpy.duration import Duration
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from rclpy.time import Time
 from sensor_msgs.msg import PointCloud2, PointField
-
 from tf2_ros import Buffer, TransformException, TransformListener
+
+from .geometry import quaternion_to_matrix
 
 
 def _field_offsets(fields) -> dict:
@@ -98,26 +102,13 @@ class TableCloudFilter(Node):
         # Transform cloud frame -> target frame via TF (translation + rotation).
         target = str(self._param("target_frame"))
         if msg.header.frame_id != target:
-            from rclpy.time import Time
-            from rclpy.duration import Duration
-
             tf = self._tf.lookup_transform(
                 target, msg.header.frame_id, Time(),
                 timeout=Duration(seconds=0.2),
             )
             t = tf.transform.translation
             q = tf.transform.rotation
-            n = (q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w) ** 0.5
-            if not np.isfinite(n) or n < 1e-9:
-                raise ValueError("invalid TF rotation")
-            x, y, z, w = q.x / n, q.y / n, q.z / n, q.w / n
-            rot = np.array(
-                [
-                    [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
-                    [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
-                    [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
-                ]
-            )
+            rot = quaternion_to_matrix((q.x, q.y, q.z, q.w))
             xyz = xyz @ rot.T + np.array([t.x, t.y, t.z])
         box = (
             (xyz[:, 0] >= float(self.get_parameter("x_min_m").value))
@@ -183,7 +174,7 @@ def main(args=None):
     node = TableCloudFilter()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
         node.destroy_node()

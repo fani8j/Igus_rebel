@@ -1,7 +1,19 @@
-# robot_description_kinematics:
+# robot_description_kinematics
+# kinematics_solver_attempts is ignored since MoveIt 2 Humble, and
+# kinematics_solver_search_resolution only affects redundant joints (the arm has 6 DoF),
+# so neither is set.
 igus_rebel_arm:
-  kinematics_solver: kdl_kinematics_plugin/KDLKinematicsPlugin # Plugin used for solving kinematics
-  kinematics_solver_search_resolution: 0.005 #  Granularity (in radians for revolute joints) used by the solver when searching for a solution.
-  kinematics_solver_timeout: 0.25 # Maximum time the solver will spend trying to find a solution for each planning attempt
-  position_only_ik: false # If true, the solver will only consider the position of the end effector, not its orientation
-  kinematics_solver_attempts: 5 # How many times the solver will try to find a solution
+  kinematics_solver: kdl_kinematics_plugin/KDLKinematicsPlugin
+  kinematics_solver_timeout: 0.25  # [s] per IK call
+  position_only_ik: false
+
+# TRAC-IK (not installed; enable with
+#   sudo apt install ros-humble-trac-ik-kinematics-plugin
+# then replace the block above with this one and rebuild/relaunch). Distance returns the
+# solution closest to the seed state, which suits the wrist-branch-sensitive H-cut transits.
+# Re-run the H-cut mock regression before any physical use.
+# igus_rebel_arm:
+#   kinematics_solver: trac_ik_kinematics_plugin/TRAC_IKKinematicsPlugin
+#   kinematics_solver_timeout: 0.25
+#   solve_type: Distance
+#   position_only_ik: false

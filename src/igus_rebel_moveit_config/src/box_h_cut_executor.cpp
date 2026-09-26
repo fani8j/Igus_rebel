@@ -20,14 +20,14 @@
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <std_srvs/srv/trigger.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
-#include <algorithm>
-#include <array>
-#include <chrono>
-#include <thread>
-#include <cmath>
-#include <cstdlib>
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
+#include <algorithm>
+#include <array>
+#include <atomic>
+#include <chrono>
+#include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -37,10 +37,12 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <sstream>
+#include <system_error>
+#include <thread>
 #include <utility>
 #include <vector>
-#include <system_error>
 
 namespace mtc = moveit::task_constructor;
 
@@ -81,17 +83,21 @@ private:
 
 // Free-space transit wrapper that resolves a Cartesian (pose) goal to the exact-pose,
 // collision-free IK branch nearest the propagated start state before planning. Seeds
-// are the start state and its spherical-wrist flip (joint4 +/- pi, -joint5, joint6 +/- pi);
-// every IK result is expanded with the equivalent wrist-flip/joint6 +/- 2pi branches,
-// each re-verified by forward kinematics, bounds and collision. Candidates whose joint6
-// change would exceed pi are ranked last, then by L1 joint distance, so the transit takes
-// the short wrist branch. The target pose is never altered and the trajectory is still
-// produced by the wrapped planner; the solution-level wrist guard remains authoritative.
+// are the start state and its in-bounds spherical-wrist flip (joint4 +/- pi, -joint5,
+// joint6 +/- pi); every IK result is expanded with its in-bounds wrist flip, each
+// re-verified by forward kinematics, bounds and collision. (joint6 +/- 2pi variants are
+// never generated: joint6 is limited to about +/-3.124 rad, so they are always out of
+// bounds.) Candidates whose joint6 change would exceed pi are ranked last, then by L1
+// joint distance, so the transit takes the short wrist branch. If every branch fails,
+// the original pose goal is retried once. All attempts share one time budget of
+// min(stage timeout, max_total_s). The target pose is never altered and the trajectory
+// is still produced by the wrapped planner; the solution-level wrist guard remains
+// authoritative.
 class NearestBranchTransitPlanner : public mtc::solvers::PlannerInterface
 {
 public:
-  explicit NearestBranchTransitPlanner(mtc::solvers::PlannerInterfacePtr inner)
-  : inner_(std::move(inner)) {}
+  NearestBranchTransitPlanner(mtc::solvers::PlannerInterfacePtr inner, double max_total_s)
+  : inner_(std::move(inner)), max_total_s_(max_total_s) {}
 
   void init(const moveit::core::RobotModelConstPtr& robot_model) override
   {
@@ -105,7 +111,8 @@ public:
     robot_trajectory::RobotTrajectoryPtr& result,
     const moveit_msgs::msg::Constraints& path_constraints) override
   {
-    return inner_->plan(from, to, jmg, timeout, result, path_constraints);
+    return inner_->plan(
+      from, to, jmg, std::min(timeout, max_total_s_), result, path_constraints);
   }
 
   Result plan(
@@ -117,6 +124,20 @@ public:
   {
     const auto logger = rclcpp::get_logger("box_h_cut_executor.transit_ik");
     constexpr double kPi = 3.14159265358979323846;
+    const auto started = std::chrono::steady_clock::now();
+    const double budget_s = std::min(timeout, max_total_s_);
+    const auto remaining_s = [&]() {
+      return budget_s -
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+    };
+    const auto plan_original_pose = [&]() -> Result {
+      const double left_s = remaining_s();
+      if (left_s <= 0.0) {
+        return Result{false, "transit planning budget of " + std::to_string(budget_s) +
+          " s exhausted before the original pose goal could be retried"};
+      }
+      return inner_->plan(from, link, offset, target, jmg, left_s, result, path_constraints);
+    };
     const auto& variables = jmg->getVariableNames();
     const auto index_of = [&](const std::string& name) -> std::optional<std::size_t> {
       const auto it = std::find(variables.begin(), variables.end(), name);
@@ -126,9 +147,10 @@ public:
     const auto j4 = index_of("joint4");
     const auto j5 = index_of("joint5");
     const auto j6 = index_of("joint6");
-    if (!j6) return inner_->plan(from, link, offset, target, jmg, timeout, result, path_constraints);
+    if (!j6) return plan_original_pose();
 
     const moveit::core::RobotState& start = from->getCurrentState();
+    const moveit::core::RobotModel& model = *start.getRobotModel();
     std::vector<double> start_values;
     start.copyJointGroupPositions(jmg, start_values);
     const Eigen::Isometry3d link_target = target * offset.inverse();
@@ -162,22 +184,25 @@ public:
       if ((!ik_verified && !is_valid(probe)) || !exact_pose(probe)) return;
       candidates.push_back(values);
     };
+    const auto within_bounds = [&](std::size_t index, double value) {
+      const auto& bounds = model.getVariableBounds(variables[index]);
+      return !bounds.position_bounded_ ||
+        (value >= bounds.min_position_ && value <= bounds.max_position_);
+    };
+    // Equivalent spherical-wrist branch; only offsets that keep joint4 and joint6 inside
+    // their position limits are generated (at most one per joint for limits below pi).
     const auto wrist_variants = [&](const std::vector<double>& values) {
       std::vector<std::vector<double>> variants;
-      for (const double turn6 : {-2.0 * kPi, 2.0 * kPi}) {
-        auto shifted = values;
-        shifted[*j6] += turn6;
-        variants.push_back(shifted);
-      }
-      if (j4 && j5) {
-        for (const double turn4 : {-kPi, kPi}) {
-          for (const double turn6 : {-kPi, kPi}) {
-            auto flipped = values;
-            flipped[*j4] += turn4;
-            flipped[*j5] = -flipped[*j5];
-            flipped[*j6] += turn6;
-            variants.push_back(flipped);
-          }
+      if (!j4 || !j5) return variants;
+      for (const double turn4 : {-kPi, kPi}) {
+        if (!within_bounds(*j4, values[*j4] + turn4)) continue;
+        for (const double turn6 : {-kPi, kPi}) {
+          if (!within_bounds(*j6, values[*j6] + turn6)) continue;
+          auto flipped = values;
+          flipped[*j4] += turn4;
+          flipped[*j5] = -flipped[*j5];
+          flipped[*j6] += turn6;
+          variants.push_back(flipped);
         }
       }
       return variants;
@@ -209,7 +234,7 @@ public:
     if (candidates.empty()) {
       RCLCPP_WARN(
         logger, "no seeded collision-free IK branch for transit goal; using wrapped planner");
-      return inner_->plan(from, link, offset, target, jmg, timeout, result, path_constraints);
+      return plan_original_pose();
     }
 
     const auto wrist_travel = [&](const std::vector<double>& values) {
@@ -240,10 +265,15 @@ public:
 
     Result last{false, "no IK branch could be planned"};
     for (const auto& candidate : candidates) {
+      const double left_s = remaining_s();
+      if (left_s <= 0.0) {
+        last = Result{false, "transit planning budget exhausted"};
+        break;
+      }
       auto goal_scene = from->diff();
       goal_scene->getCurrentStateNonConst().setJointGroupPositions(jmg, candidate);
       goal_scene->getCurrentStateNonConst().update();
-      last = inner_->plan(from, goal_scene, jmg, timeout, result, path_constraints);
+      last = inner_->plan(from, goal_scene, jmg, left_s, result, path_constraints);
       if (last) {
         RCLCPP_INFO(
           logger, "transit planned to IK branch joint6=%.4f (joint6 change %.4f rad)",
@@ -251,17 +281,28 @@ public:
         return last;
       }
     }
-    return last;
+    RCLCPP_WARN(
+      logger, "every seeded IK branch failed (%s); retrying the original pose goal once",
+      last.message.c_str());
+    const Result retry = plan_original_pose();
+    if (retry) return retry;
+    return Result{false, last.message + "; original pose goal retry: " + retry.message};
   }
 
   std::string getPlannerId() const override { return "NearestBranchTransit"; }
 
 private:
   mtc::solvers::PlannerInterfacePtr inner_;
+  double max_total_s_;
 };
 
+enum class CutKind : std::uint8_t { kNone, kLeft, kMiddle, kRight };
 struct CutSegment {
   std::string name;
+  // Which detected cut this segment belongs to; selects the correction slot, clearance,
+  // tilt, orientation mode and stage shapes. kNone (middle_debug_short) takes no
+  // correction and is planned like a side segment with its forced fixed orientation.
+  CutKind cut{CutKind::kNone};
   geometry_msgs::msg::Point start;
   geometry_msgs::msg::Point end;
   bool stop_after_start{false};
@@ -271,15 +312,24 @@ struct CutSegment {
   bool terminal_after_cut{false};
   double handoff_fraction{0.0};
 };
+// Left-roll search result for one planning request, reused by every t_cut_handoff probe:
+// the left segment, its correction, the snapshot and the seed state are identical
+// across probes, so the search result is too.
+struct LeftRollCache {
+  bool computed{false};
+  bool feasible{false};
+  std::vector<geometry_msgs::msg::Quaternion> orientations;
+  std::string error;
+};
 struct SegmentPlanOptions {
   // Skip the supplied joint-space approach (approach_joint_degrees); only "h" uses it.
   bool skip_supplied_approach{true};
-  double timeout_s{15.0};
-  bool explain_failure{true};
   // Staged cut-debug start plan: the carton is added together with the scoped
   // tool/carton allowance in one atomic scene change (the arm may still be in contact
   // from an earlier session), and the left roll search probes only the start poses.
   bool cut_debug_start{false};
+  // Optional per-request cache of the left roll search (t_cut_handoff probes).
+  LeftRollCache* left_roll_cache{nullptr};
 };
 struct Snapshot {
   std::string snapshot_id;
@@ -298,46 +348,89 @@ struct Snapshot {
   geometry_msgs::msg::Point back_middle_right;
   geometry_msgs::msg::Point front_middle_right;
   geometry_msgs::msg::Vector3 surface_normal;
-  double plane_rms_m{0.0};
 };
+// Staged cut-debug session: start planned -> start executed (explicit dispatch) ->
+// start observation saved (teleop to the endpoint, then save completes the record).
 enum class CutDebugStage : std::uint8_t {
   kNone = 0,
   kStartPlanned,
   kStartExecuted,
-  kEndExecuted,
+  kStartSaved,
 };
 struct CutLocalDeltas {
   double along_m{0.0};
   double across_m{0.0};
   double normal_m{0.0};
 };
+// Orthonormal right-handed cut frame: along the cut, across it, and the surface normal.
+struct CutBasis {
+  Eigen::Vector3d along{Eigen::Vector3d::UnitX()};
+  Eigen::Vector3d across{Eigen::Vector3d::UnitY()};
+  Eigen::Vector3d normal{Eigen::Vector3d::UnitZ()};
+};
 struct CutDebugCorrection {
   std::string cut;
   CutLocalDeltas start_local{};
   CutLocalDeltas end_local{};
-  std::array<double, 3> recorded_along{};
-  std::array<double, 3> recorded_across{};
-  std::array<double, 3> recorded_normal{};
+  CutBasis recorded{};
   geometry_msgs::msg::Quaternion observed_start{};
   geometry_msgs::msg::Quaternion observed_end{};
+};
+// Every executor parameter value. Read-only entries are fixed at startup; planning
+// entries change only through the parameter callback, under plan_mutex_, and clear any
+// retained plan. See kParameterTable in BoxHCutExecutor for scopes and defaults.
+struct PlannerSettings {
+  std::string planning_group, planning_frame, tool_link, planning_pipeline, chomp_pipeline,
+    pilz_pipeline, carton_collision_id, camera_pole_topic, side_cut_orientation_mode;
+  double external_snapshot_max_age_s{0.0}, carton_height_m{0.0}, hover_clearance_m{0.0},
+    left_lateral_standoff_m{0.0}, cut_clearance_m{0.0}, middle_cut_clearance_m{0.0},
+    middle_entry_alignment_m{0.0}, debug_motion_distance_m{0.0},
+    debug_motion_clearance_m{0.0}, cartesian_step_m{0.0}, planning_timeout_s{0.0},
+    velocity_scaling{0.0}, acceleration_scaling{0.0}, transit_velocity_scaling{0.0},
+    transit_acceleration_scaling{0.0};
+  bool allow_tool_carton_contact{false}, camera_pole_required{true};
+  std::vector<double> approach_joint_degrees;
+  std::int64_t max_solutions{1};
+  // Runtime-settable planning inputs.
+  std::string motion_profile, cut_pattern, cut_debug_cut, cut_debug_left_correction_file,
+    cut_debug_middle_correction_file, cut_debug_right_correction_file, cut_debug_output_dir;
+  double pre_cut_stabilization_duration_s{0.0}, left_side_cut_tilt_deg{0.0},
+    right_side_cut_tilt_deg{0.0}, left_adaptive_orientation_max_deg{0.0},
+    left_adaptive_orientation_step_deg{0.0}, t_cut_middle_handoff_fraction{0.0};
+  bool debug_fixed_orientation{false}, debug_allow_stale_snapshot{false},
+    cut_debug_correction_enabled{false}, left_adaptive_orientation_enabled{true};
 };
 class BoxHCutExecutor : public rclcpp::Node
 {
 public:
   BoxHCutExecutor() : Node("box_h_cut_executor")
   {
-    planning_group_ = declare_parameter<std::string>("planning_group", "igus_rebel_arm");
-    planning_frame_ = declare_parameter<std::string>("planning_frame", "base_link");
-    tool_link_ = declare_parameter<std::string>("tool_link", "link6");
-    planning_pipeline_ = declare_parameter<std::string>("planning_pipeline", "ompl");
-    chomp_pipeline_ = declare_parameter<std::string>("chomp_pipeline", "chomp");
-    pilz_pipeline_ = declare_parameter<std::string>(
-      "pilz_pipeline", "pilz_industrial_motion_planner");
-    const auto ompl_plugin_parameter = planning_pipeline_ + ".planning_plugin";
+    // One table drives declaration, startup validation and runtime updates. Read-only
+    // entries are declared read_only, so `ros2 param set` fails loudly instead of being
+    // silently ignored by code that only reads them at startup.
+    for (const auto& spec : parameterTable()) {
+      rcl_interfaces::msg::ParameterDescriptor descriptor;
+      descriptor.read_only = spec.scope == ParamScope::kReadOnly;
+      rclcpp::ParameterValue default_value = spec.default_value;
+      if (std::string(spec.name) == "middle_cut_clearance_m") {
+        default_value = rclcpp::ParameterValue(settings_.cut_clearance_m);
+      }
+      const auto value = declare_parameter(spec.name, default_value, descriptor);
+      const rclcpp::Parameter parameter(spec.name, value);
+      if (spec.scope == ParamScope::kRuntime) {
+        applyRuntimeParameter(parameter);
+      } else {
+        spec.apply(settings_, parameter);
+      }
+    }
+    if (const auto error = validateSettings(settings_)) {
+      throw std::invalid_argument("invalid H-cut planning safety parameters: " + *error);
+    }
+    const auto ompl_plugin_parameter = settings_.planning_pipeline + ".planning_plugin";
     if (!has_parameter(ompl_plugin_parameter)) {
       declare_parameter<std::string>(ompl_plugin_parameter, "ompl_interface/OMPLPlanner");
     }
-    const auto ompl_adapters_parameter = planning_pipeline_ + ".request_adapters";
+    const auto ompl_adapters_parameter = settings_.planning_pipeline + ".request_adapters";
     if (!has_parameter(ompl_adapters_parameter)) {
       declare_parameter<std::string>(
         ompl_adapters_parameter,
@@ -348,7 +441,8 @@ public:
         "default_planner_request_adapters/FixStartStatePathConstraints "
         "default_planner_request_adapters/AddTimeOptimalParameterization");
     }
-    const auto kinematics_prefix = "robot_description_kinematics." + planning_group_ + ".";
+    const auto kinematics_prefix =
+      "robot_description_kinematics." + settings_.planning_group + ".";
     if (!has_parameter(kinematics_prefix + "kinematics_solver")) {
       declare_parameter<std::string>(
         kinematics_prefix + "kinematics_solver",
@@ -359,332 +453,9 @@ public:
       declare_parameter<double>(kinematics_prefix + "kinematics_solver_timeout", 0.05);
       declare_parameter<bool>(kinematics_prefix + "position_only_ik", false);
     }
-    const auto motion_profile = declare_parameter<std::string>("motion_profile", "ompl_pilz");
-    declare_parameter<std::string>("external_snapshot_file", "");
-    external_snapshot_max_age_s_ = declare_parameter<double>(
-      "external_snapshot_max_age_s", 30.0);
-    debug_allow_stale_snapshot_ = declare_parameter<bool>(
-      "debug_allow_stale_snapshot", false);
-    carton_collision_id_ = declare_parameter<std::string>("carton_collision_id", "detected_carton");
-    allow_tool_carton_contact_ = declare_parameter<bool>("allow_tool_carton_contact", false);
-    camera_pole_required_ = declare_parameter<bool>("camera_pole_required", true);
-    camera_pole_topic_ = declare_parameter<std::string>(
-      "camera_pole_topic", "/box_motion/camera_pole_collision");
-    carton_height_m_ = declare_parameter<double>("carton_height_m", 0.20);
-    hover_clearance_m_ = declare_parameter<double>("hover_clearance_m", 0.10);
-    left_lateral_standoff_m_ = declare_parameter<double>("left_lateral_standoff_m", 0.010);
-    cut_clearance_m_ = declare_parameter<double>("cut_clearance_m", 0.05);
-    middle_cut_clearance_m_ = declare_parameter<double>(
-      "middle_cut_clearance_m", cut_clearance_m_);
-    middle_entry_alignment_m_ = declare_parameter<double>("middle_entry_alignment_m", 0.010);
-    pre_cut_stabilization_duration_s_ = declare_parameter<double>(
-      "pre_cut_stabilization_duration_s", 1.0);
-    left_side_cut_tilt_deg_ = declare_parameter<double>("left_side_cut_tilt_deg", 0.0);
-    right_side_cut_tilt_deg_ = declare_parameter<double>("right_side_cut_tilt_deg", 0.0);
-    side_cut_orientation_mode_ = declare_parameter<std::string>(
-      "side_cut_orientation_mode", "edge_aligned");
-    left_adaptive_orientation_enabled_ = declare_parameter<bool>(
-      "left_adaptive_orientation_enabled", true);
-    left_adaptive_orientation_max_deg_ = declare_parameter<double>(
-      "left_adaptive_orientation_max_deg", 45.0);
-    left_adaptive_orientation_step_deg_ = declare_parameter<double>(
-      "left_adaptive_orientation_step_deg", 5.0);
-    // Expensive per-pose IK/collision probing that explains each rejected left roll
-    // candidate. Read at use time; the roll search itself is unaffected.
-    declare_parameter<bool>("left_roll_diagnostics_enabled", false);
-    debug_motion_distance_m_ = declare_parameter<double>("debug_motion_distance_m", 0.010);
-    debug_motion_clearance_m_ = declare_parameter<double>("debug_motion_clearance_m", 0.030);
-    debug_fixed_orientation_ = declare_parameter<bool>("debug_fixed_orientation", false);
-    cut_pattern_ = declare_parameter<std::string>("cut_pattern", "t_cut");
-    t_cut_middle_handoff_fraction_ = declare_parameter<double>(
-      "t_cut_middle_handoff_fraction", 0.0);
-    // Supplied joint-space approach used only by the "h" pattern before its first cut.
-    approach_joint_degrees_ = declare_parameter<std::vector<double>>(
-      "approach_joint_degrees", std::vector<double>{});
-    cartesian_step_m_ = declare_parameter<double>("cartesian_step_m", 0.003);
-    planning_timeout_s_ = declare_parameter<double>("planning_timeout_s", 15.0);
-    velocity_scaling_ = declare_parameter<double>("velocity_scaling", 0.05);
-    acceleration_scaling_ = declare_parameter<double>("acceleration_scaling", 0.05);
-    transit_velocity_scaling_ = declare_parameter<double>("transit_velocity_scaling", 0.05);
-    transit_acceleration_scaling_ = declare_parameter<double>("transit_acceleration_scaling", 0.05);
-    declare_parameter<bool>("execution_enabled", false);
-    declare_parameter<bool>("debug_motion_execution_enabled", false);
-    cut_debug_cut_ = declare_parameter<std::string>("cut_debug_cut", "middle");
-    cut_debug_correction_enabled_ = declare_parameter<bool>("cut_debug_correction_enabled", false);
-    cut_debug_left_correction_file_ = declare_parameter<std::string>(
-      "cut_debug_left_correction_file", "");
-    cut_debug_middle_correction_file_ = declare_parameter<std::string>(
-      "cut_debug_middle_correction_file", "");
-    cut_debug_right_correction_file_ = declare_parameter<std::string>(
-      "cut_debug_right_correction_file", "");
-    cut_debug_output_dir_ = declare_parameter<std::string>("cut_debug_output_dir", "");
-    max_solutions_ = declare_parameter<int>("max_solutions", 1);
-    if (external_snapshot_max_age_s_ <= 0.0) {
-      throw std::invalid_argument("external_snapshot_max_age_s must be positive");
-    }
-    if (!isSupportedMotionProfile(motion_profile)) {
-      throw std::invalid_argument("unsupported H-cut motion_profile: " + motion_profile);
-    }
-    if (planning_frame_.empty() || carton_collision_id_.empty() ||
-        (camera_pole_required_ && camera_pole_topic_.empty()) ||
-        carton_height_m_ <= 0.0 ||
-        hover_clearance_m_ < 0.005 || left_lateral_standoff_m_ < 0.005 ||
-        left_lateral_standoff_m_ > 0.025 || cut_clearance_m_ < -0.003 ||
-        middle_cut_clearance_m_ < -0.005 ||
-        ((cut_clearance_m_ < 0.0 || middle_cut_clearance_m_ < 0.0) &&
-         !allow_tool_carton_contact_) ||
-        cut_clearance_m_ >= hover_clearance_m_ ||
-        middle_cut_clearance_m_ >= hover_clearance_m_ || middle_entry_alignment_m_ < 0.0 ||
-        middle_entry_alignment_m_ > 0.10 ||
-        !std::isfinite(pre_cut_stabilization_duration_s_) ||
-        pre_cut_stabilization_duration_s_ < 0.0 || pre_cut_stabilization_duration_s_ > 10.0 ||
-        cartesian_step_m_ <= 0.0 || planning_timeout_s_ <= 0.0 ||
-        debug_motion_distance_m_ <= 0.0 || debug_motion_distance_m_ > 0.020 ||
-        debug_motion_clearance_m_ < 0.010 || debug_motion_clearance_m_ > 0.100 ||
-        std::abs(left_side_cut_tilt_deg_) > 90.0 ||
-        std::abs(right_side_cut_tilt_deg_) > 90.0 ||
-        !std::isfinite(left_adaptive_orientation_max_deg_) ||
-        left_adaptive_orientation_max_deg_ <= 0.0 ||
-        left_adaptive_orientation_max_deg_ > 90.0 ||
-        !std::isfinite(left_adaptive_orientation_step_deg_) ||
-        left_adaptive_orientation_step_deg_ <= 0.0 ||
-        left_adaptive_orientation_step_deg_ > 90.0 ||
-        left_adaptive_orientation_step_deg_ > left_adaptive_orientation_max_deg_ ||
-        velocity_scaling_ <= 0.0 || velocity_scaling_ > 1.0 || acceleration_scaling_ <= 0.0 ||
-        acceleration_scaling_ > 1.0 ||
-        !std::isfinite(transit_velocity_scaling_) || transit_velocity_scaling_ <= 0.0 ||
-        transit_velocity_scaling_ > 1.0 || !std::isfinite(transit_acceleration_scaling_) ||
-        transit_acceleration_scaling_ <= 0.0 || transit_acceleration_scaling_ > 1.0 ||
-        max_solutions_ < 1 ||
-        !isValidHandoffFraction(t_cut_middle_handoff_fraction_) ||
-        !isSupportedCutPattern(cut_pattern_) ||
-        (!approach_joint_degrees_.empty() && approach_joint_degrees_.size() != 6U) ||
-        (cut_debug_cut_ != "left" && cut_debug_cut_ != "middle" && cut_debug_cut_ != "right") ||
-        !isAbsoluteJsonOrEmpty(cut_debug_left_correction_file_) ||
-        !isAbsoluteJsonOrEmpty(cut_debug_middle_correction_file_) ||
-        !isAbsoluteJsonOrEmpty(cut_debug_right_correction_file_) ||
-        (!cut_debug_output_dir_.empty() && cut_debug_output_dir_.front() != '/')) {
-      throw std::invalid_argument("invalid H-cut planning safety parameters");
-    }
-    if (side_cut_orientation_mode_ != "edge_aligned" &&
-        side_cut_orientation_mode_ != "middle_aligned") {
-      throw std::invalid_argument(
-        "unsupported side_cut_orientation_mode (edge_aligned or middle_aligned)");
-    }
-    cut_pattern_callback_ = add_on_set_parameters_callback(
+    parameter_callback_ = add_on_set_parameters_callback(
       [this](const std::vector<rclcpp::Parameter>& parameters) {
-        rcl_interfaces::msg::SetParametersResult result;
-        result.successful = true;
-        std::optional<std::string> requested_pattern;
-        std::optional<bool> requested_debug_orientation;
-        std::optional<bool> requested_debug_stale_snapshot;
-        std::optional<double> requested_left_tilt;
-        std::optional<double> requested_right_tilt;
-        std::optional<double> requested_pre_cut_dwell;
-        std::optional<std::string> requested_debug_cut;
-        std::optional<bool> requested_correction_enabled;
-        std::optional<bool> requested_left_adaptive_enabled;
-        std::optional<double> requested_left_adaptive_max_deg;
-        std::optional<double> requested_left_adaptive_step_deg;
-        std::optional<std::string> requested_left_correction_file;
-        std::optional<std::string> requested_middle_correction_file;
-        std::optional<std::string> requested_right_correction_file;
-        std::optional<std::string> requested_output_dir;
-        std::optional<double> requested_handoff_fraction;
-        for (const auto& parameter : parameters) {
-          if (parameter.get_name() == "cut_pattern") {
-            const auto pattern = parameter.as_string();
-            if (!isSupportedCutPattern(pattern)) {
-              result.successful = false;
-              result.reason = "unsupported cut_pattern";
-              return result;
-            }
-            requested_pattern = pattern;
-          } else if (parameter.get_name() == "motion_profile") {
-            // Validated only: every planning request reads motion_profile at use time.
-            if (!isSupportedMotionProfile(parameter.as_string())) {
-              result.successful = false;
-              result.reason =
-                "unsupported motion_profile (ompl_cartesian, ompl_pilz, pilz_only, chomp_pilz)";
-              return result;
-            }
-          } else if (parameter.get_name() == "t_cut_middle_handoff_fraction") {
-            const double fraction = parameter.as_double();
-            if (!isValidHandoffFraction(fraction)) {
-              result.successful = false;
-              result.reason = kHandoffFractionRule;
-              return result;
-            }
-            requested_handoff_fraction = fraction;
-          } else if (parameter.get_name() == "debug_fixed_orientation") {
-            requested_debug_orientation = parameter.as_bool();
-          } else if (parameter.get_name() == "debug_allow_stale_snapshot") {
-            requested_debug_stale_snapshot = parameter.as_bool();
-          } else if (parameter.get_name() == "pre_cut_stabilization_duration_s") {
-            const double duration_s = parameter.as_double();
-            if (!std::isfinite(duration_s) || duration_s < 0.0 || duration_s > 10.0) {
-              result.successful = false;
-              result.reason =
-                "pre_cut_stabilization_duration_s must be finite and within [0,10] seconds";
-              return result;
-            }
-            requested_pre_cut_dwell = duration_s;
-          } else if (parameter.get_name() == "left_side_cut_tilt_deg" ||
-                     parameter.get_name() == "right_side_cut_tilt_deg") {
-            const double tilt = parameter.as_double();
-            if (!std::isfinite(tilt) || std::abs(tilt) > 90.0) {
-              result.successful = false;
-              result.reason = "side cut tilt must be finite and within [-90,90] degrees";
-              return result;
-            }
-            if (parameter.get_name() == "left_side_cut_tilt_deg") {
-              requested_left_tilt = tilt;
-            } else {
-              requested_right_tilt = tilt;
-            }
-          } else if (parameter.get_name() == "cut_debug_cut") {
-            const auto cut = parameter.as_string();
-            if (cut != "left" && cut != "middle" && cut != "right") {
-              result.successful = false;
-              result.reason = "cut_debug_cut must be left, middle, or right";
-              return result;
-            }
-            requested_debug_cut = cut;
-          } else if (parameter.get_name() == "cut_debug_correction_enabled") {
-            requested_correction_enabled = parameter.as_bool();
-          } else if (parameter.get_name() == "left_adaptive_orientation_enabled") {
-            requested_left_adaptive_enabled = parameter.as_bool();
-          } else if (parameter.get_name() == "left_adaptive_orientation_max_deg") {
-            const double value = parameter.as_double();
-            if (!std::isfinite(value) || value <= 0.0 || value > 90.0) {
-              result.successful = false;
-              result.reason =
-                "left_adaptive_orientation_max_deg must be finite and within (0,90] degrees";
-              return result;
-            }
-            requested_left_adaptive_max_deg = value;
-          } else if (parameter.get_name() == "left_adaptive_orientation_step_deg") {
-            const double value = parameter.as_double();
-            if (!std::isfinite(value) || value <= 0.0 || value > 90.0) {
-              result.successful = false;
-              result.reason =
-                "left_adaptive_orientation_step_deg must be finite and within (0,90] degrees";
-              return result;
-            }
-            requested_left_adaptive_step_deg = value;
-          } else if (parameter.get_name() == "cut_debug_left_correction_file") {
-            const auto file = parameter.as_string();
-            if (!isAbsoluteJsonOrEmpty(file)) {
-              result.successful = false;
-              result.reason =
-                "cut_debug_left_correction_file must be an absolute .json path or empty";
-              return result;
-            }
-            requested_left_correction_file = file;
-          } else if (parameter.get_name() == "cut_debug_middle_correction_file") {
-            const auto file = parameter.as_string();
-            if (!isAbsoluteJsonOrEmpty(file)) {
-              result.successful = false;
-              result.reason =
-                "cut_debug_middle_correction_file must be an absolute .json path or empty";
-              return result;
-            }
-            requested_middle_correction_file = file;
-          } else if (parameter.get_name() == "cut_debug_right_correction_file") {
-            const auto file = parameter.as_string();
-            if (!isAbsoluteJsonOrEmpty(file)) {
-              result.successful = false;
-              result.reason =
-                "cut_debug_right_correction_file must be an absolute .json path or empty";
-              return result;
-            }
-            requested_right_correction_file = file;
-          } else if (parameter.get_name() == "cut_debug_output_dir") {
-            const auto dir = parameter.as_string();
-            if (!dir.empty() && dir.front() != '/') {
-              result.successful = false;
-              result.reason = "cut_debug_output_dir must be an absolute path or empty";
-              return result;
-            }
-            requested_output_dir = dir;
-          }
-        }
-        if (!requested_pattern && !requested_debug_orientation &&
-            !requested_debug_stale_snapshot && !requested_left_tilt &&
-            !requested_right_tilt && !requested_pre_cut_dwell && !requested_debug_cut &&
-            !requested_correction_enabled && !requested_left_adaptive_enabled &&
-            !requested_left_adaptive_max_deg && !requested_left_adaptive_step_deg &&
-            !requested_left_correction_file &&
-            !requested_middle_correction_file && !requested_right_correction_file &&
-            !requested_output_dir && !requested_handoff_fraction) {
-          return result;
-        }
-        std::lock_guard<std::mutex> lock(plan_mutex_);
-        if (execution_in_progress_) {
-          result.successful = false;
-          result.reason = "cannot change planning parameters during trajectory execution";
-          return result;
-        }
-        const bool any_planning_mutation = requested_pattern || requested_debug_orientation ||
-          requested_debug_stale_snapshot || requested_left_tilt || requested_right_tilt ||
-          requested_pre_cut_dwell || requested_debug_cut || requested_correction_enabled ||
-          requested_left_adaptive_enabled || requested_left_adaptive_max_deg ||
-          requested_left_adaptive_step_deg || requested_left_correction_file ||
-          requested_middle_correction_file || requested_right_correction_file ||
-          requested_output_dir || requested_handoff_fraction;
-        if (any_planning_mutation && cut_debug_stage_ != CutDebugStage::kNone) {
-          result.successful = false;
-          result.reason = "cannot change H-cut planning or cut-debug correction parameters while a cut debug session is active for cut " +
-            cut_debug_session_cut_ + " stage " + cutDebugStageName(cut_debug_stage_) +
-            "; call clear_plan first; execution_enabled and debug_motion_execution_enabled remain operable gates";
-          return result;
-        }
-        if (requested_pattern) cut_pattern_ = *requested_pattern;
-        if (requested_handoff_fraction) t_cut_middle_handoff_fraction_ = *requested_handoff_fraction;
-        if (requested_debug_orientation) debug_fixed_orientation_ = *requested_debug_orientation;
-        if (requested_debug_stale_snapshot) {
-          debug_allow_stale_snapshot_ = *requested_debug_stale_snapshot;
-        }
-        if (requested_left_tilt) left_side_cut_tilt_deg_ = *requested_left_tilt;
-        if (requested_right_tilt) right_side_cut_tilt_deg_ = *requested_right_tilt;
-        if (requested_pre_cut_dwell) {
-          pre_cut_stabilization_duration_s_ = *requested_pre_cut_dwell;
-        }
-        if (requested_debug_cut) cut_debug_cut_ = *requested_debug_cut;
-        if (requested_correction_enabled) {
-          cut_debug_correction_enabled_ = *requested_correction_enabled;
-        }
-        if (requested_left_adaptive_enabled) {
-          left_adaptive_orientation_enabled_ = *requested_left_adaptive_enabled;
-        }
-        if (requested_left_adaptive_max_deg || requested_left_adaptive_step_deg) {
-          const double next_max = requested_left_adaptive_max_deg ?
-            *requested_left_adaptive_max_deg : left_adaptive_orientation_max_deg_;
-          const double next_step = requested_left_adaptive_step_deg ?
-            *requested_left_adaptive_step_deg : left_adaptive_orientation_step_deg_;
-          if (!std::isfinite(next_max) || next_max <= 0.0 || next_max > 90.0 ||
-              !std::isfinite(next_step) || next_step <= 0.0 || next_step > 90.0 ||
-              next_step > next_max) {
-            result.successful = false;
-            result.reason =
-              "left adaptive orientation bounds must satisfy 0 < step <= max <= 90 degrees";
-            return result;
-          }
-          left_adaptive_orientation_max_deg_ = next_max;
-          left_adaptive_orientation_step_deg_ = next_step;
-        }
-        if (requested_left_correction_file) {
-          cut_debug_left_correction_file_ = *requested_left_correction_file;
-        }
-        if (requested_middle_correction_file) {
-          cut_debug_middle_correction_file_ = *requested_middle_correction_file;
-        }
-        if (requested_right_correction_file) {
-          cut_debug_right_correction_file_ = *requested_right_correction_file;
-        }
-        if (requested_output_dir) cut_debug_output_dir_ = *requested_output_dir;
-        clearRetainedPlan();
-        return result;
+        return onSetParameters(parameters);
       });
 
     joint_state_sub_ = create_subscription<sensor_msgs::msg::JointState>(
@@ -695,9 +466,9 @@ public:
         joint_state_received_ = now();
       });
     camera_pole_sub_ = create_subscription<moveit_msgs::msg::CollisionObject>(
-      camera_pole_topic_, rclcpp::QoS(1).reliable().transient_local(),
+      settings_.camera_pole_topic, rclcpp::QoS(1).reliable().transient_local(),
       [this](moveit_msgs::msg::CollisionObject::SharedPtr message) {
-        if (message->id != "camera_pole" || message->header.frame_id != planning_frame_ ||
+        if (message->id != "camera_pole" || message->header.frame_id != settings_.planning_frame ||
             message->operation != moveit_msgs::msg::CollisionObject::ADD ||
             message->primitives.size() != 1U || message->primitive_poses.size() != 1U ||
             message->primitives.front().type != shape_msgs::msg::SolidPrimitive::BOX ||
@@ -716,234 +487,57 @@ public:
     carton_collision_pub_ = create_publisher<moveit_msgs::msg::CollisionObject>(
       "/collision_object", rclcpp::QoS(1).reliable().transient_local());
 
-    plan_service_ = create_service<std_srvs::srv::Trigger>(
+    plan_service_ = guardedTrigger(
       "~/plan_h_cut",
-      [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
-             std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
-        std::unique_lock<std::mutex> lock(plan_mutex_, std::try_to_lock);
-        if (!lock.owns_lock() || execution_in_progress_) {
-          response->success = false;
-          response->message = "cannot plan while another planning or execution operation is active";
-          return;
-        }
+      "cannot plan while another planning or execution operation is active",
+      [this](std::string& message) {
         if (cut_debug_stage_ != CutDebugStage::kNone) {
-          response->success = false;
-          response->message = "cut debug session active for cut " + cut_debug_session_cut_ +
+          message = "cut debug session active for cut " + cut_debug_session_cut_ +
             " stage " + cutDebugStageName(cut_debug_stage_) +
             "; call clear_plan before planning a normal H-cut";
-          return;
+          return false;
         }
         clearRetainedPlan();
-        response->success = planExternalSnapshot(response->message);
-      },
-      rmw_qos_profile_services_default, callback_group_);
-    cut_debug_start_service_ = create_service<std_srvs::srv::Trigger>(
+        return planExternalSnapshot(message);
+      });
+    cut_debug_start_service_ = guardedTrigger(
       "~/start_cut_debug_session",
-      [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
-             std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
-        std::unique_lock<std::mutex> lock(plan_mutex_, std::try_to_lock);
-        if (!lock.owns_lock() || execution_in_progress_) {
-          response->success = false;
-          response->message = "cannot start cut debug session while another planning or execution operation is active";
-          return;
-        }
-        response->success = startCutDebugSession(response->message);
-      },
-      rmw_qos_profile_services_default, callback_group_);
-    cut_debug_save_service_ = create_service<std_srvs::srv::Trigger>(
+      "cannot start cut debug session while another planning or execution operation is active",
+      [this](std::string& message) { return startCutDebugSession(message); });
+    cut_debug_save_service_ = guardedTrigger(
       "~/save_cut_debug_point",
-      [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
-             std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
-        std::unique_lock<std::mutex> lock(plan_mutex_, std::try_to_lock);
-        if (!lock.owns_lock() || execution_in_progress_) {
-          response->success = false;
-          response->message = "cannot save cut debug point while another planning or execution operation is active";
-          return;
-        }
-        response->success = saveCutDebugPoint(response->message);
-      },
-      rmw_qos_profile_services_default, callback_group_);
-    section_diagnostic_service_ = create_service<std_srvs::srv::Trigger>(
+      "cannot save cut debug point while another planning or execution operation is active",
+      [this](std::string& message) { return saveCutDebugPoint(message); });
+    section_diagnostic_service_ = guardedTrigger(
       "~/diagnose_external_snapshot_sections",
-      [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
-             std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
-        std::unique_lock<std::mutex> lock(plan_mutex_, std::try_to_lock);
-        if (!lock.owns_lock() || execution_in_progress_) {
-          response->success = false;
-          response->message = "cannot diagnose while another planning or execution operation is active";
-          return;
-        }
+      "cannot diagnose while another planning or execution operation is active",
+      [this](std::string& message) {
         if (cut_debug_stage_ != CutDebugStage::kNone) {
-          response->success = false;
-          response->message = "cut debug session active for cut " + cut_debug_session_cut_ +
+          message = "cut debug session active for cut " + cut_debug_session_cut_ +
             "; call clear_plan before running section diagnostics";
-          return;
+          return false;
         }
-        response->success = diagnoseExternalSnapshotSections(response->message);
-      },
-      rmw_qos_profile_services_default, callback_group_);
-    execute_service_ = create_service<std_srvs::srv::Trigger>(
-      "~/execute_planned_h_cut",
-      [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
-             std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
-        std::unique_lock<std::mutex> lock(plan_mutex_, std::try_to_lock);
-        if (!lock.owns_lock()) {
-          response->success = false;
-          response->message = "another H-cut plan operation is active";
-          return;
-        }
-        if (!get_parameter("execution_enabled").as_bool()) {
-          response->success = false;
-          response->message = "execution service is disabled by execution_enabled";
-          return;
-        }
-        if (debug_fixed_orientation_) {
-          response->success = false;
-          response->message = "execution is blocked while debug_fixed_orientation is enabled";
-          return;
-        }
-        const bool in_debug_session = cut_debug_stage_ != CutDebugStage::kNone;
-        if (in_debug_session &&
-            !get_parameter("debug_motion_execution_enabled").as_bool()) {
-          response->success = false;
-          response->message =
-            "cut debug session execution requires both execution_enabled and debug_motion_execution_enabled";
-          return;
-        }
-        if (!in_debug_session && cut_pattern_ == "middle_debug_short" &&
-            !get_parameter("debug_motion_execution_enabled").as_bool()) {
-          response->success = false;
-          response->message =
-            "debug trajectory execution is disabled by debug_motion_execution_enabled";
-          return;
-        }
-        if (execution_in_progress_) {
-          response->success = false;
-          response->message = "an H-cut trajectory execution is already active";
-          return;
-        }
-        if (in_debug_session && cut_debug_stage_ != CutDebugStage::kStartPlanned) {
-          response->success = false;
-          if (cut_debug_stage_ == CutDebugStage::kStartExecuted) {
-            response->message = "cut debug start already executed for cut " +
-              cut_debug_session_cut_ +
-              "; teleop correct the TCP then call save_cut_debug_point before any further execution";
-          } else if (cut_debug_stage_ == CutDebugStage::kEndExecuted) {
-            response->message = "cut debug end already executed for cut " +
-              cut_debug_session_cut_ +
-              "; teleop correct the TCP then call save_cut_debug_point before any further execution";
-          } else {
-            response->message = "no executable cut debug plan is retained for cut " +
-              cut_debug_session_cut_ + " stage " + cutDebugStageName(cut_debug_stage_);
-          }
-          return;
-        }
-        if (in_debug_session && cut_debug_dispatch_failed_) {
-          response->success = false;
-          response->message = "previous cut debug " + cutDebugStageName(cut_debug_stage_) +
-            " dispatch for cut " + cut_debug_session_cut_ +
-            " failed during execution and was NOT marked executed; no retained plan remains; call clear_plan then start_cut_debug_session to restart";
-          return;
-        }
-        if (!planned_task_ || !planned_snapshot_ || planned_task_->solutions().empty()) {
-          response->success = false;
-          response->message = "no valid planned H-cut is available to execute";
-          return;
-        }
-        // Normal retained plans refuse a stale snapshot so a previous carton's result
-        // can never dispatch. A staged session instead freezes its snapshot at session
-        // start and each stage is planned from the live state seconds before its
-        // explicit execution; teleop correction inherently takes longer than the
-        // snapshot age bound, so the age check does not apply while the session owns
-        // the retained plan. Both execution gates still apply to every stage.
-        if (!in_debug_session) {
-          std::string freshness_error;
-          if (!snapshotIsFresh(*planned_snapshot_, freshness_error)) {
-            clearRetainedPlan();
-            response->success = false;
-            response->message = freshness_error + "; retained plan was cleared";
-            return;
-          }
-        }
-        if (execution_thread_.joinable()) execution_thread_.join();
-        execution_in_progress_ = true;
-        const CutDebugStage dispatched_stage = cut_debug_stage_;
-        const std::string dispatched_cut = cut_debug_session_cut_;
-        auto task = std::move(planned_task_);
-        planned_snapshot_.reset();
-        execution_thread_ = std::thread(
-          [this, task = std::move(task), dispatched_stage, dispatched_cut]() mutable {
-          bool succeeded = false;
-          std::string failure_detail;
-          try {
-            const auto result = task->execute(*task->solutions().front());
-            succeeded = (result == moveit::core::MoveItErrorCode::SUCCESS);
-            if (succeeded) {
-              RCLCPP_INFO(get_logger(), "H-cut trajectory execution completed");
-            } else {
-              failure_detail =
-                "controller reported failure status " + std::to_string(result.val);
-              RCLCPP_ERROR(
-                get_logger(), "H-cut trajectory execution failed: %s",
-                failure_detail.c_str());
-            }
-          } catch (const std::exception& exception) {
-            failure_detail = std::string("threw exception: ") + exception.what();
-            RCLCPP_ERROR(
-              get_logger(), "H-cut trajectory execution %s", failure_detail.c_str());
-          }
-          std::lock_guard<std::mutex> completion_lock(plan_mutex_);
-          execution_in_progress_ = false;
-          if (dispatched_stage == CutDebugStage::kNone) return;
-          if (!succeeded) {
-            // Never mark the stage executed: the arm did not reach the stage pose,
-            // so capturing an observation here would persist a false correction.
-            // The dispatched task was consumed, so nothing executable remains.
-            cut_debug_dispatch_failed_ = true;
-            RCLCPP_ERROR(
-              get_logger(),
-              "Cut debug %s dispatch for cut %s did NOT complete (%s); the stage was NOT marked executed and no plan is retained; call clear_plan then start_cut_debug_session to restart",
-              cutDebugStageName(dispatched_stage).c_str(), dispatched_cut.c_str(),
-              failure_detail.c_str());
-            return;
-          }
-          cut_debug_dispatch_failed_ = false;
-          // The staged session retains only a start plan; every later stage is teleop.
-          if (dispatched_stage == CutDebugStage::kStartPlanned) {
-            cut_debug_stage_ = CutDebugStage::kStartExecuted;
-          }
-        });
-        if (in_debug_session) {
-          response->success = true;
-          response->message = "cut debug start dispatch accepted for cut " + dispatched_cut +
-            "; monitor controller execution, then teleop correct and call save_cut_debug_point; no further motion is automatic";
-        } else {
-          response->success = true;
-          response->message = "H-cut trajectory dispatch accepted; monitor controller execution";
-        }
-      },
-      rmw_qos_profile_services_default, callback_group_);
-    clear_service_ = create_service<std_srvs::srv::Trigger>(
+        return diagnoseExternalSnapshotSections(message);
+      });
+    // Execution-in-progress is reported by the execute body itself, after the gates.
+    execute_service_ = guardedTrigger(
+      "~/execute_planned_h_cut", "another H-cut plan operation is active",
+      [this](std::string& message) { return executeRetainedPlan(message); },
+      /*reject_during_execution=*/false);
+    clear_service_ = guardedTrigger(
       "~/clear_plan",
-      [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
-             std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
-        std::lock_guard<std::mutex> lock(plan_mutex_);
-        if (execution_in_progress_) {
-          response->success = false;
-          response->message = "cannot clear a plan while an H-cut trajectory execution is active";
-          return;
-        }
+      "cannot clear the plan while planning or an H-cut trajectory execution is active",
+      [this](std::string& message) {
         clearRetainedPlan();
         clearCutDebugSessionState();
-        response->success = true;
-        response->message = "H-cut plan, cut debug session, and RViz outputs cleared";
-      },
-      rmw_qos_profile_services_default, callback_group_);
+        message = "H-cut plan, cut debug session, and RViz outputs cleared";
+        return true;
+      });
     RCLCPP_INFO(
       get_logger(),
       "Snapshot H-cut MTC planner ready; hover %.0f mm, cut %.0f mm, pre-cut stabilization %.3f s",
-      hover_clearance_m_ * 1000.0, cut_clearance_m_ * 1000.0,
-      pre_cut_stabilization_duration_s_);
+      settings_.hover_clearance_m * 1000.0, settings_.cut_clearance_m * 1000.0,
+      settings_.pre_cut_stabilization_duration_s);
   }
 
   ~BoxHCutExecutor() override
@@ -952,21 +546,477 @@ public:
   }
 
 private:
+  // kReadOnly: startup only (declared read_only). kPlanning: changes planning inputs, so
+  // it is applied under plan_mutex_ and clears any retained plan. kRuntime: read at use
+  // time (execution gates, diagnostics, snapshot path); never blocked by planning.
+  enum class ParamScope : std::uint8_t { kReadOnly, kPlanning, kRuntime };
+  struct ParamSpec {
+    const char* name;
+    ParamScope scope;
+    rclcpp::ParameterValue default_value;
+    std::function<void(PlannerSettings&, const rclcpp::Parameter&)> apply;
+  };
+  template<typename T>
+  static ParamSpec field(const char* name, ParamScope scope, T default_value, T PlannerSettings::*member)
+  {
+    return ParamSpec{
+      name, scope, rclcpp::ParameterValue(default_value),
+      [member](PlannerSettings& settings, const rclcpp::Parameter& parameter) {
+        settings.*member = parameter.get_value<T>();
+      }};
+  }
+  static ParamSpec runtime(const char* name, rclcpp::ParameterValue default_value)
+  {
+    return ParamSpec{name, ParamScope::kRuntime, std::move(default_value), nullptr};
+  }
+  static const std::vector<ParamSpec>& parameterTable()
+  {
+    using S = PlannerSettings;
+    using str = std::string;
+    constexpr auto kRO = ParamScope::kReadOnly;
+    constexpr auto kPlan = ParamScope::kPlanning;
+    // Default scalings are relative to joint_limits.yaml (0.785 rad/s, 5.24 rad/s^2) and
+    // keep the physical speed of the former 0.05 default at 2.16 rad/s, 10 rad/s^2.
+    static const std::vector<ParamSpec> table{
+      field<str>("planning_group", kRO, "igus_rebel_arm", &S::planning_group),
+      field<str>("planning_frame", kRO, "base_link", &S::planning_frame),
+      field<str>("tool_link", kRO, "link6", &S::tool_link),
+      field<str>("planning_pipeline", kRO, "ompl", &S::planning_pipeline),
+      field<str>("chomp_pipeline", kRO, "chomp", &S::chomp_pipeline),
+      field<str>("pilz_pipeline", kRO, "pilz_industrial_motion_planner", &S::pilz_pipeline),
+      field<str>("motion_profile", kPlan, "ompl_pilz", &S::motion_profile),
+      runtime("external_snapshot_file", rclcpp::ParameterValue(str())),
+      field<double>("external_snapshot_max_age_s", kRO, 30.0, &S::external_snapshot_max_age_s),
+      field<bool>("debug_allow_stale_snapshot", kPlan, false, &S::debug_allow_stale_snapshot),
+      field<str>("carton_collision_id", kRO, "detected_carton", &S::carton_collision_id),
+      field<bool>("allow_tool_carton_contact", kRO, false, &S::allow_tool_carton_contact),
+      field<bool>("camera_pole_required", kRO, true, &S::camera_pole_required),
+      field<str>(
+        "camera_pole_topic", kRO, "/box_motion/camera_pole_collision", &S::camera_pole_topic),
+      field<double>("carton_height_m", kRO, 0.20, &S::carton_height_m),
+      field<double>("hover_clearance_m", kRO, 0.10, &S::hover_clearance_m),
+      field<double>("left_lateral_standoff_m", kRO, 0.010, &S::left_lateral_standoff_m),
+      field<double>("cut_clearance_m", kRO, 0.05, &S::cut_clearance_m),
+      // Default follows cut_clearance_m (substituted at declaration).
+      field<double>("middle_cut_clearance_m", kRO, 0.05, &S::middle_cut_clearance_m),
+      field<double>("middle_entry_alignment_m", kRO, 0.010, &S::middle_entry_alignment_m),
+      field<double>(
+        "pre_cut_stabilization_duration_s", kPlan, 1.0, &S::pre_cut_stabilization_duration_s),
+      field<double>("left_side_cut_tilt_deg", kPlan, 0.0, &S::left_side_cut_tilt_deg),
+      field<double>("right_side_cut_tilt_deg", kPlan, 0.0, &S::right_side_cut_tilt_deg),
+      field<str>(
+        "side_cut_orientation_mode", kRO, "edge_aligned", &S::side_cut_orientation_mode),
+      field<bool>(
+        "left_adaptive_orientation_enabled", kPlan, true, &S::left_adaptive_orientation_enabled),
+      field<double>(
+        "left_adaptive_orientation_max_deg", kPlan, 45.0, &S::left_adaptive_orientation_max_deg),
+      field<double>(
+        "left_adaptive_orientation_step_deg", kPlan, 5.0, &S::left_adaptive_orientation_step_deg),
+      // Expensive per-pose IK/collision probing that explains each rejected left roll
+      // candidate. Read at use time; the roll search itself is unaffected.
+      runtime("left_roll_diagnostics_enabled", rclcpp::ParameterValue(false)),
+      field<double>("debug_motion_distance_m", kRO, 0.010, &S::debug_motion_distance_m),
+      field<double>("debug_motion_clearance_m", kRO, 0.030, &S::debug_motion_clearance_m),
+      field<bool>("debug_fixed_orientation", kPlan, false, &S::debug_fixed_orientation),
+      field<str>("cut_pattern", kPlan, "t_cut", &S::cut_pattern),
+      field<double>(
+        "t_cut_middle_handoff_fraction", kPlan, 0.0, &S::t_cut_middle_handoff_fraction),
+      // Supplied joint-space approach used only by the "h" pattern before its first cut.
+      field<std::vector<double>>(
+        "approach_joint_degrees", kRO, std::vector<double>{}, &S::approach_joint_degrees),
+      field<double>("cartesian_step_m", kRO, 0.003, &S::cartesian_step_m),
+      field<double>("planning_timeout_s", kRO, 15.0, &S::planning_timeout_s),
+      field<double>("velocity_scaling", kRO, 0.1376, &S::velocity_scaling),
+      field<double>("acceleration_scaling", kRO, 0.0954, &S::acceleration_scaling),
+      field<double>("transit_velocity_scaling", kRO, 0.1376, &S::transit_velocity_scaling),
+      field<double>(
+        "transit_acceleration_scaling", kRO, 0.0954, &S::transit_acceleration_scaling),
+      runtime("execution_enabled", rclcpp::ParameterValue(false)),
+      runtime("debug_motion_execution_enabled", rclcpp::ParameterValue(false)),
+      field<str>("cut_debug_cut", kPlan, "middle", &S::cut_debug_cut),
+      field<bool>(
+        "cut_debug_correction_enabled", kPlan, false, &S::cut_debug_correction_enabled),
+      field<str>(
+        "cut_debug_left_correction_file", kPlan, "", &S::cut_debug_left_correction_file),
+      field<str>(
+        "cut_debug_middle_correction_file", kPlan, "", &S::cut_debug_middle_correction_file),
+      field<str>(
+        "cut_debug_right_correction_file", kPlan, "", &S::cut_debug_right_correction_file),
+      field<str>("cut_debug_output_dir", kPlan, "", &S::cut_debug_output_dir),
+      field<std::int64_t>("max_solutions", kRO, 1, &S::max_solutions),
+    };
+    return table;
+  }
+  static const ParamSpec* findParamSpec(const std::string& name)
+  {
+    for (const auto& spec : parameterTable()) {
+      if (name == spec.name) return &spec;
+    }
+    return nullptr;
+  }
+  static constexpr double kMaxSnapshotAgeS = 600.0;
+  // Shared by startup and every runtime change: returns the first violated rule.
+  static std::optional<std::string> validateSettings(const PlannerSettings& s)
+  {
+    const std::array<std::pair<const char*, double>, 21> doubles{{
+      {"external_snapshot_max_age_s", s.external_snapshot_max_age_s},
+      {"carton_height_m", s.carton_height_m}, {"hover_clearance_m", s.hover_clearance_m},
+      {"left_lateral_standoff_m", s.left_lateral_standoff_m},
+      {"cut_clearance_m", s.cut_clearance_m}, {"middle_cut_clearance_m", s.middle_cut_clearance_m},
+      {"middle_entry_alignment_m", s.middle_entry_alignment_m},
+      {"debug_motion_distance_m", s.debug_motion_distance_m},
+      {"debug_motion_clearance_m", s.debug_motion_clearance_m},
+      {"cartesian_step_m", s.cartesian_step_m}, {"planning_timeout_s", s.planning_timeout_s},
+      {"velocity_scaling", s.velocity_scaling}, {"acceleration_scaling", s.acceleration_scaling},
+      {"transit_velocity_scaling", s.transit_velocity_scaling},
+      {"transit_acceleration_scaling", s.transit_acceleration_scaling},
+      {"pre_cut_stabilization_duration_s", s.pre_cut_stabilization_duration_s},
+      {"left_side_cut_tilt_deg", s.left_side_cut_tilt_deg},
+      {"right_side_cut_tilt_deg", s.right_side_cut_tilt_deg},
+      {"left_adaptive_orientation_max_deg", s.left_adaptive_orientation_max_deg},
+      {"left_adaptive_orientation_step_deg", s.left_adaptive_orientation_step_deg},
+      {"t_cut_middle_handoff_fraction", s.t_cut_middle_handoff_fraction}}};
+    for (const auto& [name, value] : doubles) {
+      if (!std::isfinite(value)) return std::string(name) + " must be finite";
+    }
+    const auto within = [](double value, double low, double high) {
+      return value >= low && value <= high;
+    };
+    if (s.planning_group.empty() || s.planning_frame.empty() || s.tool_link.empty() ||
+        s.carton_collision_id.empty()) {
+      return std::string(
+        "planning_group, planning_frame, tool_link and carton_collision_id must be non-empty");
+    }
+    if (s.camera_pole_required && s.camera_pole_topic.empty()) {
+      return std::string("camera_pole_topic is required while camera_pole_required is true");
+    }
+    if (s.external_snapshot_max_age_s <= 0.0 || s.external_snapshot_max_age_s > kMaxSnapshotAgeS) {
+      return "external_snapshot_max_age_s must be within (0," + formatDouble(kMaxSnapshotAgeS, 0) +
+        "] seconds";
+    }
+    if (s.carton_height_m <= 0.0) return std::string("carton_height_m must be positive");
+    if (s.hover_clearance_m < 0.005) return std::string("hover_clearance_m must be >= 0.005 m");
+    if (!within(s.left_lateral_standoff_m, 0.005, 0.025)) {
+      return std::string("left_lateral_standoff_m must be within [0.005,0.025] m");
+    }
+    if (s.cut_clearance_m < -0.003 || s.middle_cut_clearance_m < -0.005) {
+      return std::string(
+        "cut penetration is capped at 3 mm (cut_clearance_m) and 5 mm (middle_cut_clearance_m)");
+    }
+    if ((s.cut_clearance_m < 0.0 || s.middle_cut_clearance_m < 0.0) &&
+        !s.allow_tool_carton_contact) {
+      return std::string("negative cut clearances require allow_tool_carton_contact");
+    }
+    if (s.cut_clearance_m >= s.hover_clearance_m ||
+        s.middle_cut_clearance_m >= s.hover_clearance_m) {
+      return std::string("cut clearances must be below hover_clearance_m");
+    }
+    if (!within(s.middle_entry_alignment_m, 0.0, 0.10)) {
+      return std::string("middle_entry_alignment_m must be within [0,0.10] m");
+    }
+    if (!within(s.pre_cut_stabilization_duration_s, 0.0, 10.0)) {
+      return std::string(
+        "pre_cut_stabilization_duration_s must be finite and within [0,10] seconds");
+    }
+    if (s.cartesian_step_m <= 0.0 || s.planning_timeout_s <= 0.0) {
+      return std::string("cartesian_step_m and planning_timeout_s must be positive");
+    }
+    if (s.debug_motion_distance_m <= 0.0 || s.debug_motion_distance_m > 0.020 ||
+        !within(s.debug_motion_clearance_m, 0.010, 0.100)) {
+      return std::string(
+        "debug_motion_distance_m must be within (0,0.020] m and debug_motion_clearance_m within [0.010,0.100] m");
+    }
+    if (std::abs(s.left_side_cut_tilt_deg) > 90.0 || std::abs(s.right_side_cut_tilt_deg) > 90.0) {
+      return std::string("side cut tilt must be finite and within [-90,90] degrees");
+    }
+    if (s.left_adaptive_orientation_max_deg <= 0.0 || s.left_adaptive_orientation_max_deg > 90.0 ||
+        s.left_adaptive_orientation_step_deg <= 0.0 ||
+        s.left_adaptive_orientation_step_deg > s.left_adaptive_orientation_max_deg) {
+      return std::string(
+        "left adaptive orientation bounds must satisfy 0 < step <= max <= 90 degrees");
+    }
+    for (const double scaling : {s.velocity_scaling, s.acceleration_scaling,
+                                 s.transit_velocity_scaling, s.transit_acceleration_scaling}) {
+      if (scaling <= 0.0 || scaling > 1.0) {
+        return std::string("velocity/acceleration scalings must be finite and within (0,1]");
+      }
+    }
+    if (s.max_solutions < 1) return std::string("max_solutions must be at least 1");
+    if (!isValidHandoffFraction(s.t_cut_middle_handoff_fraction)) {
+      return std::string(kHandoffFractionRule);
+    }
+    if (!isSupportedCutPattern(s.cut_pattern)) return std::string("unsupported cut_pattern");
+    if (!isSupportedMotionProfile(s.motion_profile)) {
+      return std::string(
+        "unsupported motion_profile (ompl_cartesian, ompl_pilz, pilz_only, chomp_pilz)");
+    }
+    if (s.side_cut_orientation_mode != "edge_aligned" &&
+        s.side_cut_orientation_mode != "middle_aligned") {
+      return std::string(
+        "unsupported side_cut_orientation_mode (edge_aligned or middle_aligned)");
+    }
+    if (!s.approach_joint_degrees.empty() &&
+        (s.approach_joint_degrees.size() != 6U ||
+         !std::all_of(s.approach_joint_degrees.begin(), s.approach_joint_degrees.end(),
+                      [](double value) { return std::isfinite(value); }))) {
+      return std::string("approach_joint_degrees must be empty or six finite values");
+    }
+    if (!cutKindFromName(s.cut_debug_cut)) {
+      return std::string("cut_debug_cut must be left, middle, or right");
+    }
+    for (const auto& [name, file] : std::array<std::pair<const char*, const std::string*>, 3>{{
+           {"cut_debug_left_correction_file", &s.cut_debug_left_correction_file},
+           {"cut_debug_middle_correction_file", &s.cut_debug_middle_correction_file},
+           {"cut_debug_right_correction_file", &s.cut_debug_right_correction_file}}}) {
+      if (!isAbsoluteJsonOrEmpty(*file)) {
+        return std::string(name) + " must be an absolute .json path or empty";
+      }
+    }
+    if (!s.cut_debug_output_dir.empty() && s.cut_debug_output_dir.front() != '/') {
+      return std::string("cut_debug_output_dir must be an absolute path or empty");
+    }
+    return std::nullopt;
+  }
+  void applyRuntimeParameter(const rclcpp::Parameter& parameter)
+  {
+    const auto& name = parameter.get_name();
+    if (name == "execution_enabled") {
+      execution_enabled_.store(parameter.as_bool());
+    } else if (name == "debug_motion_execution_enabled") {
+      debug_motion_execution_enabled_.store(parameter.as_bool());
+    } else if (name == "left_roll_diagnostics_enabled") {
+      left_roll_diagnostics_enabled_.store(parameter.as_bool());
+    } else if (name == "external_snapshot_file") {
+      std::lock_guard<std::mutex> lock(runtime_parameter_mutex_);
+      external_snapshot_file_ = parameter.as_string();
+    }
+  }
+  std::string externalSnapshotFile()
+  {
+    std::lock_guard<std::mutex> lock(runtime_parameter_mutex_);
+    return external_snapshot_file_;
+  }
+  // rclcpp holds its internal parameter mutex while this callback runs, and every
+  // planning/execution service holds plan_mutex_ for its whole duration, so this
+  // callback must never block on plan_mutex_ (that was a deadlock with any code reading
+  // a parameter under plan_mutex_). Planning changes are rejected while busy; runtime
+  // gates (execution_enabled, debug_motion_execution_enabled) always apply.
+  rcl_interfaces::msg::SetParametersResult onSetParameters(
+    const std::vector<rclcpp::Parameter>& parameters)
+  {
+    rcl_interfaces::msg::SetParametersResult result;
+    result.successful = false;
+    std::vector<std::pair<const ParamSpec*, const rclcpp::Parameter*>> planning;
+    std::vector<const rclcpp::Parameter*> runtime_changes;
+    for (const auto& parameter : parameters) {
+      const ParamSpec* spec = findParamSpec(parameter.get_name());
+      if (spec == nullptr) continue;  // MoveIt pipeline/kinematics parameters
+      if (spec->scope == ParamScope::kReadOnly) {
+        result.reason = "parameter '" + parameter.get_name() +
+          "' is read-only: it is applied only at startup; edit box_h_cut_executor.yaml and restart";
+        return result;
+      }
+      if (spec->scope == ParamScope::kPlanning) {
+        planning.emplace_back(spec, &parameter);
+      } else {
+        runtime_changes.push_back(&parameter);
+      }
+    }
+    std::unique_lock<std::mutex> lock(plan_mutex_, std::defer_lock);
+    if (!planning.empty()) {
+      if (!lock.try_lock()) {
+        result.reason =
+          "busy: planning/execution active; H-cut planning parameters were not changed; retry after the active service call returns";
+        return result;
+      }
+      if (execution_in_progress_) {
+        result.reason =
+          "busy: planning/execution active; cannot change planning parameters during trajectory execution";
+        return result;
+      }
+      if (cut_debug_stage_ != CutDebugStage::kNone) {
+        result.reason = "cannot change H-cut planning or cut-debug correction parameters while a cut debug session is active for cut " +
+          cut_debug_session_cut_ + " stage " + cutDebugStageName(cut_debug_stage_) +
+          "; call clear_plan first; execution_enabled and debug_motion_execution_enabled remain operable gates";
+        return result;
+      }
+      PlannerSettings candidate = settings_;
+      for (const auto& [spec, parameter] : planning) spec->apply(candidate, *parameter);
+      if (const auto error = validateSettings(candidate)) {
+        result.reason = *error;
+        return result;
+      }
+      // Commit only the planning fields; read-only fields are never rewritten.
+      for (const auto& [spec, parameter] : planning) spec->apply(settings_, *parameter);
+      clearRetainedPlan();
+    }
+    for (const auto* parameter : runtime_changes) applyRuntimeParameter(*parameter);
+    result.successful = true;
+    return result;
+  }
+  using TriggerService = rclcpp::Service<std_srvs::srv::Trigger>;
+  // Every Trigger service runs under plan_mutex_ taken with try_lock, so a service never
+  // queues behind a long plan; a busy request fails immediately with `busy_message`.
+  TriggerService::SharedPtr guardedTrigger(
+    const std::string& name, const std::string& busy_message,
+    std::function<bool(std::string&)> body, bool reject_during_execution = true)
+  {
+    return create_service<std_srvs::srv::Trigger>(
+      name,
+      [this, busy_message, reject_during_execution, body = std::move(body)](
+        const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+        std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+        std::unique_lock<std::mutex> lock(plan_mutex_, std::try_to_lock);
+        if (!lock.owns_lock() || (reject_during_execution && execution_in_progress_)) {
+          response->success = false;
+          response->message = busy_message;
+          return;
+        }
+        response->success = body(response->message);
+      },
+      rmw_qos_profile_services_default, callback_group_);
+  }
+  bool executeRetainedPlan(std::string& message)
+  {
+    const bool in_debug_session = cut_debug_stage_ != CutDebugStage::kNone;
+    // Checked before every other gate: a snapshot loaded under the plan-only stale
+    // override (or the override being on now) can never be dispatched, on any path.
+    if (settings_.debug_allow_stale_snapshot || retained_with_stale_override_) {
+      message = std::string(in_debug_session ? "cut debug session" : "retained H-cut plan") +
+        " execution is blocked: its snapshot was loaded with debug_allow_stale_snapshot=true "
+        "(plan-only override); set debug_allow_stale_snapshot false, call clear_plan and "
+        "replan from a fresh snapshot";
+      return false;
+    }
+    if (!execution_enabled_.load()) {
+      message = "execution service is disabled by execution_enabled";
+      return false;
+    }
+    if (settings_.debug_fixed_orientation) {
+      message = "execution is blocked while debug_fixed_orientation is enabled";
+      return false;
+    }
+    if (in_debug_session && !debug_motion_execution_enabled_.load()) {
+      message =
+        "cut debug session execution requires both execution_enabled and debug_motion_execution_enabled";
+      return false;
+    }
+    if (!in_debug_session && settings_.cut_pattern == "middle_debug_short" &&
+        !debug_motion_execution_enabled_.load()) {
+      message = "debug trajectory execution is disabled by debug_motion_execution_enabled";
+      return false;
+    }
+    if (execution_in_progress_) {
+      message = "an H-cut trajectory execution is already active";
+      return false;
+    }
+    if (in_debug_session && cut_debug_stage_ != CutDebugStage::kStartPlanned) {
+      if (cut_debug_stage_ == CutDebugStage::kStartExecuted) {
+        message = "cut debug start already executed for cut " + cut_debug_session_cut_ +
+          "; teleop correct the TCP then call save_cut_debug_point before any further execution";
+      } else if (cut_debug_stage_ == CutDebugStage::kStartSaved) {
+        message = "cut debug start observation already saved for cut " + cut_debug_session_cut_ +
+          "; this session has nothing left to execute: teleop to the endpoint and call save_cut_debug_point";
+      } else {
+        message = "no executable cut debug plan is retained for cut " + cut_debug_session_cut_ +
+          " stage " + cutDebugStageName(cut_debug_stage_);
+      }
+      return false;
+    }
+    if (in_debug_session && cut_debug_dispatch_failed_) {
+      message = "previous cut debug " + cutDebugStageName(cut_debug_stage_) +
+        " dispatch for cut " + cut_debug_session_cut_ +
+        " failed during execution and was NOT marked executed; no retained plan remains; call clear_plan then start_cut_debug_session to restart";
+      return false;
+    }
+    if (!planned_task_ || !planned_snapshot_ || planned_task_->solutions().empty()) {
+      message = "no valid planned H-cut is available to execute";
+      return false;
+    }
+    // Normal retained plans refuse a stale snapshot so a previous carton's result
+    // can never dispatch. A staged session instead freezes its snapshot at session
+    // start and each stage is planned from the live state seconds before its
+    // explicit execution; teleop correction inherently takes longer than the
+    // snapshot age bound, so the age check does not apply while the session owns
+    // the retained plan. Both execution gates and the stale-override block above
+    // still apply to every stage.
+    if (!in_debug_session) {
+      std::string freshness_error;
+      if (!snapshotIsFresh(*planned_snapshot_, freshness_error)) {
+        clearRetainedPlan();
+        message = freshness_error + "; retained plan was cleared";
+        return false;
+      }
+    }
+    if (execution_thread_.joinable()) execution_thread_.join();
+    execution_in_progress_ = true;
+    const CutDebugStage dispatched_stage = cut_debug_stage_;
+    const std::string dispatched_cut = cut_debug_session_cut_;
+    auto task = std::move(planned_task_);
+    planned_snapshot_.reset();
+    execution_thread_ = std::thread(
+      [this, task = std::move(task), dispatched_stage, dispatched_cut]() mutable {
+        bool succeeded = false;
+        std::string failure_detail;
+        try {
+          const auto result = task->execute(*task->solutions().front());
+          succeeded = (result == moveit::core::MoveItErrorCode::SUCCESS);
+          if (succeeded) {
+            RCLCPP_INFO(get_logger(), "H-cut trajectory execution completed");
+          } else {
+            failure_detail = "controller reported failure status " + std::to_string(result.val);
+            RCLCPP_ERROR(
+              get_logger(), "H-cut trajectory execution failed: %s", failure_detail.c_str());
+          }
+        } catch (const std::exception& exception) {
+          failure_detail = std::string("threw exception: ") + exception.what();
+          RCLCPP_ERROR(get_logger(), "H-cut trajectory execution %s", failure_detail.c_str());
+        }
+        std::lock_guard<std::mutex> completion_lock(plan_mutex_);
+        execution_in_progress_ = false;
+        if (dispatched_stage == CutDebugStage::kNone) return;
+        if (!succeeded) {
+          // Never mark the stage executed: the arm did not reach the stage pose,
+          // so capturing an observation here would persist a false correction.
+          // The dispatched task was consumed, so nothing executable remains.
+          cut_debug_dispatch_failed_ = true;
+          RCLCPP_ERROR(
+            get_logger(),
+            "Cut debug %s dispatch for cut %s did NOT complete (%s); the stage was NOT marked executed and no plan is retained; call clear_plan then start_cut_debug_session to restart",
+            cutDebugStageName(dispatched_stage).c_str(), dispatched_cut.c_str(),
+            failure_detail.c_str());
+          return;
+        }
+        cut_debug_dispatch_failed_ = false;
+        // The staged session retains only a start plan; every later stage is teleop.
+        if (dispatched_stage == CutDebugStage::kStartPlanned) {
+          cut_debug_stage_ = CutDebugStage::kStartExecuted;
+        }
+      });
+    if (in_debug_session) {
+      message = "cut debug start dispatch accepted for cut " + dispatched_cut +
+        "; monitor controller execution, then teleop correct and call save_cut_debug_point; no further motion is automatic";
+    } else {
+      message = "H-cut trajectory dispatch accepted; monitor controller execution";
+    }
+    return true;
+  }
   void clearRetainedPlan()
   {
     planned_task_.reset();
     planned_snapshot_.reset();
+    retained_with_stale_override_ = false;
     visualization_msgs::msg::MarkerArray markers;
     visualization_msgs::msg::Marker delete_all;
     delete_all.action = visualization_msgs::msg::Marker::DELETEALL;
     markers.markers.push_back(delete_all);
     marker_pub_->publish(markers);
     geometry_msgs::msg::PoseArray empty_targets;
-    empty_targets.header.frame_id = planning_frame_;
+    empty_targets.header.frame_id = settings_.planning_frame;
     target_pose_pub_->publish(empty_targets);
     moveit_msgs::msg::CollisionObject remove_carton;
-    remove_carton.id = carton_collision_id_;
-    remove_carton.header.frame_id = planning_frame_;
+    remove_carton.id = settings_.carton_collision_id;
+    remove_carton.header.frame_id = settings_.planning_frame;
     remove_carton.operation = moveit_msgs::msg::CollisionObject::REMOVE;
     carton_collision_pub_->publish(remove_carton);
   }
@@ -976,7 +1026,6 @@ private:
     cut_debug_stage_ = CutDebugStage::kNone;
     cut_debug_session_cut_.clear();
     cut_debug_snapshot_.reset();
-    cut_debug_robot_model_.reset();
     cut_debug_has_observed_start_ = false;
     cut_debug_has_observed_end_ = false;
     cut_debug_dispatch_failed_ = false;
@@ -986,7 +1035,7 @@ private:
 
   bool planExternalSnapshot(std::string& message)
   {
-    const auto source_path = get_parameter("external_snapshot_file").as_string();
+    const auto source_path = externalSnapshotFile();
     const auto snapshot = loadExternalSnapshot(source_path, message);
     if (!snapshot) return false;
     const bool planned = planSnapshot(*snapshot, message);
@@ -1023,122 +1072,179 @@ private:
     return path.empty() || (path.front() == '/' && path.size() >= 6U &&
                             path.substr(path.size() - 5U) == ".json");
   }
+  static const char* cutName(CutKind cut)
+  {
+    switch (cut) {
+      case CutKind::kLeft: return "left";
+      case CutKind::kMiddle: return "middle";
+      case CutKind::kRight: return "right";
+      case CutKind::kNone: break;
+    }
+    return "";
+  }
+  static std::optional<CutKind> cutKindFromName(const std::string& name)
+  {
+    if (name == "left") return CutKind::kLeft;
+    if (name == "middle") return CutKind::kMiddle;
+    if (name == "right") return CutKind::kRight;
+    return std::nullopt;
+  }
   const std::string& correctionFileForCut(const std::string& cut) const
   {
-    if (cut == "left") return cut_debug_left_correction_file_;
-    if (cut == "right") return cut_debug_right_correction_file_;
-    return cut_debug_middle_correction_file_;
+    if (cut == "left") return settings_.cut_debug_left_correction_file;
+    if (cut == "right") return settings_.cut_debug_right_correction_file;
+    return settings_.cut_debug_middle_correction_file;
   }
-  std::string cutDebugStageName(CutDebugStage stage) const
+  static std::string cutDebugStageName(CutDebugStage stage)
   {
     switch (stage) {
       case CutDebugStage::kNone: return "idle";
       case CutDebugStage::kStartPlanned: return "start_planned";
       case CutDebugStage::kStartExecuted: return "start_executed";
-      case CutDebugStage::kEndExecuted: return "end_executed";
+      case CutDebugStage::kStartSaved: return "start_saved";
     }
     return "unknown";
   }
-  bool cutDebugEndpoints(
-    const Snapshot& snapshot, const std::string& cut,
-    geometry_msgs::msg::Point& start, geometry_msgs::msg::Point& end) const
+  static Eigen::Vector3d toEigen(const geometry_msgs::msg::Point& point)
   {
-    if (cut == "left") {
-      start = snapshot.back_middle_left;
-      end = snapshot.front_middle_left;
-      return true;
+    return Eigen::Vector3d(point.x, point.y, point.z);
+  }
+  static Eigen::Vector3d toEigen(const geometry_msgs::msg::Vector3& vector)
+  {
+    return Eigen::Vector3d(vector.x, vector.y, vector.z);
+  }
+  static geometry_msgs::msg::Point toPoint(const Eigen::Vector3d& vector)
+  {
+    geometry_msgs::msg::Point point;
+    point.x = vector.x();
+    point.y = vector.y();
+    point.z = vector.z();
+    return point;
+  }
+  static Eigen::Quaterniond toEigen(const geometry_msgs::msg::Quaternion& q)
+  {
+    return Eigen::Quaterniond(q.w, q.x, q.y, q.z);
+  }
+  static geometry_msgs::msg::Quaternion toMsg(const Eigen::Quaterniond& q)
+  {
+    geometry_msgs::msg::Quaternion msg;
+    msg.x = q.x();
+    msg.y = q.y();
+    msg.z = q.z();
+    msg.w = q.w();
+    return msg;
+  }
+  // Rotation whose columns are the given frame axes (Eigen's rotation-matrix conversion).
+  static Eigen::Quaterniond basisQuaternion(
+    const Eigen::Vector3d& x_axis, const Eigen::Vector3d& y_axis, const Eigen::Vector3d& z_axis)
+  {
+    Eigen::Matrix3d basis;
+    basis.col(0) = x_axis;
+    basis.col(1) = y_axis;
+    basis.col(2) = z_axis;
+    return Eigen::Quaterniond(basis);
+  }
+  static Eigen::Quaterniond basisQuaternion(const CutBasis& basis)
+  {
+    return basisQuaternion(basis.along, basis.across, basis.normal);
+  }
+  // Standard detected segment for a cut (named, endpoints from the canonical snapshot).
+  static CutSegment segmentFor(const Snapshot& snapshot, CutKind cut)
+  {
+    CutSegment segment;
+    segment.cut = cut;
+    switch (cut) {
+      case CutKind::kLeft:
+        segment.name = "left side cut";
+        segment.start = snapshot.back_middle_left;
+        segment.end = snapshot.front_middle_left;
+        break;
+      case CutKind::kMiddle:
+        segment.name = "middle seam cut";
+        segment.start = snapshot.seam_start;
+        segment.end = snapshot.seam_end;
+        break;
+      case CutKind::kRight:
+        segment.name = "right side cut";
+        segment.start = snapshot.back_middle_right;
+        segment.end = snapshot.front_middle_right;
+        break;
+      case CutKind::kNone:
+        throw std::invalid_argument("segmentFor requires a detected cut");
     }
-    if (cut == "middle") {
-      start = snapshot.seam_start;
-      end = snapshot.seam_end;
-      return true;
-    }
-    if (cut == "right") {
-      start = snapshot.back_middle_right;
-      end = snapshot.front_middle_right;
-      return true;
-    }
-    return false;
+    return segment;
   }
   bool cutDebugBasis(
-    const Snapshot& snapshot, const std::string& cut,
-    std::array<double, 3>& along, std::array<double, 3>& across,
-    std::array<double, 3>& normal, std::string& error) const
+    const Snapshot& snapshot, const std::string& cut, CutBasis& basis, std::string& error) const
   {
-    geometry_msgs::msg::Point start;
-    geometry_msgs::msg::Point end;
-    if (!cutDebugEndpoints(snapshot, cut, start, end)) {
+    const auto kind = cutKindFromName(cut);
+    if (!kind) {
       error = "unknown cut debug cut: " + cut;
       return false;
     }
-    normal = {snapshot.surface_normal.x, snapshot.surface_normal.y, snapshot.surface_normal.z};
-    const double normal_length =
-      std::sqrt(normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]);
+    const CutSegment segment = segmentFor(snapshot, *kind);
+    Eigen::Vector3d normal = toEigen(snapshot.surface_normal);
+    const double normal_length = normal.norm();
     if (!std::isfinite(normal_length) || normal_length <= 1e-9) {
       error = "snapshot surface normal has zero length";
       return false;
     }
-    for (auto& component : normal) component /= normal_length;
-    std::array<double, 3> axis{
-      end.x - start.x, end.y - start.y, end.z - start.z};
-    const double projection = axis[0] * normal[0] + axis[1] * normal[1] + axis[2] * normal[2];
-    for (std::size_t i = 0; i < 3; ++i) axis[i] -= projection * normal[i];
-    const double axis_length = std::sqrt(axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2]);
+    normal /= normal_length;
+    Eigen::Vector3d axis = toEigen(segment.end) - toEigen(segment.start);
+    axis -= axis.dot(normal) * normal;
+    const double axis_length = axis.norm();
     if (!std::isfinite(axis_length) || axis_length < 1e-6) {
       error = "cut debug cut has degenerate length for cut " + cut;
       return false;
     }
-    for (auto& component : axis) component /= axis_length;
-    along = axis;
-    across = {
-      normal[1] * along[2] - normal[2] * along[1],
-      normal[2] * along[0] - normal[0] * along[2],
-      normal[0] * along[1] - normal[1] * along[0]};
+    basis.along = axis / axis_length;
+    basis.across = normal.cross(basis.along);
+    basis.normal = normal;
     return true;
   }
   bool offsetLeftPoseOutward(
     const Snapshot& snapshot, geometry_msgs::msg::PoseStamped& pose, double distance_m,
     std::string& error) const
   {
-    std::array<double, 3> along{};
-    std::array<double, 3> across{};
-    std::array<double, 3> normal{};
-    if (!cutDebugBasis(snapshot, "left", along, across, normal, error)) return false;
-    const std::array<double, 3> midpoint{
-      0.5 * (snapshot.back_middle_left.x + snapshot.front_middle_left.x),
-      0.5 * (snapshot.back_middle_left.y + snapshot.front_middle_left.y),
-      0.5 * (snapshot.back_middle_left.z + snapshot.front_middle_left.z)};
-    const std::array<double, 3> toward_center{
-      snapshot.seam_center.x - midpoint[0], snapshot.seam_center.y - midpoint[1],
-      snapshot.seam_center.z - midpoint[2]};
-    const double projection = across[0] * toward_center[0] +
-      across[1] * toward_center[1] + across[2] * toward_center[2];
+    CutBasis basis;
+    if (!cutDebugBasis(snapshot, "left", basis, error)) return false;
+    const Eigen::Vector3d midpoint =
+      0.5 * (toEigen(snapshot.back_middle_left) + toEigen(snapshot.front_middle_left));
+    const double projection = basis.across.dot(toEigen(snapshot.seam_center) - midpoint);
     if (!std::isfinite(projection) || std::abs(projection) < 1e-6) {
       error = "cannot determine outward side of left cut from carton geometry";
       return false;
     }
     const double sign = projection > 0.0 ? -1.0 : 1.0;
-    pose.pose.position.x += sign * distance_m * across[0];
-    pose.pose.position.y += sign * distance_m * across[1];
-    pose.pose.position.z += sign * distance_m * across[2];
+    pose.pose.position =
+      toPoint(toEigen(pose.pose.position) + sign * distance_m * basis.across);
     return true;
   }
-  Eigen::Quaterniond cutDebugBasisQuaternion(
-    const std::array<double, 3>& along, const std::array<double, 3>& across,
-    const std::array<double, 3>& normal) const
+  template<std::size_t N>
+  static bool readArray(
+    const boost::property_tree::ptree& document, const std::string& field,
+    std::array<double, N>& values, std::string& error)
   {
-    Eigen::Matrix3d basis;
-    basis.col(0) = Eigen::Vector3d(along[0], along[1], along[2]);
-    basis.col(1) = Eigen::Vector3d(across[0], across[1], across[2]);
-    basis.col(2) = Eigen::Vector3d(normal[0], normal[1], normal[2]);
-    return Eigen::Quaterniond(basis);
+    const auto child = document.get_child_optional(field);
+    if (!child || child->size() != N) {
+      error = "cut debug correction file is missing " +
+        std::string(N == 3U ? "three" : "four") + "-element " + field;
+      return false;
+    }
+    std::size_t index = 0;
+    try {
+      for (const auto& entry : *child) values[index++] = entry.second.get_value<double>();
+    } catch (const std::exception&) {
+      error = "cut debug correction file has invalid " + field;
+      return false;
+    }
+    return true;
   }
   bool loadCutDebugCorrectionFile(
     const std::string& path, CutDebugCorrection& correction, std::string& error) const
   {
     namespace fs = std::filesystem;
-    if (path.empty() || path.front() != '/' || path.size() < 6U ||
-        path.substr(path.size() - 5U) != ".json") {
+    if (path.empty() || !isAbsoluteJsonOrEmpty(path)) {
       error = "per-cut correction file path must be an absolute .json path";
       return false;
     }
@@ -1167,19 +1273,30 @@ private:
         std::string(cutDebugCorrectionSchema());
       return false;
     }
-    if (!cut || (*cut != "left" && *cut != "middle" && *cut != "right")) {
+    if (!cut || !cutKindFromName(*cut)) {
       error = "cut debug correction file has an invalid cut field";
       return false;
     }
+    // Frame and tool are required: a record whose frame or TCP link cannot be verified
+    // against the active configuration is never applied.
     const auto frame = document.get_optional<std::string>("planning_frame");
-    if (frame && *frame != planning_frame_) {
+    if (!frame || frame->empty()) {
+      error = "cut debug correction file is missing planning_frame; refusing a record whose frame cannot be verified";
+      return false;
+    }
+    if (*frame != settings_.planning_frame) {
       error = "cut debug correction planning_frame mismatch: file=" + *frame +
-        " active=" + planning_frame_;
+        " active=" + settings_.planning_frame;
       return false;
     }
     const auto tool = document.get_optional<std::string>("tool_link");
-    if (tool && !tool->empty() && *tool != tool_link_) {
-      error = "cut debug correction tool_link mismatch: file=" + *tool + " active=" + tool_link_;
+    if (!tool || tool->empty()) {
+      error = "cut debug correction file is missing tool_link; refusing a record whose TCP link cannot be verified";
+      return false;
+    }
+    if (*tool != settings_.tool_link) {
+      error = "cut debug correction tool_link mismatch: file=" + *tool + " active=" +
+        settings_.tool_link;
       return false;
     }
     const auto status = document.get_optional<std::string>("status");
@@ -1219,43 +1336,23 @@ private:
       deltas.normal_m = *normal;
       return true;
     };
-    const auto read_array3 = [&document, &error](
-      const std::string& field, std::array<double, 3>& values) {
-      const auto child = document.get_child_optional(field);
-      if (!child || child->size() != values.size()) {
-        error = "cut debug correction file is missing three-element " + field;
-        return false;
-      }
-      std::size_t index = 0;
-      try {
-        for (const auto& entry : *child) values[index++] = entry.second.get_value<double>();
-      } catch (const std::exception&) {
-        error = "cut debug correction file has invalid " + field;
-        return false;
-      }
+    const auto read_vector3 = [&document, &error](
+      const std::string& field, Eigen::Vector3d& vector) {
+      std::array<double, 3> values{};
+      if (!readArray(document, field, values, error)) return false;
       if (!std::all_of(values.begin(), values.end(), [](double value) {
             return std::isfinite(value);
           })) {
         error = "cut debug correction file has non-finite " + field;
         return false;
       }
+      vector = Eigen::Vector3d(values[0], values[1], values[2]);
       return true;
     };
     const auto read_observed_orientation = [&document, &error](
       const std::string& field, geometry_msgs::msg::Quaternion& orientation) {
-      const auto child = document.get_child_optional(field);
-      if (!child || child->size() != 4U) {
-        error = "cut debug correction file is missing four-element " + field;
-        return false;
-      }
       std::array<double, 4> values{};
-      std::size_t index = 0;
-      try {
-        for (const auto& entry : *child) values[index++] = entry.second.get_value<double>();
-      } catch (const std::exception&) {
-        error = "cut debug correction file has invalid " + field;
-        return false;
-      }
+      if (!readArray(document, field, values, error)) return false;
       const double norm = std::sqrt(
         values[0] * values[0] + values[1] * values[1] +
         values[2] * values[2] + values[3] * values[3]);
@@ -1271,26 +1368,21 @@ private:
     };
     CutDebugCorrection loaded;
     loaded.cut = *cut;
-    if (!read_array3("cut_basis_along_m", loaded.recorded_along) ||
-        !read_array3("cut_basis_across_m", loaded.recorded_across) ||
-        !read_array3("cut_basis_normal_m", loaded.recorded_normal) ||
+    if (!read_vector3("cut_basis_along_m", loaded.recorded.along) ||
+        !read_vector3("cut_basis_across_m", loaded.recorded.across) ||
+        !read_vector3("cut_basis_normal_m", loaded.recorded.normal) ||
         !read_observed_orientation("observed_start_orientation_xyzw", loaded.observed_start) ||
         !read_observed_orientation("observed_end_orientation_xyzw", loaded.observed_end)) {
       return false;
     }
-    const Eigen::Vector3d recorded_along(
-      loaded.recorded_along[0], loaded.recorded_along[1], loaded.recorded_along[2]);
-    const Eigen::Vector3d recorded_across(
-      loaded.recorded_across[0], loaded.recorded_across[1], loaded.recorded_across[2]);
-    const Eigen::Vector3d recorded_normal(
-      loaded.recorded_normal[0], loaded.recorded_normal[1], loaded.recorded_normal[2]);
-    if (std::abs(recorded_along.norm() - 1.0) > 0.01 ||
-        std::abs(recorded_across.norm() - 1.0) > 0.01 ||
-        std::abs(recorded_normal.norm() - 1.0) > 0.01 ||
-        std::abs(recorded_along.dot(recorded_across)) > 0.01 ||
-        std::abs(recorded_along.dot(recorded_normal)) > 0.01 ||
-        std::abs(recorded_across.dot(recorded_normal)) > 0.01 ||
-        recorded_along.cross(recorded_across).dot(recorded_normal) < 0.99) {
+    const CutBasis& recorded = loaded.recorded;
+    if (std::abs(recorded.along.norm() - 1.0) > 0.01 ||
+        std::abs(recorded.across.norm() - 1.0) > 0.01 ||
+        std::abs(recorded.normal.norm() - 1.0) > 0.01 ||
+        std::abs(recorded.along.dot(recorded.across)) > 0.01 ||
+        std::abs(recorded.along.dot(recorded.normal)) > 0.01 ||
+        std::abs(recorded.across.dot(recorded.normal)) > 0.01 ||
+        recorded.along.cross(recorded.across).dot(recorded.normal) < 0.99) {
       error = "cut debug correction recorded cut basis is not orthonormal";
       return false;
     }
@@ -1316,7 +1408,7 @@ private:
     const std::vector<std::string>& cuts, bool require_any) const
   {
     std::map<std::string, CutDebugCorrection> active;
-    if (!cut_debug_correction_enabled_) return active;
+    if (!settings_.cut_debug_correction_enabled) return active;
     for (const auto& cut : cuts) {
       const std::string& correction_path = correctionFileForCut(cut);
       if (correction_path.empty()) continue;
@@ -1343,14 +1435,11 @@ private:
     return loadActiveCorrections({"left", "middle", "right"}, true);
   }
   static geometry_msgs::msg::Point applyCutLocalDelta(
-    geometry_msgs::msg::Point point, const std::array<double, 3>& along,
-    const std::array<double, 3>& across, const std::array<double, 3>& normal,
-    const CutLocalDeltas& local)
+    const geometry_msgs::msg::Point& point, const CutBasis& basis, const CutLocalDeltas& local)
   {
-    point.x += along[0] * local.along_m + across[0] * local.across_m + normal[0] * local.normal_m;
-    point.y += along[1] * local.along_m + across[1] * local.across_m + normal[1] * local.normal_m;
-    point.z += along[2] * local.along_m + across[2] * local.across_m + normal[2] * local.normal_m;
-    return point;
+    return toPoint(
+      toEigen(point) + (basis.along * local.along_m + basis.across * local.across_m +
+                        basis.normal * local.normal_m));
   }
   // Nominal blade-direction targets for a cut: the blade (tool Y) follows the cut
   // segment, or the middle seam for side cuts in middle_aligned mode. Side cuts face
@@ -1361,60 +1450,35 @@ private:
     const geometry_msgs::msg::Point& end) const
   {
     const double facing_sign = is_middle ? 1.0 : -1.0;
-    const bool use_seam = !is_middle && side_cut_orientation_mode_ == "middle_aligned";
+    const bool use_seam = !is_middle && settings_.side_cut_orientation_mode == "middle_aligned";
     const auto& from = use_seam ? snapshot.seam_start : segment_start;
     const auto& to = use_seam ? snapshot.seam_end : segment_end;
-    const double dx = to.x - from.x;
-    const double dy = to.y - from.y;
-    const double dz = to.z - from.z;
-    auto start_target = start;
-    start_target.x += facing_sign * dx;
-    start_target.y += facing_sign * dy;
-    start_target.z += facing_sign * dz;
-    auto end_target = end;
-    end_target.x += facing_sign * dx;
-    end_target.y += facing_sign * dy;
-    end_target.z += facing_sign * dz;
-    return {start_target, end_target};
+    const Eigen::Vector3d offset = facing_sign * (toEigen(to) - toEigen(from));
+    return {toPoint(toEigen(start) + offset), toPoint(toEigen(end) + offset)};
   }
-  geometry_msgs::msg::Quaternion interpolateTaughtOrientation(
+  static geometry_msgs::msg::Quaternion interpolateTaughtOrientation(
     const geometry_msgs::msg::Quaternion& start,
-    const geometry_msgs::msg::Quaternion& end, double fraction) const
+    const geometry_msgs::msg::Quaternion& end, double fraction)
   {
-    Eigen::Quaterniond start_q(start.w, start.x, start.y, start.z);
-    Eigen::Quaterniond end_q(end.w, end.x, end.y, end.z);
+    const Eigen::Quaterniond start_q = toEigen(start);
+    Eigen::Quaterniond end_q = toEigen(end);
     if (start_q.dot(end_q) < 0.0) end_q.coeffs() *= -1.0;
-    const Eigen::Quaterniond blended = start_q.slerp(fraction, end_q).normalized();
-    geometry_msgs::msg::Quaternion result;
-    result.x = blended.x();
-    result.y = blended.y();
-    result.z = blended.z();
-    result.w = blended.w();
-    return result;
+    return toMsg(start_q.slerp(fraction, end_q).normalized());
   }
   bool applyCutDebugObservedOrientation(
     const Snapshot& snapshot, const std::string& cut, const CutDebugCorrection& correction,
     const geometry_msgs::msg::Quaternion& observed, geometry_msgs::msg::PoseStamped& pose,
     std::string& error) const
   {
-    std::array<double, 3> current_along{};
-    std::array<double, 3> current_across{};
-    std::array<double, 3> current_normal{};
-    if (!cutDebugBasis(
-        snapshot, cut, current_along, current_across, current_normal, error)) {
+    CutBasis current;
+    if (!cutDebugBasis(snapshot, cut, current, error)) {
       return false;
     }
-    const Eigen::Quaterniond current_basis =
-      cutDebugBasisQuaternion(current_along, current_across, current_normal).normalized();
-    const Eigen::Quaterniond recorded_basis = cutDebugBasisQuaternion(
-      correction.recorded_along, correction.recorded_across, correction.recorded_normal).normalized();
-    const Eigen::Quaterniond recorded_observed(
-      observed.w, observed.x, observed.y, observed.z);
+    const Eigen::Quaterniond current_basis = basisQuaternion(current).normalized();
+    const Eigen::Quaterniond recorded_basis = basisQuaternion(correction.recorded).normalized();
     const Eigen::Quaterniond corrected =
-      (current_basis * recorded_basis.inverse() * recorded_observed).normalized();
-    const Eigen::Vector3d into_surface(
-      -snapshot.surface_normal.x, -snapshot.surface_normal.y, -snapshot.surface_normal.z);
-    const Eigen::Vector3d into_unit = into_surface.normalized();
+      (current_basis * recorded_basis.inverse() * toEigen(observed)).normalized();
+    const Eigen::Vector3d into_unit = (-toEigen(snapshot.surface_normal)).normalized();
     if (cut == "left") {
       const double dot_x = (corrected * Eigen::Vector3d::UnitX()).dot(into_unit);
       const double dot_z = (corrected * Eigen::Vector3d::UnitZ()).dot(into_unit);
@@ -1435,18 +1499,15 @@ private:
         return false;
       }
     }
-    pose.pose.orientation.x = corrected.x();
-    pose.pose.orientation.y = corrected.y();
-    pose.pose.orientation.z = corrected.z();
-    pose.pose.orientation.w = corrected.w();
+    pose.pose.orientation = toMsg(corrected);
     return true;
   }
   std::vector<double> leftAdaptiveOrientationCandidates() const
   {
     // Deterministic smallest-magnitude order: 0, +step, -step, ..., ±max.
     std::vector<double> candidates{0.0};
-    const double max_deg = left_adaptive_orientation_max_deg_;
-    const double step_deg = left_adaptive_orientation_step_deg_;
+    const double max_deg = settings_.left_adaptive_orientation_max_deg;
+    const double step_deg = settings_.left_adaptive_orientation_step_deg;
     const auto magnitudes =
       static_cast<std::size_t>(std::floor(max_deg / step_deg + 1e-9));
     for (std::size_t multiple = 1; multiple <= magnitudes; ++multiple) {
@@ -1490,23 +1551,17 @@ private:
           error = "cannot add camera pole to left orientation collision probe";
           return false;
         }
-      } else if (camera_pole_required_) {
+      } else if (settings_.camera_pole_required) {
         error = "camera pole collision object is unavailable for left orientation probe";
         return false;
       }
     }
     std::vector<Eigen::Quaterniond> mapped;
     mapped.reserve(labeled_poses.size());
-    for (const auto& labeled : labeled_poses) {
-      const auto& orientation = labeled.first->pose.orientation;
-      mapped.emplace_back(orientation.w, orientation.x, orientation.y, orientation.z);
-    }
-    const Eigen::Vector3d into_surface(
-      -snapshot.surface_normal.x, -snapshot.surface_normal.y,
-      -snapshot.surface_normal.z);
-    const Eigen::Vector3d into_unit = into_surface.normalized();
+    for (const auto& labeled : labeled_poses) mapped.push_back(toEigen(labeled.first->pose.orientation));
+    const Eigen::Vector3d into_unit = (-toEigen(snapshot.surface_normal)).normalized();
     const std::vector<double> candidates = leftAdaptiveOrientationCandidates();
-    const bool detailed_diagnostics = get_parameter("left_roll_diagnostics_enabled").as_bool();
+    const bool detailed_diagnostics = left_roll_diagnostics_enabled_.load();
     std::string first_failure;
     std::vector<std::string> failing_categories;
     const auto record_category = [&failing_categories](const char* label) {
@@ -1517,17 +1572,14 @@ private:
         }
       };
     const auto apply = [&](std::size_t index, const Eigen::Quaterniond& orientation) {
-        labeled_poses[index].first->pose.orientation.x = orientation.x();
-        labeled_poses[index].first->pose.orientation.y = orientation.y();
-        labeled_poses[index].first->pose.orientation.z = orientation.z();
-        labeled_poses[index].first->pose.orientation.w = orientation.w();
+        labeled_poses[index].first->pose.orientation = toMsg(orientation);
       };
     const moveit::core::GroupStateValidityCallbackFn valid_state =
       [this, &scene](moveit::core::RobotState* state,
                      const moveit::core::JointModelGroup* group, const double* values) {
         state->setJointGroupPositions(group, values);
         state->update();
-        return !scene.isStateColliding(*state, planning_group_);
+        return !scene.isStateColliding(*state, settings_.planning_group);
       };
     // Diagnostic only (left_roll_diagnostics_enabled): explains why a candidate pose
     // failed without mutating the labeled poses or influencing candidate selection. Every IK probe here runs on
@@ -1544,17 +1596,14 @@ private:
           return out.str();
         }
         geometry_msgs::msg::Pose target = labeled_poses[index].first->pose;
-        target.orientation.x = orientation.x();
-        target.orientation.y = orientation.y();
-        target.orientation.z = orientation.z();
-        target.orientation.w = orientation.w();
-        const bool contact_allowed = index % 2U != 0U && allow_tool_carton_contact_;
+        target.orientation = toMsg(orientation);
+        const bool contact_allowed = index % 2U != 0U && settings_.allow_tool_carton_contact;
         scene.getAllowedCollisionMatrixNonConst().setEntry(
-          tool_link_, carton_collision_id_, contact_allowed);
+          settings_.tool_link, settings_.carton_collision_id, contact_allowed);
         out << " pos=(" << target.position.x << "," << target.position.y << "," <<
           target.position.z << ") tool/carton_allowed=" << (contact_allowed ? 1 : 0);
         moveit::core::RobotState aware(seed_state);
-        if (aware.setFromIK(joint_group, target, tool_link_, 0.25, valid_state)) {
+        if (aware.setFromIK(joint_group, target, settings_.tool_link, 0.25, valid_state)) {
           out << " collision-aware IK OK";
           return out.str();
         }
@@ -1575,7 +1624,7 @@ private:
             kin.setToRandomPositions(joint_group);
             kin.update();
           }
-          if (!kin.setFromIK(joint_group, target, tool_link_, 0.1)) continue;
+          if (!kin.setFromIK(joint_group, target, settings_.tool_link, 0.1)) continue;
           kin.update();
           ++kinematic_found;
           if (!kin.satisfiesBounds(joint_group)) {
@@ -1583,7 +1632,7 @@ private:
             continue;
           }
           collision_detection::CollisionRequest request;
-          request.group_name = planning_group_;
+          request.group_name = settings_.planning_group;
           request.contacts = true;
           request.max_contacts = 50;
           request.max_contacts_per_pair = 1;
@@ -1667,9 +1716,9 @@ private:
         // Hover/approach remains free. Only cut targets may use the scoped
         // tool/carton contact allowance installed by their MTC cut stages.
         scene.getAllowedCollisionMatrixNonConst().setEntry(
-          tool_link_, carton_collision_id_, index % 2U != 0U && allow_tool_carton_contact_);
+          settings_.tool_link, settings_.carton_collision_id, index % 2U != 0U && settings_.allow_tool_carton_contact);
         if (!probe.setFromIK(
-              joint_group, labeled_poses[index].first->pose, tool_link_, 0.25, valid_state)) {
+              joint_group, labeled_poses[index].first->pose, settings_.tool_link, 0.25, valid_state)) {
           feasible = false;
           failure = std::string(labeled_poses[index].second) +
             " collision-aware IK (no valid solution)";
@@ -1713,8 +1762,8 @@ private:
       detail << labeled_poses[index].second;
     }
     detail << " (tried " << candidates.size() <<
-      " candidates 0,+step,-step,...,+/-max with max=" << left_adaptive_orientation_max_deg_ <<
-      " deg step=" << left_adaptive_orientation_step_deg_ << " deg)";
+      " candidates 0,+step,-step,...,+/-max with max=" << settings_.left_adaptive_orientation_max_deg <<
+      " deg step=" << settings_.left_adaptive_orientation_step_deg << " deg)";
     if (!first_failure.empty()) detail << "; candidate 0 first failed at " << first_failure;
     if (!failing_categories.empty()) {
       detail << "; failing pose categories across search: ";
@@ -1733,17 +1782,21 @@ private:
     geometry_msgs::msg::PoseStamped& nominal_start,
     geometry_msgs::msg::PoseStamped& nominal_end, std::string& error) const
   {
-    geometry_msgs::msg::Point start;
-    geometry_msgs::msg::Point end;
-    if (!cutDebugEndpoints(snapshot, cut, start, end)) {
+    const auto kind = cutKindFromName(cut);
+    if (!kind) {
       error = "unknown cut debug cut: " + cut;
       return false;
     }
-    const bool is_middle = cut == "middle";
+    const CutSegment segment = segmentFor(snapshot, *kind);
+    const auto& start = segment.start;
+    const auto& end = segment.end;
+    const bool is_middle = *kind == CutKind::kMiddle;
     const double tilt_deg = is_middle ? 0.0 :
-      (cut == "right" ? right_side_cut_tilt_deg_ : left_side_cut_tilt_deg_);
+      (*kind == CutKind::kRight ? settings_.right_side_cut_tilt_deg :
+       settings_.left_side_cut_tilt_deg);
     const auto targets = orientationTargets(snapshot, is_middle, start, end, start, end);
-    const double cut_clearance = is_middle ? middle_cut_clearance_m_ : cut_clearance_m_;
+    const double cut_clearance =
+      is_middle ? settings_.middle_cut_clearance_m : settings_.cut_clearance_m;
     nominal_start = targetPose(snapshot, start, targets.first, cut_clearance, tilt_deg);
     nominal_end = targetPose(snapshot, end, targets.second, cut_clearance, tilt_deg);
     return true;
@@ -1772,13 +1825,13 @@ private:
       error = "joint state has fewer positions than names; cannot record TCP observation";
       return false;
     }
-    if (!cut_debug_robot_model_) {
+    if (!robot_model_) {
       error = "robot model is unavailable; plan a cut debug stage before saving";
       return false;
     }
-    moveit::core::RobotState state(cut_debug_robot_model_);
+    moveit::core::RobotState state(robot_model_);
     state.setToDefaultValues();
-    const auto& variables = cut_debug_robot_model_->getVariableNames();
+    const auto& variables = robot_model_->getVariableNames();
     for (const auto& variable : variables) {
       const auto position = std::find(
         joint_state.name.begin(), joint_state.name.end(), variable);
@@ -1797,23 +1850,41 @@ private:
       state.setVariablePosition(variable, value);
     }
     state.update();
-    const Eigen::Isometry3d transform = state.getGlobalLinkTransform(tool_link_);
+    const Eigen::Isometry3d transform = state.getGlobalLinkTransform(settings_.tool_link);
     const Eigen::Vector3d position = transform.translation();
     const Eigen::Quaterniond orientation(transform.rotation());
     if (!position.allFinite() || !orientation.coeffs().allFinite()) {
       error = "forward kinematics produced a non-finite TCP pose";
       return false;
     }
-    observed.header.frame_id = planning_frame_;
+    observed.header.frame_id = settings_.planning_frame;
     observed.header.stamp = now();
-    observed.pose.position.x = position.x();
-    observed.pose.position.y = position.y();
-    observed.pose.position.z = position.z();
-    observed.pose.orientation.x = orientation.x();
-    observed.pose.orientation.y = orientation.y();
-    observed.pose.orientation.z = orientation.z();
-    observed.pose.orientation.w = orientation.w();
+    observed.pose.position = toPoint(position);
+    observed.pose.orientation = toMsg(orientation);
     return true;
+  }
+  static std::string jsonEscape(const std::string& value)
+  {
+    std::ostringstream out;
+    for (const char character : value) {
+      switch (character) {
+        case '"': out << "\\\""; break;
+        case '\\': out << "\\\\"; break;
+        case '\b': out << "\\b"; break;
+        case '\f': out << "\\f"; break;
+        case '\n': out << "\\n"; break;
+        case '\r': out << "\\r"; break;
+        case '\t': out << "\\t"; break;
+        default:
+          if (static_cast<unsigned char>(character) < 0x20U) {
+            out << "\\u" << std::hex << std::setw(4) << std::setfill('0')
+                << static_cast<int>(static_cast<unsigned char>(character)) << std::dec;
+          } else {
+            out << character;
+          }
+      }
+    }
+    return out.str();
   }
   static std::string formatDouble(double value, int precision = 9)
   {
@@ -1829,8 +1900,8 @@ private:
   {
     namespace fs = std::filesystem;
     fs::path directory;
-    if (!cut_debug_output_dir_.empty()) {
-      directory = fs::path(cut_debug_output_dir_);
+    if (!settings_.cut_debug_output_dir.empty()) {
+      directory = fs::path(settings_.cut_debug_output_dir);
     } else {
       const char* home = std::getenv("HOME");
       if (home == nullptr || std::string(home).empty()) {
@@ -1853,6 +1924,43 @@ private:
     path = (directory / (cut + "_" + snapshot_id + ".json")).string();
     return true;
   }
+  // Observed-minus-nominal TCP delta for one saved cut-debug observation.
+  struct PoseDelta {
+    Eigen::Vector3d world{Eigen::Vector3d::Zero()};
+    CutLocalDeltas local{};
+    geometry_msgs::msg::Quaternion world_q{toMsg(Eigen::Quaterniond::Identity())};
+    geometry_msgs::msg::Quaternion local_q{toMsg(Eigen::Quaterniond::Identity())};
+    double angle_deg{0.0};
+  };
+  static bool computePoseDelta(
+    const geometry_msgs::msg::Pose& nominal, const geometry_msgs::msg::Pose& observed,
+    const CutBasis& basis, const std::string& label, PoseDelta& delta, std::string& error)
+  {
+    delta.world = toEigen(observed.position) - toEigen(nominal.position);
+    delta.local.along_m = delta.world.dot(basis.along);
+    delta.local.across_m = delta.world.dot(basis.across);
+    delta.local.normal_m = delta.world.dot(basis.normal);
+    if (!std::isfinite(delta.local.along_m) || !std::isfinite(delta.local.across_m) ||
+        !std::isfinite(delta.local.normal_m)) {
+      error = "cut debug " + label +
+        " translation delta is non-finite; refusing to persist an unbounded correction";
+      return false;
+    }
+    const Eigen::Quaterniond nominal_q = toEigen(nominal.orientation);
+    const Eigen::Quaterniond observed_q = toEigen(observed.orientation);
+    if (!nominal_q.coeffs().allFinite() || !observed_q.coeffs().allFinite() ||
+        std::abs(nominal_q.norm() - 1.0) > 0.01 || std::abs(observed_q.norm() - 1.0) > 0.01) {
+      error = "nominal or observed orientation is not unit length";
+      return false;
+    }
+    const Eigen::Quaterniond world_delta_q = (observed_q * nominal_q.inverse()).normalized();
+    const Eigen::Quaterniond basis_q = basisQuaternion(basis);
+    delta.world_q = toMsg(world_delta_q);
+    delta.local_q = toMsg((basis_q.inverse() * world_delta_q * basis_q).normalized());
+    delta.angle_deg = 2.0 * std::acos(std::min(1.0, std::abs(world_delta_q.w()))) * 180.0 /
+      std::acos(-1.0);
+    return true;
+  }
   bool writeCutDebugRecord(bool complete, std::string& error)
   {
     if (!cut_debug_snapshot_ || cut_debug_record_path_.empty()) {
@@ -1860,59 +1968,10 @@ private:
       return false;
     }
     const Snapshot& snapshot = *cut_debug_snapshot_;
-    std::array<double, 3> along{};
-    std::array<double, 3> across{};
-    std::array<double, 3> normal{};
-    if (!cutDebugBasis(snapshot, cut_debug_session_cut_, along, across, normal, error)) {
+    CutBasis basis;
+    if (!cutDebugBasis(snapshot, cut_debug_session_cut_, basis, error)) {
       return false;
     }
-    const auto world_delta = [&along, &across, &normal](
-      const geometry_msgs::msg::Pose& nominal, const geometry_msgs::msg::Pose& observed) {
-      return std::array<double, 3>{
-        observed.position.x - nominal.position.x,
-        observed.position.y - nominal.position.y,
-        observed.position.z - nominal.position.z};
-    };
-    const auto to_local = [&along, &across, &normal](const std::array<double, 3>& world) {
-      CutLocalDeltas local;
-      local.along_m = world[0] * along[0] + world[1] * along[1] + world[2] * along[2];
-      local.across_m = world[0] * across[0] + world[1] * across[1] + world[2] * across[2];
-      local.normal_m = world[0] * normal[0] + world[1] * normal[1] + world[2] * normal[2];
-      return local;
-    };
-    const auto orientation_deltas = [this, &along, &across, &normal](
-      const geometry_msgs::msg::Pose& nominal, const geometry_msgs::msg::Pose& observed,
-      geometry_msgs::msg::Quaternion& world_delta_out,
-      geometry_msgs::msg::Quaternion& local_delta_out, double& angle_deg_out,
-      std::string& orientation_error) {
-      const Eigen::Quaterniond nominal_q(
-        nominal.orientation.w, nominal.orientation.x, nominal.orientation.y,
-        nominal.orientation.z);
-      const Eigen::Quaterniond observed_q(
-        observed.orientation.w, observed.orientation.x, observed.orientation.y,
-        observed.orientation.z);
-      if (!nominal_q.coeffs().allFinite() || !observed_q.coeffs().allFinite() ||
-          std::abs(nominal_q.norm() - 1.0) > 0.01 ||
-          std::abs(observed_q.norm() - 1.0) > 0.01) {
-        orientation_error = "nominal or observed orientation is not unit length";
-        return false;
-      }
-      const Eigen::Quaterniond world_delta_q = (observed_q * nominal_q.inverse()).normalized();
-      const Eigen::Quaterniond basis_q = cutDebugBasisQuaternion(along, across, normal);
-      const Eigen::Quaterniond local_q =
-        (basis_q.inverse() * world_delta_q * basis_q).normalized();
-      world_delta_out.x = world_delta_q.x();
-      world_delta_out.y = world_delta_q.y();
-      world_delta_out.z = world_delta_q.z();
-      world_delta_out.w = world_delta_q.w();
-      local_delta_out.x = local_q.x();
-      local_delta_out.y = local_q.y();
-      local_delta_out.z = local_q.z();
-      local_delta_out.w = local_q.w();
-      angle_deg_out = 2.0 * std::acos(std::min(1.0, std::abs(world_delta_q.w()))) * 180.0 /
-        std::acos(-1.0);
-      return true;
-    };
     if (!cut_debug_has_observed_start_) {
       error = "cut debug start observation is missing";
       return false;
@@ -1921,115 +1980,79 @@ private:
       error = "cut debug end observation is missing";
       return false;
     }
-    const auto start_world = world_delta(
-      cut_debug_nominal_start_.pose, cut_debug_observed_start_.pose);
-    const CutLocalDeltas start_local = to_local(start_world);
-    for (const double component : {start_local.along_m, start_local.across_m, start_local.normal_m}) {
-      if (!std::isfinite(component)) {
-        error = "cut debug start translation delta is non-finite; refusing to persist an unbounded correction";
-        return false;
-      }
-    }
-    geometry_msgs::msg::Quaternion start_world_q;
-    geometry_msgs::msg::Quaternion start_local_q;
-    double start_angle_deg{0.0};
-    if (!orientation_deltas(
-          cut_debug_nominal_start_.pose, cut_debug_observed_start_.pose, start_world_q,
-          start_local_q, start_angle_deg, error)) {
+    PoseDelta start;
+    if (!computePoseDelta(
+          cut_debug_nominal_start_.pose, cut_debug_observed_start_.pose, basis, "start", start,
+          error)) {
       return false;
     }
-    std::array<double, 3> end_world{0.0, 0.0, 0.0};
-    CutLocalDeltas end_local{};
-    geometry_msgs::msg::Quaternion end_world_q;
-    geometry_msgs::msg::Quaternion end_local_q;
-    double end_angle_deg{0.0};
-    end_world_q.x = 0.0;
-    end_world_q.y = 0.0;
-    end_world_q.z = 0.0;
-    end_world_q.w = 1.0;
-    end_local_q = end_world_q;
-    if (complete) {
-      end_world = world_delta(cut_debug_nominal_end_.pose, cut_debug_observed_end_.pose);
-      end_local = to_local(end_world);
-      for (const double component : {end_local.along_m, end_local.across_m, end_local.normal_m}) {
-        if (!std::isfinite(component)) {
-          error = "cut debug end translation delta is non-finite; refusing to persist an unbounded correction";
-          return false;
-        }
-      }
-      if (!orientation_deltas(
-            cut_debug_nominal_end_.pose, cut_debug_observed_end_.pose, end_world_q,
-            end_local_q, end_angle_deg, error)) {
-        return false;
-      }
+    PoseDelta end;
+    if (complete &&
+        !computePoseDelta(
+          cut_debug_nominal_end_.pose, cut_debug_observed_end_.pose, basis, "end", end, error)) {
+      return false;
     }
-    const auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::system_clock::now().time_since_epoch()).count();
+    const auto now_ns = nowNs();
     if (cut_debug_created_stamp_ns_ == 0) cut_debug_created_stamp_ns_ = now_ns;
-    std::ostringstream json;
-    json.setf(std::ios::fixed);
-    json.precision(9);
-    json << "{\n";
-    json << "  \"schema\": \"" << cutDebugCorrectionSchema() << "\",\n";
-    json << "  \"cut\": \"" << cut_debug_session_cut_ << "\",\n";
-    json << "  \"snapshot_id\": \"" << snapshot.snapshot_id << "\",\n";
-    json << "  \"capture_id\": \"" << snapshot.capture_id << "\",\n";
-    json << "  \"acquisition_stamp_ns\": " << snapshot.acquisition_stamp_ns << ",\n";
-    json << "  \"planning_frame\": \"" << planning_frame_ << "\",\n";
-    json << "  \"tool_link\": \"" << tool_link_ << "\",\n";
-    json << "  \"status\": \"" << (complete ? "complete" : "start_saved") << "\",\n";
-    json << "  \"created_stamp_ns\": " << cut_debug_created_stamp_ns_ << ",\n";
-    json << "  \"updated_stamp_ns\": " << now_ns << ",\n";
-    json << "  \"cut_basis_along_m\": [" << formatDouble(along[0]) << ", " <<
-      formatDouble(along[1]) << ", " << formatDouble(along[2]) << "],\n";
-    json << "  \"cut_basis_across_m\": [" << formatDouble(across[0]) << ", " <<
-      formatDouble(across[1]) << ", " << formatDouble(across[2]) << "],\n";
-    json << "  \"cut_basis_normal_m\": [" << formatDouble(normal[0]) << ", " <<
-      formatDouble(normal[1]) << ", " << formatDouble(normal[2]) << "],\n";
-    const auto pose_block = [this](
+    const auto vector3 = [](const Eigen::Vector3d& value) {
+      return "[" + formatDouble(value.x()) + ", " + formatDouble(value.y()) + ", " +
+        formatDouble(value.z()) + "]";
+    };
+    const auto quaternion_object = [](const geometry_msgs::msg::Quaternion& q) {
+      return "{\"x\": " + formatDouble(q.x) + ", \"y\": " + formatDouble(q.y) + ", \"z\": " +
+        formatDouble(q.z) + ", \"w\": " + formatDouble(q.w) + "}";
+    };
+    const auto pose_block = [&vector3](
       const char* name, const geometry_msgs::msg::Pose& pose, std::ostringstream& out) {
-      out << "  \"" << name << "_position_m\": [" << formatDouble(pose.position.x) << ", " <<
-        formatDouble(pose.position.y) << ", " << formatDouble(pose.position.z) << "],\n";
+      out << "  \"" << name << "_position_m\": " << vector3(toEigen(pose.position)) << ",\n";
       out << "  \"" << name << "_orientation_xyzw\": [" << formatDouble(pose.orientation.x) <<
         ", " << formatDouble(pose.orientation.y) << ", " << formatDouble(pose.orientation.z) <<
         ", " << formatDouble(pose.orientation.w) << "],\n";
     };
+    const auto local_block = [&quaternion_object](
+      const char* prefix, const PoseDelta& delta, std::ostringstream& out) {
+      out << "  \"" << prefix << "_delta_cut_local_along_m\": " <<
+        formatDouble(delta.local.along_m) << ",\n";
+      out << "  \"" << prefix << "_delta_cut_local_across_m\": " <<
+        formatDouble(delta.local.across_m) << ",\n";
+      out << "  \"" << prefix << "_delta_cut_local_normal_m\": " <<
+        formatDouble(delta.local.normal_m) << ",\n";
+      out << "  \"" << prefix << "_orientation_delta_world_xyzw\": " <<
+        quaternion_object(delta.world_q) << ",\n";
+      out << "  \"" << prefix << "_delta_cut_local_orientation_delta_local_xyzw\": " <<
+        quaternion_object(delta.local_q) << ",\n";
+    };
+    std::ostringstream json;
+    json << "{\n";
+    json << "  \"schema\": \"" << cutDebugCorrectionSchema() << "\",\n";
+    json << "  \"cut\": \"" << jsonEscape(cut_debug_session_cut_) << "\",\n";
+    json << "  \"snapshot_id\": \"" << jsonEscape(snapshot.snapshot_id) << "\",\n";
+    json << "  \"capture_id\": \"" << jsonEscape(snapshot.capture_id) << "\",\n";
+    json << "  \"acquisition_stamp_ns\": " << snapshot.acquisition_stamp_ns << ",\n";
+    json << "  \"planning_frame\": \"" << jsonEscape(settings_.planning_frame) << "\",\n";
+    json << "  \"tool_link\": \"" << jsonEscape(settings_.tool_link) << "\",\n";
+    json << "  \"status\": \"" << (complete ? "complete" : "start_saved") << "\",\n";
+    json << "  \"created_stamp_ns\": " << cut_debug_created_stamp_ns_ << ",\n";
+    json << "  \"updated_stamp_ns\": " << now_ns << ",\n";
+    json << "  \"cut_basis_along_m\": " << vector3(basis.along) << ",\n";
+    json << "  \"cut_basis_across_m\": " << vector3(basis.across) << ",\n";
+    json << "  \"cut_basis_normal_m\": " << vector3(basis.normal) << ",\n";
     pose_block("nominal_start", cut_debug_nominal_start_.pose, json);
     pose_block("observed_start", cut_debug_observed_start_.pose, json);
-    json << "  \"start_delta_world_m\": [" << formatDouble(start_world[0]) << ", " <<
-      formatDouble(start_world[1]) << ", " << formatDouble(start_world[2]) << "],\n";
-    json << "  \"start_delta_cut_local_along_m\": " << formatDouble(start_local.along_m) << ",\n";
-    json << "  \"start_delta_cut_local_across_m\": " << formatDouble(start_local.across_m) << ",\n";
-    json << "  \"start_delta_cut_local_normal_m\": " << formatDouble(start_local.normal_m) << ",\n";
-    json << "  \"start_orientation_delta_world_xyzw\": {\"x\": " <<
-      formatDouble(start_world_q.x) << ", \"y\": " << formatDouble(start_world_q.y) <<
-      ", \"z\": " << formatDouble(start_world_q.z) << ", \"w\": " <<
-      formatDouble(start_world_q.w) << "},\n";
-    json << "  \"start_delta_cut_local_orientation_delta_local_xyzw\": {\"x\": " <<
-      formatDouble(start_local_q.x) << ", \"y\": " << formatDouble(start_local_q.y) <<
-      ", \"z\": " << formatDouble(start_local_q.z) << ", \"w\": " <<
-      formatDouble(start_local_q.w) << "},\n";
-    json << "  \"start_orientation_delta_angle_deg\": " << formatDouble(start_angle_deg, 6) << ",\n";
+    json << "  \"start_delta_world_m\": " << vector3(start.world) << ",\n";
+    local_block("start", start, json);
+    json << "  \"start_orientation_delta_angle_deg\": " << formatDouble(start.angle_deg, 6) << ",\n";
     pose_block("nominal_end", cut_debug_nominal_end_.pose, json);
     if (complete) {
       pose_block("observed_end", cut_debug_observed_end_.pose, json);
-      json << "  \"end_delta_world_m\": [" << formatDouble(end_world[0]) << ", " <<
-        formatDouble(end_world[1]) << ", " << formatDouble(end_world[2]) << "],\n";
+      json << "  \"end_delta_world_m\": " << vector3(end.world) << ",\n";
     } else {
       json << "  \"observed_end_position_m\": null,\n";
       json << "  \"observed_end_orientation_xyzw\": null,\n";
       json << "  \"end_delta_world_m\": null,\n";
     }
-    json << "  \"end_delta_cut_local_along_m\": " << formatDouble(end_local.along_m) << ",\n";
-    json << "  \"end_delta_cut_local_across_m\": " << formatDouble(end_local.across_m) << ",\n";
-    json << "  \"end_delta_cut_local_normal_m\": " << formatDouble(end_local.normal_m) << ",\n";
-    json << "  \"end_orientation_delta_world_xyzw\": {\"x\": " << formatDouble(end_world_q.x) <<
-      ", \"y\": " << formatDouble(end_world_q.y) << ", \"z\": " << formatDouble(end_world_q.z) <<
-      ", \"w\": " << formatDouble(end_world_q.w) << "},\n";
-    json << "  \"end_delta_cut_local_orientation_delta_local_xyzw\": {\"x\": " <<
-      formatDouble(end_local_q.x) << ", \"y\": " << formatDouble(end_local_q.y) << ", \"z\": " <<
-      formatDouble(end_local_q.z) << ", \"w\": " << formatDouble(end_local_q.w) << "},\n";
-    json << "  \"end_orientation_delta_angle_deg\": " << formatDouble(end_angle_deg, 6) << "\n";
+    local_block("end", end, json);
+    json << "  \"end_orientation_delta_angle_deg\": " << formatDouble(end.angle_deg, 6) << "\n";
     json << "}\n";
     namespace fs = std::filesystem;
     const fs::path output(cut_debug_record_path_);
@@ -2054,8 +2077,8 @@ private:
       error = "cannot atomically persist cut debug record: " + code.message();
       return false;
     }
-    cut_debug_start_local_ = start_local;
-    if (complete) cut_debug_end_local_ = end_local;
+    cut_debug_start_local_ = start.local;
+    if (complete) cut_debug_end_local_ = end.local;
     return true;
   }
   bool startCutDebugSession(std::string& message)
@@ -2071,11 +2094,12 @@ private:
         "a normal H-cut plan is retained; call clear_plan before starting a cut debug session";
       return false;
     }
-    if (cut_debug_cut_ != "left" && cut_debug_cut_ != "middle" && cut_debug_cut_ != "right") {
+    const auto debug_cut = cutKindFromName(settings_.cut_debug_cut);
+    if (!debug_cut) {
       message = "cut_debug_cut must be left, middle, or right";
       return false;
     }
-    const auto source_path = get_parameter("external_snapshot_file").as_string();
+    const auto source_path = externalSnapshotFile();
     std::string load_error;
     const auto snapshot = loadExternalSnapshot(source_path, load_error);
     if (!snapshot) {
@@ -2090,38 +2114,34 @@ private:
     geometry_msgs::msg::PoseStamped nominal_start;
     geometry_msgs::msg::PoseStamped nominal_end;
     if (!cutDebugNominalPoses(
-          *snapshot, cut_debug_cut_, nominal_start, nominal_end, validation)) {
-      message = "cut debug nominal computation failed for cut " + cut_debug_cut_ + ": " +
+          *snapshot, settings_.cut_debug_cut, nominal_start, nominal_end, validation)) {
+      message = "cut debug nominal computation failed for cut " + settings_.cut_debug_cut + ": " +
         validation;
       return false;
     }
     // The configured target (correction applied when opted in) is planned by the common
     // segment planner, stopping at the cut start: same dwell and wrist-guard validation
     // as full plans, with the carton added under the scoped contact allowance.
-    CutSegment segment;
-    segment.name = cut_debug_cut_ == "middle" ? "middle seam cut" :
-      (cut_debug_cut_ == "left" ? "left side cut" : "right side cut");
-    cutDebugEndpoints(*snapshot, cut_debug_cut_, segment.start, segment.end);
+    CutSegment segment = segmentFor(*snapshot, *debug_cut);
     segment.stop_after_start = true;
     std::unique_ptr<mtc::Task> task;
     std::vector<geometry_msgs::msg::PoseStamped> targets;
     std::string planning_message;
     bool planned = false;
     try {
-      const auto corrections = loadActiveCorrections({cut_debug_cut_}, false);
+      const auto corrections = loadActiveCorrections({settings_.cut_debug_cut}, false);
       publishCartonGeometry(*snapshot);
       SegmentPlanOptions options;
-      options.timeout_s = planning_timeout_s_;
       options.cut_debug_start = true;
       planned = planCutSegments(
-        *snapshot, {segment}, corrections,
-        get_parameter("motion_profile").as_string(), "Cut debug " + cut_debug_cut_ + " start",
-        options, task, targets, planning_message);
+        *snapshot, {segment}, corrections, settings_.motion_profile,
+        "Cut debug " + settings_.cut_debug_cut + " start", options, task, targets,
+        planning_message);
     } catch (const std::exception& exception) {
       planning_message = exception.what();
     }
     if (!planned) {
-      message = "cut debug start planning failed for cut " + cut_debug_cut_ + ": " +
+      message = "cut debug start planning failed for cut " + settings_.cut_debug_cut + ": " +
         planning_message;
       return false;
     }
@@ -2131,16 +2151,17 @@ private:
     }
     publishMarkers(targets, {segment});
     publishTargetPoses(*snapshot, targets);
+    publishSolution(*task);
     cut_debug_snapshot_ = *snapshot;
-    cut_debug_session_cut_ = cut_debug_cut_;
+    cut_debug_session_cut_ = settings_.cut_debug_cut;
     cut_debug_nominal_start_ = nominal_start;
     cut_debug_nominal_end_ = nominal_end;
     cut_debug_has_observed_start_ = false;
     cut_debug_has_observed_end_ = false;
     cut_debug_created_stamp_ns_ = 0;
-    cut_debug_robot_model_ = task->getRobotModel();
     planned_snapshot_ = *snapshot;
     planned_task_ = std::move(task);
+    retained_with_stale_override_ = settings_.debug_allow_stale_snapshot;
     cut_debug_stage_ = CutDebugStage::kStartPlanned;
     message = "cut debug session started for cut " + cut_debug_session_cut_ +
       " snapshot " + snapshot->snapshot_id +
@@ -2164,15 +2185,8 @@ private:
         "; execute via execute_planned_h_cut then teleop correct before calling save_cut_debug_point";
       return false;
     }
-    if (planned_task_ && !planned_snapshot_) {
-      clearRetainedPlan();
-    }
-    if (planned_task_) {
-      clearRetainedPlan();
-      message = "a stale cut debug plan is still retained for cut " + cut_debug_session_cut_ +
-        "; it was cleared without saving; execute the retained stage before saving";
-      return false;
-    }
+    // From here the start was dispatched, which consumed the retained plan; nothing can
+    // plan while a session is active, so no plan is retained in these stages.
     if (cut_debug_stage_ == CutDebugStage::kStartExecuted) {
       geometry_msgs::msg::PoseStamped observed;
       if (!captureObservedTcpPose(observed, message)) return false;
@@ -2193,7 +2207,7 @@ private:
       }
       clearRetainedPlan();
       publishCartonGeometry(*cut_debug_snapshot_);
-      cut_debug_stage_ = CutDebugStage::kEndExecuted;
+      cut_debug_stage_ = CutDebugStage::kStartSaved;
       const auto& nominal = cut_debug_nominal_start_.pose.position;
       const auto& observed_position = observed.pose.position;
       message = "saved cut debug start observation to " + cut_debug_record_path_ +
@@ -2206,7 +2220,7 @@ private:
         "; no endpoint traverse was planned; teleop to the endpoint then call save_cut_debug_point; saved deltas use the uncorrected geometry baseline; this service never dispatches motion";
       return true;
     }
-    if (cut_debug_stage_ == CutDebugStage::kEndExecuted) {
+    if (cut_debug_stage_ == CutDebugStage::kStartSaved) {
       geometry_msgs::msg::PoseStamped observed;
       if (!captureObservedTcpPose(observed, message)) return false;
       cut_debug_observed_end_ = observed;
@@ -2239,23 +2253,20 @@ private:
   }
   bool diagnoseExternalSnapshotSections(std::string& message)
   {
-    const auto source_path = get_parameter("external_snapshot_file").as_string();
+    const auto source_path = externalSnapshotFile();
     const auto snapshot = loadExternalSnapshot(source_path, message);
     if (!snapshot) return false;
     std::string validation;
     const bool canonical = validateSnapshot(*snapshot, validation);
-    const auto motion_profile = get_parameter("motion_profile").as_string();
-    const std::array<CutSegment, 3> sections{{
-      {"left side cut", snapshot->back_middle_left, snapshot->front_middle_left},
-      {"middle seam cut", snapshot->seam_start, snapshot->seam_end},
-      {"right side cut", snapshot->back_middle_right, snapshot->front_middle_right},
-    }};
+    const auto& motion_profile = settings_.motion_profile;
+    const std::array<CutSegment, 3> sections{
+      segmentFor(*snapshot, CutKind::kLeft), segmentFor(*snapshot, CutKind::kMiddle),
+      segmentFor(*snapshot, CutKind::kRight)};
     std::ostringstream report;
     report << "diagnostic_only snapshot=" << snapshot->snapshot_id
            << " canonical=" << (canonical ? "true" : "false")
            << " validation=" << (canonical ? "ok" : validation);
-    SegmentPlanOptions options;
-    options.timeout_s = planning_timeout_s_;
+    const SegmentPlanOptions options;
     std::optional<std::map<std::string, CutDebugCorrection>> corrections;
     for (const auto& section : sections) {
       std::unique_ptr<mtc::Task> task;
@@ -2302,9 +2313,9 @@ private:
     }
     const auto age_s = std::chrono::duration<double>(
       fs::file_time_type::clock::now() - modified).count();
-    if (!debug_allow_stale_snapshot_ && age_s > external_snapshot_max_age_s_) {
+    if (!settings_.debug_allow_stale_snapshot && age_s > settings_.external_snapshot_max_age_s) {
       message = "external snapshot is stale (" + formatDouble(age_s, 3) + " s; maximum " +
-        formatDouble(external_snapshot_max_age_s_, 3) + " s): " + selected.string();
+        formatDouble(settings_.external_snapshot_max_age_s, 3) + " s): " + selected.string();
       return std::nullopt;
     }
     std::ifstream input(selected);
@@ -2375,19 +2386,15 @@ private:
       message = "external snapshot required geometry is invalid: " + selected.string();
       return std::nullopt;
     }
+    // plane_rms_m is validated for schema integrity only; planning does not use it.
     snapshot.acquisition_stamp_ns = *acquisition_stamp;
-    snapshot.plane_rms_m = *plane_rms;
     snapshot.surface_normal.x = normal.x;
     snapshot.surface_normal.y = normal.y;
     snapshot.surface_normal.z = normal.z;
-    const auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::system_clock::now().time_since_epoch()).count();
-    const auto age_ns = now_ns - snapshot.acquisition_stamp_ns;
-    const auto maximum_age_ns = static_cast<std::int64_t>(external_snapshot_max_age_s_ * 1e9);
-    if (age_ns < -1'000'000'000LL ||
-        (!debug_allow_stale_snapshot_ && age_ns > maximum_age_ns)) {
+    if (!acquisitionIsFresh(
+          snapshot.acquisition_stamp_ns, settings_.debug_allow_stale_snapshot)) {
       message = "external snapshot acquisition is stale or invalid; maximum age " +
-        formatDouble(external_snapshot_max_age_s_, 3) + " s: " + selected.string();
+        formatDouble(settings_.external_snapshot_max_age_s, 3) + " s: " + selected.string();
       return std::nullopt;
     }
     snapshot.header.stamp.sec = static_cast<std::int32_t>(snapshot.acquisition_stamp_ns / 1'000'000'000LL);
@@ -2402,7 +2409,7 @@ private:
       std::lock_guard<std::mutex> lock(camera_pole_mutex_);
       camera_pole = camera_pole_;
     }
-    if (camera_pole_required_ && !camera_pole) {
+    if (settings_.camera_pole_required && !camera_pole) {
       throw std::runtime_error(
         "camera pole collision object is unavailable; wait for camera_pole_collision.py");
     }
@@ -2416,55 +2423,27 @@ private:
 
   moveit_msgs::msg::CollisionObject cartonCollisionObject(const Snapshot& snapshot) const
   {
-    const auto vector = [](const geometry_msgs::msg::Point& from,
-                           const geometry_msgs::msg::Point& to) {
-      return std::array<double, 3>{to.x - from.x, to.y - from.y, to.z - from.z};
-    };
-    const auto dot = [](const std::array<double, 3>& left, const std::array<double, 3>& right) {
-      return left[0] * right[0] + left[1] * right[1] + left[2] * right[2];
-    };
-    const auto magnitude = [&dot](const std::array<double, 3>& value) {
-      return std::sqrt(dot(value, value));
-    };
-    const auto normalize = [&magnitude](std::array<double, 3> value) {
-      const double length = magnitude(value);
-      for (auto& component : value) component /= length;
-      return value;
-    };
-    const auto cross = [](const std::array<double, 3>& left, const std::array<double, 3>& right) {
-      return std::array<double, 3>{
-        left[1] * right[2] - left[2] * right[1],
-        left[2] * right[0] - left[0] * right[2],
-        left[0] * right[1] - left[1] * right[0]};
-    };
-    const auto normal = normalize({
-      snapshot.surface_normal.x, snapshot.surface_normal.y, snapshot.surface_normal.z});
-    std::array<double, 3> top_center{
-      (snapshot.back_left.x + snapshot.back_right.x + snapshot.front_left.x + snapshot.front_right.x) / 4.0,
-      (snapshot.back_left.y + snapshot.back_right.y + snapshot.front_left.y + snapshot.front_right.y) / 4.0,
-      (snapshot.back_left.z + snapshot.back_right.z + snapshot.front_left.z + snapshot.front_right.z) / 4.0};
-    auto x_axis = vector(snapshot.seam_start, snapshot.seam_end);
-    const double normal_component = dot(x_axis, normal);
-    for (std::size_t i = 0; i < 3; ++i) x_axis[i] -= normal_component * normal[i];
-    x_axis = normalize(x_axis);
-    const auto y_axis = normalize(cross(normal, x_axis));
-    const double width = (magnitude(vector(snapshot.back_left, snapshot.back_right)) +
-                          magnitude(vector(snapshot.front_left, snapshot.front_right))) / 2.0;
-    const double depth = (magnitude(vector(snapshot.back_left, snapshot.front_left)) +
-                          magnitude(vector(snapshot.back_right, snapshot.front_right))) / 2.0;
-
-    const geometry_msgs::msg::Quaternion q = basisQuaternion(x_axis, y_axis, normal);
+    const Eigen::Vector3d normal = toEigen(snapshot.surface_normal).normalized();
+    const Eigen::Vector3d back_left = toEigen(snapshot.back_left);
+    const Eigen::Vector3d back_right = toEigen(snapshot.back_right);
+    const Eigen::Vector3d front_left = toEigen(snapshot.front_left);
+    const Eigen::Vector3d front_right = toEigen(snapshot.front_right);
+    const Eigen::Vector3d top_center = (back_left + back_right + front_left + front_right) / 4.0;
+    Eigen::Vector3d x_axis = toEigen(snapshot.seam_end) - toEigen(snapshot.seam_start);
+    x_axis -= x_axis.dot(normal) * normal;
+    x_axis.normalize();
+    const Eigen::Vector3d y_axis = normal.cross(x_axis).normalized();
+    const double width = ((back_right - back_left).norm() + (front_right - front_left).norm()) / 2.0;
+    const double depth = ((front_left - back_left).norm() + (front_right - back_right).norm()) / 2.0;
 
     shape_msgs::msg::SolidPrimitive primitive;
     primitive.type = shape_msgs::msg::SolidPrimitive::BOX;
-    primitive.dimensions = {width, depth, carton_height_m_};
+    primitive.dimensions = {width, depth, settings_.carton_height_m};
     geometry_msgs::msg::Pose pose;
-    pose.position.x = top_center[0] - normal[0] * carton_height_m_ / 2.0;
-    pose.position.y = top_center[1] - normal[1] * carton_height_m_ / 2.0;
-    pose.position.z = top_center[2] - normal[2] * carton_height_m_ / 2.0;
-    pose.orientation = q;
+    pose.position = toPoint(top_center - normal * settings_.carton_height_m / 2.0);
+    pose.orientation = toMsg(basisQuaternion(x_axis, y_axis, normal));
     moveit_msgs::msg::CollisionObject object;
-    object.id = carton_collision_id_;
+    object.id = settings_.carton_collision_id;
     object.header = snapshot.header;
     object.primitives.push_back(primitive);
     object.primitive_poses.push_back(pose);
@@ -2490,8 +2469,8 @@ private:
       &snapshot.front_left, &snapshot.front_right, &snapshot.seam_center,
       &snapshot.back_middle_left, &snapshot.front_middle_left,
       &snapshot.back_middle_right, &snapshot.front_middle_right};
-    if (snapshot.snapshot_id.empty() || snapshot.header.frame_id != planning_frame_) {
-      message = "snapshot must have an ID and use planning frame " + planning_frame_ +
+    if (snapshot.snapshot_id.empty() || snapshot.header.frame_id != settings_.planning_frame) {
+      message = "snapshot must have an ID and use planning frame " + settings_.planning_frame +
                 "; got frame=" + snapshot.header.frame_id;
       return false;
     }
@@ -2551,13 +2530,24 @@ private:
     return true;
   }
 
+  static std::int64_t nowNs()
+  {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+      std::chrono::system_clock::now().time_since_epoch()).count();
+  }
+  // Shared acquisition-age rule: a positive stamp, at most 1 s in the future, and (unless
+  // the plan-only stale override applies) no older than external_snapshot_max_age_s.
+  bool acquisitionIsFresh(std::int64_t stamp_ns, bool ignore_max_age) const
+  {
+    const auto age_ns = nowNs() - stamp_ns;
+    const auto maximum_age_ns =
+      static_cast<std::int64_t>(settings_.external_snapshot_max_age_s * 1e9);
+    return stamp_ns > 0 && age_ns >= -1'000'000'000LL &&
+      (ignore_max_age || age_ns <= maximum_age_ns);
+  }
   bool snapshotIsFresh(const Snapshot& snapshot, std::string& message) const
   {
-    const auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::system_clock::now().time_since_epoch()).count();
-    const auto age_ns = now_ns - snapshot.acquisition_stamp_ns;
-    const auto maximum_age_ns = static_cast<std::int64_t>(external_snapshot_max_age_s_ * 1e9);
-    if (snapshot.acquisition_stamp_ns <= 0 || age_ns < -1'000'000'000LL || age_ns > maximum_age_ns) {
+    if (!acquisitionIsFresh(snapshot.acquisition_stamp_ns, false)) {
       message = "planned snapshot is stale or has an invalid acquisition timestamp";
       return false;
     }
@@ -2606,102 +2596,129 @@ private:
       snapshot.snapshot_id.c_str(), snapshot.header.frame_id.c_str());
   }
 
+  // Segments for every cut pattern except t_cut_handoff (see planTCutHandoffSnapshot).
+  std::vector<CutSegment> segmentsForPattern(
+    const Snapshot& snapshot, const std::string& pattern) const
+  {
+    const auto left = segmentFor(snapshot, CutKind::kLeft);
+    const auto middle = segmentFor(snapshot, CutKind::kMiddle);
+    const auto right = segmentFor(snapshot, CutKind::kRight);
+    if (pattern == "h" || pattern == "combined") return {left, middle, right};
+    if (pattern == "t_cut") return {left, middle};
+    if (pattern == "left_only") return {left};
+    if (pattern == "middle_only") return {middle};
+    if (pattern == "right_only") return {right};
+    if (pattern == "middle_entry_debug") {
+      auto entry = middle;
+      entry.name = "middle seam entry debug";
+      entry.stop_after_start = true;
+      return {entry};
+    }
+    if (pattern == "middle_debug_short") {
+      const double seam_length = distanceBetween(snapshot.seam_start, snapshot.seam_end);
+      if (seam_length < settings_.debug_motion_distance_m) {
+        throw std::invalid_argument("middle seam is shorter than debug_motion_distance_m");
+      }
+      const double half_fraction = settings_.debug_motion_distance_m / (2.0 * seam_length);
+      // No cut kind: never corrected, no middle entry alignment, fixed orientation.
+      CutSegment short_move;
+      short_move.name = "middle debug short move";
+      short_move.start = interpolate(snapshot.seam_start, snapshot.seam_end, 0.5 - half_fraction);
+      short_move.end = interpolate(snapshot.seam_start, snapshot.seam_end, 0.5 + half_fraction);
+      short_move.hover_only = true;
+      short_move.force_fixed_orientation = true;
+      return {short_move};
+    }
+    throw std::invalid_argument("unsupported cut_pattern: " + pattern);
+  }
   bool planSnapshot(const Snapshot& snapshot, std::string& message)
   {
+    const std::string pattern = settings_.cut_pattern;
     try {
       std::string validation;
       if (!validateSnapshot(snapshot, validation)) {
         message = "snapshot rejected: " + validation;
         return false;
       }
-      const auto motion_profile = get_parameter("motion_profile").as_string();
+      const auto& motion_profile = settings_.motion_profile;
       if (!isSupportedMotionProfile(motion_profile)) {
         throw std::invalid_argument("unsupported H-cut motion_profile: " + motion_profile);
       }
       publishCartonGeometry(snapshot);
       // Each configured correction record is loaded and validated once per request.
       const auto corrections = loadAllActiveCorrections();
-      if (cut_pattern_ == "t_cut_handoff") {
+      if (pattern == "t_cut_handoff") {
         return planTCutHandoffSnapshot(snapshot, corrections, motion_profile, message);
       }
-      if (cut_pattern_ == "combined" || cut_pattern_ == "t_cut") {
-        return planCombinedSnapshot(
-          snapshot, corrections, motion_profile, cut_pattern_ == "t_cut", message);
-      }
-
-      std::vector<CutSegment> segments;
-      if (cut_pattern_ == "h") {
-        segments = {
-          {"left side cut", snapshot.back_middle_left, snapshot.front_middle_left},
-          {"middle seam cut", snapshot.seam_start, snapshot.seam_end},
-          {"right side cut", snapshot.back_middle_right, snapshot.front_middle_right},
-        };
-      } else if (cut_pattern_ == "left_only") {
-        segments = {{"left side cut", snapshot.back_middle_left, snapshot.front_middle_left}};
-      } else if (cut_pattern_ == "middle_only") {
-        segments = {{"middle seam cut", snapshot.seam_start, snapshot.seam_end}};
-      } else if (cut_pattern_ == "right_only") {
-        segments = {{"right side cut", snapshot.back_middle_right, snapshot.front_middle_right}};
-      } else if (cut_pattern_ == "middle_entry_debug") {
-        segments = {{"middle seam entry debug", snapshot.seam_start, snapshot.seam_end, true}};
-      } else if (cut_pattern_ == "middle_debug_short") {
-        const double seam_length = distanceBetween(snapshot.seam_start, snapshot.seam_end);
-        if (seam_length < debug_motion_distance_m_) {
-          throw std::invalid_argument("middle seam is shorter than debug_motion_distance_m");
-        }
-        const double half_fraction = debug_motion_distance_m_ / (2.0 * seam_length);
-        segments = {{"middle debug short move",
-          interpolate(snapshot.seam_start, snapshot.seam_end, 0.5 - half_fraction),
-          interpolate(snapshot.seam_start, snapshot.seam_end, 0.5 + half_fraction),
-          false, true, true}};
-      } else {
-        throw std::invalid_argument("unsupported cut_pattern: " + cut_pattern_);
-      }
+      const bool waypoint_pattern = pattern == "combined" || pattern == "t_cut";
+      const std::vector<CutSegment> segments = segmentsForPattern(snapshot, pattern);
       std::unique_ptr<mtc::Task> task;
       std::vector<geometry_msgs::msg::PoseStamped> cut_targets;
       SegmentPlanOptions options;
-      options.timeout_s = planning_timeout_s_;
-      options.skip_supplied_approach = cut_pattern_ != "h";
+      options.skip_supplied_approach = pattern != "h";
+      const std::string task_name = !waypoint_pattern ?
+        "Snapshot-relative " + pattern + " dry run" :
+        (pattern == "t_cut" ? "Snapshot-relative T-cut canonical waypoint plan" :
+         "Snapshot-relative combined canonical waypoint plan");
       if (!planCutSegments(
-            snapshot, segments, corrections, motion_profile,
-            "Snapshot-relative " + cut_pattern_ + " dry run", options, task, cut_targets,
-            message)) {
+            snapshot, segments, corrections, motion_profile, task_name, options, task,
+            cut_targets, message)) {
         return false;
       }
       retainPlan(snapshot, segments, cut_targets, std::move(task));
+      const std::string dwell_summary = "pre-cut stabilization_s=" +
+        formatDouble(settings_.pre_cut_stabilization_duration_s, 3) + "; dwell_count=" +
+        std::to_string(settings_.pre_cut_stabilization_duration_s > 0.0 ? segments.size() : 0U);
+      if (waypoint_pattern) {
+        const bool t_cut = pattern == "t_cut";
+        message =
+          "Snapshot-relative " + std::string(t_cut ? "T-cut" : "combined") +
+          " dry-run plan [" + motion_profile + "] published to RViz; waypoint_order=approach"
+          "->back_middle_left->front_middle_left->finish->transition->approach->seam_start"
+          "->seam_end->finish" +
+          (t_cut ? "" : "->transition->approach->back_middle_right->front_middle_right->finish") +
+          "; side_knife_facing=opposite_travel; " + dwell_summary +
+          "; execution remains disabled until execution_enabled is set";
+        return true;
+      }
+      // Only segments of the middle seam get the entry-alignment stage.
       const bool includes_middle_seam =
-        cut_pattern_ == "h" || cut_pattern_ == "middle_only" ||
-        cut_pattern_ == "middle_entry_debug" || cut_pattern_ == "middle_debug_short";
-      message = "Snapshot-relative " + cut_pattern_ + " dry-run plan [" + motion_profile +
-                "] published to RViz; pre-cut stabilization_s=" +
-                formatDouble(pre_cut_stabilization_duration_s_, 3) + "; dwell_count=" +
-                std::to_string(pre_cut_stabilization_duration_s_ > 0.0 ? segments.size() : 0U) +
+        std::any_of(segments.begin(), segments.end(), [](const CutSegment& segment) {
+          return segment.cut == CutKind::kMiddle;
+        });
+      message = "Snapshot-relative " + pattern + " dry-run plan [" + motion_profile +
+                "] published to RViz; " + dwell_summary +
                 (includes_middle_seam ? "; middle entry alignment_m=" +
-                  formatDouble(middle_entry_alignment_m_, 3) : "") +
-                (cut_pattern_ == "middle_entry_debug" ?
+                  formatDouble(settings_.middle_entry_alignment_m, 3) : "") +
+                (pattern == "middle_entry_debug" ?
                   "; stops at seam_start before the cut traverse" : "") +
-                (cut_pattern_ == "middle_debug_short" ?
+                (pattern == "middle_debug_short" ?
                   "; fixed orientation (x=0,y=1,z=0,w=0); short stroke_m=" +
-                  formatDouble(debug_motion_distance_m_, 3) + "; surface clearance_m=" +
-                  formatDouble(debug_motion_clearance_m_, 3) +
+                  formatDouble(settings_.debug_motion_distance_m, 3) + "; surface clearance_m=" +
+                  formatDouble(settings_.debug_motion_clearance_m, 3) +
                   "; manual execution additionally requires debug_motion_execution_enabled=true" : "") +
                 "; execution remains disabled until execution_enabled is set";
       RCLCPP_INFO(
         get_logger(),
         "Planned snapshot %s with profile %s and pattern %s; dwell count %zu at %.3f s; middle entry alignment %.1f mm",
-        snapshot.snapshot_id.c_str(), motion_profile.c_str(), cut_pattern_.c_str(),
-        segments.size(), pre_cut_stabilization_duration_s_,
-        includes_middle_seam ? middle_entry_alignment_m_ * 1000.0 : 0.0);
+        snapshot.snapshot_id.c_str(), motion_profile.c_str(), pattern.c_str(),
+        segments.size(), settings_.pre_cut_stabilization_duration_s,
+        includes_middle_seam ? settings_.middle_entry_alignment_m * 1000.0 : 0.0);
       return true;
     } catch (const std::exception& exception) {
       RCLCPP_ERROR(
         get_logger(), "H-cut %s planning initialization failed: %s",
-        cut_pattern_.c_str(), exception.what());
-      message = cut_pattern_ + " planning failed: " + exception.what();
+        pattern.c_str(), exception.what());
+      message = pattern + " planning failed: " + exception.what();
       return false;
     }
   }
-  // Publishes the plan's target markers/poses and retains it for explicit execution.
+  void publishSolution(mtc::Task& task)
+  {
+    task.introspection().publishSolution(*task.solutions().front());
+  }
+  // Publishes the plan's target markers/poses and solution, and retains it for explicit
+  // execution. Only retained plans are published (never rejected handoff probes).
   void retainPlan(
     const Snapshot& snapshot, const std::vector<CutSegment>& segments,
     const std::vector<geometry_msgs::msg::PoseStamped>& cut_targets,
@@ -2709,30 +2726,29 @@ private:
   {
     publishMarkers(cut_targets, segments);
     publishTargetPoses(snapshot, cut_targets);
+    publishSolution(*task);
     planned_snapshot_ = snapshot;
     planned_task_ = std::move(task);
+    retained_with_stale_override_ = settings_.debug_allow_stale_snapshot;
   }
   // Plans the first-arm T-cut handoff candidate: the full left cut plus the middle seam
   // prefix ending at `fraction`, under min_fraction=1.0 like every other candidate.
   bool planHandoffAt(
     const Snapshot& snapshot, const std::map<std::string, CutDebugCorrection>& corrections,
     const std::string& motion_profile, double fraction, const std::string& task_name,
-    std::unique_ptr<mtc::Task>& task, std::vector<geometry_msgs::msg::PoseStamped>& targets,
+    LeftRollCache& left_roll_cache, std::unique_ptr<mtc::Task>& task,
+    std::vector<geometry_msgs::msg::PoseStamped>& targets,
     std::vector<CutSegment>& segments, std::string& failure)
   {
-    CutSegment handoff_segment;
+    CutSegment handoff_segment = segmentFor(snapshot, CutKind::kMiddle);
     handoff_segment.name = "middle seam handoff";
-    handoff_segment.start = snapshot.seam_start;
     handoff_segment.end = interpolate(snapshot.seam_start, snapshot.seam_end, fraction);
     handoff_segment.handoff_end = true;
     handoff_segment.terminal_after_cut = true;
     handoff_segment.handoff_fraction = fraction;
-    segments = std::vector<CutSegment>{
-      {"left side cut", snapshot.back_middle_left, snapshot.front_middle_left},
-      handoff_segment,
-    };
+    segments = {segmentFor(snapshot, CutKind::kLeft), handoff_segment};
     SegmentPlanOptions options;
-    options.timeout_s = planning_timeout_s_;
+    options.left_roll_cache = &left_roll_cache;
     return planCutSegments(
       snapshot, segments, corrections, motion_profile, task_name, options, task, targets,
       failure);
@@ -2741,7 +2757,7 @@ private:
     const Snapshot& snapshot, const std::map<std::string, CutDebugCorrection>& corrections,
     const std::string& motion_profile, std::string& message)
   {
-    const double fraction = t_cut_middle_handoff_fraction_;
+    const double fraction = settings_.t_cut_middle_handoff_fraction;
     if (!isValidHandoffFraction(fraction)) {
       message = kHandoffFractionRule;
       return false;
@@ -2751,55 +2767,70 @@ private:
     std::vector<CutSegment> best_segments;
     double best_fraction = fraction;
     constexpr double kAutoTolerance = 0.01;
+    // The left segment is identical for every probe of this request: its roll search
+    // runs once and the selected (or failed) result is reused.
+    LeftRollCache left_roll_cache;
     if (fraction != 0.0) {
       if (!planHandoffAt(
             snapshot, corrections, motion_profile, fraction,
-            "Snapshot-relative T-cut handoff canonical waypoint plan", best_task, best_targets,
-            best_segments, message)) {
+            "Snapshot-relative T-cut handoff canonical waypoint plan", left_roll_cache,
+            best_task, best_targets, best_segments, message)) {
         return false;
       }
     } else {
       constexpr double kAutoMin = 0.05;
       constexpr double kAutoMax = 0.95;
-      // Bounded bisection over [0.05,0.95]: ceil(log2((0.95-0.05)/0.01)) = 7 probes after the
-      // minimum candidate. Feasibility is monotonic along the same middle seam direction, so a
-      // failed probe narrows from above and a success narrows from below. Every probe is a full
-      // planCutSegments handoff candidate under min_fraction=1.0; no partial path is accepted.
-      constexpr int kAutoMaxProbes = 7;
       const auto candidate_name = [](double probe) {
         return "Snapshot-relative T-cut handoff automatic candidate " + formatDouble(probe, 2);
       };
+      // Every probe is a full planCutSegments handoff candidate under min_fraction=1.0;
+      // no partial path is accepted. The maximum is probed first: when the complete
+      // declared prefix up to 0.95 plans, no search is needed.
       std::string probe_failure;
-      if (!planHandoffAt(
-            snapshot, corrections, motion_profile, kAutoMin, candidate_name(kAutoMin),
-            best_task, best_targets, best_segments, probe_failure)) {
-        message =
-          "Automatic T-cut handoff search failed closed: no fully planned handoff candidate at minimum "
-          "middle_handoff_fraction=0.05; search_tolerance=" + formatDouble(kAutoTolerance, 2) +
-          "; last_failure=" + probe_failure;
-        return false;
-      }
-      best_fraction = kAutoMin;
-      double low = kAutoMin;
-      double high = kAutoMax;
-      for (int probe = 0; probe < kAutoMaxProbes && (high - low) > kAutoTolerance; ++probe) {
-        const double mid = 0.5 * (low + high);
-        std::unique_ptr<mtc::Task> candidate_task;
-        std::vector<geometry_msgs::msg::PoseStamped> candidate_targets;
-        std::vector<CutSegment> candidate_segments;
-        std::string candidate_failure;
-        if (planHandoffAt(
-              snapshot, corrections, motion_profile, mid, candidate_name(mid), candidate_task,
-              candidate_targets, candidate_segments, candidate_failure)) {
-          best_fraction = mid;
-          best_task = std::move(candidate_task);
-          best_targets = std::move(candidate_targets);
-          best_segments = std::move(candidate_segments);
-          low = mid;
-        } else {
-          high = mid;
-          probe_failure = std::move(candidate_failure);
+      if (planHandoffAt(
+            snapshot, corrections, motion_profile, kAutoMax, candidate_name(kAutoMax),
+            left_roll_cache, best_task, best_targets, best_segments, probe_failure)) {
+        best_fraction = kAutoMax;
+      } else {
+        const std::string max_failure = probe_failure;
+        if (!planHandoffAt(
+              snapshot, corrections, motion_profile, kAutoMin, candidate_name(kAutoMin),
+              left_roll_cache, best_task, best_targets, best_segments, probe_failure)) {
+          message =
+            "Automatic T-cut handoff search failed closed: no fully planned handoff candidate at minimum "
+            "middle_handoff_fraction=0.05; search_tolerance=" + formatDouble(kAutoTolerance, 2) +
+            "; last_failure=" + probe_failure;
+          return false;
         }
+        best_fraction = kAutoMin;
+        // Bounded bisection over [0.05,0.95): ceil(log2((0.95-0.05)/0.01)) = 7 probes.
+        // Feasibility is monotonic along the same middle seam direction, so a failed probe
+        // narrows from above and a success narrows from below.
+        constexpr int kAutoMaxProbes = 7;
+        double low = kAutoMin;
+        double high = kAutoMax;
+        for (int probe = 0; probe < kAutoMaxProbes && (high - low) > kAutoTolerance; ++probe) {
+          const double mid = 0.5 * (low + high);
+          std::unique_ptr<mtc::Task> candidate_task;
+          std::vector<geometry_msgs::msg::PoseStamped> candidate_targets;
+          std::vector<CutSegment> candidate_segments;
+          std::string candidate_failure;
+          if (planHandoffAt(
+                snapshot, corrections, motion_profile, mid, candidate_name(mid),
+                left_roll_cache, candidate_task, candidate_targets, candidate_segments,
+                candidate_failure)) {
+            best_fraction = mid;
+            best_task = std::move(candidate_task);
+            best_targets = std::move(candidate_targets);
+            best_segments = std::move(candidate_segments);
+            low = mid;
+          } else {
+            high = mid;
+          }
+        }
+        RCLCPP_INFO(
+          get_logger(), "T-cut handoff: maximum fraction 0.95 did not plan (%s); selected %.4f",
+          max_failure.c_str(), best_fraction);
       }
     }
     retainPlan(snapshot, best_segments, best_targets, std::move(best_task));
@@ -2816,45 +2847,8 @@ private:
       "; the retained middle traverse is an executable first-arm prefix "
       "ending at the declared handoff point and is not the complete seam; "
       "side_knife_facing=opposite_travel; pre-cut stabilization_s=" +
-      formatDouble(pre_cut_stabilization_duration_s_, 3) + "; dwell_count=" +
-      std::to_string(pre_cut_stabilization_duration_s_ > 0.0 ? best_segments.size() : 0U) +
-      "; execution remains disabled until execution_enabled is set";
-    return true;
-  }
-
-
-  bool planCombinedSnapshot(
-    const Snapshot& snapshot, const std::map<std::string, CutDebugCorrection>& corrections,
-    const std::string& motion_profile, bool omit_right, std::string& message)
-  {
-    std::vector<CutSegment> segments{
-      {"left side cut", snapshot.back_middle_left, snapshot.front_middle_left},
-      {"middle seam cut", snapshot.seam_start, snapshot.seam_end},
-    };
-    if (!omit_right) {
-      segments.push_back({"right side cut", snapshot.back_middle_right, snapshot.front_middle_right});
-    }
-    std::unique_ptr<mtc::Task> task;
-    std::vector<geometry_msgs::msg::PoseStamped> cut_targets;
-    SegmentPlanOptions options;
-    options.timeout_s = planning_timeout_s_;
-    if (!planCutSegments(
-          snapshot, segments, corrections, motion_profile,
-          omit_right ? "Snapshot-relative T-cut canonical waypoint plan" :
-            "Snapshot-relative combined canonical waypoint plan", options, task, cut_targets,
-          message)) {
-      return false;
-    }
-    retainPlan(snapshot, segments, cut_targets, std::move(task));
-    message =
-      "Snapshot-relative " + std::string(omit_right ? "T-cut" : "combined") +
-      " dry-run plan [" + motion_profile + "] published to RViz; waypoint_order=approach"
-      "->back_middle_left->front_middle_left->finish->transition->approach->seam_start"
-      "->seam_end->finish" +
-      (omit_right ? "" : "->transition->approach->back_middle_right->front_middle_right->finish") +
-      "; side_knife_facing=opposite_travel; pre-cut stabilization_s=" +
-      formatDouble(pre_cut_stabilization_duration_s_, 3) + "; dwell_count=" +
-      std::to_string(pre_cut_stabilization_duration_s_ > 0.0 ? segments.size() : 0U) +
+      formatDouble(settings_.pre_cut_stabilization_duration_s, 3) + "; dwell_count=" +
+      std::to_string(settings_.pre_cut_stabilization_duration_s > 0.0 ? best_segments.size() : 0U) +
       "; execution remains disabled until execution_enabled is set";
     return true;
   }
@@ -2867,46 +2861,72 @@ private:
   // Planner stack for one task. Free-space transits run at their own scaling so transit
   // speed can be tuned without ever raising physical cutting speed, and are wrapped by
   // makeTransitPlanner. Contact strokes use Cartesian (min_fraction=1.0, never partial)
-  // or Pilz LIN at the contact scaling.
-  CutPlanners makeCutPlanners(const std::string& motion_profile, double timeout_s)
+  // or Pilz LIN at the contact scaling. Every pipeline stage is bounded by
+  // planning_timeout_s.
+  CutPlanners makeCutPlanners(const std::string& motion_profile)
   {
-    const auto pipeline = [this, timeout_s](
+    const auto pipeline = [this](
       const std::string& pipeline_name, const std::string& planner_id, bool transit) {
       auto planner = std::make_shared<mtc::solvers::PipelinePlanner>(
         shared_from_this(), pipeline_name);
-      planner->setTimeout(timeout_s);
-      planner->setMaxVelocityScalingFactor(transit ? transit_velocity_scaling_ : velocity_scaling_);
+      planner->setTimeout(settings_.planning_timeout_s);
+      planner->setMaxVelocityScalingFactor(
+        transit ? settings_.transit_velocity_scaling : settings_.velocity_scaling);
       planner->setMaxAccelerationScalingFactor(
-        transit ? transit_acceleration_scaling_ : acceleration_scaling_);
+        transit ? settings_.transit_acceleration_scaling : settings_.acceleration_scaling);
       if (!planner_id.empty()) planner->setPlannerId(planner_id);
       return planner;
     };
     CutPlanners planners;
     planners.cartesian = std::make_shared<mtc::solvers::CartesianPath>();
-    planners.cartesian->setIKFrame(tool_link_);
-    planners.cartesian->setStepSize(cartesian_step_m_);
+    planners.cartesian->setIKFrame(settings_.tool_link);
+    planners.cartesian->setStepSize(settings_.cartesian_step_m);
     planners.cartesian->setJumpThreshold(0.0);
     planners.cartesian->setMinFraction(1.0);
-    planners.cartesian->setMaxVelocityScalingFactor(velocity_scaling_);
-    planners.cartesian->setMaxAccelerationScalingFactor(acceleration_scaling_);
+    planners.cartesian->setMaxVelocityScalingFactor(settings_.velocity_scaling);
+    planners.cartesian->setMaxAccelerationScalingFactor(settings_.acceleration_scaling);
     mtc::solvers::PlannerInterfacePtr transit;
     if (motion_profile == "ompl_cartesian") {
-      transit = pipeline(planning_pipeline_, "", true);
+      transit = pipeline(settings_.planning_pipeline, "", true);
       planners.stroke = planners.cartesian;
     } else if (motion_profile == "ompl_pilz") {
-      transit = pipeline(planning_pipeline_, "", true);
-      planners.stroke = pipeline(pilz_pipeline_, "LIN", false);
+      transit = pipeline(settings_.planning_pipeline, "", true);
+      planners.stroke = pipeline(settings_.pilz_pipeline, "LIN", false);
     } else if (motion_profile == "pilz_only") {
-      transit = pipeline(pilz_pipeline_, "PTP", true);
-      planners.stroke = pipeline(pilz_pipeline_, "LIN", false);
+      transit = pipeline(settings_.pilz_pipeline, "PTP", true);
+      planners.stroke = pipeline(settings_.pilz_pipeline, "LIN", false);
     } else if (motion_profile == "chomp_pilz") {
-      transit = pipeline(chomp_pipeline_, "", true);
-      planners.stroke = pipeline(pilz_pipeline_, "LIN", false);
+      transit = pipeline(settings_.chomp_pipeline, "", true);
+      planners.stroke = pipeline(settings_.pilz_pipeline, "LIN", false);
     } else {
       throw std::invalid_argument("unsupported H-cut motion_profile: " + motion_profile);
     }
     planners.transit = makeTransitPlanner(transit);
     return planners;
+  }
+  // Forward-only MoveTo of the planning group; returns the stage for bookkeeping.
+  template<typename Goal>
+  const mtc::Stage* addMoveTo(
+    mtc::Task& task, const std::string& name,
+    const mtc::solvers::PlannerInterfacePtr& planner, const Goal& goal,
+    bool set_ik_frame = true)
+  {
+    auto stage = std::make_unique<mtc::stages::MoveTo>(name, planner);
+    stage->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
+    stage->setGroup(settings_.planning_group);
+    if (set_ik_frame) stage->setIKFrame(settings_.tool_link);
+    stage->setGoal(goal);
+    const mtc::Stage* raw = stage.get();
+    task.add(std::move(stage));
+    return raw;
+  }
+  // Scoped tool/carton contact allowance (true) or its restore (false).
+  void addCartonContactScope(mtc::Task& task, const std::string& name, bool allow)
+  {
+    auto stage = std::make_unique<mtc::stages::ModifyPlanningScene>(name);
+    stage->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
+    stage->allowCollisions(settings_.tool_link, settings_.carton_collision_id, allow);
+    task.add(std::move(stage));
   }
 
   bool planCutSegments(
@@ -2918,25 +2938,31 @@ private:
   {
     task = std::make_unique<mtc::Task>();
     task->stages()->setName(task_name);
-    task->loadRobotModel(shared_from_this());
+    // The robot model (and with it MTC's cached planning pipelines) is loaded once.
+    if (robot_model_) {
+      task->setRobotModel(robot_model_);
+    } else {
+      task->loadRobotModel(shared_from_this());
+      robot_model_ = task->getRobotModel();
+    }
     task->add(std::make_unique<mtc::stages::CurrentState>("current robot state"));
-    const auto carton = cartonCollisionObject(snapshot);
     auto add_carton = std::make_unique<mtc::stages::ModifyPlanningScene>(
       "add detected carton collision object");
     add_carton->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
-    add_carton->addObject(carton);
+    add_carton->addObject(cartonCollisionObject(snapshot));
     // A cut-debug start may begin while the arm is still in contact from an earlier
     // session, so the carton is added with the scoped tool/carton allowance in the same
     // atomic scene change; whole plans always start free and keep add-then-allow ordering.
-    const bool contact_allowed_from_start = options.cut_debug_start && allow_tool_carton_contact_;
+    const bool contact_allowed_from_start =
+      options.cut_debug_start && settings_.allow_tool_carton_contact;
     if (contact_allowed_from_start) {
-      add_carton->allowCollisions(tool_link_, carton_collision_id_, true);
+      add_carton->allowCollisions(settings_.tool_link, settings_.carton_collision_id, true);
     }
     task->add(std::move(add_carton));
     addCameraPole(*task);
-    moveit::core::RobotState ik_state(task->getRobotModel());
+    moveit::core::RobotState ik_state(robot_model_);
     ik_state.setToDefaultValues();
-    const auto& model_variables = task->getRobotModel()->getVariableNames();
+    const auto& model_variables = robot_model_->getVariableNames();
     {
       std::lock_guard<std::mutex> lock(state_mutex_);
       if (!current_joint_state_ || current_joint_state_->name.empty() ||
@@ -2955,32 +2981,29 @@ private:
       }
       ik_state.update();
     }
-    const auto* joint_group = task->getRobotModel()->getJointModelGroup(planning_group_);
+    const auto* joint_group = robot_model_->getJointModelGroup(settings_.planning_group);
     if (joint_group == nullptr) {
       throw std::runtime_error("planning group is missing from robot model");
     }
 
-    const CutPlanners planners = makeCutPlanners(motion_profile, options.timeout_s);
+    const CutPlanners planners = makeCutPlanners(motion_profile);
     const auto& transit_planner = planners.transit;
     const auto& stroke_planner = planners.stroke;
-    if (!options.skip_supplied_approach && !approach_joint_degrees_.empty()) {
-      auto approach = std::make_unique<mtc::stages::MoveTo>(
-        "transit to supplied link6 approach [" + motion_profile + "]", transit_planner);
-      approach->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
-      approach->setGroup(planning_group_);
-      approach->setGoal(jointGoalDegrees(joint_group, approach_joint_degrees_));
-      task->add(std::move(approach));
+    // Every free-space transit stage built below, recorded for the wrist guard.
+    std::vector<const mtc::Stage*> transit_stages;
+    if (!options.skip_supplied_approach && !settings_.approach_joint_degrees.empty()) {
+      transit_stages.push_back(addMoveTo(
+        *task, "transit to supplied link6 approach [" + motion_profile + "]", transit_planner,
+        jointGoalDegrees(joint_group, settings_.approach_joint_degrees),
+        /*set_ik_frame=*/false));
     }
     cut_targets.clear();
     for (std::size_t segment_index = 0; segment_index < segments.size(); ++segment_index) {
       const auto& segment = segments[segment_index];
-      const bool is_middle_seam = segment.name.rfind("middle seam", 0) == 0U;
-      const bool is_right_side = segment.name.rfind("right side cut", 0) == 0U;
-      std::string segment_cut;
-      if (segment.name.rfind("left side cut", 0) == 0U) segment_cut = "left";
-      else if (is_middle_seam) segment_cut = "middle";
-      else if (is_right_side) segment_cut = "right";
-      const bool is_left_side = segment_cut == "left";
+      const bool is_middle_seam = segment.cut == CutKind::kMiddle;
+      const bool is_right_side = segment.cut == CutKind::kRight;
+      const bool is_left_side = segment.cut == CutKind::kLeft;
+      const std::string segment_cut = cutName(segment.cut);
       geometry_msgs::msg::Point corrected_start_point = segment.start;
       geometry_msgs::msg::Point corrected_end_point = segment.end;
       const CutDebugCorrection* segment_correction = nullptr;
@@ -2991,18 +3014,14 @@ private:
         }
       }
       if (segment_correction != nullptr) {
-        std::array<double, 3> correction_along{};
-        std::array<double, 3> correction_across{};
-        std::array<double, 3> correction_normal{};
+        CutBasis correction_basis;
         std::string basis_error;
-        if (!cutDebugBasis(
-              snapshot, segment_cut, correction_along, correction_across, correction_normal,
-              basis_error)) {
+        if (!cutDebugBasis(snapshot, segment_cut, correction_basis, basis_error)) {
           throw std::runtime_error("cut debug correction basis failed: " + basis_error);
         }
         const CutLocalDeltas& local_start = segment_correction->start_local;
         CutLocalDeltas local_end = segment_correction->end_local;
-        if (segment.handoff_end && segment_cut == "middle") {
+        if (segment.handoff_end && is_middle_seam) {
           const double fraction = segment.handoff_fraction;
           local_end.along_m = local_start.along_m +
             fraction * (segment_correction->end_local.along_m - local_start.along_m);
@@ -3011,15 +3030,12 @@ private:
           local_end.normal_m = local_start.normal_m +
             fraction * (segment_correction->end_local.normal_m - local_start.normal_m);
         }
-        corrected_start_point = applyCutLocalDelta(
-          corrected_start_point, correction_along, correction_across, correction_normal,
-          local_start);
-        corrected_end_point = applyCutLocalDelta(
-          corrected_end_point, correction_along, correction_across, correction_normal,
-          local_end);
+        corrected_start_point =
+          applyCutLocalDelta(corrected_start_point, correction_basis, local_start);
+        corrected_end_point = applyCutLocalDelta(corrected_end_point, correction_basis, local_end);
       }
       const double tilt_deg = is_middle_seam ? 0.0 :
-        (is_right_side ? right_side_cut_tilt_deg_ : left_side_cut_tilt_deg_);
+        (is_right_side ? settings_.right_side_cut_tilt_deg : settings_.left_side_cut_tilt_deg);
       // Side strokes travel back-to-front, but their nominal knife frame faces 180 degrees
       // away from travel. Position corrections must not rotate that nominal baseline, so
       // the direction comes from the uncorrected segment. Learned orientation records
@@ -3029,11 +3045,11 @@ private:
         snapshot, is_middle_seam, segment.start, segment.end, corrected_start_point,
         corrected_end_point);
       const double segment_cut_clearance_m =
-        is_middle_seam ? middle_cut_clearance_m_ : cut_clearance_m_;
+        is_middle_seam ? settings_.middle_cut_clearance_m : settings_.cut_clearance_m;
       const double target_clearance_m =
-        segment.hover_only ? debug_motion_clearance_m_ : segment_cut_clearance_m;
+        segment.hover_only ? settings_.debug_motion_clearance_m : segment_cut_clearance_m;
       const double approach_clearance_m =
-        segment.hover_only ? debug_motion_clearance_m_ : hover_clearance_m_;
+        segment.hover_only ? settings_.debug_motion_clearance_m : settings_.hover_clearance_m;
       // Left hover poses are the cut poses withdrawn laterally (below), so they are not
       // derived from the hover clearance.
       const bool left_lateral_hover = is_left_side && !segment.hover_only;
@@ -3054,20 +3070,15 @@ private:
           tilt_deg);
       }
       if (segment.force_fixed_orientation) {
-        geometry_msgs::msg::Quaternion fixed;
-        fixed.x = 0.0;
-        fixed.y = 1.0;
-        fixed.z = 0.0;
-        fixed.w = 0.0;
+        const auto fixed = fixedDebugOrientation();
         hover_start.pose.orientation = fixed;
         cut_start.pose.orientation = fixed;
         hover_end.pose.orientation = fixed;
         cut_end.pose.orientation = fixed;
       }
       if (segment_correction != nullptr && !segment.force_fixed_orientation) {
-        geometry_msgs::msg::Quaternion handoff_end_observed =
-          segment_correction->observed_end;
-        if (segment.handoff_end && segment_cut == "middle") {
+        geometry_msgs::msg::Quaternion handoff_end_observed = segment_correction->observed_end;
+        if (segment.handoff_end && is_middle_seam) {
           handoff_end_observed = interpolateTaughtOrientation(
             segment_correction->observed_start, segment_correction->observed_end,
             segment.handoff_fraction);
@@ -3089,14 +3100,14 @@ private:
         hover_start = cut_start;
         hover_end = cut_end;
         if (!offsetLeftPoseOutward(
-            snapshot, hover_start, left_lateral_standoff_m_, message) ||
+            snapshot, hover_start, settings_.left_lateral_standoff_m, message) ||
             !offsetLeftPoseOutward(
-            snapshot, hover_end, left_lateral_standoff_m_, message)) {
+            snapshot, hover_end, settings_.left_lateral_standoff_m, message)) {
           throw std::runtime_error(message);
         }
       }
       if (is_left_side && segment_correction != nullptr &&
-          !segment.force_fixed_orientation && left_adaptive_orientation_enabled_) {
+          !segment.force_fixed_orientation && settings_.left_adaptive_orientation_enabled) {
         // All probed poses are at their final positions here, so every IK probe below
         // covers the exact pose the MTC stages will target. A cut-debug start plans only
         // its start poses, so only those are probed.
@@ -3115,24 +3126,44 @@ private:
             {&cut_end, "left cut end"}};
           pose_context = "left " + segment.name + " hover/cut start+end";
         }
-        if (!adaptLeftCorrectedOrientations(
-              snapshot, joint_group, ik_state, left_poses, pose_context, message)) {
-          if (!options.cut_debug_start) {
+        LeftRollCache* cache = options.left_roll_cache;
+        if (cache != nullptr && cache->computed &&
+            (!cache->feasible || cache->orientations.size() == left_poses.size())) {
+          if (!cache->feasible) {
+            message = cache->error;
+            return false;
+          }
+          for (std::size_t index = 0; index < left_poses.size(); ++index) {
+            left_poses[index].first->pose.orientation = cache->orientations[index];
+          }
+        } else {
+          const bool feasible = adaptLeftCorrectedOrientations(
+            snapshot, joint_group, ik_state, left_poses, pose_context, message);
+          if (!feasible && !options.cut_debug_start) {
             message = "left orientation adaptation failed for segment " + segment.name + ": " +
               message;
           }
-          return false;
+          if (cache != nullptr) {
+            cache->computed = true;
+            cache->feasible = feasible;
+            cache->error = feasible ? std::string() : message;
+            cache->orientations.clear();
+            for (const auto& labeled : left_poses) {
+              cache->orientations.push_back(labeled.first->pose.orientation);
+            }
+          }
+          if (!feasible) return false;
         }
       }
       if (segment.force_fixed_orientation) {
         moveit::core::RobotState debug_ik_state(ik_state);
-        if (!debug_ik_state.setFromIK(joint_group, cut_start.pose, tool_link_, 1.0)) {
+        if (!debug_ik_state.setFromIK(joint_group, cut_start.pose, settings_.tool_link, 1.0)) {
           message =
             "fixed debug orientation (x=0,y=1,z=0,w=0) has no kinematic IK solution "
             "at the short-stroke start; collision checking was not involved";
           return false;
         }
-        if (!debug_ik_state.setFromIK(joint_group, cut_end.pose, tool_link_, 1.0)) {
+        if (!debug_ik_state.setFromIK(joint_group, cut_end.pose, settings_.tool_link, 1.0)) {
           message =
             "fixed debug orientation (x=0,y=1,z=0,w=0) has no kinematic IK solution "
             "at the short-stroke end; collision checking was not involved";
@@ -3141,21 +3172,23 @@ private:
       }
       if (is_right_side) {
         moveit::core::RobotState approach_ik_state(ik_state);
-        if (!approach_ik_state.setFromIK(joint_group, hover_start.pose, tool_link_, 0.25)) {
+        if (!approach_ik_state.setFromIK(
+              joint_group, hover_start.pose, settings_.tool_link, 0.25)) {
           message = "right-side approach IK infeasible before Cartesian stroke";
           return false;
         }
       }
+      const bool middle_entry_alignment =
+        is_middle_seam && settings_.middle_entry_alignment_m > 0.0;
       auto entry_alignment = hover_start;
-      if (is_middle_seam && middle_entry_alignment_m_ > 0.0) {
-        const double dx = corrected_end_point.x - corrected_start_point.x;
-        const double dy = corrected_end_point.y - corrected_start_point.y;
-        const double dz = corrected_end_point.z - corrected_start_point.z;
-        const double length = std::sqrt(dx * dx + dy * dy + dz * dz);
+      if (middle_entry_alignment) {
+        const Eigen::Vector3d direction =
+          toEigen(corrected_end_point) - toEigen(corrected_start_point);
+        const double length = direction.norm();
         if (length <= 0.0) throw std::runtime_error("zero-length middle seam direction");
-        entry_alignment.pose.position.x -= middle_entry_alignment_m_ * dx / length;
-        entry_alignment.pose.position.y -= middle_entry_alignment_m_ * dy / length;
-        entry_alignment.pose.position.z -= middle_entry_alignment_m_ * dz / length;
+        entry_alignment.pose.position = toPoint(
+          toEigen(entry_alignment.pose.position) -
+          settings_.middle_entry_alignment_m * direction / length);
       }
       cut_targets.push_back(cut_start);
       if (!segment.stop_after_start) cut_targets.push_back(cut_end);
@@ -3165,77 +3198,53 @@ private:
         const std::string transit_name = segment_index == 0U ? first_approach :
           "transition from " + segments[segment_index - 1U].name + " finish pose to " +
           segment.name + " approach pose";
-        auto transit = std::make_unique<mtc::stages::MoveTo>(
-          transit_name + " [" + motion_profile + "]", transit_planner);
-        transit->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
-        transit->setGroup(planning_group_);
-        transit->setIKFrame(tool_link_);
+        const std::string stage_name = transit_name + " [" + motion_profile + "]";
         if (motion_profile == "chomp_pilz") {
-          transit->setGoal(jointGoal(ik_state, joint_group, entry_alignment));
+          transit_stages.push_back(addMoveTo(
+            *task, stage_name, transit_planner, jointGoal(ik_state, joint_group, entry_alignment)));
         } else {
-          transit->setGoal(entry_alignment);
+          transit_stages.push_back(addMoveTo(*task, stage_name, transit_planner, entry_alignment));
         }
-        task->add(std::move(transit));
       }
-      if (is_middle_seam && middle_entry_alignment_m_ > 0.0) {
-        auto align = std::make_unique<mtc::stages::MoveTo>(
-          "align above middle seam start [" + motion_profile + "]", stroke_planner);
-        align->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
-        align->setGroup(planning_group_);
-        align->setIKFrame(tool_link_);
-        align->setGoal(hover_start);
-        task->add(std::move(align));
+      if (middle_entry_alignment) {
+        addMoveTo(
+          *task, "align above middle seam start [" + motion_profile + "]", stroke_planner,
+          hover_start);
       }
-      if (pre_cut_stabilization_duration_s_ > 0.0) {
+      if (settings_.pre_cut_stabilization_duration_s > 0.0) {
         task->add(std::make_unique<StationaryDwell>(
-          "stabilize blade before " + segment.name, planning_group_,
-          pre_cut_stabilization_duration_s_));
+          "stabilize blade before " + segment.name, settings_.planning_group,
+          settings_.pre_cut_stabilization_duration_s));
       }
       if (!segment.hover_only) {
-        if (allow_tool_carton_contact_ && !contact_allowed_from_start) {
-          auto allow_contact = std::make_unique<mtc::stages::ModifyPlanningScene>(
-            "allow knife-tip contact with carton for " + segment.name);
-          allow_contact->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
-          allow_contact->allowCollisions(tool_link_, carton_collision_id_, true);
-          task->add(std::move(allow_contact));
+        if (settings_.allow_tool_carton_contact && !contact_allowed_from_start) {
+          addCartonContactScope(
+            *task, "allow knife-tip contact with carton for " + segment.name, true);
         }
         const std::string entry_label = is_left_side ? "enter laterally into " :
           "descend from aligned ";
-        auto descend = std::make_unique<mtc::stages::MoveTo>(
-          entry_label + segment.name + " start [" + motion_profile + "]", stroke_planner);
-        descend->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
-        descend->setGroup(planning_group_);
-        descend->setIKFrame(tool_link_);
-        descend->setGoal(cut_start);
-        task->add(std::move(descend));
+        addMoveTo(
+          *task, entry_label + segment.name + " start [" + motion_profile + "]", stroke_planner,
+          cut_start);
       }
       if (segment.stop_after_start) {
         continue;
       }
 
-      auto traverse = std::make_unique<mtc::stages::MoveTo>(
-        "cut " + segment.name + " [" + motion_profile + "]", stroke_planner);
-      traverse->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
-      traverse->setGroup(planning_group_);
-      traverse->setIKFrame(tool_link_);
-      traverse->setGoal(cut_end);
-      task->add(std::move(traverse));
+      addMoveTo(
+        *task, "cut " + segment.name + " [" + motion_profile + "]", stroke_planner, cut_end);
       // Terminal handoff: the left arm stops at the cut-level handoff endpoint after the
       // traverse above. Skip the Cartesian hover retract and leave the planned tool/carton
       // contact allowance active; a second arm (not modeled here) resumes from this pose.
       if (!segment.hover_only && !segment.terminal_after_cut) {
         const std::string finish_label = is_left_side ? "finish pose outside " :
           "finish pose above ";
-        auto ascend = std::make_unique<mtc::stages::MoveTo>(
-          finish_label + segment.name + " [" + motion_profile + "]", stroke_planner);
-        ascend->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
-        ascend->setGroup(planning_group_);
-        ascend->setIKFrame(tool_link_);
-        ascend->setGoal(hover_end);
-        task->add(std::move(ascend));
+        addMoveTo(
+          *task, finish_label + segment.name + " [" + motion_profile + "]", stroke_planner,
+          hover_end);
         const bool lift_before_middle = is_left_side &&
           (segment_index + 1U) < segments.size() &&
-          segments[segment_index + 1U].name.rfind("middle seam", 0) == 0U &&
+          segments[segment_index + 1U].cut == CutKind::kMiddle &&
           !segments[segment_index + 1U].hover_only;
         if (lift_before_middle) {
           // Safety: pull laterally clear first (ascend above), then lift along the
@@ -3243,24 +3252,17 @@ private:
           // finish orientation. Collision restore and the free-space transit/rotation
           // to the middle approach happen only after this lift.
           auto lift_target = hover_end;
-          const double lift_m = hover_clearance_m_ - cut_clearance_m_;
+          const double lift_m = settings_.hover_clearance_m - settings_.cut_clearance_m;
           lift_target.pose.position.x += lift_m * snapshot.surface_normal.x;
           lift_target.pose.position.y += lift_m * snapshot.surface_normal.y;
           lift_target.pose.position.z += lift_m * snapshot.surface_normal.z;
-          auto lift = std::make_unique<mtc::stages::MoveTo>(
-            "lift clear of " + segment.name + " to hover [cartesian]", planners.cartesian);
-          lift->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
-          lift->setGroup(planning_group_);
-          lift->setIKFrame(tool_link_);
-          lift->setGoal(lift_target);
-          task->add(std::move(lift));
+          addMoveTo(
+            *task, "lift clear of " + segment.name + " to hover [cartesian]",
+            planners.cartesian, lift_target);
         }
-        if (allow_tool_carton_contact_) {
-          auto forbid_contact = std::make_unique<mtc::stages::ModifyPlanningScene>(
-            "restore knife-tip collision checking after " + segment.name);
-          forbid_contact->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
-          forbid_contact->allowCollisions(tool_link_, carton_collision_id_, false);
-          task->add(std::move(forbid_contact));
+        if (settings_.allow_tool_carton_contact) {
+          addCartonContactScope(
+            *task, "restore knife-tip collision checking after " + segment.name, false);
         }
       }
     }
@@ -3272,32 +3274,30 @@ private:
       details << exception;
       throw std::runtime_error("MTC stage initialization failed: " + details.str());
     }
-    const auto result = task->plan(static_cast<std::size_t>(max_solutions_));
+    const auto result = task->plan(static_cast<std::size_t>(settings_.max_solutions));
     if (result != moveit::core::MoveItErrorCode::SUCCESS || task->solutions().empty()) {
-      if (options.explain_failure) {
-        task->explainFailure();
-      }
+      task->explainFailure();
       message = "MTC candidate failed: task=" + task_name + " profile=" + motion_profile +
                 " segments=" + std::to_string(segments.size());
       return false;
     }
-    // Serialized once and shared by both fail-closed solution validators.
+    // Serialized once and shared by both fail-closed solution validators. Publication
+    // happens only for the retained plan (retainPlan / cut-debug start).
     const auto& solution = *task->solutions().front();
     moveit_task_constructor_msgs::msg::Solution solution_message;
     solution.toMsg(solution_message);
     const std::size_t expected_dwell_count =
-      pre_cut_stabilization_duration_s_ > 0.0 ? segments.size() : 0U;
+      settings_.pre_cut_stabilization_duration_s > 0.0 ? segments.size() : 0U;
     std::string dwell_error;
     if (!validateStationaryDwells(solution_message, expected_dwell_count, dwell_error)) {
       message = "planned trajectory has invalid pre-cut stabilization: " + dwell_error;
       return false;
     }
     std::string wrist_error;
-    if (!validateFreeSpaceTransitWrist(solution, solution_message, wrist_error)) {
+    if (!validateFreeSpaceTransitWrist(solution, solution_message, transit_stages, wrist_error)) {
       message = wrist_error;
       return false;
     }
-    task->introspection().publishSolution(solution);
     return true;
   }
 
@@ -3343,7 +3343,7 @@ private:
       }
       if (std::abs(seconds(points.front().time_from_start)) > 1e-9 ||
           std::abs(seconds(points.back().time_from_start) -
-            pre_cut_stabilization_duration_s_) > 1e-6) {
+            settings_.pre_cut_stabilization_duration_s) > 1e-6) {
         error = "dwell waypoint timing does not match requested duration";
         return false;
       }
@@ -3358,35 +3358,38 @@ private:
 
   // Free-space transit stack: resolve pose goals to the IK branch nearest the
   // propagated start, then try the shortest validity-checked joint-space
-  // interpolation first and the profile's existing planner second. Cutting
-  // strokes never use this stack.
+  // interpolation first and the profile's existing planner second, all within one
+  // planning_timeout_s budget per transit. Cutting strokes never use this stack.
   mtc::solvers::PlannerInterfacePtr makeTransitPlanner(
     const mtc::solvers::PlannerInterfacePtr& fallback) const
   {
     auto direct = std::make_shared<mtc::solvers::JointInterpolationPlanner>();
-    direct->setMaxVelocityScalingFactor(transit_velocity_scaling_);
-    direct->setMaxAccelerationScalingFactor(transit_acceleration_scaling_);
+    direct->setMaxVelocityScalingFactor(settings_.transit_velocity_scaling);
+    direct->setMaxAccelerationScalingFactor(settings_.transit_acceleration_scaling);
     auto multi = std::make_shared<mtc::solvers::MultiPlanner>();
     multi->push_back(direct);
     multi->push_back(fallback);
     // Pose goals are resolved to the nearest exact IK branch before either planner runs.
-    return std::make_shared<NearestBranchTransitPlanner>(multi);
+    return std::make_shared<NearestBranchTransitPlanner>(multi, settings_.planning_timeout_s);
   }
 
   // Fail-closed wrist guard for free-space transits: rejects the retained solution
   // when a free-space MoveTo transit winds joint6 through more than pi radians
   // of total travel. Travel is summed over every consecutive waypoint pair so
   // intermediate winding cannot hide behind benign endpoints. Cutting, align,
-  // descend, ascend, lift, and dwell stages are never examined here.
+  // descend, ascend, lift, and dwell stages are never examined here. Transit stages
+  // are the ones recorded while the task was built (`transit_stages`); the check fails
+  // closed unless every recorded transit is examined exactly once and no other stage
+  // carries a transit name.
   bool validateFreeSpaceTransitWrist(
     const mtc::SolutionBase& solution,
     const moveit_task_constructor_msgs::msg::Solution& solution_message,
-    std::string& error) const
+    const std::vector<const mtc::Stage*>& transit_stages, std::string& error) const
   {
+    const std::string prefix = "planned free-space transit winds the wrist: ";
     const auto* sequence = dynamic_cast<const mtc::SolutionSequence*>(&solution);
     if (sequence == nullptr) {
-      error = "planned free-space transit winds the wrist: unexpected solution type; " +
-        std::string("refusing to guess transit stages");
+      error = prefix + "unexpected solution type; refusing to guess transit stages";
       return false;
     }
     std::vector<const mtc::SubTrajectory*> leaves;
@@ -3406,75 +3409,86 @@ private:
     };
     for (const auto* child : sequence->solutions()) collect(child);
     if (leaves.size() != solution_message.sub_trajectory.size()) {
-      error = "planned free-space transit winds the wrist: solution trajectory count does " +
-        std::string("not match planned stages; refusing to guess");
+      error = prefix + "solution trajectory count does not match planned stages; refusing to guess";
       return false;
     }
-    const auto is_free_space_transit = [](const std::string& stage_name) {
+    const std::set<const mtc::Stage*> recorded(transit_stages.begin(), transit_stages.end());
+    if (recorded.size() != transit_stages.size() || recorded.count(nullptr) != 0U) {
+      error = prefix + "transit stage bookkeeping is inconsistent; refusing to guess";
+      return false;
+    }
+    const auto has_transit_name = [](const std::string& stage_name) {
       return stage_name.rfind("transit to supplied", 0) == 0U ||
         stage_name.rfind("approach pose above ", 0) == 0U ||
         stage_name.rfind("approach pose outside ", 0) == 0U ||
         stage_name.rfind("transition from ", 0) == 0U;
     };
     constexpr double kMaxWristTravelRad = 3.14159265358979323846;
+    std::set<const mtc::Stage*> examined;
     for (std::size_t index = 0; index < leaves.size(); ++index) {
-      const std::string stage_name = leaves[index]->creator() != nullptr ?
-        leaves[index]->creator()->name() : std::string();
-      if (!is_free_space_transit(stage_name)) continue;
+      const mtc::Stage* creator = leaves[index]->creator();
+      const std::string stage_name = creator != nullptr ? creator->name() : std::string();
+      const bool is_recorded = recorded.count(creator) != 0U;
+      if (!is_recorded) {
+        if (has_transit_name(stage_name)) {
+          error = prefix + "stage '" + stage_name +
+            "' is named as a transit but was not recorded as one; refusing to guess";
+          return false;
+        }
+        continue;
+      }
+      if (!examined.insert(creator).second) {
+        error = prefix + "transit '" + stage_name +
+          "' produced more than one trajectory; refusing to guess";
+        return false;
+      }
       const auto& sub_msg = solution_message.sub_trajectory[index];
       const auto& joint_names = sub_msg.trajectory.joint_trajectory.joint_names;
       const auto& points = sub_msg.trajectory.joint_trajectory.points;
-      const auto find_joint = [&](const std::string& name) -> std::optional<std::size_t> {
-        const auto it = std::find(joint_names.begin(), joint_names.end(), name);
-        if (it == joint_names.end()) return std::nullopt;
-        return static_cast<std::size_t>(std::distance(joint_names.begin(), it));
-      };
-      const auto joint6 = find_joint("joint6");
-      if (!joint6) {
-        error = "planned free-space transit winds the wrist: transit '" + stage_name +
-          "' has no joint6 waypoints";
+      const auto joint6_it = std::find(joint_names.begin(), joint_names.end(), "joint6");
+      if (joint6_it == joint_names.end()) {
+        error = prefix + "transit '" + stage_name + "' has no joint6 waypoints";
         return false;
       }
+      const auto joint6 = static_cast<std::size_t>(std::distance(joint_names.begin(), joint6_it));
       if (points.size() < 2U) {
-        error = "planned free-space transit winds the wrist: transit '" + stage_name +
-          "' has missing joint waypoints";
+        error = prefix + "transit '" + stage_name + "' has missing joint waypoints";
         return false;
       }
       double travel6 = 0.0;
       for (std::size_t point = 1U; point < points.size(); ++point) {
         const auto& prev = points[point - 1U].positions;
         const auto& curr = points[point].positions;
-        if (prev.size() != joint_names.size() || curr.size() != joint_names.size() ||
-            *joint6 >= prev.size() || *joint6 >= curr.size()) {
-          error = "planned free-space transit winds the wrist: transit '" + stage_name +
-            "' has incomplete joint waypoints";
+        if (prev.size() != joint_names.size() || curr.size() != joint_names.size()) {
+          error = prefix + "transit '" + stage_name + "' has incomplete joint waypoints";
           return false;
         }
-        const double before6 = prev[*joint6];
-        const double after6 = curr[*joint6];
-        if (!std::isfinite(before6) || !std::isfinite(after6)) {
-          error = "planned free-space transit winds the wrist: transit '" + stage_name +
-            "' has non-finite wrist waypoints";
+        if (!std::isfinite(prev[joint6]) || !std::isfinite(curr[joint6])) {
+          error = prefix + "transit '" + stage_name + "' has non-finite wrist waypoints";
           return false;
         }
-        travel6 += std::abs(after6 - before6);
+        travel6 += std::abs(curr[joint6] - prev[joint6]);
       }
       if (travel6 > kMaxWristTravelRad) {
         std::ostringstream details;
-        details << "planned free-space transit winds the wrist: transit '" << stage_name <<
-          "' joint6 travel " << travel6 <<
+        details << prefix << "transit '" << stage_name << "' joint6 travel " << travel6 <<
           " rad exceeds " << kMaxWristTravelRad << " rad";
         error = details.str();
         return false;
       }
     }
+    if (examined.size() != recorded.size()) {
+      error = prefix + "examined " + std::to_string(examined.size()) + " of " +
+        std::to_string(recorded.size()) +
+        " planned free-space transits; refusing to accept an unchecked transit";
+      return false;
+    }
     return true;
   }
 
-
-  geometry_msgs::msg::Point interpolate(
+  static geometry_msgs::msg::Point interpolate(
     const geometry_msgs::msg::Point& start, const geometry_msgs::msg::Point& end,
-    double fraction) const
+    double fraction)
   {
     geometry_msgs::msg::Point point;
     point.x = start.x + fraction * (end.x - start.x);
@@ -3483,13 +3497,21 @@ private:
     return point;
   }
 
-  double distanceBetween(
-    const geometry_msgs::msg::Point& start, const geometry_msgs::msg::Point& end) const
+  static double distanceBetween(
+    const geometry_msgs::msg::Point& start, const geometry_msgs::msg::Point& end)
   {
-    const double dx = end.x - start.x;
-    const double dy = end.y - start.y;
-    const double dz = end.z - start.z;
-    return std::sqrt(dx * dx + dy * dy + dz * dz);
+    return (toEigen(end) - toEigen(start)).norm();
+  }
+
+  // middle_debug_short / debug_fixed_orientation tool orientation, XYZW=(0,1,0,0).
+  static geometry_msgs::msg::Quaternion fixedDebugOrientation()
+  {
+    geometry_msgs::msg::Quaternion fixed;
+    fixed.x = 0.0;
+    fixed.y = 1.0;
+    fixed.z = 0.0;
+    fixed.w = 0.0;
+    return fixed;
   }
 
   geometry_msgs::msg::PoseStamped targetPose(
@@ -3497,90 +3519,27 @@ private:
     const geometry_msgs::msg::Point& direction_target, double clearance_m,
     double tilt_deg = 0.0) const
   {
-    const auto normalize = [](std::array<double, 3> value) {
-      const double norm = std::sqrt(
-        value[0] * value[0] + value[1] * value[1] + value[2] * value[2]);
-      for (auto& component : value) component /= norm;
-      return value;
-    };
-    const auto cross = [](const auto& a, const auto& b) {
-      return std::array<double, 3>{
-        a[1] * b[2] - a[2] * b[1],
-        a[2] * b[0] - a[0] * b[2],
-        a[0] * b[1] - a[1] * b[0]};
-    };
-    const auto z_axis = normalize({
-      -snapshot.surface_normal.x, -snapshot.surface_normal.y,
-      -snapshot.surface_normal.z});
+    const Eigen::Vector3d z_axis = (-toEigen(snapshot.surface_normal)).normalized();
     // The cutter's local Y axis is its blade length. Keep it along the seam,
     // rather than using local X as was appropriate only for the top-seam trial.
-    std::array<double, 3> y_axis{
-      direction_target.x - point.x,
-      direction_target.y - point.y,
-      direction_target.z - point.z};
-    const double projection =
-      y_axis[0] * z_axis[0] + y_axis[1] * z_axis[1] + y_axis[2] * z_axis[2];
-    for (std::size_t i = 0; i < 3; ++i) y_axis[i] -= projection * z_axis[i];
-    y_axis = normalize(y_axis);
-    auto x_axis = normalize(cross(y_axis, z_axis));
-    auto tilted_z_axis = z_axis;
+    Eigen::Vector3d y_axis = toEigen(direction_target) - toEigen(point);
+    y_axis -= y_axis.dot(z_axis) * z_axis;
+    y_axis.normalize();
+    const Eigen::Vector3d x_axis = y_axis.cross(z_axis).normalized();
     // Side tilt is a roll about the blade, so it cannot rotate the blade off seam.
     const double radians = tilt_deg * std::acos(-1.0) / 180.0;
     const double cosine = std::cos(radians);
     const double sine = std::sin(radians);
-    for (std::size_t i = 0; i < 3; ++i) {
-      const double original_x = x_axis[i];
-      x_axis[i] = cosine * original_x - sine * z_axis[i];
-      tilted_z_axis[i] = sine * original_x + cosine * z_axis[i];
-    }
+    const Eigen::Vector3d tilted_x_axis = cosine * x_axis - sine * z_axis;
+    const Eigen::Vector3d tilted_z_axis = sine * x_axis + cosine * z_axis;
 
-    const geometry_msgs::msg::Quaternion q =
-      normalizedQuaternion(basisQuaternion(x_axis, y_axis, tilted_z_axis));
     geometry_msgs::msg::PoseStamped pose;
     pose.header = snapshot.header;
-    pose.pose.position.x = point.x + clearance_m * snapshot.surface_normal.x;
-    pose.pose.position.y = point.y + clearance_m * snapshot.surface_normal.y;
-    pose.pose.position.z = point.z + clearance_m * snapshot.surface_normal.z;
-    pose.pose.orientation = q;
-    if (debug_fixed_orientation_) {
-      pose.pose.orientation.x = 0.0;
-      pose.pose.orientation.y = 1.0;
-      pose.pose.orientation.z = 0.0;
-      pose.pose.orientation.w = 0.0;
-    }
+    pose.pose.position = toPoint(toEigen(point) + clearance_m * toEigen(snapshot.surface_normal));
+    pose.pose.orientation =
+      toMsg(basisQuaternion(tilted_x_axis, y_axis, tilted_z_axis).normalized());
+    if (settings_.debug_fixed_orientation) pose.pose.orientation = fixedDebugOrientation();
     return pose;
-  }
-  // Rotation whose columns are the given frame axes (Eigen's rotation-matrix conversion).
-  static geometry_msgs::msg::Quaternion basisQuaternion(
-    const std::array<double, 3>& x_axis, const std::array<double, 3>& y_axis,
-    const std::array<double, 3>& z_axis)
-  {
-    Eigen::Matrix3d basis;
-    basis.col(0) = Eigen::Vector3d(x_axis[0], x_axis[1], x_axis[2]);
-    basis.col(1) = Eigen::Vector3d(y_axis[0], y_axis[1], y_axis[2]);
-    basis.col(2) = Eigen::Vector3d(z_axis[0], z_axis[1], z_axis[2]);
-    const Eigen::Quaterniond rotation(basis);
-    geometry_msgs::msg::Quaternion q;
-    q.x = rotation.x();
-    q.y = rotation.y();
-    q.z = rotation.z();
-    q.w = rotation.w();
-    return q;
-  }
-  geometry_msgs::msg::Quaternion normalizedQuaternion(
-    geometry_msgs::msg::Quaternion quaternion) const
-  {
-    const double norm = std::sqrt(
-      quaternion.x * quaternion.x + quaternion.y * quaternion.y +
-      quaternion.z * quaternion.z + quaternion.w * quaternion.w);
-    if (norm <= 0.0) {
-      throw std::runtime_error("cannot normalize a zero-length quaternion");
-    }
-    quaternion.x /= norm;
-    quaternion.y /= norm;
-    quaternion.z /= norm;
-    quaternion.w /= norm;
-    return quaternion;
   }
 
   std::map<std::string, double> jointGoal(
@@ -3588,7 +3547,7 @@ private:
     const moveit::core::JointModelGroup* group,
     const geometry_msgs::msg::PoseStamped& pose) const
   {
-    if (!state.setFromIK(group, pose.pose, tool_link_, 0.25)) {
+    if (!state.setFromIK(group, pose.pose, settings_.tool_link, 0.25)) {
       throw std::runtime_error("CHOMP transit IK failed");
     }
     std::vector<double> positions;
@@ -3638,7 +3597,7 @@ private:
         RCLCPP_ERROR(get_logger(), "Cannot publish RViz marker: targets do not match named cut segments");
         break;
       }
-      const bool middle_seam = segment.name.find("middle seam") != std::string::npos;
+      const bool middle_seam = segment.cut == CutKind::kMiddle;
       visualization_msgs::msg::Marker marker;
       marker.header = cut_targets[target_index].header;
       marker.ns = "frozen_h_cut/" + segment.name;
@@ -3665,9 +3624,18 @@ private:
     }
     marker_pub_->publish(array);
   }
+  // Held for the whole duration of every Trigger service (try_lock) and by the
+  // parameter callback (try_lock only) when applying planning parameters.
   std::mutex plan_mutex_;
   std::mutex state_mutex_;
   std::mutex camera_pole_mutex_;
+  std::mutex runtime_parameter_mutex_;
+  PlannerSettings settings_;
+  // Runtime parameters: readable without plan_mutex_ or rclcpp's parameter mutex.
+  std::atomic<bool> execution_enabled_{false};
+  std::atomic<bool> debug_motion_execution_enabled_{false};
+  std::atomic<bool> left_roll_diagnostics_enabled_{false};
+  std::string external_snapshot_file_;
   std::optional<sensor_msgs::msg::JointState> current_joint_state_;
   std::optional<moveit_msgs::msg::CollisionObject> camera_pole_;
   rclcpp::Time joint_state_received_;
@@ -3677,17 +3645,18 @@ private:
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_pub_;
   rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr target_pose_pub_;
   rclcpp::Publisher<moveit_msgs::msg::CollisionObject>::SharedPtr carton_collision_pub_;
-  std::string cut_debug_cut_, cut_debug_output_dir_;
-  std::string cut_debug_left_correction_file_, cut_debug_middle_correction_file_,
-    cut_debug_right_correction_file_;
-  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr plan_service_;
-  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr section_diagnostic_service_;
-  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr execute_service_;
-  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr clear_service_;
-  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr cut_debug_start_service_;
-  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr cut_debug_save_service_;
-  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr cut_pattern_callback_;
+  TriggerService::SharedPtr plan_service_;
+  TriggerService::SharedPtr section_diagnostic_service_;
+  TriggerService::SharedPtr execute_service_;
+  TriggerService::SharedPtr clear_service_;
+  TriggerService::SharedPtr cut_debug_start_service_;
+  TriggerService::SharedPtr cut_debug_save_service_;
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr parameter_callback_;
+  // Loaded once, reused by every task (Task::setRobotModel) and by the cut-debug FK.
+  moveit::core::RobotModelConstPtr robot_model_;
   std::optional<Snapshot> planned_snapshot_;
+  // True when the retained plan's snapshot was loaded under debug_allow_stale_snapshot.
+  bool retained_with_stale_override_{false};
   CutDebugStage cut_debug_stage_{CutDebugStage::kNone};
   std::string cut_debug_session_cut_;
   std::optional<Snapshot> cut_debug_snapshot_;
@@ -3702,27 +3671,8 @@ private:
   CutLocalDeltas cut_debug_end_local_{};
   std::string cut_debug_record_path_;
   std::int64_t cut_debug_created_stamp_ns_{0};
-  moveit::core::RobotModelConstPtr cut_debug_robot_model_;
   std::unique_ptr<mtc::Task> planned_task_;
   std::thread execution_thread_;
-  std::string cut_pattern_, side_cut_orientation_mode_;
-  std::string planning_frame_, planning_group_, tool_link_, planning_pipeline_, chomp_pipeline_;
-  std::string pilz_pipeline_, carton_collision_id_, camera_pole_topic_;
-  double external_snapshot_max_age_s_, carton_height_m_, hover_clearance_m_,
-    left_lateral_standoff_m_, cut_clearance_m_, middle_cut_clearance_m_,
-    debug_motion_distance_m_, debug_motion_clearance_m_,
-    middle_entry_alignment_m_,
-    pre_cut_stabilization_duration_s_, left_side_cut_tilt_deg_, right_side_cut_tilt_deg_,
-    left_adaptive_orientation_max_deg_, left_adaptive_orientation_step_deg_,
-    t_cut_middle_handoff_fraction_, cartesian_step_m_, planning_timeout_s_, velocity_scaling_, acceleration_scaling_,
-    transit_velocity_scaling_, transit_acceleration_scaling_;
-  std::vector<double> approach_joint_degrees_;
-  int max_solutions_;
-  bool debug_fixed_orientation_{false},
-    debug_allow_stale_snapshot_{false}, camera_pole_required_{true},
-    allow_tool_carton_contact_{false};
-  bool cut_debug_correction_enabled_{false};
-  bool left_adaptive_orientation_enabled_{true};
   bool execution_in_progress_{false};
 };
 

@@ -51,6 +51,10 @@ namespace
 {
 constexpr double kPi = 3.141592653589793238462643383279502884;
 constexpr double kEpsilon = 1e-9;
+// Board reference points point_1..point_N (parameters point_<n>_xy_m, services ~/plan_point_<n>).
+constexpr std::size_t kBoardPointCount = 7U;
+
+std::string boardPointName(std::size_t index) { return "point_" + std::to_string(index + 1U); }
 
 bool isFinite(double value) { return std::isfinite(value); }
 
@@ -283,23 +287,22 @@ public:
         "default_planner_request_adapters/FixStartStatePathConstraints "
         "default_planner_request_adapters/AddTimeOptimalParameterization");
     }
-    const auto kinematics_prefix = "robot_description_kinematics." + planning_group_ + ".";
-    if (!has_parameter(kinematics_prefix + "kinematics_solver")) {
-      declare_parameter<std::string>(
-        kinematics_prefix + "kinematics_solver", "kdl_kinematics_plugin/KDLKinematicsPlugin");
-      declare_parameter<int>(kinematics_prefix + "kinematics_solver_attempts", 5);
-      declare_parameter<double>(kinematics_prefix + "kinematics_solver_search_resolution", 0.005);
-      declare_parameter<double>(kinematics_prefix + "kinematics_solver_timeout", 0.05);
-      declare_parameter<bool>(kinematics_prefix + "position_only_ik", false);
+    // Kinematics must come from the package kinematics.yaml (passed by
+    // move_group.launch.py); a silent in-code fallback could disagree with it.
+    const auto kinematics_solver_parameter =
+      "robot_description_kinematics." + planning_group_ + ".kinematics_solver";
+    if (!has_parameter(kinematics_solver_parameter) &&
+        get_node_parameters_interface()->get_parameter_overrides().count(kinematics_solver_parameter) == 0U) {
+      throw std::invalid_argument(
+        "missing parameter " + kinematics_solver_parameter +
+        "; launch calibration_verification via move_group.launch.py so robot_description_kinematics "
+        "is loaded from igus_rebel_moveit_config/config/kinematics.yaml");
     }
 
-    point_1_xy_m_ = declare_parameter<std::vector<double>>("point_1_xy_m", std::vector<double>{});
-    point_2_xy_m_ = declare_parameter<std::vector<double>>("point_2_xy_m", std::vector<double>{});
-    point_3_xy_m_ = declare_parameter<std::vector<double>>("point_3_xy_m", std::vector<double>{});
-    point_4_xy_m_ = declare_parameter<std::vector<double>>("point_4_xy_m", std::vector<double>{});
-    point_5_xy_m_ = declare_parameter<std::vector<double>>("point_5_xy_m", std::vector<double>{});
-    point_6_xy_m_ = declare_parameter<std::vector<double>>("point_6_xy_m", std::vector<double>{});
-    point_7_xy_m_ = declare_parameter<std::vector<double>>("point_7_xy_m", std::vector<double>{});
+    for (std::size_t index = 0U; index < kBoardPointCount; ++index) {
+      point_xy_m_[index] = declare_parameter<std::vector<double>>(
+        boardPointName(index) + "_xy_m", std::vector<double>{});
+    }
     board_target_height_m_ = declare_parameter<double>("board_target_height_m", 0.0);
     preapproach_only_ = declare_parameter<bool>("preapproach_only", false);
     retract_after_approach_ = declare_parameter<bool>("retract_after_approach", true);
@@ -437,13 +440,10 @@ public:
       rmw_qos_profile_services_default, callback_group_);
 
     plan_center_service_ = createPlanService("~/plan_center", TargetKind::CENTER);
-    plan_point_1_service_ = createPlanService("~/plan_point_1", TargetKind::POINT_1);
-    plan_point_2_service_ = createPlanService("~/plan_point_2", TargetKind::POINT_2);
-    plan_point_3_service_ = createPlanService("~/plan_point_3", TargetKind::POINT_3);
-    plan_point_4_service_ = createPlanService("~/plan_point_4", TargetKind::POINT_4);
-    plan_point_5_service_ = createPlanService("~/plan_point_5", TargetKind::POINT_5);
-    plan_point_6_service_ = createPlanService("~/plan_point_6", TargetKind::POINT_6);
-    plan_point_7_service_ = createPlanService("~/plan_point_7", TargetKind::POINT_7);
+    for (std::size_t index = 0U; index < kBoardPointCount; ++index) {
+      plan_point_services_[index] =
+        createPlanService("~/plan_" + boardPointName(index), TargetKind::POINT, index);
+    }
     plan_cube_service_ = createPlanService("~/plan_cube", TargetKind::CUBE);
 
     execute_service_ = create_service<std_srvs::srv::Trigger>(
@@ -502,13 +502,7 @@ private:
   enum class TargetKind
   {
     CENTER,
-    POINT_1,
-    POINT_2,
-    POINT_3,
-    POINT_4,
-    POINT_5,
-    POINT_6,
-    POINT_7,
+    POINT,  // board reference point; the index selects point_<index + 1>
     CUBE
   };
 
@@ -556,11 +550,11 @@ private:
   };
 
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr createPlanService(
-    const std::string& name, TargetKind target_kind)
+    const std::string& name, TargetKind target_kind, std::size_t point_index = 0U)
   {
     return create_service<std_srvs::srv::Trigger>(
       name,
-      [this, target_kind](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+      [this, target_kind, point_index](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
                           std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
         std::unique_lock<std::mutex> lock(plan_mutex_, std::try_to_lock);
         if (!lock.owns_lock()) {
@@ -573,7 +567,7 @@ private:
           response->message = "cannot plan while calibration verification execution is active";
           return;
         }
-        response->success = planTargetLocked(target_kind, response->message);
+        response->success = planTargetLocked(target_kind, point_index, response->message);
       },
       rmw_qos_profile_services_default, callback_group_);
   }
@@ -605,13 +599,11 @@ private:
       throw std::invalid_argument("reference_origin_xyz_m must contain three finite metre values");
     }
     validateOptionalPosition(reference_origin_xyz_m_, "reference_origin_xyz_m");
-    validateOptionalVector(point_1_xy_m_, 2U, "point_1_xy_m");
-    validateOptionalVector(point_2_xy_m_, 2U, "point_2_xy_m");
-    validateOptionalVector(point_3_xy_m_, 2U, "point_3_xy_m");
-    validateOptionalVector(point_4_xy_m_, 2U, "point_4_xy_m");
-    validateOptionalVector(point_5_xy_m_, 2U, "point_5_xy_m");
-    validateOptionalVector(point_6_xy_m_, 2U, "point_6_xy_m");
-    validateOptionalVector(point_7_xy_m_, 2U, "point_7_xy_m");
+    for (std::size_t index = 0U; index < kBoardPointCount; ++index) {
+      const std::string name = boardPointName(index) + "_xy_m";
+      validateOptionalVector(point_xy_m_[index], 2U, name.c_str());
+      validateOptionalPosition(point_xy_m_[index], name.c_str());
+    }
     validateOptionalVector(board_to_tcp_orientation_xyzw_, 4U, "board_to_tcp_orientation_xyzw");
     validateOptionalVector(board_to_tcp_rpy_rad_, 3U, "board_to_tcp_rpy_rad");
     validateOptionalVector(board_box_center_xyz_m_, 3U, "board_box_center_xyz_m");
@@ -640,13 +632,6 @@ private:
     validateOptionalDimensions(board_box_dimensions_xyz_m_, "board_box_dimensions_xyz_m");
     validateOptionalDimensions(table_box_dimensions_xyz_m_, "table_box_dimensions_xyz_m");
     validateOptionalDimensions(cube_dimensions_xyz_m_, "cube_dimensions_xyz_m");
-    validateOptionalPosition(point_1_xy_m_, "point_1_xy_m");
-    validateOptionalPosition(point_2_xy_m_, "point_2_xy_m");
-    validateOptionalPosition(point_3_xy_m_, "point_3_xy_m");
-    validateOptionalPosition(point_4_xy_m_, "point_4_xy_m");
-    validateOptionalPosition(point_5_xy_m_, "point_5_xy_m");
-    validateOptionalPosition(point_6_xy_m_, "point_6_xy_m");
-    validateOptionalPosition(point_7_xy_m_, "point_7_xy_m");
     validateOptionalPosition(board_box_center_xyz_m_, "board_box_center_xyz_m");
     validateOptionalPosition(table_box_center_xyz_m_, "table_box_center_xyz_m");
     validateOptionalPosition(cube_pose_xyz_m_, "cube_pose_xyz_m");
@@ -795,7 +780,7 @@ private:
     return true;
   }
 
-  bool planTargetLocked(TargetKind target_kind, std::string& message)
+  bool planTargetLocked(TargetKind target_kind, std::size_t point_index, std::string& message)
   {
     retained_plan_.reset();
     if (!captured_board_pose_) {
@@ -811,7 +796,7 @@ private:
     }
 
     TargetSpec target;
-    if (!buildTargetSpec(target_kind, *captured_board_pose_, target, message)) {
+    if (!buildTargetSpec(target_kind, point_index, *captured_board_pose_, target, message)) {
       message = "planning blocked: " + message;
       publishMarkers(*captured_board_pose_, std::nullopt, collision_objects);
       return false;
@@ -883,7 +868,19 @@ private:
   {
     auto task = std::make_unique<mtc::Task>();
     task->stages()->setName("Calibration verification " + target.name);
-    task->loadRobotModel(shared_from_this());
+    {
+      // Loading the model parses URDF/SRDF and kinematics plugins; do it once.
+      std::lock_guard<std::mutex> lock(robot_model_mutex_);
+      if (!robot_model_) {
+        task->loadRobotModel(shared_from_this());
+        robot_model_ = task->getRobotModel();
+      } else {
+        task->setRobotModel(robot_model_);
+      }
+    }
+    if (!task->getRobotModel()) {
+      throw std::runtime_error("failed to load robot model from robot_description");
+    }
     if (task->getRobotModel()->getJointModelGroup(planning_group_) == nullptr) {
       throw std::runtime_error("planning_group " + planning_group_ + " is missing from robot model");
     }
@@ -1091,7 +1088,7 @@ private:
   }
 
   bool buildTargetSpec(
-    TargetKind target_kind, const CapturedBoardPose& board, TargetSpec& target,
+    TargetKind target_kind, std::size_t point_index, const CapturedBoardPose& board, TargetSpec& target,
     std::string& message) const
   {
     if (preview_only_ && target_kind == TargetKind::CUBE) {
@@ -1101,20 +1098,13 @@ private:
     switch (target_kind) {
       case TargetKind::CENTER:
         return buildBoardTarget("center", {0.0, 0.0}, board, target, message);
-      case TargetKind::POINT_1:
-        return buildOptionalBoardTarget("point_1", point_1_xy_m_, board, target, message);
-      case TargetKind::POINT_2:
-        return buildOptionalBoardTarget("point_2", point_2_xy_m_, board, target, message);
-      case TargetKind::POINT_3:
-        return buildOptionalBoardTarget("point_3", point_3_xy_m_, board, target, message);
-      case TargetKind::POINT_4:
-        return buildOptionalBoardTarget("point_4", point_4_xy_m_, board, target, message);
-      case TargetKind::POINT_5:
-        return buildOptionalBoardTarget("point_5", point_5_xy_m_, board, target, message);
-      case TargetKind::POINT_6:
-        return buildOptionalBoardTarget("point_6", point_6_xy_m_, board, target, message);
-      case TargetKind::POINT_7:
-        return buildOptionalBoardTarget("point_7", point_7_xy_m_, board, target, message);
+      case TargetKind::POINT:
+        if (point_index >= kBoardPointCount) {
+          message = "board point index out of range";
+          return false;
+        }
+        return buildOptionalBoardTarget(
+          boardPointName(point_index), point_xy_m_[point_index], board, target, message);
       case TargetKind::CUBE:
         return buildCubeTarget(board, target, message);
     }
@@ -1970,11 +1960,10 @@ private:
     Eigen::Isometry3d base_reference = base_board;
     base_reference.translation() = base_board * referencePoint(0.0, 0.0);
     addAxisMarkers(array, base_reference, "captured_board", 0, 0.075);
-    const std::vector<std::pair<std::string, std::vector<double>>> points{
-      {"center", {0.0, 0.0}}, {"point_1", point_1_xy_m_},
-      {"point_2", point_2_xy_m_}, {"point_3", point_3_xy_m_},
-      {"point_4", point_4_xy_m_}, {"point_5", point_5_xy_m_},
-      {"point_6", point_6_xy_m_}, {"point_7", point_7_xy_m_}};
+    std::vector<std::pair<std::string, std::vector<double>>> points{{"center", {0.0, 0.0}}};
+    for (std::size_t index = 0U; index < kBoardPointCount; ++index) {
+      points.emplace_back(boardPointName(index), point_xy_m_[index]);
+    }
     int point_id = 300;
     for (const auto& [name, xy] : points) {
       if (xy.size() != 2U) continue;
@@ -2138,6 +2127,8 @@ private:
   std::optional<CapturedBoardPose> captured_board_pose_;
   std::optional<LatestJointState> latest_joint_state_;
   std::unique_ptr<RetainedPlan> retained_plan_;
+  std::mutex robot_model_mutex_;
+  moveit::core::RobotModelConstPtr robot_model_;
   std::uint64_t capture_sequence_{0U};
   std::uint64_t plan_sequence_{0U};
 
@@ -2156,13 +2147,7 @@ private:
 
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr capture_service_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr plan_center_service_;
-  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr plan_point_1_service_;
-  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr plan_point_2_service_;
-  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr plan_point_3_service_;
-  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr plan_point_4_service_;
-  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr plan_point_5_service_;
-  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr plan_point_6_service_;
-  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr plan_point_7_service_;
+  std::array<rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr, kBoardPointCount> plan_point_services_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr plan_cube_service_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr execute_service_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr clear_service_;
@@ -2188,13 +2173,7 @@ private:
   std::string output_directory_;
   std::string record_format_;
 
-  std::vector<double> point_1_xy_m_;
-  std::vector<double> point_2_xy_m_;
-  std::vector<double> point_3_xy_m_;
-  std::vector<double> point_4_xy_m_;
-  std::vector<double> point_5_xy_m_;
-  std::vector<double> point_6_xy_m_;
-  std::vector<double> point_7_xy_m_;
+  std::array<std::vector<double>, kBoardPointCount> point_xy_m_;
   std::vector<double> board_to_tcp_orientation_xyzw_;
   std::vector<double> board_to_tcp_rpy_rad_;
   std::vector<double> board_box_center_xyz_m_;
@@ -2241,7 +2220,14 @@ private:
 int main(int argc, char** argv)
 {
   rclcpp::init(argc, argv);
-  auto node = std::make_shared<CalibrationVerification>();
+  std::shared_ptr<CalibrationVerification> node;
+  try {
+    node = std::make_shared<CalibrationVerification>();
+  } catch (const std::exception& error) {
+    RCLCPP_FATAL(rclcpp::get_logger("calibration_verification"), "startup failed: %s", error.what());
+    rclcpp::shutdown();
+    return 1;
+  }
   rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), 4);
   executor.add_node(node);
   executor.spin();

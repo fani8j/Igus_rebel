@@ -5,13 +5,21 @@ The pole is an upright 0.15 x 0.15 x 1.0 m box in ``base_link``. Its
 front face passes through ``camera_link`` and its depth extends opposite the
 camera optical +Z direction, projected horizontally. This node never requests
 robot motion.
+
+The pole is re-applied to move_group every ``reapply_period_s`` seconds and
+immediately whenever the ``apply_planning_scene`` service reappears, so a
+move_group restart does not silently drop it from the planning scene.
 """
 
 import math
+import signal
 
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from rclpy.signals import SignalHandlerOptions
+from rclpy.duration import Duration
 from rclpy.time import Time
 from tf2_ros import Buffer, TransformException, TransformListener
 
@@ -79,13 +87,26 @@ class CameraPoleCollision(Node):
         self.buffer = Buffer()
         self.listener = TransformListener(self.buffer, self)
         self.client = self.create_client(ApplyPlanningScene, "apply_planning_scene")
+        self.reapply_period = Duration(
+            seconds=float(self.declare_parameter("reapply_period_s", 5.0).value)
+        )
         self.pending = None
+        self.pending_since = None
         self.last_pose = None
-        self.timer = self.create_timer(2.0, self.update)
+        self.last_apply_time = None
+        self.service_was_ready = False
+        self.timer = self.create_timer(1.0, self.update)
 
     def update(self):
         if self.pending is not None:
             if not self.pending.done():
+                # A request lost to a move_group restart never completes; drop it.
+                if self.get_clock().now() - self.pending_since < Duration(seconds=10.0):
+                    return
+                self.client.remove_pending_request(self.pending)
+                self.pending = None
+                self.last_pose = None
+                self.get_logger().warning("camera_pole apply request timed out; retrying")
                 return
             try:
                 result = self.pending.result()
@@ -98,11 +119,19 @@ class CameraPoleCollision(Node):
             self.pending = None
 
         if not self.client.service_is_ready():
+            if self.service_was_ready:
+                self.get_logger().warning(
+                    "apply_planning_scene disappeared (move_group restart?); "
+                    "camera_pole will be re-applied when it returns"
+                )
+            self.service_was_ready = False
             self.get_logger().warning(
                 "Waiting for apply_planning_scene; camera pole not applied",
                 throttle_duration_sec=10.0,
             )
             return
+        service_reappeared = not self.service_was_ready
+        self.service_was_ready = True
 
         try:
             camera = self.buffer.lookup_transform(self.base, self.camera, Time())
@@ -121,30 +150,51 @@ class CameraPoleCollision(Node):
             pose.orientation.z,
             pose.orientation.w,
         )
-        if current_pose == self.last_pose:
+        pose_changed = current_pose != self.last_pose
+        now = self.get_clock().now()
+        reapply_due = (
+            self.last_apply_time is None
+            or now - self.last_apply_time >= self.reapply_period
+        )
+        if not (pose_changed or service_reappeared or reapply_due):
             return
         request = ApplyPlanningScene.Request()
         request.scene.is_diff = True
         request.scene.robot_state.is_diff = True
         request.scene.world.collision_objects = [collision]
-        self.pole_pub.publish(collision)
+        if pose_changed:
+            # Latched topic consumers (H-cut executor, calibration verification)
+            # only need a new message when the geometry changes.
+            self.pole_pub.publish(collision)
         self.pending = self.client.call_async(request)
+        self.pending_since = now
         self.last_pose = current_pose
-        self.get_logger().info(
-            "Applying camera_pole: centre="
-            f"({pose.position.x:.4f}, {pose.position.y:.4f}, 0.5000) in {self.base}; "
-            "size=0.15 x 0.15 x 1.0 m"
-        )
+        self.last_apply_time = now
+        if pose_changed or service_reappeared:
+            self.get_logger().info(
+                "Applying camera_pole: centre="
+                f"({pose.position.x:.4f}, {pose.position.y:.4f}, 0.5000) in {self.base}; "
+                "size=0.15 x 0.15 x 1.0 m"
+            )
 
 
 def main():
-    rclpy.init()
+    # Handle SIGINT/SIGTERM as KeyboardInterrupt instead of rclpy's handler: that handler
+    # shuts the context down asynchronously, and on Humble spin() can then fail with
+    # RCLError ("context is not valid") instead of returning cleanly.
+    rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+    signal.signal(signal.SIGTERM, signal.default_int_handler)
     node = CameraPoleCollision()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
+        # A terminal Ctrl-C reaches this process twice (directly and forwarded by
+        # ros2 launch); ignore repeats so cleanup is not interrupted.
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

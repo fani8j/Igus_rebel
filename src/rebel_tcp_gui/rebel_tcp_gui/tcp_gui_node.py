@@ -16,7 +16,7 @@ from tkinter import filedialog
 import numpy as np
 
 import rclpy
-from rclpy.duration import Duration
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.time import Time
 import tf2_ros
@@ -32,6 +32,13 @@ SAFETY_ITEMS = (
 
 PASS_RMS_MM = 1.0
 PASS_MAX_MM = 2.0
+
+# The URDF joint the snippet targets hangs off this frame; a solution computed
+# for any other tool frame is not directly appliable to that joint.
+EXPECTED_TOOL_FRAME = "igus_tool0"
+# Reject a TF sample older than this (seconds) unless it is a static transform
+# (stamp zero). Keeps a capture from silently using a stale arm pose.
+MAX_TF_AGE_S = 0.5
 
 
 def quat_to_matrix(qx, qy, qz, qw):
@@ -72,6 +79,7 @@ class TcpGui:
         self.root = root
         self.node = node
         self._poses = []  # list of ((tx,ty,tz), (qx,qy,qz,qw))
+        self._pose_frames = None  # (parent, tool) shared by every stored pose
 
         self.safety_vars = [tk.BooleanVar(value=False) for _ in SAFETY_ITEMS]
         self.parent_frame = tk.StringVar(value="base_link")
@@ -149,28 +157,53 @@ class TcpGui:
         if not parent or not tool:
             self.status_var.set("Parent and tool frames must both be non-empty.")
             return
+        if self._pose_frames is not None and self._pose_frames != (parent, tool):
+            self.status_var.set(
+                f"Stored poses are {self._pose_frames[0]} <- {self._pose_frames[1]}; "
+                f"delete them before capturing {parent} <- {tool}."
+            )
+            return
+        # Non-blocking lookup of the latest transform: never stall the Tk loop
+        # waiting on TF. A missing or stale transform is reported instead.
         try:
-            tf = self.node.tf_buffer.lookup_transform(
-                parent, tool, Time(), timeout=Duration(seconds=2.0))
+            tf = self.node.tf_buffer.lookup_transform(parent, tool, Time())
         except Exception as exc:
             self.status_var.set(f"TF lookup {parent} <- {tool} failed: {exc}")
             return
+        stamp = Time.from_msg(tf.header.stamp)
+        if stamp.nanoseconds != 0:
+            age_s = (self.node.get_clock().now() - stamp).nanoseconds / 1e9
+            if age_s > MAX_TF_AGE_S:
+                self.status_var.set(
+                    f"TF {parent} <- {tool} is {age_s:.2f} s old (limit "
+                    f"{MAX_TF_AGE_S:.1f} s); is joint_states publishing? Not captured."
+                )
+                return
         t = tf.transform.translation
         q = tf.transform.rotation
         pos = (t.x, t.y, t.z)
         quat = (q.x, q.y, q.z, q.w)
         self._poses.append((pos, quat))
+        self._pose_frames = (parent, tool)
         self.pose_list.insert(
             "end",
             f"{pos[0]:.6f} {pos[1]:.6f} {pos[2]:.6f} "
             f"{quat[0]:.6f} {quat[1]:.6f} {quat[2]:.6f} {quat[3]:.6f}",
         )
-        self.status_var.set(f"Captured pose {len(self._poses)} ({parent} <- {tool}).")
+        message = f"Captured pose {len(self._poses)} ({parent} <- {tool})."
+        if tool != EXPECTED_TOOL_FRAME:
+            message += (
+                f" Warning: tool frame is not {EXPECTED_TOOL_FRAME}; the solved "
+                "offset is relative to the entered frame."
+            )
+        self.status_var.set(message)
 
     def _on_delete(self):
         for idx in reversed(self.pose_list.curselection()):
             self.pose_list.delete(idx)
             del self._poses[idx]
+        if not self._poses:
+            self._pose_frames = None
         self.status_var.set(f"{len(self._poses)} pose(s) stored.")
 
     def _set_snippet(self, text):
@@ -190,6 +223,7 @@ class TcpGui:
             self.result_var.set(f"Cannot compute TCP: {exc}")
             self.result_label.configure(bg="#ffcdd2")
             return
+        parent, tool = self._pose_frames
         r = result["r_m"]
         c = result["pivot_m"]
         passed = result["rms_mm"] <= PASS_RMS_MM and result["max_mm"] <= PASS_MAX_MM
@@ -201,16 +235,24 @@ class TcpGui:
         residuals = ", ".join(f"{v:.3f}" for v in result["residuals_mm"])
         self.result_var.set(
             f"{verdict}\n"
-            f"TCP r (igus_tool0): [{r[0]:.6f}, {r[1]:.6f}, {r[2]:.6f}] m\n"
-            f"Pivot (base_link): [{c[0]:.6f}, {c[1]:.6f}, {c[2]:.6f}] m\n"
+            f"TCP r ({tool}): [{r[0]:.6f}, {r[1]:.6f}, {r[2]:.6f}] m\n"
+            f"Pivot ({parent}): [{c[0]:.6f}, {c[1]:.6f}, {c[2]:.6f}] m\n"
             f"RMS: {result['rms_mm']:.3f} mm, max: {result['max_mm']:.3f} mm "
             f"(n={len(result['residuals_mm'])})\n"
             f"Residuals [mm]: {residuals}"
         )
         self.result_label.configure(bg="#c8e6c9" if passed else "#ffcdd2")
+        warning = ""
+        if tool != EXPECTED_TOOL_FRAME:
+            warning = (
+                f"<!-- WARNING: solved relative to {tool}, not {EXPECTED_TOOL_FRAME}. "
+                f"The URDF joint igus_tool0_to_xeg32_tool_tip hangs off "
+                f"{EXPECTED_TOOL_FRAME}; do not paste this origin there unchanged. -->\n"
+            )
         self._set_snippet(
-            f'<joint name="igus_tool0_to_xeg32_tool_tip" type="fixed">\n'
-            f'  <parent link="igus_tool0"/>\n'
+            f"{warning}"
+            f'<joint name="{tool}_to_xeg32_tool_tip" type="fixed">\n'
+            f'  <parent link="{tool}"/>\n'
             f'  <child link="xeg32_tool_tip"/>\n'
             f'  <origin xyz="{r[0]:.6f} {r[1]:.6f} {r[2]:.6f}" rpy="0 0 0"/>\n'
             f"</joint>"
@@ -240,34 +282,45 @@ class TcpGui:
         self.status_var.set(f"Saved {len(self._poses)} pose(s) to {path}.")
 
 
+def _spin(node):
+    try:
+        rclpy.spin(node)
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass
+
+
 def main(args=None):
-    """Entry point: spin rclpy in a daemon thread and run the tkinter GUI."""
+    """Entry point: spin rclpy in a background thread and run the tkinter GUI."""
     rclpy.init(args=args)
     node = TcpGuiNode()
-    spin_thread = threading.Thread(target=rclpy.spin, args=(node,), daemon=True)
+    spin_thread = threading.Thread(target=_spin, args=(node,), daemon=True)
     spin_thread.start()
+
+    def stop_ros():
+        # Shut down first so spin() returns, join it, then destroy the node:
+        # destroying a node while another thread spins it is unsafe.
+        if rclpy.ok():
+            rclpy.shutdown()
+        spin_thread.join(timeout=2.0)
+        node.destroy_node()
 
     root = tk.Tk()
     TcpGui(root, node)
 
     def on_close():
         try:
-            node.destroy_node()
+            stop_ros()
         finally:
-            if rclpy.ok():
-                rclpy.shutdown()
-        root.destroy()
+            root.destroy()
 
     root.protocol("WM_DELETE_WINDOW", on_close)
     try:
         root.mainloop()
+    except KeyboardInterrupt:
+        pass
     finally:
         if rclpy.ok():
-            try:
-                node.destroy_node()
-            except Exception:
-                pass
-            rclpy.shutdown()
+            stop_ros()
 
 
 if __name__ == "__main__":

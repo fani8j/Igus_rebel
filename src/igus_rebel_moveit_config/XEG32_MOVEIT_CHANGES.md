@@ -11,10 +11,14 @@ The group contains:
 - `xeg32_base_link`
 - `xeg32_left_carriage_link`
 - `xeg32_right_carriage_link`
-- active/master joint: `xeg32_left_carriage_joint`
 
-`xeg32_right_carriage_joint` remains the URDF mimic joint and is marked passive
-in the SRDF. `xeg32_camera_tilt_joint` and the camera-mount link are removed
+Both carriage joints are fixed (`lock_joints` defaults to true), so the group has no
+actuated joints and the SRDF lists no passive joint. The arm group is defined by its
+chain only, and the SRDF has no virtual joint (the URDF root is already `world`).
+The self-collision matrix was regenerated on 2026-09-27 with the Setup Assistant's
+`computeDefaultCollisions` (100,000 samples): 17 adjacent and 59 never-colliding pairs
+are disabled, 29 pairs stay checked (including link2-motor4, base_link-link4 and
+base_link-motor5, which do collide). `xeg32_camera_tilt_joint` and the camera-mount link are removed
 from the URDF and SRDF with the absent camera holder.
 
 ## Added end effector
@@ -24,15 +28,22 @@ from the URDF and SRDF with the absent camera holder.
 - parent link: `link6`
 - end-effector group: `xeg32_gripper`
 
-## Added adjacent self-collision exclusions
+## Self-collision exclusions
 
-Only these directly connected pairs were disabled:
-- `link6` / `xeg32_base_link`
-- `xeg32_base_link` / `xeg32_left_carriage_link`
-- `xeg32_base_link` / `xeg32_right_carriage_link`
+The whole matrix (arm and gripper) comes from the 2026-09-27 regeneration described
+above; see the comment block in `config/igus_rebel2.srdf`. The gripper's directly
+connected pairs (`link6` / `xeg32_base_link`, `xeg32_base_link` /
+`xeg32_left_carriage_link`, `xeg32_base_link` / `xeg32_right_carriage_link`) are among
+the 17 `Adjacent` entries. `link1`-`link2`, `link2`-`link3` and `link4`-`link5` are
+also kept as `Adjacent` although a fixed motor link sits between them in the URDF: once
+the rigid motor link is merged into its parent they are one revolute joint apart, and
+their coarse primitives overlap in most states. This deviates from a strict
+Setup Assistant adjacency result and is an open review item.
+The carriage collision geometry is `meshes/xeg32_collision/right_carriage.stl` (a
+convex hull, used for both carriage links together with `part_1__3.stl`).
 
-If the gripper is still shown red in MoveIt, regenerate the self-collision
-matrix with MoveIt Setup Assistant rather than disabling all XEG collisions.
+Regenerate the matrix by sampling whenever collision geometry changes, rather than
+disabling all XEG collisions.
 
 ## Tool center point
 
@@ -42,10 +53,13 @@ The active TCP is defined in `igus_rebel_xeg32_wrapper.urdf.xacro`, independentl
 of optional gripper geometry:
 
 - `link6 -> igus_tool0`: xyz `[0, 0, 0.0527]` m, RPY `[0, 0, pi]`.
-- `igus_tool0 -> xeg32_tool_tip`: xyz `[0.068936, 0.046766, 0.127060]` m,
-  RPY `[0, 0, 0]`. These values are `OffsetX`, `OffsetY`, `OffsetZ`,
-  `OffsetA`, `OffsetB`, and `OffsetC` from `knivetool4_with_pose2` in
-  `knivetool4.xml`, converted from millimetres to metres.
+- `igus_tool0 -> xeg32_tool_tip` (joint `igus_tool0_to_xeg32_tool_tip`): xyz
+  `[0.005937, 0.094121, 0.130699]` m, RPY `[0, 0, 0]`. This is the touch-corrected
+  TCP of 2026-09-24 (confirmed by the operator); the URDF comment notes that Z is held
+  pending a stale-model check. The earlier committed value
+  `[0.068936, 0.046766, 0.127060]` m (from the `knivetool4.xml` tool offsets) is
+  obsolete, as is the TCP in effect for the 2026-09-14/16 teaching sessions; plans and
+  taught translations made with an earlier TCP are not valid for the current tool.
 - Both frames remain available with `attach_xeg32:=false`.
 - Arm kinematics, the `link6` IK solver tip, and the rough XEG mount
   (`0 0 0.052` m, 15-degree Z rotation) are unchanged. MTC uses the fixed
@@ -53,7 +67,7 @@ of optional gripper geometry:
 
 The rough `xeg32_cutter_link`, its mounting joint, box and pyramid visual/collision
 geometry, and old cutter-derived TCP joint are removed. The cutter Xacro arguments
-are removed as well. The unused pyramid STL remains as an archived asset.
+and the unused pyramid STL are removed as well.
 Four cutter-specific SRDF collision exclusions remain removed. The H-cut MTC task
 supports an explicit `allow_tool_carton_contact` policy: when enabled, the
 `xeg32_tool_tip`/`detected_carton` allowance is applied during each canonical
@@ -70,7 +84,8 @@ carton penetration but does not model cutting force or material deformation.
 `cut_clearance_m` is the signed side-cut offset and `middle_cut_clearance_m` is
 the signed middle-seam offset: positive values hover above the detected plane,
 while negative values penetrate it. The configured values are -1 mm for side cuts
-and -4 mm for the middle cut. Side penetration is capped at 3 mm and middle
+and -2 mm for the middle cut, with `hover_clearance_m` 10 mm (all read-only; edit the
+YAML and restart). Side penetration is capped at 3 mm and middle
 penetration at 5 mm, accepted only when `allow_tool_carton_contact` is enabled.
 
 Side-cut roll is configured independently with `left_side_cut_tilt_deg` and
@@ -79,13 +94,17 @@ detections with the recorded point clouds and the then-current camera-to-base tr
 -10-degree left roll planned all 59 boxes with at most one retry for two stochastic
 OMPL transits. The selected -5-degree right roll planned 52/59 boxes in two repeated
 runs; the other seven failed the right-side approach IK precheck. These angles may
-be changed at runtime within [-90, 90] degrees while execution is idle; any accepted
+be changed at runtime within [-90, 90] degrees while no planning call, execution or
+cut-debug session is active (otherwise the change is rejected as busy); any accepted
 change clears the retained plan.
 
-The current rotated-box workspace map uses the complete combined H-cut, the
-recorded carton geometry, scoped tool/carton contact, the prior-model camera-pole
-collision (since removed with the absent camera holder; do not reintroduce camera
-geometry), the selected -10/-5 degree side tilts, and all other MoveIt collisions. Its focused
+The rotated-box workspace map below was produced with an earlier model (TCP, joint
+limits and gripper collision geometry have changed since) and uses the complete
+combined H-cut, the recorded carton geometry, scoped tool/carton contact, the
+then-modeled gripper-mounted camera holder (since removed because no camera is mounted
+on the gripper; do not reintroduce it), the fixed external `camera_pole` obstacle
+(still required today), the selected -10/-5 degree side tilts, and all other MoveIt
+collisions. Its focused
 grid passed 70/100 samples. The conservative sampled core is carton top-center X
 `[0.200, 0.225]` m, Y `[-0.175, -0.125]` m, and yaw -45 through +30 degrees
 relative to the reference capture, sampled every 15 degrees. All 24 core
@@ -151,8 +170,9 @@ so it must also pass the dwell check and the free-space wrist guard (joint6 <= p
 joint positions, zero velocity, zero acceleration, and the configured duration;
 it is not a callback sleep. Generated plans are rejected unless every expected
 hold has that structure and timing. Runtime values must be finite within
-`[0, 10]` seconds, `0` disables the hold, changes are refused during execution,
-and accepted changes clear retained plans.
+`[0, 10]` seconds, `0` disables the hold, changes are refused as busy during planning
+or execution and while a cut-debug session is active, and accepted changes clear
+retained plans.
 
 This timed command allows the controller to settle but does not prove the blade
 is mechanically stable or in contact. Tracking error and cutting force remain
@@ -183,8 +203,12 @@ then teleoperates the endpoint separately and calls the same save service, which
 the endpoint and completes the record (`complete`). A save retains no plan (any retained
 plan is cleared) and never dispatches motion. Start and end observations are thus
 persisted independently, and the final record is complete after the endpoint save. Only
-`complete` records are loadable as corrections; `start_saved` is an intermediate. Left approach and
-finish move 10 mm laterally toward the carton exterior without shifting the cut start or
+`complete` records are loadable as corrections; `start_saved` is an intermediate.
+Stages are `start_planned` -> `start_executed` -> `start_saved`; the endpoint save
+writes the `complete` record and ends the session. No save plans or retains an endpoint
+or lift plan. Left approach and
+finish move `left_lateral_standoff_m` (25 mm in the supplied YAML, allowed 5-25 mm)
+laterally toward the carton exterior without shifting the cut start or
 end; middle/right retain surface-normal hover/retract. For every left, middle, and right
 target, the saved full TCP quaternion is mapped from its recorded cut basis into the
 current detected cut basis. A left taught pose may validly use tool local X or
@@ -195,9 +219,10 @@ motion implicitly: every stage runs only through an explicit
 `debug_motion_execution_enabled` on top of `execution_enabled` (both default
 `false`). Out-of-order calls, planning a normal H-cut mid-session, and
 starting a session over a retained plan or active session are all rejected
-with precise messages. Normal retained plans still refuse a stale snapshot;
-sessions freeze their snapshot at start because teleop correction inherently
-outlasts the snapshot age bound.
+with precise messages. Normal retained plans still refuse a stale snapshot at
+execution; a session requires a fresh snapshot when it starts and then freezes it,
+because teleop correction inherently outlasts the snapshot age bound. A plan or
+session loaded with `debug_allow_stale_snapshot=true` can never be executed.
 
 The retained record schema is `box_h_cut_correction/v1`
 (`<cut>_<snapshot_id>.json` in `cut_debug_output_dir`, default
@@ -206,7 +231,10 @@ snapshot ID/capture/acquisition stamp, cut name, planning frame, tool link,
 nominal/observed full start/end poses, world and cut-local (`along`/`across`/
 `normal`) translation deltas, world and cut-local orientation deltas plus
 angle, the cut basis, status (`start_saved`/`complete`), and created/updated
-stamps. Translation values must be finite; there is no per-axis magnitude limit.
+stamps. On load, `planning_frame` and `tool_link` are required and must equal the
+executor's active values (a record missing either is refused), the status must be
+`complete`, and the recorded cut basis must be orthonormal and right-handed.
+Translation values must be finite; there is no per-axis magnitude limit.
 Orientation corrections accept the full finite unit-quaternion range; applying
 a record still fails closed unless the mapped penetration axis (left: X or Z; middle/right: Z) points into the carton surface.
 
@@ -218,8 +246,10 @@ slot to its segment; `t_cut` and `t_cut_handoff` contain only left and middle
 segments, so a set right correction is loaded, validated, and left unused rather
 than failing closed; individual plans apply only their cut's
 slot. Empty means no correction for that cut; any malformed or mismatched nonempty record,
-or enabling with all slots empty, fails closed. The local deltas are rotated onto each newly detected cut basis
-and the tool local Z into the surface plus the opposite-travel side facing are re-validated.
+or enabling with all slots empty, fails closed. The local deltas are rotated onto each
+newly detected cut basis, the saved full start/end quaternions are mapped from the
+recorded cut basis into the current one, and the mapped penetration axis (left: tool X
+or Z; middle/right: tool Z) is re-validated to point into the carton.
 Anything else fails closed, and with the opt-in off the file paths alone
 change nothing.
 
@@ -241,7 +271,8 @@ candidates must be fully collision-free; cut-target candidates honor only the
 scoped tool/carton contact allowance. MTC and Cartesian path validation remain
 the final authority; neither a mock replay nor this pose search validates the
 old taught record for the current physical TCP. Retain correction opt-in and both
-execution gates off for hardware until the left pose is re-taught.
+execution gates off for hardware until the left blade pose has been verified on the
+current tool (the mock work uses an orientation-only derivative of the old record).
 
 The multi-segment planner keeps its original add-carton-then-allow ordering; only the staged builders add the carton with
 the scoped allowance atomically, because those stages legitimately start in
@@ -272,9 +303,16 @@ will not work until that controller is added.
 ## Joint limits
 
 The Onshape-exported XEG velocity/effort values were not copied into
-`joint_limits.yaml` because they are exporter placeholders. Configure the
-gripper limit after mapping the HIWIN XEG-32 command convention to the single
-master URDF carriage joint.
+`joint_limits.yaml` because they are exporter placeholders. The carriage joints are
+fixed by default; with `lock_joints:=false` the left carriage joint is prismatic and
+the right one mimics it. Configure a gripper limit only after mapping the HIWIN XEG-32
+command convention to that master carriage joint.
+
+The arm joints use the igus/CPR limits 0.785 rad/s and 5.24 rad/s² in
+`joint_limits.yaml` (the URDF `velocity` limits are 0.785 as well). The previous
+2.16 rad/s / 10 rad/s² exceeded what the controller can follow. All executor and
+calibration scaling factors, and the Pilz `cartesian_limits`, were rescaled on
+2026-09-27 so the physical speeds did not change.
 
 ## Side-cut direction
 
@@ -287,27 +325,38 @@ order, collision policy, stabilization dwell, and execution gates are unchanged.
 ## Free-space transit consistency
 
 Free-space transits (initial approach and inter-segment finish-to-approach
-moves) use dedicated `transit_velocity_scaling` /
-`transit_acceleration_scaling` (`box_h_cut_executor.yaml`, default 0.15, raised from 0.05
-with operator approval on 2026-09-26; finite values in `(0, 1]` only, out-of-range fails closed). Contact
-descend/traverse/retract strokes keep the 0.05 `velocity_scaling` /
-`acceleration_scaling`, and `pre_cut_stabilization_duration_s` stays 1.0 s,
-so cutting speed is unchanged. Each free-space transit
-tries a direct collision-checked joint interpolation first via MultiPlanner
-ordering ([joint interpolation, existing transit]), falling back to the
-original transit solver. Full cut poses, `min_fraction=1.0` acceptance, the
+moves) use dedicated `transit_velocity_scaling` / `transit_acceleration_scaling`
+(`box_h_cut_executor.yaml`: 0.4127 / 0.2863 of the 0.785 rad/s / 5.24 rad/s² joint
+limits, i.e. 0.324 rad/s / 1.50 rad/s², the physical speed of the operator-approved
+0.15 transit scaling of 2026-09-26 at the former limits). Contact
+descend/traverse/retract strokes use `velocity_scaling` / `acceleration_scaling`
+0.1376 / 0.0954 (0.108 rad/s / 0.50 rad/s², the physical speed of the former 0.05),
+and `pre_cut_stabilization_duration_s` stays 1.0 s, so cutting speed is unchanged.
+All scalings are read-only, finite and within `(0, 1]`; out-of-range values fail
+closed at startup.
+Each free-space transit is wrapped by `NearestBranchTransitPlanner`: a pose goal is
+first resolved to the exact-pose, collision-free IK branch nearest the propagated
+start (seeded from the start and its equivalent spherical-wrist branches; branches
+with joint6 change <= pi first, then smallest joint distance), then planned with a
+direct collision-checked joint interpolation first and the profile's pipeline planner
+second (MultiPlanner [joint interpolation, existing transit]). If every branch fails,
+the original pose goal is retried once. All attempts share one `planning_timeout_s`
+budget. Full cut poses, `min_fraction=1.0` acceptance, the
 scoped tool/carton contact policy, and the fixed external `camera_pole`
 requirement are unchanged. A free-space solution whose joint6 travel exceeds
 pi rad, summed over every consecutive waypoint of its free-space transit
 subtrajectories, is rejected before the plan is retained, published, or
-executed; there is no silent fallback after this check. The pre-TCP-change
-taught left correction on the saved carton was rejected at 4.806 rad of
-middle-transition joint6 travel in isolated mock planning; re-teach it on
-the current TCP before physical use. Faster transit shortens only non-contact
+executed; there is no silent fallback after this check. The guard also fails closed
+when the examined transit trajectories do not match the transit stages recorded while
+building the task. Before the nearest-branch planner the pre-TCP-change taught left
+correction on the saved carton was rejected at 4.806 rad of middle-transition joint6
+travel; with it the same corrected `t_cut` planned 5/5 in isolated mock (1.66 rad,
+`scan_results/hcut_wrist_branch_20260926/`). Faster transit shortens only non-contact
 portions and is no guarantee of a fast plan or a physically safe stale TCP: the
 correction opt-in (`cut_debug_correction_enabled`, default `false`) and both
 execution gates (`execution_enabled`, `debug_motion_execution_enabled`, both
 default `false`) are unchanged, and no physical dispatch is recommended.
+
 ## T-cut handoff
 
 `cut_pattern: t_cut_handoff` is first-arm-only: the full left cut plus an
@@ -322,9 +371,12 @@ active at the terminal pose. The retained middle traverse is therefore an
 executable first-arm prefix, not the complete seam; no second arm is implemented.
 Execution still requires the normal gates.
 `t_cut_middle_handoff_fraction` selects the stop fraction along the middle seam:
-`0.0` (default) selects automatic mode: bounded bisection over `[0.05, 0.95]`
-finds the largest fully reachable declared prefix with `<=0.01` fraction tolerance,
-keeping `min_fraction=1.0` for every candidate. A nonzero value in `[0.05, 0.95]`
+`0.0` (default) selects automatic mode: 0.95 is probed first and used if it fully
+plans; otherwise 0.05 must plan (else the search fails closed) and a bounded bisection
+over `[0.05, 0.95)` (at most 7 probes) finds the largest fully reachable declared
+prefix with `<=0.01` fraction tolerance, keeping `min_fraction=1.0` for every
+candidate. The left roll search runs once per request and is reused by every probe.
+A nonzero value in `[0.05, 0.95]`
 is a manual override stop fraction; out-of-range nonzero values fail closed.
 Full `t_cut` stays the full left cut plus the full middle seam and is unaffected,
 and full `t_cut`/`combined` continue to retract above the cut and restore

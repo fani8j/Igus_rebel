@@ -1,7 +1,6 @@
 **/build
 **/install
 **/log
-*_humble_audit
 **/__pycache__
 **/.pytest_cache
 **/*.zip
@@ -9,7 +8,4 @@
 **/*.usd
 scan_results
 workspace_scan_artifacts
-isaac_exports
-docs
-backups
 .git

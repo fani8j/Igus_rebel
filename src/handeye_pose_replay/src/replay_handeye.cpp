@@ -2,8 +2,11 @@
 #include <rcl_interfaces/srv/get_parameters.hpp>
 #include <moveit/move_group_interface/move_group_interface.h>
 
+#include <unistd.h>
+
 #include <array>
 #include <chrono>
+#include <iostream>
 #include <map>
 #include <memory>
 #include <string>
@@ -57,6 +60,21 @@ int main(int argc, char* argv[])
   node->get_parameter("velocity_scale", velocity_scale);
   node->get_parameter("acceleration_scale", acceleration_scale);
 
+  // Each pose is a real robot motion. Without a terminal, std::getline would
+  // hit EOF immediately and every "confirmation" would pass unattended, so
+  // refuse to start instead of silently degrading to automatic replay.
+  if (wait_for_enter && !isatty(STDIN_FILENO))
+  {
+    RCLCPP_FATAL(
+        node->get_logger(),
+        "wait_for_enter:=true but stdin is not a terminal, so ENTER cannot be "
+        "read. Use the launch default interactive_terminal:=true (opens a "
+        "GNOME Terminal), run the executable directly in a terminal, or pass "
+        "wait_for_enter:=false only after the poses were verified.");
+    rclcpp::shutdown();
+    return 1;
+  }
+
   RCLCPP_INFO(node->get_logger(), "Planning group: %s", planning_group.c_str());
   RCLCPP_INFO(node->get_logger(), "Robot model source: %s", model_source_node.c_str());
   RCLCPP_INFO(node->get_logger(), "Velocity scale: %.3f", velocity_scale);
@@ -67,6 +85,8 @@ int main(int argc, char* argv[])
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node);
   std::thread executor_thread([&executor]() { executor.spin(); });
+  // Stop the spinning thread before rclcpp::shutdown() so the executor never
+  // spins on a context that is being torn down. Used on every exit path.
   const auto stop_executor = [&executor, &executor_thread]() {
     executor.cancel();
     if (executor_thread.joinable()) executor_thread.join();
@@ -125,9 +145,8 @@ int main(int argc, char* argv[])
         "%s does not provide non-empty robot_description and "
         "robot_description_semantic parameters.",
         model_source_node.c_str());
-
-    rclcpp::shutdown();
     stop_executor();
+    rclcpp::shutdown();
     return 1;
   }
 
@@ -214,7 +233,14 @@ int main(int argc, char* argv[])
           "Press ENTER to plan/move to %s (Ctrl+C to stop)...", pose.name.c_str());
 
       std::string input;
-      std::getline(std::cin, input);
+      if (!std::getline(std::cin, input))
+      {
+        RCLCPP_ERROR(
+            node->get_logger(),
+            "stdin closed before %s was confirmed. Stopping replay.",
+            pose.name.c_str());
+        break;
+      }
 
       if (!rclcpp::ok())
         break;

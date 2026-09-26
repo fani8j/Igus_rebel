@@ -19,3 +19,14 @@ rebel_arm_trajectory_controller:
       - joint6
     command_interfaces: [position]
     state_interfaces: [position, velocity]
+
+    # Same trajectory tolerances as controller.yaml; see the rationale there.
+    constraints:
+      stopped_velocity_tolerance: 0.05
+      goal_time: 3.0
+      joint1: {trajectory: 0.25, goal: 0.02}
+      joint2: {trajectory: 0.25, goal: 0.02}
+      joint3: {trajectory: 0.25, goal: 0.02}
+      joint4: {trajectory: 0.25, goal: 0.02}
+      joint5: {trajectory: 0.25, goal: 0.02}
+      joint6: {trajectory: 0.25, goal: 0.02}

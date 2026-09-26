@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ReBeL TCP Pivot Calibration — MoveIt Guide</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0b1118; --panel:#141e29; --line:#2a3a4a; --ink:#edf5fb; --muted:#a7bbc9; --blue:#4ab2ff; --green:#4ee0a5; --amber:#ffce6a; --red:#ff7d7d; }
+    * { box-sizing:border-box; } body { margin:0; font:16px/1.52 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:linear-gradient(135deg,#081019,#101b27); color:var(--ink); }
+    main { max-width:1080px; margin:auto; padding:30px 20px 64px; } h1 { margin:0 0 8px; font-size:clamp(1.75rem,4vw,2.6rem); } h2 { margin:0 0 12px; font-size:1.28rem; } h3 { margin:18px 0 7px; font-size:1rem; } p,li { color:var(--muted); } .lead { font-size:1.1rem; max-width:850px; } .badge { display:inline-block; margin:0 7px 10px 0; padding:3px 9px; border:1px solid var(--line); border-radius:999px; color:var(--blue); font-size:.82rem; } .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(270px,1fr)); gap:16px; } section,.card { margin-top:18px; padding:20px; background:rgba(20,30,41,.92); border:1px solid var(--line); border-radius:12px; } .card { margin:0; } .decision { border-left:4px solid var(--green); } .warn { border-left:4px solid var(--amber); } .danger { border-left:4px solid var(--red); } code,pre,textarea { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; } code { color:#b9e6ff; } pre { margin:10px 0 0; padding:14px; overflow:auto; border-radius:8px; background:#081019; color:#dcecf7; white-space:pre-wrap; } label { display:block; margin:10px 0 5px; font-weight:650; } textarea { width:100%; min-height:180px; resize:vertical; padding:12px; border:1px solid var(--line); border-radius:8px; background:#081019; color:var(--ink); line-height:1.45; } button { margin:10px 8px 0 0; padding:10px 14px; border:0; border-radius:8px; background:var(--blue); color:#06121c; font-weight:750; cursor:pointer; } button[disabled] { opacity:.45; cursor:not-allowed; } button.secondary { background:#26394b; color:var(--ink); } .checklist label { display:flex; gap:10px; align-items:flex-start; font-weight:500; color:var(--muted); } input[type=checkbox] { margin-top:5px; accent-color:var(--green); } .result { display:none; margin-top:16px; padding:16px; border:1px solid var(--line); border-radius:8px; background:#0a141e; } .result.good { border-color:var(--green); } .result.bad { border-color:var(--red); } .metric { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin:12px 0; } .metric div { padding:10px; background:#111e29; border-radius:7px; } .metric strong { display:block; color:var(--blue); font-size:1.1rem; } .small { font-size:.9rem; } .step { display:grid; grid-template-columns:32px 1fr; gap:10px; margin:14px 0; } .num { width:29px; height:29px; border-radius:50%; display:grid; place-items:center; color:#06121c; background:var(--blue); font-weight:800; } a { color:var(--blue); } @media print { body { background:white; color:black; } section,.card { background:white; color:black; } p,li { color:#222; } pre,textarea { color:black; background:#f5f5f5; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <span class="badge">ROS 2 Humble</span><span class="badge">MoveIt 2 + Servo</span><span class="badge">position TCP only</span>
+    <h1>Knife TCP pivot calibration</h1>
+    <p class="lead">A local, plan-only workflow for calibrating the knife tip directly from live MoveIt/TF poses. It computes the fixed <code>igus_tool0 → xeg32_tool_tip</code> translation from a common-point pivot; it does not send robot commands.</p>
+  </header>
+
+  <section class="decision">
+    <h2>Recommendation</h2>
+    <p><strong>Use the existing MoveIt Servo + TF stack and this local pivot solver; do not add an external calibration package.</strong> The upstream <code>moveit_calibration</code> repository is a camera/robot hand-eye tool, documented as developed and tested on ROS Melodic/Noetic—not a TCP-pivot UI or a Humble TCP solution. <code>industrial_calibration</code> likewise targets camera/robot-system calibration. MoveIt Setup Assistant defines groups/end effectors, but does not measure a mounted tool TCP.</p>
+    <p>This workspace already exposes the required integration point: <code>link6 → igus_tool0 → xeg32_tool_tip</code>. MoveIt Servo already uses <code>xeg32_tool_tip</code> as its end-effector frame. The only persistent model change after acceptance is the translation in <code>igus_tool0_to_xeg32_tool_tip</code>.</p>
+  </section>
+
+  <section class="danger">
+    <h2>Safety gate — complete before moving</h2>
+    <div class="checklist">
+      <label><input type="checkbox" class="gate">The knife is rigidly mounted. A zip tie is acceptable only for a rough, non-cutting check; it is not a stable calibration fixture.</label>
+      <label><input type="checkbox" class="gate">The blade is guarded or removed where possible; the workspace is clear; no person can enter the robot envelope.</label>
+      <label><input type="checkbox" class="gate">A fixed, hard pivot point is installed. The blade tip will touch that exact point lightly in every sample.</label>
+      <label><input type="checkbox" class="gate">A trained operator has the hardware stop and will jog only short, slow increments with physical clearance.</label>
+    </div>
+    <p class="small">The calculator remains available for recorded data. The “ready” button only confirms the checklist inside this page; it cannot enable or command the robot.</p>
+    <button id="gateButton" disabled>Safety checklist complete</button><span id="gateStatus" class="small"></span>
+  </section>
+
+  <section>
+    <h2>Why a pivot calibration works</h2>
+    <p>At each sample, hold the same physical knife tip on one fixed pivot while changing robot orientation. If <code>pᵢ, Rᵢ</code> are the live <code>base_link → igus_tool0</code> translation and rotation, this tool solves <code>pᵢ + Rᵢr = c</code> for the TCP translation <code>r</code> in <code>igus_tool0</code> and the stationary pivot <code>c</code> in <code>base_link</code>. A low residual means one rigid offset explains all samples.</p>
+    <div class="grid"><article class="card"><h3>What it calibrates</h3><p>Knife-tip position relative to <code>igus_tool0</code>.</p></article><article class="card"><h3>What it does not calibrate</h3><p>Blade roll/pitch/yaw, collision geometry, or a flexible zip-tie mount.</p></article><article class="card"><h3>Required data</h3><p>At least 5 poses; 8–12 well-spread orientations is preferred.</p></article></div>
+  </section>
+
+  <section>
+    <h2>Capture poses from MoveIt</h2>
+    <div class="step"><div class="num">1</div><div><strong>Start the existing hardware and MoveIt stack.</strong><pre>source /opt/ros/humble/setup.bash
+source install/setup.bash
+ros2 launch igus_rebel rebel.launch.py hardware_protocol:=rebel
+# Always pass hardware_protocol explicitly (use mock_hardware plus an unused
+# ROS_DOMAIN_ID and ROS_LOCALHOST_ONLY=1 for a dry run).
+# In a second terminal, source the same underlay/overlay and domain:
+ros2 launch igus_rebel_moveit_config move_group.launch.py \
+  hardware_protocol:=rebel use_gui:=true run_teleop:=true \
+  run_box_h_cut_executor:=false</pre></div></div>
+    <div class="step"><div class="num">2</div><div><strong>Run the record-only TCP GUI alongside your existing teleop.</strong><pre>source /opt/ros/humble/setup.bash
+source install/setup.bash
+ros2 launch rebel_tcp_gui tcp_gui.launch.py</pre><p class="small">The GUI is record-only: it publishes nothing and commands no motion. Move the arm with your existing teleop, hold the tip stationary on the pivot, then press Capture. Capture stays disabled until all four safety boxes are checked. The GUI stores live <code>base_link → igus_tool0</code> TF rows, solves the same pivot least-squares in-app, and only displays the <code>igus_tool0_to_xeg32_tool_tip</code> snippet for hand application — it never edits the Xacro itself.</p><p class="small">Keyboard alternative: <code>ros2 run igus_rebel_moveit_config rebel_servo_teleop_keyboard</code>. Select the <code>xeg32_tool_tip</code> command frame with <code>e</code> before orientation jogs (<code>w</code> returns to the <code>base_link</code> planning frame). On Jazzy, also select Twist input with <code>t</code>; Humble Servo accepts twist and joint commands at any time. On Humble the keyboard node calls <code>/servo_node/start_servo</code> itself when it starts; Servo needs <code>run_teleop:=true</code> in the MoveIt launch. The end-effector frame is <code>xeg32_tool_tip</code>; do not use the old, uncalibrated green marker as proof that the physical tip is correct.</p><p><strong>Safe orientation control scheme.</strong> Orientation keys publish direct Cartesian angular Twist commands: <code>i/k</code> ±roll about X, <code>n/m</code> ±pitch about Y, <code>u/o</code> ±yaw about Z. <code>j</code> selects joint jog on Jazzy (no effect on Humble) and is not an orientation key. <code>-</code> and <code>=</code> decrease and increase the Cartesian linear and angular speeds together (default 5&nbsp;mm per key press and 0.15&nbsp;rad/s; reduce the step with the <code>/servo_keyboard_input/set_cartesian_increment</code> service, range up to 0.03&nbsp;m). Start at the slowest speed and raise it only as far as gentle pivot contact requires.</p><p>No random, autonomous, or predefined physical motion is used. Random or scripted rotation cannot guarantee the knife tip stays on the fixed pivot, so it risks slipping, bending the tool, and producing non-reproducible samples. Deterministic operator-selected orientations — the operator jogs to each orientation, returns the physical knife tip to the fixed pivot, verifies light stationary contact, then records the pose — are safer and reproducible.</p><p>Recommended operator-reached sample orientations (manual targets, not automated motions). From a comfortable home pose with the tip on the pivot, the operator manually reaches roughly: (1) nominal tool-down; (2) rolled ~+20°; (3) rolled ~−20°; (4) pitched ~+20°; (5) pitched ~−20°; (6) yawed ~+30°; (7) yawed ~−30°; (8) a combined roll+pitch tilt of ~15° each. Return the physical tip to the exact pivot point after every move and record only when contact is light and stationary. Add further spread (up to 8–12 samples) only with the same manual return-to-pivot check each time.</p></div></div>
+    <div class="step"><div class="num">3</div><div><strong>Read the parent-frame pose while the physical knife tip is stationary on the pivot.</strong><pre>ros2 run tf2_ros tf2_echo base_link igus_tool0</pre><p class="small">Record one stable transform after every substantial orientation change. Keep contact gentle; do not slide or bend the tool. Avoid samples that differ only by translation or only by a few degrees.</p></div></div>
+    <div class="step"><div class="num">4</div><div><strong>Enter the transform readings below.</strong><p>One row per pose: <code>tx ty tz qx qy qz qw</code>, metres and ROS quaternion order. Copy the translation and rotation reported by <code>tf2_echo</code>; timestamps are not needed.</p></div></div>
+  </section>
+
+  <section>
+    <h2>Local TCP calculator</h2>
+    <label for="poses">Pose rows — <code>base_link → igus_tool0</code></label>
+    <textarea id="poses" spellcheck="false" placeholder="# tx ty tz qx qy qz qw
+0.321456 -0.114822 0.402017 0.000000 0.707107 0.000000 0.707107
+# Add 7–11 more measured poses; these example values are not calibration data."></textarea>
+    <button id="solve">Compute TCP translation</button><button class="secondary" id="example">Load format example</button><button class="secondary" id="clear">Clear</button>
+    <div id="result" class="result" aria-live="polite"></div>
+  </section>
+
+  <section class="warn">
+    <h2>Accept, apply, and validate</h2>
+    <div class="step"><div class="num">1</div><div><strong>Reject weak fits.</strong><p>Inspect every sample and redo any contact that slipped. As an operator acceptance rule, aim for RMS residual ≤ 1 mm and maximum residual ≤ 2 mm for a rigid knife mount. A larger result is evidence of inconsistent pivot contact, insufficient orientation spread, TF/joint-state error, or tool flex—not a number to average away.</p></div></div>
+    <div class="step"><div class="num">2</div><div><strong>Apply only the reported translation.</strong><p>Update the <code>&lt;origin xyz="…" rpy="0 0 0"/&gt;</code> in the fixed joint <code>igus_tool0_to_xeg32_tool_tip</code> in <code>src/igus_rebel_description/urdf/igus_rebel_xeg32_wrapper.urdf.xacro</code>. Preserve the parent and child links. Do not change joint origins elsewhere to compensate.</p></div></div>
+    <div class="step"><div class="num">3</div><div><strong>Rebuild and restart, then verify without cutting.</strong><pre>colcon build --packages-select igus_rebel_description igus_rebel_moveit_config --symlink-install
+source install/setup.bash
+# Restart robot-state publisher and MoveIt after changing the model.
+ros2 run tf2_ros tf2_echo igus_tool0 xeg32_tool_tip</pre><p>Use slow Servo jogging to place the physical tip on the pivot from several fresh orientations. The green marker must coincide with the physical tip before any planning near a fixture.</p></div></div>
+    <div class="step"><div class="num">4</div><div><strong>Calibrate blade orientation separately.</strong><p>Pivot calibration provides position only. Set the fixed-joint RPY only after a separate, physical orientation reference establishes the blade normal and cutting direction. Then add conservative attached-tool collision geometry before relying on collision checking.</p></div></div>
+  </section>
+
+  <section>
+    <h2>Sources checked</h2>
+    <ul><li>Workspace frame chain and current TCP joint: <code>src/igus_rebel_description/urdf/igus_rebel_xeg32_wrapper.urdf.xacro</code>.</li><li>MoveIt Servo end-effector frame: <code>src/igus_rebel_moveit_config/src/rebel_servo_teleop_keyboard.cpp</code>.</li><li>MoveIt launch arguments: <code>src/igus_rebel_moveit_config/launch/move_group.launch.py</code>.</li><li>Upstream package scope: <a href="https://github.com/moveit/moveit_calibration">moveit/moveit_calibration</a> and <a href="https://github.com/ros-industrial/industrial_calibration">ros-industrial/industrial_calibration</a>.</li></ul>
+  </section>
+</main>
+<script>
+(() => {
+  const gates = [...document.querySelectorAll('.gate')], gateButton = document.querySelector('#gateButton'), gateStatus = document.querySelector('#gateStatus');
+  const poses = document.querySelector('#poses'), result = document.querySelector('#result');
+  function updateGate() { const ready = gates.every(g => g.checked); gateButton.disabled = !ready; gateStatus.textContent = ready ? ' Ready to record data; movement remains under the operator.' : ' Complete every acknowledgement before physical jogging.'; }
+  gates.forEach(g => g.addEventListener('change', updateGate)); updateGate();
+  gateButton.addEventListener('click', () => { gateButton.textContent = 'Safety checklist acknowledged'; });
+  document.querySelector('#clear').addEventListener('click', () => { poses.value = ''; result.style.display = 'none'; });
+  document.querySelector('#example').addEventListener('click', () => { poses.value = '# Format only — do not use as measured calibration data\n0.321456 -0.114822 0.402017 0.000000 0.707107 0.000000 0.707107\n0.318910 -0.109183 0.407521 0.270598 0.653281 -0.270598 0.653281\n0.325201 -0.120334 0.398802 -0.270598 0.653281 0.270598 0.653281\n# Replace all rows with 5–12 live measurements.'; });
+  function rotation([x,y,z,w]) { const n = Math.hypot(x,y,z,w); if (!Number.isFinite(n) || n < 1e-10) throw Error('Quaternion has zero or invalid length.'); x/=n; y/=n; z/=n; w/=n; return [[1-2*(y*y+z*z),2*(x*y-z*w),2*(x*z+y*w)],[2*(x*y+z*w),1-2*(x*x+z*z),2*(y*z-x*w)],[2*(x*z-y*w),2*(y*z+x*w),1-2*(x*x+y*y)]]; }
+  function solveLinear(a,b) { const n=b.length; for(let k=0;k<n;k++){ let p=k; for(let i=k+1;i<n;i++) if(Math.abs(a[i][k])>Math.abs(a[p][k])) p=i; if(Math.abs(a[p][k])<1e-11) throw Error('Samples do not constrain all three TCP coordinates. Capture more widely separated orientations.'); [a[k],a[p]]=[a[p],a[k]]; [b[k],b[p]]=[b[p],b[k]]; for(let i=k+1;i<n;i++){ const f=a[i][k]/a[k][k]; for(let j=k;j<n;j++) a[i][j]-=f*a[k][j]; b[i]-=f*b[k]; }} const x=Array(n); for(let i=n-1;i>=0;i--){ let s=b[i]; for(let j=i+1;j<n;j++) s-=a[i][j]*x[j]; x[i]=s/a[i][i]; } return x; }
+  function format(v) { return Number(v).toFixed(6); }
+  document.querySelector('#solve').addEventListener('click', () => { try {
+    const rows = poses.value.split(/\n+/).map((line,index) => ({line:line.trim(), index:index+1})).filter(x => x.line && !x.line.startsWith('#')).map(({line,index}) => { const numbers=line.split(/[\s,]+/).map(Number); if(numbers.length!==7 || numbers.some(v=>!Number.isFinite(v))) throw Error('Row '+index+' must contain exactly 7 finite values: tx ty tz qx qy qz qw.'); return {p:numbers.slice(0,3), R:rotation(numbers.slice(3))}; });
+    if(rows.length<5) throw Error('Capture at least 5 measured poses; 8–12 are preferred.');
+    const ata=Array.from({length:6},()=>Array(6).fill(0)), atb=Array(6).fill(0);
+    for(const {p,R} of rows) for(let k=0;k<3;k++){ const a=[...R[k],0,0,0]; a[3+k]=-1; const b=-p[k]; for(let i=0;i<6;i++){ atb[i]+=a[i]*b; for(let j=0;j<6;j++) ata[i][j]+=a[i]*a[j]; }}
+    const x=solveLinear(ata,atb), r=x.slice(0,3), c=x.slice(3); const errors=rows.map(({p,R})=>Math.hypot(...p.map((v,k)=>v+R[k][0]*r[0]+R[k][1]*r[1]+R[k][2]*r[2]-c[k]))); const rms=Math.sqrt(errors.reduce((s,e)=>s+e*e,0)/errors.length)*1000, max=Math.max(...errors)*1000; const good=rms<=1 && max<=2;
+    result.className='result '+(good?'good':'bad'); result.style.display='block'; result.innerHTML='<strong>'+ (good ? 'Fit passes the suggested position-consistency threshold.' : 'Fit needs review before it is applied.') +'</strong><div class="metric"><div><span>Samples</span><strong>'+rows.length+'</strong></div><div><span>RMS residual</span><strong>'+rms.toFixed(3)+' mm</strong></div><div><span>Maximum residual</span><strong>'+max.toFixed(3)+' mm</strong></div></div><p>TCP translation in <code>igus_tool0</code>: <code>['+r.map(format).join(', ')+'] m</code></p><p>Estimated fixed pivot in <code>base_link</code>: <code>['+c.map(format).join(', ')+'] m</code></p><label>Replace the <code>origin</code> only after physical review</label><pre>&lt;joint name="igus_tool0_to_xeg32_tool_tip" type="fixed"&gt;\n  &lt;parent link="igus_tool0"/&gt;\n  &lt;child link="xeg32_tool_tip"/&gt;\n  &lt;origin xyz="'+r.map(format).join(' ')+'" rpy="0 0 0"/&gt;\n&lt;/joint&gt;</pre><p class="small">Per-sample residuals (mm): '+errors.map(e=>(e*1000).toFixed(3)).join(', ')+'</p>';
+  } catch (error) { result.className='result bad'; result.style.display='block'; result.textContent='Cannot compute TCP: '+error.message; } });
+})();
+</script>
+</body>
+</html>

@@ -14,17 +14,16 @@ import os
 
 
 def generate_launch_description():
-  
     hardware_protocol_arg = DeclareLaunchArgument(
         "hardware_protocol",
         default_value="rebel",
-        choices=["mock_hardware", "gazebo", "rebel"],
+        choices=["mock_hardware", "gazebo", "isaac_topic", "rebel"],
         description="Which hardware protocol or mock hardware should be used",
     )
-    
+
     igus_rebel_pkg = get_package_share_directory("igus_rebel")
     igus_rebel_desc_pkg = get_package_share_directory("igus_rebel_description")
-    
+
     controller_config_path = PathJoinSubstitution(
         [
             igus_rebel_pkg,
@@ -66,7 +65,7 @@ def generate_launch_description():
             controller_config_path],
         output="both",
     )
-    
+
     robot_state_pub_node = Node(
         package="robot_state_publisher",
         executable="robot_state_publisher",
@@ -80,11 +79,15 @@ def generate_launch_description():
         arguments=["joint_state_broadcaster", "--controller-manager", "/controller_manager"],
         output="both",
     )
-    
+
     robot_trajectory_controller_spawner = Node(
         package="controller_manager",
         executable="spawner",
-        arguments=["rebel_arm_trajectory_controller", "--controller-manager", "/controller_manager"],
+        arguments=[
+            "rebel_arm_trajectory_controller",
+            "--controller-manager",
+            "/controller_manager",
+        ],
         output="both",
     )
 
@@ -95,4 +98,3 @@ def generate_launch_description():
         joint_state_broadcaster_spawner,
         robot_trajectory_controller_spawner,
     ])
-    

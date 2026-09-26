@@ -1,13 +1,8 @@
 """Unit checks for the table-region cloud filter (no ROS spin)."""
 
 import math
-import os
-import sys
 
 import numpy as np
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
 from sensor_msgs.msg import PointCloud2, PointField
 
 from compal_box_perception.table_cloud_filter import TableCloudFilter
@@ -126,5 +121,8 @@ def test_rgb_preserved_through_crop_and_voxel():
         # voxel keeps one point per 2cm cell: the two in-box points share x/y cells
         # 10mm apart in x only -> same voxel -> first (red) survives; far point cropped
         assert out.width in (1, 2)
+        colors = {tuple(row) for row in raw[:, 12:16]}
+        assert colors <= {(0, 0, 255, 0), (0, 255, 0, 0)}  # BGRx red / green
+        assert (0, 0, 255, 0) in colors
     finally:
         node.destroy_node()

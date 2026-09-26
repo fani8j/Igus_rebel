@@ -23,7 +23,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="file://$(find igus_rebel_description)/meshes/rebel_d00617809/base_link.dae" />
+          filename="package://igus_rebel_description/meshes/rebel_d00617809/base_link.dae" />
       </geometry>
     </visual>
     <collision>
@@ -57,7 +57,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="file://$(find igus_rebel_description)/meshes/rebel_d00617809/motor1.dae" />
+          filename="package://igus_rebel_description/meshes/rebel_d00617809/motor1.dae" />
       </geometry>
     </visual>
     <collision>
@@ -104,7 +104,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="file://$(find igus_rebel_description)/meshes/rebel_d00617809/link1.dae" />
+          filename="package://igus_rebel_description/meshes/rebel_d00617809/link1.dae" />
       </geometry>
     </visual>
     <collision>
@@ -132,7 +132,7 @@
       lower="-3.1241"
       upper="3.1241"
       effort="330"
-      velocity="2.16" />
+      velocity="0.785" />
     <dynamics
       damping="0.0"
       friction="0.0" />
@@ -159,7 +159,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="file://$(find igus_rebel_description)/meshes/rebel_d00617809/motor2.dae" />
+          filename="package://igus_rebel_description/meshes/rebel_d00617809/motor2.dae" />
       </geometry>
     </visual>
     <collision>
@@ -206,7 +206,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="file://$(find igus_rebel_description)/meshes/rebel_d00617809/link2.dae" />
+          filename="package://igus_rebel_description/meshes/rebel_d00617809/link2.dae" />
       </geometry>
     </visual>
     <collision>
@@ -234,7 +234,7 @@
       lower="-1.4835"
       upper="2.4435"
       effort="330"
-      velocity="2.16" />
+      velocity="0.785" />
     <dynamics
       damping="0.0"
       friction="0.0" />
@@ -261,7 +261,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="file://$(find igus_rebel_description)/meshes/rebel_d00617809/motor3.dae" />
+          filename="package://igus_rebel_description/meshes/rebel_d00617809/motor3.dae" />
       </geometry>
     </visual>
     <collision>
@@ -308,7 +308,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="file://$(find igus_rebel_description)/meshes/rebel_d00617809/link3.dae" />
+          filename="package://igus_rebel_description/meshes/rebel_d00617809/link3.dae" />
       </geometry>
     </visual>
     <collision>
@@ -336,7 +336,7 @@
       lower="-1.39626"
       upper="2.61799"
       effort="330"
-      velocity="2.16" />
+      velocity="0.785" />
     <dynamics
       damping="0.0"
       friction="0.0" />
@@ -363,7 +363,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="file://$(find igus_rebel_description)/meshes/rebel_d00617809/motor4.dae" />
+          filename="package://igus_rebel_description/meshes/rebel_d00617809/motor4.dae" />
       </geometry>
     </visual>
     <collision>
@@ -410,7 +410,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="file://$(find igus_rebel_description)/meshes/rebel_d00617809/link4.dae" />
+          filename="package://igus_rebel_description/meshes/rebel_d00617809/link4.dae" />
       </geometry>
     </visual>
     <collision>
@@ -438,7 +438,7 @@
       lower="-3.12414"
       upper="3.12414"
       effort="330"
-      velocity="2.16" />
+      velocity="0.785" />
     <dynamics
       damping="0.0"
       friction="0.0" />
@@ -465,7 +465,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="file://$(find igus_rebel_description)/meshes/rebel_d00617809/motor5.dae" />
+          filename="package://igus_rebel_description/meshes/rebel_d00617809/motor5.dae" />
       </geometry>
     </visual>
     <collision>
@@ -512,7 +512,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="file://$(find igus_rebel_description)/meshes/rebel_d00617809/link5.dae" />
+          filename="package://igus_rebel_description/meshes/rebel_d00617809/link5.dae" />
       </geometry>
     </visual>
     <collision>
@@ -540,7 +540,7 @@
       lower="-1.65806"
       upper="1.65806"
       effort="330"
-      velocity="2.16" />
+      velocity="0.785" />
     <dynamics
       damping="0.0"
       friction="0.0" />
@@ -567,7 +567,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="file://$(find igus_rebel_description)/meshes/rebel_d00617809/link6.dae" />
+          filename="package://igus_rebel_description/meshes/rebel_d00617809/link6.dae" />
       </geometry>
     </visual>
     <collision>
@@ -595,7 +595,7 @@
       lower="-3.12414"
       upper="3.12414"
       effort="330"
-      velocity="2.16" />
+      velocity="0.785" />
     <dynamics
       damping="0.0"
       friction="0.0" />
