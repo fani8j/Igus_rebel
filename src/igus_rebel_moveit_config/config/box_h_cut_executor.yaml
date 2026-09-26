@@ -26,8 +26,9 @@ box_h_cut_executor:
     # The external converter writes a complete canonical base_link snapshot atomically.
     # The planner rejects missing or invalid points instead of estimating carton geometry.
     # Fixed waypoint modes: left_only, middle_only, right_only, h, combined, t_cut,
-    # or t_cut_handoff.
+    # or t_cut_handoff (plus the plan-only middle_entry_debug/middle_debug_short aids).
     # t_cut is the full first-arm left cut plus the full middle seam.
+    cut_pattern: t_cut
     # t_cut_handoff is first-arm-only: the full left cut plus an executable bounded
     # middle-seam prefix ending at the declared handoff endpoint
     # (interpolate(seam_start, seam_end, <resolved fraction>), included in
@@ -44,7 +45,6 @@ box_h_cut_executor:
     # normal gates.
     # middle_entry_debug stops at seam_start before traversal.
     # middle_debug_short uses fixed XYZW=(0,1,0,0) for a short stroke above seam center.
-    # middle_partial_preview searches 100/75/50/25/20/15/10/5% prefixes; never executable.
     # Fraction along the middle seam where t_cut_handoff stops. 0.0 (default)
     # selects automatic mode: bounded bisection over [0.05, 0.95] finds the
     # largest fully reachable declared prefix with <=0.01 fraction tolerance,
@@ -61,17 +61,9 @@ box_h_cut_executor:
     debug_fixed_orientation: false
     debug_motion_distance_m: 0.010
     debug_motion_clearance_m: 0.030
-    partial_reverse: false
-    partial_start_fraction: 0.25
-    partial_end_fraction: 0.75
     t_cut_middle_handoff_fraction: 0.0
-    # These supplied values apply only to explicit left_partial/right_partial modes.
-    partial_start_joint_degrees: [51.52, 15.99, 124.79, -65.84, 94.37, 125.94]
+    # Supplied joint-space transit used only by cut_pattern h before its first cut.
     approach_joint_degrees: [51.52, 15.99, 124.79, -65.84, 94.37, 125.94]
-    use_approach_pose_as_cut_start: true
-    approach_cut_start_xyz: [0.270446, -0.000835, 0.127984]
-    approach_cut_orientation_xyzw: [0.679474, -0.371311, 0.538700, 0.332032]
-    approach_cut_length_m: 0.0518
     # The TCP is a 6 mm visual marker with no collision geometry; scoped carton contact is controlled above.
     # Before each descend/cut stage, settle motion at the final collision-checked
     # approach pose. The hold is encoded in the trajectory, not as a callback sleep.
@@ -83,8 +75,9 @@ box_h_cut_executor:
     left_side_cut_tilt_deg: -10.0
     right_side_cut_tilt_deg: -5.0
     # Side strokes use the canonical midpoint pairs added by capture_and_query_depth.py.
-    # Set middle_aligned to orient side strokes parallel to the middle seam.
-    side_cut_orientation_mode: auto
+    # edge_aligned keeps the side blade along its own cut; middle_aligned orients side
+    # strokes parallel to the middle seam instead. Taught corrections override both.
+    side_cut_orientation_mode: edge_aligned
     # Signed distance along surface_normal: positive hovers, negative penetrates the
     # detected top plane. Source validation caps side penetration at 3 mm and middle
     # penetration at 5 mm, and requires the scoped tool/carton contact policy above.
@@ -114,10 +107,9 @@ box_h_cut_executor:
     # Free-space transit speed only; contact descend/traverse/retract keep the
     # 0.05 contact stroke scaling above, and pre_cut_stabilization_duration_s
     # stays 1.0 s. Finite values in (0, 1] only; out-of-range fails closed.
-    # Mock-only tuning first (e.g. 0.10 shortens only non-contact portions);
-    # physical speed needs separate review. No physical speed change by default.
-    transit_velocity_scaling: 0.05
-    transit_acceleration_scaling: 0.05
+    # Raised from 0.05 with operator approval (2026-09-26); contact strokes unchanged.
+    transit_velocity_scaling: 0.15
+    transit_acceleration_scaling: 0.15
     max_solutions: 1
     # Physical trajectory dispatch stays disabled until an operator deliberately enables it.
     execution_enabled: false
@@ -181,3 +173,7 @@ box_h_cut_executor:
     left_adaptive_orientation_enabled: true
     left_adaptive_orientation_max_deg: 45.0
     left_adaptive_orientation_step_deg: 5.0
+    # Each roll candidate always logs a one-line "Left roll diag" result. true adds
+    # expensive per-pose IK/collision probing (kinematic restarts, contact pairs) to
+    # explain every rejected candidate; it never changes candidate selection.
+    left_roll_diagnostics_enabled: false

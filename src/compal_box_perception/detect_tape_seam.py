@@ -75,9 +75,9 @@ detect_tape_seam.py
   4 個角點。
 
 使用方式：
-  python3 detect_tape_seam.py
+  python3 detect_tape_seam.py --image /path/to/frame.png
   python3 detect_tape_seam.py --image /path/to/other_frame.png --roi 500 80 900 320
-  python3 detect_tape_seam.py --debug   # 額外印出每條邊的分類過程，方便除錯
+  python3 detect_tape_seam.py --image /path/to/frame.png --debug   # 額外印出每條邊的分類過程，方便除錯
 
 必要套件：
   pip install opencv-python-headless numpy --break-system-packages
@@ -92,7 +92,6 @@ import cv2
 import numpy as np
 
 
-DEFAULT_IMAGE = "/home/james/Igus_rebel/outputs/rgb/frame_000001_20260821_121845_735625.png"
 # 針對這張照片手動框出的「中央偏上方紙箱」大略範圍 (x0, y0, x1, y1)
 DEFAULT_ROI = (590, 90, 860, 300)
 
@@ -829,7 +828,7 @@ def draw_visualization(image, result):
 
 def main():
     parser = argparse.ArgumentParser(description="偵測紙箱頂面左右邊，估計膠帶縫隙/切割軌跡")
-    parser.add_argument("--image", default=DEFAULT_IMAGE, help="輸入影像路徑")
+    parser.add_argument("--image", required=True, help="輸入影像路徑（必填）")
     parser.add_argument(
         "--roi", type=int, nargs=4, default=None,
         metavar=("X0", "Y0", "X1", "Y1"),

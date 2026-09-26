@@ -41,7 +41,6 @@ namespace Igus
             msg << 0.0f << " " << 0.0f << " " << 0.0f << " ";
             msg << "CRIEND" << std::endl;
 
-            // RCLCPP_INFO(node_->get_logger(), "ALIVEJOG: %s", msg.str().c_str());
             {
                 std::lock_guard<std::mutex> lockGuard(aliveLock);
                 rebelSocket->SendMessage(msg.str());
@@ -77,7 +76,6 @@ namespace Igus
                             "Ignoring malformed CRI status message");
                         break;
                     }
-                    status.Log();
                     currentStatus = status;
                     ProcessStatus(currentStatus);
                     break;
@@ -112,8 +110,8 @@ namespace Igus
                     {
                     case CriMessages::ConfigType::KINEMATICLIMITS:
                     {
+                        // Parsed only so malformed replies are logged; the limits are not used.
                         CriMessages::KinematicLimits kinematicLimits = CriMessages::KinematicLimits(msg);
-                        // kinematicLimits.Print();
                         break;
                     }
                     case CriMessages::ConfigType::UNKNOWN:
@@ -159,7 +157,7 @@ namespace Igus
 
                     case CriMessages::LogLevel::INFO:
                     {
-                        // The Rebel is pretty chatty with its INFO level log messages, so I've set them to output only to the ROS DEBUG level.
+                        // The Rebel is pretty chatty with its INFO level log messages; they are forwarded at ROS INFO level.
                         RCLCPP_INFO(rclcpp::get_logger("igus_rebel"), "REBEL LOG: %s (%ld ms)", log.logMsg.c_str(), log.timestamp);
                         break;
                     }
@@ -194,7 +192,6 @@ namespace Igus
 
                 case CriMessages::MessageType::VARIABLES:
                 {
-                    // CriMessages::Variables vars = CriMessages::Variables(msg);
                     break;
                 }
 
@@ -237,7 +234,7 @@ namespace Igus
                 case CriMessages::MessageType::CYCLESTAT:
                 {
                     CriMessages::Cyclestat cyclestat = CriMessages::Cyclestat(msg);
-                    // Will only output this once every 2 minutes, because this is sent every 0.5 seconds.
+                    // Throttle period is 120 ms (not minutes). CYCLESTAT arrives roughly every 0.5 s, so this rarely suppresses anything.
                     RCLCPP_INFO_THROTTLE(rclcpp::get_logger("igus_rebel"), *node_->get_clock(), 120, "Rebel cycle statistics -- Cycletime: %d -- Workload: %d%%", cyclestat.cycletime, cyclestat.workload);
                     break;
                 }
@@ -306,39 +303,6 @@ namespace Igus
         msg << CriKeywords::END << std::endl;
 
         rebelSocket->SendMessage(msg.str());
-    }
-
-    void Rebel::SetControlMode(const ControlMode &mode)
-    {
-        switch (mode)
-        {
-        case Rebel::ControlMode::POSITION:
-        {
-            {
-                std::lock_guard<std::mutex> lockGuard(aliveLock);
-
-                j1 = currentStatus.posJointCurrent.at(0);
-                j2 = currentStatus.posJointCurrent.at(1);
-                j3 = currentStatus.posJointCurrent.at(2);
-                j4 = currentStatus.posJointCurrent.at(3);
-                j5 = currentStatus.posJointCurrent.at(4);
-                j6 = currentStatus.posJointCurrent.at(5);
-
-                Command(CriKeywords::COMMAND_MOTIONTYPECARTBASE);
-                controlMode = mode;
-            }
-            RCLCPP_INFO(rclcpp::get_logger("igus_rebel"), "Rebel now controlled by position control.");
-            break;
-        }
-
-        case Rebel::ControlMode::VELOCITY:
-        {
-            Command(CriKeywords::COMMAND_MOTIONTYPEJOINT);
-            controlMode = mode;
-            RCLCPP_INFO(rclcpp::get_logger("igus_rebel"), "Rebel now controlled by velocity control.");
-            break;
-        }
-        }
     }
 
     void Rebel::ProcessStatus(const CriMessages::Status &status)
@@ -526,38 +490,15 @@ namespace Igus
     //
     // public functions
     //
-    void Rebel::SetJog(const float &joint1, const float &joint2, const float &joint3,
-                       const float &joint4, const float &joint5, const float &joint6)
-    {
-        j1 = joint1;
-        j2 = joint2;
-        j3 = joint3;
-        j4 = joint4;
-        j5 = joint5;
-        j6 = joint6;
-    }
-
-    void Rebel::GetJoints(float &joint1, float &joint2, float &joint3,
-                          float &joint4, float &joint5, float &joint6)
-    {
-        joint1 = currentStatus.posJointCurrent.at(0);
-        joint2 = currentStatus.posJointCurrent.at(1);
-        joint3 = currentStatus.posJointCurrent.at(2);
-        joint4 = currentStatus.posJointCurrent.at(3);
-        joint5 = currentStatus.posJointCurrent.at(4);
-        joint6 = currentStatus.posJointCurrent.at(5);
-    }
-
     CallbackReturn Rebel::on_init(const HardwareInfo &)
     {
-        rebelSocket = std::make_shared<RebelSocket>(ip, port, 200),
+        rebelSocket = std::make_shared<RebelSocket>(ip, port);
         j1 = 0.0f;
         j2 = 0.0f;
         j3 = 0.0f;
         j4 = 0.0f;
         j5 = 0.0f;
         j6 = 0.0f;
-        controlMode = Rebel::ControlMode::VELOCITY;
         current_ccnt = 1;
         continueAlive = false;
         continueMessage = false;
@@ -660,11 +601,6 @@ namespace Igus
         response->success = true;
     }
 
-    void Rebel::GetReferenceInfo()
-    {
-        Command(std::string("GetReferencingInfo"));
-    }
-
     void Rebel::Start()
     {
         continueMessage = true;
@@ -672,9 +608,7 @@ namespace Igus
 
         rebelSocket->Start();
 
-        // std::this_thread::sleep_for(std::chrono::milliseconds(500));
-
-        // Command(CriKeywords::COMMAND_CONNECT); // Gets a CMDERROR in CRI_V17
+        // The CRI "Connect" command is intentionally not sent: CRI_V17 answers it with CMDERROR.
         Command(CriKeywords::COMMAND_SETACTIVE + " true");
         Command(CriKeywords::COMMAND_RESET);
         Command(CriKeywords::COMMAND_ENABLE);
@@ -683,7 +617,10 @@ namespace Igus
         aliveThread = std::thread(&Rebel::AliveThreadFunction, this);
 
         GetConfig(CriKeywords::CONFIG_GETKINEMATICLIMITS);
-        SetControlMode(ControlMode::VELOCITY);
+
+        // Joint jog (velocity) mode; the only control mode this driver uses.
+        Command(CriKeywords::COMMAND_MOTIONTYPEJOINT);
+        RCLCPP_INFO(rclcpp::get_logger("igus_rebel"), "Rebel now controlled by velocity control.");
     }
 
     void Rebel::Stop()
@@ -705,7 +642,6 @@ namespace Igus
         }
 
         Command(CriKeywords::COMMAND_DISABLE);
-        // Command(CriKeywords::COMMAND_DISCONNECT);
         Command(CriKeywords::COMMAND_QUIT);
 
         rebelSocket->Stop();

@@ -32,6 +32,7 @@
 #include <fstream>
 #include <functional>
 #include <iomanip>
+#include <limits>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -78,19 +79,207 @@ private:
   double duration_s_;
 };
 
+// Free-space transit wrapper that resolves a Cartesian (pose) goal to the exact-pose,
+// collision-free IK branch nearest the propagated start state before planning. Seeds
+// are the start state and its spherical-wrist flip (joint4 +/- pi, -joint5, joint6 +/- pi);
+// every IK result is expanded with the equivalent wrist-flip/joint6 +/- 2pi branches,
+// each re-verified by forward kinematics, bounds and collision. Candidates whose joint6
+// change would exceed pi are ranked last, then by L1 joint distance, so the transit takes
+// the short wrist branch. The target pose is never altered and the trajectory is still
+// produced by the wrapped planner; the solution-level wrist guard remains authoritative.
+class NearestBranchTransitPlanner : public mtc::solvers::PlannerInterface
+{
+public:
+  explicit NearestBranchTransitPlanner(mtc::solvers::PlannerInterfacePtr inner)
+  : inner_(std::move(inner)) {}
+
+  void init(const moveit::core::RobotModelConstPtr& robot_model) override
+  {
+    inner_->init(robot_model);
+  }
+
+  Result plan(
+    const planning_scene::PlanningSceneConstPtr& from,
+    const planning_scene::PlanningSceneConstPtr& to,
+    const moveit::core::JointModelGroup* jmg, double timeout,
+    robot_trajectory::RobotTrajectoryPtr& result,
+    const moveit_msgs::msg::Constraints& path_constraints) override
+  {
+    return inner_->plan(from, to, jmg, timeout, result, path_constraints);
+  }
+
+  Result plan(
+    const planning_scene::PlanningSceneConstPtr& from, const moveit::core::LinkModel& link,
+    const Eigen::Isometry3d& offset, const Eigen::Isometry3d& target,
+    const moveit::core::JointModelGroup* jmg, double timeout,
+    robot_trajectory::RobotTrajectoryPtr& result,
+    const moveit_msgs::msg::Constraints& path_constraints) override
+  {
+    const auto logger = rclcpp::get_logger("box_h_cut_executor.transit_ik");
+    constexpr double kPi = 3.14159265358979323846;
+    const auto& variables = jmg->getVariableNames();
+    const auto index_of = [&](const std::string& name) -> std::optional<std::size_t> {
+      const auto it = std::find(variables.begin(), variables.end(), name);
+      if (it == variables.end()) return std::nullopt;
+      return static_cast<std::size_t>(std::distance(variables.begin(), it));
+    };
+    const auto j4 = index_of("joint4");
+    const auto j5 = index_of("joint5");
+    const auto j6 = index_of("joint6");
+    if (!j6) return inner_->plan(from, link, offset, target, jmg, timeout, result, path_constraints);
+
+    const moveit::core::RobotState& start = from->getCurrentState();
+    std::vector<double> start_values;
+    start.copyJointGroupPositions(jmg, start_values);
+    const Eigen::Isometry3d link_target = target * offset.inverse();
+
+    const auto is_valid = [&](moveit::core::RobotState& state) {
+      state.update();
+      return state.satisfiesBounds(jmg) && from->isStateValid(state, jmg->getName());
+    };
+    const auto exact_pose = [&](moveit::core::RobotState& state) {
+      state.update();
+      const Eigen::Isometry3d& reached = state.getGlobalLinkTransform(&link);
+      const double position_error = (reached.translation() - link_target.translation()).norm();
+      const double angle_error = Eigen::AngleAxisd(
+        reached.linear().transpose() * link_target.linear()).angle();
+      return position_error <= 1e-5 && std::abs(angle_error) <= 1e-4;
+    };
+
+    std::vector<std::vector<double>> candidates;
+    // `ik_verified`: the raw IK solution already passed is_valid inside the IK
+    // validity callback, so only its exact-pose check remains.
+    const auto add_candidate = [&](const std::vector<double>& values, bool ik_verified) {
+      for (const auto& existing : candidates) {
+        double max_diff = 0.0;
+        for (std::size_t i = 0; i < values.size(); ++i) {
+          max_diff = std::max(max_diff, std::abs(existing[i] - values[i]));
+        }
+        if (max_diff < 1e-4) return;
+      }
+      moveit::core::RobotState probe(start);
+      probe.setJointGroupPositions(jmg, values);
+      if ((!ik_verified && !is_valid(probe)) || !exact_pose(probe)) return;
+      candidates.push_back(values);
+    };
+    const auto wrist_variants = [&](const std::vector<double>& values) {
+      std::vector<std::vector<double>> variants;
+      for (const double turn6 : {-2.0 * kPi, 2.0 * kPi}) {
+        auto shifted = values;
+        shifted[*j6] += turn6;
+        variants.push_back(shifted);
+      }
+      if (j4 && j5) {
+        for (const double turn4 : {-kPi, kPi}) {
+          for (const double turn6 : {-kPi, kPi}) {
+            auto flipped = values;
+            flipped[*j4] += turn4;
+            flipped[*j5] = -flipped[*j5];
+            flipped[*j6] += turn6;
+            variants.push_back(flipped);
+          }
+        }
+      }
+      return variants;
+    };
+
+    std::vector<std::vector<double>> seeds{start_values};
+    for (const auto& variant : wrist_variants(start_values)) {
+      moveit::core::RobotState probe(start);
+      probe.setJointGroupPositions(jmg, variant);
+      probe.update();
+      if (probe.satisfiesBounds(jmg)) seeds.push_back(variant);
+    }
+    const moveit::core::GroupStateValidityCallbackFn ik_valid =
+      [&](moveit::core::RobotState* state, const moveit::core::JointModelGroup* group,
+          const double* values) {
+        state->setJointGroupPositions(group, values);
+        return is_valid(*state);
+      };
+    for (const auto& seed : seeds) {
+      moveit::core::RobotState ik_state(start);
+      ik_state.setJointGroupPositions(jmg, seed);
+      ik_state.update();
+      if (!ik_state.setFromIK(jmg, link_target, link.getName(), 0.0, ik_valid)) continue;
+      std::vector<double> solution;
+      ik_state.copyJointGroupPositions(jmg, solution);
+      add_candidate(solution, true);
+      for (const auto& variant : wrist_variants(solution)) add_candidate(variant, false);
+    }
+    if (candidates.empty()) {
+      RCLCPP_WARN(
+        logger, "no seeded collision-free IK branch for transit goal; using wrapped planner");
+      return inner_->plan(from, link, offset, target, jmg, timeout, result, path_constraints);
+    }
+
+    const auto wrist_travel = [&](const std::vector<double>& values) {
+      return std::abs(values[*j6] - start_values[*j6]);
+    };
+    const auto joint_distance = [&](const std::vector<double>& values) {
+      double sum = 0.0;
+      for (std::size_t i = 0; i < values.size(); ++i) sum += std::abs(values[i] - start_values[i]);
+      return sum;
+    };
+    std::stable_sort(
+      candidates.begin(), candidates.end(),
+      [&](const std::vector<double>& lhs, const std::vector<double>& rhs) {
+        const bool lhs_long = wrist_travel(lhs) > kPi;
+        const bool rhs_long = wrist_travel(rhs) > kPi;
+        if (lhs_long != rhs_long) return !lhs_long;
+        return joint_distance(lhs) < joint_distance(rhs);
+      });
+
+    std::ostringstream summary;
+    summary << std::fixed << std::setprecision(4) << "start joint6=" << start_values[*j6]
+            << "; " << candidates.size() << " IK branch(es):";
+    for (const auto& candidate : candidates) {
+      summary << " [joint6=" << candidate[*j6] << " d6=" << wrist_travel(candidate)
+              << " L1=" << joint_distance(candidate) << "]";
+    }
+    RCLCPP_INFO(logger, "transit goal %s", summary.str().c_str());
+
+    Result last{false, "no IK branch could be planned"};
+    for (const auto& candidate : candidates) {
+      auto goal_scene = from->diff();
+      goal_scene->getCurrentStateNonConst().setJointGroupPositions(jmg, candidate);
+      goal_scene->getCurrentStateNonConst().update();
+      last = inner_->plan(from, goal_scene, jmg, timeout, result, path_constraints);
+      if (last) {
+        RCLCPP_INFO(
+          logger, "transit planned to IK branch joint6=%.4f (joint6 change %.4f rad)",
+          candidate[*j6], wrist_travel(candidate));
+        return last;
+      }
+    }
+    return last;
+  }
+
+  std::string getPlannerId() const override { return "NearestBranchTransit"; }
+
+private:
+  mtc::solvers::PlannerInterfacePtr inner_;
+};
+
 struct CutSegment {
   std::string name;
   geometry_msgs::msg::Point start;
   geometry_msgs::msg::Point end;
-  double roll_deg{0.0};
-  double pitch_deg{0.0};
-  double yaw_deg{0.0};
   bool stop_after_start{false};
   bool hover_only{false};
   bool force_fixed_orientation{false};
   bool handoff_end{false};
   bool terminal_after_cut{false};
   double handoff_fraction{0.0};
+};
+struct SegmentPlanOptions {
+  // Skip the supplied joint-space approach (approach_joint_degrees); only "h" uses it.
+  bool skip_supplied_approach{true};
+  double timeout_s{15.0};
+  bool explain_failure{true};
+  // Staged cut-debug start plan: the carton is added together with the scoped
+  // tool/carton allowance in one atomic scene change (the arm may still be in contact
+  // from an earlier session), and the left roll search probes only the start poses.
+  bool cut_debug_start{false};
 };
 struct Snapshot {
   std::string snapshot_id;
@@ -115,9 +304,7 @@ enum class CutDebugStage : std::uint8_t {
   kNone = 0,
   kStartPlanned,
   kStartExecuted,
-  kEndPlanned,
   kEndExecuted,
-  kLiftPlanned,
 };
 struct CutLocalDeltas {
   double along_m{0.0};
@@ -126,11 +313,8 @@ struct CutLocalDeltas {
 };
 struct CutDebugCorrection {
   std::string cut;
-  std::string snapshot_id;
   CutLocalDeltas start_local{};
   CutLocalDeltas end_local{};
-  geometry_msgs::msg::Quaternion start_delta_local{};
-  geometry_msgs::msg::Quaternion end_delta_local{};
   std::array<double, 3> recorded_along{};
   std::array<double, 3> recorded_across{};
   std::array<double, 3> recorded_normal{};
@@ -175,9 +359,8 @@ public:
       declare_parameter<double>(kinematics_prefix + "kinematics_solver_timeout", 0.05);
       declare_parameter<bool>(kinematics_prefix + "position_only_ik", false);
     }
-    motion_profile_ = declare_parameter<std::string>("motion_profile", "ompl_pilz");
-    external_snapshot_file_ = declare_parameter<std::string>(
-      "external_snapshot_file", "");
+    const auto motion_profile = declare_parameter<std::string>("motion_profile", "ompl_pilz");
+    declare_parameter<std::string>("external_snapshot_file", "");
     external_snapshot_max_age_s_ = declare_parameter<double>(
       "external_snapshot_max_age_s", 30.0);
     debug_allow_stale_snapshot_ = declare_parameter<bool>(
@@ -206,24 +389,16 @@ public:
       "left_adaptive_orientation_max_deg", 45.0);
     left_adaptive_orientation_step_deg_ = declare_parameter<double>(
       "left_adaptive_orientation_step_deg", 5.0);
+    // Expensive per-pose IK/collision probing that explains each rejected left roll
+    // candidate. Read at use time; the roll search itself is unaffected.
+    declare_parameter<bool>("left_roll_diagnostics_enabled", false);
     debug_motion_distance_m_ = declare_parameter<double>("debug_motion_distance_m", 0.010);
     debug_motion_clearance_m_ = declare_parameter<double>("debug_motion_clearance_m", 0.030);
     debug_fixed_orientation_ = declare_parameter<bool>("debug_fixed_orientation", false);
-    cut_pattern_ = declare_parameter<std::string>("cut_pattern", "left_partial");
-    partial_reverse_ = declare_parameter<bool>("partial_reverse", false);
-    partial_start_fraction_ = declare_parameter<double>("partial_start_fraction", 0.25);
-    partial_end_fraction_ = declare_parameter<double>("partial_end_fraction", 0.75);
+    cut_pattern_ = declare_parameter<std::string>("cut_pattern", "t_cut");
     t_cut_middle_handoff_fraction_ = declare_parameter<double>(
       "t_cut_middle_handoff_fraction", 0.0);
-    use_approach_pose_as_cut_start_ = declare_parameter<bool>(
-      "use_approach_pose_as_cut_start", false);
-    approach_cut_start_xyz_ = declare_parameter<std::vector<double>>(
-      "approach_cut_start_xyz", std::vector<double>{});
-    approach_cut_orientation_xyzw_ = declare_parameter<std::vector<double>>(
-      "approach_cut_orientation_xyzw", std::vector<double>{});
-    approach_cut_length_m_ = declare_parameter<double>("approach_cut_length_m", 0.04);
-    partial_start_joint_degrees_ = declare_parameter<std::vector<double>>(
-      "partial_start_joint_degrees", std::vector<double>{});
+    // Supplied joint-space approach used only by the "h" pattern before its first cut.
     approach_joint_degrees_ = declare_parameter<std::vector<double>>(
       "approach_joint_degrees", std::vector<double>{});
     cartesian_step_m_ = declare_parameter<double>("cartesian_step_m", 0.003);
@@ -247,10 +422,8 @@ public:
     if (external_snapshot_max_age_s_ <= 0.0) {
       throw std::invalid_argument("external_snapshot_max_age_s must be positive");
     }
-    const std::array<std::string, 4> profiles{
-      "ompl_cartesian", "ompl_pilz", "pilz_only", "chomp_pilz"};
-    if (std::find(profiles.begin(), profiles.end(), motion_profile_) == profiles.end()) {
-      throw std::invalid_argument("unsupported H-cut motion_profile: " + motion_profile_);
+    if (!isSupportedMotionProfile(motion_profile)) {
+      throw std::invalid_argument("unsupported H-cut motion_profile: " + motion_profile);
     }
     if (planning_frame_.empty() || carton_collision_id_.empty() ||
         (camera_pole_required_ && camera_pole_topic_.empty()) ||
@@ -283,17 +456,8 @@ public:
         transit_velocity_scaling_ > 1.0 || !std::isfinite(transit_acceleration_scaling_) ||
         transit_acceleration_scaling_ <= 0.0 || transit_acceleration_scaling_ > 1.0 ||
         max_solutions_ < 1 ||
-        !std::isfinite(t_cut_middle_handoff_fraction_) ||
-        (t_cut_middle_handoff_fraction_ != 0.0 &&
-         (t_cut_middle_handoff_fraction_ < 0.05 || t_cut_middle_handoff_fraction_ > 0.95)) ||
-        (cut_pattern_ != "h" && cut_pattern_ != "t_cut" && cut_pattern_ != "t_cut_handoff" &&
-         cut_pattern_ != "left_only" && cut_pattern_ != "middle_only" &&
-         cut_pattern_ != "right_only" && cut_pattern_ != "middle_entry_debug" &&
-         cut_pattern_ != "middle_debug_short" && cut_pattern_ != "middle_partial_preview" &&
-         cut_pattern_ != "left_partial" && cut_pattern_ != "right_partial" &&
-         cut_pattern_ != "combined") ||
-        ((cut_pattern_ == "left_partial" || cut_pattern_ == "right_partial") &&
-         partial_start_joint_degrees_.size() != 6U) ||
+        !isValidHandoffFraction(t_cut_middle_handoff_fraction_) ||
+        !isSupportedCutPattern(cut_pattern_) ||
         (!approach_joint_degrees_.empty() && approach_joint_degrees_.size() != 6U) ||
         (cut_debug_cut_ != "left" && cut_debug_cut_ != "middle" && cut_debug_cut_ != "right") ||
         !isAbsoluteJsonOrEmpty(cut_debug_left_correction_file_) ||
@@ -302,17 +466,10 @@ public:
         (!cut_debug_output_dir_.empty() && cut_debug_output_dir_.front() != '/')) {
       throw std::invalid_argument("invalid H-cut planning safety parameters");
     }
-    if ((cut_pattern_ == "left_partial" || cut_pattern_ == "right_partial") &&
-        use_approach_pose_as_cut_start_ &&
-        (approach_joint_degrees_.size() != 6U ||
-         approach_cut_start_xyz_.size() != 3U ||
-         approach_cut_orientation_xyzw_.size() != 4U || approach_cut_length_m_ <= 0.0)) {
-      throw std::invalid_argument("invalid supplied fixed-orientation cut parameters");
-    }
     if (side_cut_orientation_mode_ != "edge_aligned" &&
-        side_cut_orientation_mode_ != "middle_aligned" &&
-        side_cut_orientation_mode_ != "auto") {
-      throw std::invalid_argument("unsupported side_cut_orientation_mode");
+        side_cut_orientation_mode_ != "middle_aligned") {
+      throw std::invalid_argument(
+        "unsupported side_cut_orientation_mode (edge_aligned or middle_aligned)");
     }
     cut_pattern_callback_ = add_on_set_parameters_callback(
       [this](const std::vector<rclcpp::Parameter>& parameters) {
@@ -337,23 +494,25 @@ public:
         for (const auto& parameter : parameters) {
           if (parameter.get_name() == "cut_pattern") {
             const auto pattern = parameter.as_string();
-            if (pattern != "h" && pattern != "t_cut" && pattern != "t_cut_handoff" &&
-                pattern != "left_only" && pattern != "middle_only" && pattern != "right_only" &&
-                pattern != "middle_entry_debug" && pattern != "middle_debug_short" &&
-                pattern != "middle_partial_preview" && pattern != "left_partial" &&
-                pattern != "right_partial" && pattern != "combined") {
+            if (!isSupportedCutPattern(pattern)) {
               result.successful = false;
               result.reason = "unsupported cut_pattern";
               return result;
             }
             requested_pattern = pattern;
-          } else if (parameter.get_name() == "t_cut_middle_handoff_fraction") {
-            const double fraction = parameter.as_double();
-            if (!std::isfinite(fraction) ||
-                (fraction != 0.0 && (fraction < 0.05 || fraction > 0.95))) {
+          } else if (parameter.get_name() == "motion_profile") {
+            // Validated only: every planning request reads motion_profile at use time.
+            if (!isSupportedMotionProfile(parameter.as_string())) {
               result.successful = false;
               result.reason =
-                "t_cut_middle_handoff_fraction must be finite and either exactly 0.0 (automatic) or within [0.05,0.95]";
+                "unsupported motion_profile (ompl_cartesian, ompl_pilz, pilz_only, chomp_pilz)";
+              return result;
+            }
+          } else if (parameter.get_name() == "t_cut_middle_handoff_fraction") {
+            const double fraction = parameter.as_double();
+            if (!isValidHandoffFraction(fraction)) {
+              result.successful = false;
+              result.reason = kHandoffFractionRule;
               return result;
             }
             requested_handoff_fraction = fraction;
@@ -663,10 +822,7 @@ public:
           response->message = "an H-cut trajectory execution is already active";
           return;
         }
-        if (in_debug_session &&
-            cut_debug_stage_ != CutDebugStage::kStartPlanned &&
-            cut_debug_stage_ != CutDebugStage::kEndPlanned &&
-            cut_debug_stage_ != CutDebugStage::kLiftPlanned) {
+        if (in_debug_session && cut_debug_stage_ != CutDebugStage::kStartPlanned) {
           response->success = false;
           if (cut_debug_stage_ == CutDebugStage::kStartExecuted) {
             response->message = "cut debug start already executed for cut " +
@@ -752,31 +908,15 @@ public:
             return;
           }
           cut_debug_dispatch_failed_ = false;
+          // The staged session retains only a start plan; every later stage is teleop.
           if (dispatched_stage == CutDebugStage::kStartPlanned) {
             cut_debug_stage_ = CutDebugStage::kStartExecuted;
-          } else if (dispatched_stage == CutDebugStage::kEndPlanned) {
-            cut_debug_stage_ = CutDebugStage::kEndExecuted;
-          } else if (dispatched_stage == CutDebugStage::kLiftPlanned) {
-            RCLCPP_INFO(
-              get_logger(), "Cut debug session for cut %s completed lift execution",
-              dispatched_cut.c_str());
-            clearCutDebugSessionState();
           }
         });
         if (in_debug_session) {
-          if (dispatched_stage == CutDebugStage::kStartPlanned) {
-            response->success = true;
-            response->message = "cut debug start dispatch accepted for cut " + dispatched_cut +
-              "; monitor controller execution, then teleop correct and call save_cut_debug_point; no further motion is automatic";
-          } else if (dispatched_stage == CutDebugStage::kEndPlanned) {
-            response->success = true;
-            response->message = "cut debug end dispatch accepted for cut " + dispatched_cut +
-              "; monitor controller execution, then teleop correct and call save_cut_debug_point; no further motion is automatic";
-          } else {
-            response->success = true;
-            response->message = "cut debug lift dispatch accepted for cut " + dispatched_cut +
-              "; monitor controller execution; session completes with no further motion";
-          }
+          response->success = true;
+          response->message = "cut debug start dispatch accepted for cut " + dispatched_cut +
+            "; monitor controller execution, then teleop correct and call save_cut_debug_point; no further motion is automatic";
         } else {
           response->success = true;
           response->message = "H-cut trajectory dispatch accepted; monitor controller execution";
@@ -855,6 +995,29 @@ private:
   }
 
   static const char* cutDebugCorrectionSchema() { return "box_h_cut_correction/v1"; }
+  static constexpr const char* kHandoffFractionRule =
+    "t_cut_middle_handoff_fraction must be finite and either exactly 0.0 (automatic) or within [0.05,0.95]";
+  static bool isValidHandoffFraction(double fraction)
+  {
+    return std::isfinite(fraction) && (fraction == 0.0 || (fraction >= 0.05 && fraction <= 0.95));
+  }
+  static bool isSupportedCutPattern(const std::string& pattern)
+  {
+    static const std::array<const char*, 9> patterns{
+      "h", "t_cut", "t_cut_handoff", "combined", "left_only", "middle_only", "right_only",
+      "middle_entry_debug", "middle_debug_short"};
+    return std::any_of(patterns.begin(), patterns.end(), [&pattern](const char* candidate) {
+      return pattern == candidate;
+    });
+  }
+  static bool isSupportedMotionProfile(const std::string& profile)
+  {
+    static const std::array<const char*, 4> profiles{
+      "ompl_cartesian", "ompl_pilz", "pilz_only", "chomp_pilz"};
+    return std::any_of(profiles.begin(), profiles.end(), [&profile](const char* candidate) {
+      return profile == candidate;
+    });
+  }
   static bool isAbsoluteJsonOrEmpty(const std::string& path)
   {
     return path.empty() || (path.front() == '/' && path.size() >= 6U &&
@@ -872,9 +1035,7 @@ private:
       case CutDebugStage::kNone: return "idle";
       case CutDebugStage::kStartPlanned: return "start_planned";
       case CutDebugStage::kStartExecuted: return "start_executed";
-      case CutDebugStage::kEndPlanned: return "end_planned";
       case CutDebugStage::kEndExecuted: return "end_executed";
-      case CutDebugStage::kLiftPlanned: return "lift_planned";
     }
     return "unknown";
   }
@@ -1027,9 +1188,10 @@ private:
         "cut debug correction file is not a complete start+end record; finish the staged session before opting in";
       return false;
     }
-    const auto read_local = [this, &document, &error](
-      const std::string& prefix, CutLocalDeltas& deltas,
-      geometry_msgs::msg::Quaternion& delta_local) {
+    // The local orientation delta is schema-validated (finite, unit length) but not
+    // stored: planning maps the full observed quaternions instead.
+    const auto read_local = [&document, &error](
+      const std::string& prefix, CutLocalDeltas& deltas) {
       const auto along = document.get_optional<double>(prefix + "_along_m");
       const auto across = document.get_optional<double>(prefix + "_across_m");
       const auto normal = document.get_optional<double>(prefix + "_normal_m");
@@ -1055,10 +1217,6 @@ private:
       deltas.along_m = *along;
       deltas.across_m = *across;
       deltas.normal_m = *normal;
-      delta_local.x = *qx / norm;
-      delta_local.y = *qy / norm;
-      delta_local.z = *qz / norm;
-      delta_local.w = *qw / norm;
       return true;
     };
     const auto read_array3 = [&document, &error](
@@ -1113,8 +1271,6 @@ private:
     };
     CutDebugCorrection loaded;
     loaded.cut = *cut;
-    const auto snapshot_id = document.get_optional<std::string>("snapshot_id");
-    loaded.snapshot_id = snapshot_id ? *snapshot_id : "";
     if (!read_array3("cut_basis_along_m", loaded.recorded_along) ||
         !read_array3("cut_basis_across_m", loaded.recorded_across) ||
         !read_array3("cut_basis_normal_m", loaded.recorded_normal) ||
@@ -1138,20 +1294,88 @@ private:
       error = "cut debug correction recorded cut basis is not orthonormal";
       return false;
     }
-    if (!read_local("start_delta_cut_local", loaded.start_local, loaded.start_delta_local)) {
+    if (!read_local("start_delta_cut_local", loaded.start_local)) {
       return false;
     }
     const auto has_end = document.get_optional<double>("end_delta_cut_local_along_m");
     if (has_end) {
-      if (!read_local("end_delta_cut_local", loaded.end_local, loaded.end_delta_local)) {
+      if (!read_local("end_delta_cut_local", loaded.end_local)) {
         return false;
       }
     } else {
       loaded.end_local = loaded.start_local;
-      loaded.end_delta_local = loaded.start_delta_local;
     }
     correction = loaded;
     return true;
+  }
+  // Loads each configured correction slot for `cuts` exactly once per planning request;
+  // the resulting records are passed down to every planned segment. Empty when
+  // cut_debug_correction_enabled is false. Schema/slot mismatches throw (fail closed).
+  // `require_any`: whole-plan requests refuse to run opted-in without any record.
+  std::map<std::string, CutDebugCorrection> loadActiveCorrections(
+    const std::vector<std::string>& cuts, bool require_any) const
+  {
+    std::map<std::string, CutDebugCorrection> active;
+    if (!cut_debug_correction_enabled_) return active;
+    for (const auto& cut : cuts) {
+      const std::string& correction_path = correctionFileForCut(cut);
+      if (correction_path.empty()) continue;
+      CutDebugCorrection loaded;
+      std::string correction_error;
+      if (!loadCutDebugCorrectionFile(correction_path, loaded, correction_error)) {
+        throw std::runtime_error("cut debug correction rejected: " + correction_error);
+      }
+      if (loaded.cut != cut) {
+        throw std::runtime_error(
+          "cut debug correction record is for cut " + loaded.cut + " but was configured in cut_debug_" +
+          cut + "_correction_file; refusing to silently apply a mismatched correction");
+      }
+      active.emplace(cut, loaded);
+    }
+    if (require_any && active.empty()) {
+      throw std::runtime_error(
+        "cut_debug_correction_enabled is true but no per-cut correction file is set; refusing to plan without an explicit correction record");
+    }
+    return active;
+  }
+  std::map<std::string, CutDebugCorrection> loadAllActiveCorrections() const
+  {
+    return loadActiveCorrections({"left", "middle", "right"}, true);
+  }
+  static geometry_msgs::msg::Point applyCutLocalDelta(
+    geometry_msgs::msg::Point point, const std::array<double, 3>& along,
+    const std::array<double, 3>& across, const std::array<double, 3>& normal,
+    const CutLocalDeltas& local)
+  {
+    point.x += along[0] * local.along_m + across[0] * local.across_m + normal[0] * local.normal_m;
+    point.y += along[1] * local.along_m + across[1] * local.across_m + normal[1] * local.normal_m;
+    point.z += along[2] * local.along_m + across[2] * local.across_m + normal[2] * local.normal_m;
+    return point;
+  }
+  // Nominal blade-direction targets for a cut: the blade (tool Y) follows the cut
+  // segment, or the middle seam for side cuts in middle_aligned mode. Side cuts face
+  // 180 degrees away from travel (facing sign -1). Returns {start target, end target}.
+  std::pair<geometry_msgs::msg::Point, geometry_msgs::msg::Point> orientationTargets(
+    const Snapshot& snapshot, bool is_middle, const geometry_msgs::msg::Point& segment_start,
+    const geometry_msgs::msg::Point& segment_end, const geometry_msgs::msg::Point& start,
+    const geometry_msgs::msg::Point& end) const
+  {
+    const double facing_sign = is_middle ? 1.0 : -1.0;
+    const bool use_seam = !is_middle && side_cut_orientation_mode_ == "middle_aligned";
+    const auto& from = use_seam ? snapshot.seam_start : segment_start;
+    const auto& to = use_seam ? snapshot.seam_end : segment_end;
+    const double dx = to.x - from.x;
+    const double dy = to.y - from.y;
+    const double dz = to.z - from.z;
+    auto start_target = start;
+    start_target.x += facing_sign * dx;
+    start_target.y += facing_sign * dy;
+    start_target.z += facing_sign * dz;
+    auto end_target = end;
+    end_target.x += facing_sign * dx;
+    end_target.y += facing_sign * dy;
+    end_target.z += facing_sign * dz;
+    return {start_target, end_target};
   }
   geometry_msgs::msg::Quaternion interpolateTaughtOrientation(
     const geometry_msgs::msg::Quaternion& start,
@@ -1282,6 +1506,7 @@ private:
       -snapshot.surface_normal.z);
     const Eigen::Vector3d into_unit = into_surface.normalized();
     const std::vector<double> candidates = leftAdaptiveOrientationCandidates();
+    const bool detailed_diagnostics = get_parameter("left_roll_diagnostics_enabled").as_bool();
     std::string first_failure;
     std::vector<std::string> failing_categories;
     const auto record_category = [&failing_categories](const char* label) {
@@ -1303,6 +1528,119 @@ private:
         state->setJointGroupPositions(group, values);
         state->update();
         return !scene.isStateColliding(*state, planning_group_);
+      };
+    // Diagnostic only (left_roll_diagnostics_enabled): explains why a candidate pose
+    // failed without mutating the labeled poses or influencing candidate selection. Every IK probe here runs on
+    // throwaway states; the ACM entry is set exactly as the search loop sets it.
+    const auto diagnose_pose = [&](std::size_t index, const Eigen::Quaterniond& orientation) {
+        std::ostringstream out;
+        out << std::fixed << std::setprecision(4);
+        const double dot_x = (orientation * Eigen::Vector3d::UnitX()).dot(into_unit);
+        const double dot_z = (orientation * Eigen::Vector3d::UnitZ()).dot(into_unit);
+        out << "gate x=" << dot_x << " z=" << dot_z << " q_xyzw=(" << orientation.x() << "," <<
+          orientation.y() << "," << orientation.z() << "," << orientation.w() << ")";
+        if (dot_x < 0.7 && dot_z < 0.7) {
+          out << " FAIL(penetration gate)";
+          return out.str();
+        }
+        geometry_msgs::msg::Pose target = labeled_poses[index].first->pose;
+        target.orientation.x = orientation.x();
+        target.orientation.y = orientation.y();
+        target.orientation.z = orientation.z();
+        target.orientation.w = orientation.w();
+        const bool contact_allowed = index % 2U != 0U && allow_tool_carton_contact_;
+        scene.getAllowedCollisionMatrixNonConst().setEntry(
+          tool_link_, carton_collision_id_, contact_allowed);
+        out << " pos=(" << target.position.x << "," << target.position.y << "," <<
+          target.position.z << ") tool/carton_allowed=" << (contact_allowed ? 1 : 0);
+        moveit::core::RobotState aware(seed_state);
+        if (aware.setFromIK(joint_group, target, tool_link_, 0.25, valid_state)) {
+          out << " collision-aware IK OK";
+          return out.str();
+        }
+        // Kinematic-only IK from the seed plus random restarts: separates
+        // "unreachable" from "reachable but every found branch collides".
+        constexpr int kRandomAttempts = 24;
+        int kinematic_found = 0;
+        int colliding = 0;
+        int out_of_bounds = 0;
+        int collision_free = 0;
+        double best_depth = std::numeric_limits<double>::infinity();
+        std::string best_contacts;
+        std::vector<double> best_joints;
+        std::map<std::string, int> pair_counts;
+        for (int attempt = 0; attempt <= kRandomAttempts; ++attempt) {
+          moveit::core::RobotState kin(seed_state);
+          if (attempt > 0) {
+            kin.setToRandomPositions(joint_group);
+            kin.update();
+          }
+          if (!kin.setFromIK(joint_group, target, tool_link_, 0.1)) continue;
+          kin.update();
+          ++kinematic_found;
+          if (!kin.satisfiesBounds(joint_group)) {
+            ++out_of_bounds;
+            continue;
+          }
+          collision_detection::CollisionRequest request;
+          request.group_name = planning_group_;
+          request.contacts = true;
+          request.max_contacts = 50;
+          request.max_contacts_per_pair = 1;
+          collision_detection::CollisionResult result;
+          scene.checkCollision(request, result, kin);
+          if (!result.collision) {
+            ++collision_free;
+            continue;
+          }
+          ++colliding;
+          double max_depth = 0.0;
+          std::ostringstream pairs;
+          pairs << std::fixed << std::setprecision(4);
+          bool first = true;
+          for (const auto& entry : result.contacts) {
+            double depth = 0.0;
+            for (const auto& contact : entry.second) depth = std::max(depth, contact.depth);
+            max_depth = std::max(max_depth, depth);
+            const std::string pair = entry.first.first + "<->" + entry.first.second;
+            ++pair_counts[pair];
+            if (!first) pairs << ", ";
+            first = false;
+            pairs << pair << " depth=" << depth;
+          }
+          if (max_depth < best_depth) {
+            best_depth = max_depth;
+            best_contacts = pairs.str();
+            kin.copyJointGroupPositions(joint_group, best_joints);
+          }
+        }
+        out << " FAIL(collision-aware IK): kinematic IK " << kinematic_found << "/" <<
+          (kRandomAttempts + 1) << " attempts";
+        if (kinematic_found == 0) {
+          out << " -> UNREACHABLE (no kinematic IK solution)";
+          return out.str();
+        }
+        out << ", out_of_bounds=" << out_of_bounds << ", colliding=" << colliding <<
+          ", collision_free=" << collision_free;
+        if (collision_free > 0) {
+          out << " -> collision-free kinematic branch exists (collision-aware IK seed/timeout)";
+        }
+        if (colliding > 0) {
+          out << "; pair hit counts: ";
+          bool first = true;
+          for (const auto& entry : pair_counts) {
+            if (!first) out << ", ";
+            first = false;
+            out << entry.first << " x" << entry.second;
+          }
+          out << "; shallowest colliding branch [" << best_contacts << "] joints=(";
+          for (std::size_t j = 0; j < best_joints.size(); ++j) {
+            if (j > 0) out << ",";
+            out << best_joints[j];
+          }
+          out << ")";
+        }
+        return out.str();
       };
     for (std::size_t candidate_index = 0; candidate_index < candidates.size();
          ++candidate_index) {
@@ -1340,6 +1678,18 @@ private:
         }
       }
       if (candidate_index == 0) first_failure = failure;
+      RCLCPP_INFO(
+        get_logger(), "Left roll diag [%s] roll %+.1f deg: %s%s", pose_context.c_str(),
+        theta_deg, feasible ? "SELECTED" : "rejected at ", feasible ? "" : failure.c_str());
+      if (!feasible && detailed_diagnostics) {
+        for (std::size_t index = 0; index < labeled_poses.size(); ++index) {
+          RCLCPP_INFO(
+            get_logger(), "Left roll diag [%s] roll %+.1f deg  %s: %s",
+            pose_context.c_str(), theta_deg, labeled_poses[index].second,
+            diagnose_pose(index, rollLeftOrientationAboutToolY(mapped[index], theta_deg))
+            .c_str());
+        }
+      }
       if (feasible) {
         if (theta_deg != 0.0) {
           RCLCPP_INFO(
@@ -1376,109 +1726,26 @@ private:
     error = detail.str();
     return false;
   }
-  bool cutDebugCorrectedPoints(
-    const Snapshot& snapshot, const std::string& cut,
-    geometry_msgs::msg::Point& corrected_start, geometry_msgs::msg::Point& corrected_end,
-    std::string& error) const
-  {
-    if (!cutDebugEndpoints(snapshot, cut, corrected_start, corrected_end)) {
-      error = "unknown cut debug cut: " + cut;
-      return false;
-    }
-    const std::string& correction_path = correctionFileForCut(cut);
-    if (cut_debug_correction_enabled_ && !correction_path.empty()) {
-      CutDebugCorrection correction;
-      if (!loadCutDebugCorrectionFile(correction_path, correction, error)) return false;
-      if (correction.cut != cut) {
-        error = "cut debug correction record is for cut " + correction.cut +
-          " but session cut is " + cut +
-          "; refusing to silently apply a mismatched correction";
-        return false;
-      }
-      std::array<double, 3> along{};
-      std::array<double, 3> across{};
-      std::array<double, 3> normal{};
-      if (!cutDebugBasis(snapshot, cut, along, across, normal, error)) return false;
-      const auto apply = [&along, &across, &normal](
-        const geometry_msgs::msg::Point& nominal, const CutLocalDeltas& local) {
-        geometry_msgs::msg::Point corrected = nominal;
-        corrected.x += along[0] * local.along_m + across[0] * local.across_m +
-          normal[0] * local.normal_m;
-        corrected.y += along[1] * local.along_m + across[1] * local.across_m +
-          normal[1] * local.normal_m;
-        corrected.z += along[2] * local.along_m + across[2] * local.across_m +
-          normal[2] * local.normal_m;
-        return corrected;
-      };
-      corrected_start = apply(corrected_start, correction.start_local);
-      corrected_end = apply(corrected_end, correction.end_local);
-    }
-    return true;
-  }
+  // Uncorrected geometry baseline for a staged session; saved deltas reference it so
+  // each completed record remains standalone.
   bool cutDebugNominalPoses(
-    const Snapshot& snapshot, const std::string& cut, bool apply_configured_correction,
+    const Snapshot& snapshot, const std::string& cut,
     geometry_msgs::msg::PoseStamped& nominal_start,
     geometry_msgs::msg::PoseStamped& nominal_end, std::string& error) const
   {
-    geometry_msgs::msg::Point corrected_start;
-    geometry_msgs::msg::Point corrected_end;
-    if (apply_configured_correction) {
-      if (!cutDebugCorrectedPoints(snapshot, cut, corrected_start, corrected_end, error)) {
-        return false;
-      }
-    } else if (!cutDebugEndpoints(snapshot, cut, corrected_start, corrected_end)) {
+    geometry_msgs::msg::Point start;
+    geometry_msgs::msg::Point end;
+    if (!cutDebugEndpoints(snapshot, cut, start, end)) {
       error = "unknown cut debug cut: " + cut;
       return false;
     }
     const bool is_middle = cut == "middle";
-    const bool is_right = cut == "right";
     const double tilt_deg = is_middle ? 0.0 :
-      (is_right ? right_side_cut_tilt_deg_ : left_side_cut_tilt_deg_);
-    const double facing_sign = is_middle ? 1.0 : -1.0;
-    const double segment_dx = corrected_end.x - corrected_start.x;
-    const double segment_dy = corrected_end.y - corrected_start.y;
-    const double segment_dz = corrected_end.z - corrected_start.z;
-    auto orientation_start_target = corrected_start;
-    orientation_start_target.x += facing_sign * segment_dx;
-    orientation_start_target.y += facing_sign * segment_dy;
-    orientation_start_target.z += facing_sign * segment_dz;
-    auto orientation_end_target = corrected_end;
-    orientation_end_target.x += facing_sign * segment_dx;
-    orientation_end_target.y += facing_sign * segment_dy;
-    orientation_end_target.z += facing_sign * segment_dz;
-    if (!is_middle && side_cut_orientation_mode_ == "middle_aligned") {
-      const double seam_dx = snapshot.seam_end.x - snapshot.seam_start.x;
-      const double seam_dy = snapshot.seam_end.y - snapshot.seam_start.y;
-      const double seam_dz = snapshot.seam_end.z - snapshot.seam_start.z;
-      orientation_start_target = corrected_start;
-      orientation_start_target.x += facing_sign * seam_dx;
-      orientation_start_target.y += facing_sign * seam_dy;
-      orientation_start_target.z += facing_sign * seam_dz;
-      orientation_end_target = corrected_end;
-      orientation_end_target.x += facing_sign * seam_dx;
-      orientation_end_target.y += facing_sign * seam_dy;
-      orientation_end_target.z += facing_sign * seam_dz;
-    }
-    const double cut_clearance = cut == "middle" ? middle_cut_clearance_m_ : cut_clearance_m_;
-    nominal_start = targetPose(
-      snapshot, corrected_start, orientation_start_target, cut_clearance, tilt_deg);
-    nominal_end = targetPose(
-      snapshot, corrected_end, orientation_end_target, cut_clearance, tilt_deg);
-    if (apply_configured_correction && cut_debug_correction_enabled_ &&
-      !correctionFileForCut(cut).empty()) {
-      CutDebugCorrection correction;
-      if (!loadCutDebugCorrectionFile(correctionFileForCut(cut), correction, error)) {
-        return false;
-      }
-      if (!applyCutDebugObservedOrientation(
-          snapshot, cut, correction, correction.observed_start, nominal_start, error)) {
-        return false;
-      }
-      if (!applyCutDebugObservedOrientation(
-          snapshot, cut, correction, correction.observed_end, nominal_end, error)) {
-        return false;
-      }
-    }
+      (cut == "right" ? right_side_cut_tilt_deg_ : left_side_cut_tilt_deg_);
+    const auto targets = orientationTargets(snapshot, is_middle, start, end, start, end);
+    const double cut_clearance = is_middle ? middle_cut_clearance_m_ : cut_clearance_m_;
+    nominal_start = targetPose(snapshot, start, targets.first, cut_clearance, tilt_deg);
+    nominal_end = targetPose(snapshot, end, targets.second, cut_clearance, tilt_deg);
     return true;
   }
   bool captureObservedTcpPose(geometry_msgs::msg::PoseStamped& observed, std::string& error)
@@ -1497,7 +1764,7 @@ private:
     }
     const double receipt_age_s = (now() - received).seconds();
     if (!std::isfinite(receipt_age_s) || receipt_age_s < 0.0 || receipt_age_s > 1.0) {
-      error = "no recent /joint_states received (last " + formatMeters(receipt_age_s) +
+      error = "no recent /joint_states received (last " + formatDouble(receipt_age_s, 3) +
         " s ago); cannot record a TCP observation from stale joint data";
       return false;
     }
@@ -1548,7 +1815,7 @@ private:
     observed.pose.orientation.w = orientation.w();
     return true;
   }
-  std::string formatDouble(double value, int precision = 9) const
+  static std::string formatDouble(double value, int precision = 9)
   {
     std::ostringstream stream;
     stream.setf(std::ios::fixed);
@@ -1788,11 +2055,7 @@ private:
       return false;
     }
     cut_debug_start_local_ = start_local;
-    cut_debug_start_delta_local_ = start_local_q;
-    if (complete) {
-      cut_debug_end_local_ = end_local;
-      cut_debug_end_delta_local_ = end_local_q;
-    }
+    if (complete) cut_debug_end_local_ = end_local;
     return true;
   }
   bool startCutDebugSession(std::string& message)
@@ -1827,38 +2090,37 @@ private:
     geometry_msgs::msg::PoseStamped nominal_start;
     geometry_msgs::msg::PoseStamped nominal_end;
     if (!cutDebugNominalPoses(
-          *snapshot, cut_debug_cut_, false, nominal_start, nominal_end, validation)) {
+          *snapshot, cut_debug_cut_, nominal_start, nominal_end, validation)) {
       message = "cut debug nominal computation failed for cut " + cut_debug_cut_ + ": " +
         validation;
       return false;
     }
-    geometry_msgs::msg::PoseStamped planned_start;
-    geometry_msgs::msg::PoseStamped planned_end;
-    if (!cutDebugNominalPoses(
-          *snapshot, cut_debug_cut_, true, planned_start, planned_end, validation)) {
-      message = "cut debug configured-target computation failed for cut " + cut_debug_cut_ +
-        ": " + validation;
-      return false;
-    }
+    // The configured target (correction applied when opted in) is planned by the common
+    // segment planner, stopping at the cut start: same dwell and wrist-guard validation
+    // as full plans, with the carton added under the scoped contact allowance.
     CutSegment segment;
     segment.name = cut_debug_cut_ == "middle" ? "middle seam cut" :
       (cut_debug_cut_ == "left" ? "left side cut" : "right side cut");
-    geometry_msgs::msg::Point corrected_start;
-    geometry_msgs::msg::Point corrected_end;
-    if (!cutDebugCorrectedPoints(*snapshot, cut_debug_cut_, corrected_start, corrected_end, validation)) {
-      message = "cut debug correction failed for cut " + cut_debug_cut_ + ": " + validation;
-      return false;
-    }
-    segment.start = corrected_start;
-    segment.end = corrected_end;
+    cutDebugEndpoints(*snapshot, cut_debug_cut_, segment.start, segment.end);
     segment.stop_after_start = true;
     std::unique_ptr<mtc::Task> task;
     std::vector<geometry_msgs::msg::PoseStamped> targets;
-    publishCartonGeometry(*snapshot);
     std::string planning_message;
-    if (!planCutDebugStartOnly(
-          *snapshot, cut_debug_cut_, corrected_start, corrected_end, planned_start,
-          get_parameter("motion_profile").as_string(), task, targets, planning_message)) {
+    bool planned = false;
+    try {
+      const auto corrections = loadActiveCorrections({cut_debug_cut_}, false);
+      publishCartonGeometry(*snapshot);
+      SegmentPlanOptions options;
+      options.timeout_s = planning_timeout_s_;
+      options.cut_debug_start = true;
+      planned = planCutSegments(
+        *snapshot, {segment}, corrections,
+        get_parameter("motion_profile").as_string(), "Cut debug " + cut_debug_cut_ + " start",
+        options, task, targets, planning_message);
+    } catch (const std::exception& exception) {
+      planning_message = exception.what();
+    }
+    if (!planned) {
       message = "cut debug start planning failed for cut " + cut_debug_cut_ + ": " +
         planning_message;
       return false;
@@ -1873,7 +2135,6 @@ private:
     cut_debug_session_cut_ = cut_debug_cut_;
     cut_debug_nominal_start_ = nominal_start;
     cut_debug_nominal_end_ = nominal_end;
-    cut_debug_planned_end_ = planned_end;
     cut_debug_has_observed_start_ = false;
     cut_debug_has_observed_end_ = false;
     cut_debug_created_stamp_ns_ = 0;
@@ -1901,16 +2162,6 @@ private:
     if (cut_debug_stage_ == CutDebugStage::kStartPlanned) {
       message = "cut debug start planned but not yet executed for cut " + cut_debug_session_cut_ +
         "; execute via execute_planned_h_cut then teleop correct before calling save_cut_debug_point";
-      return false;
-    }
-    if (cut_debug_stage_ == CutDebugStage::kEndPlanned) {
-      message = "cut debug end planned but not yet executed for cut " + cut_debug_session_cut_ +
-        "; execute via execute_planned_h_cut then teleop correct before calling save_cut_debug_point";
-      return false;
-    }
-    if (cut_debug_stage_ == CutDebugStage::kLiftPlanned) {
-      message = "cut debug lift plan is retained for cut " + cut_debug_session_cut_ +
-        "; execute via execute_planned_h_cut; no further save is expected";
       return false;
     }
     if (planned_task_ && !planned_snapshot_) {
@@ -1986,444 +2237,6 @@ private:
       cutDebugStageName(cut_debug_stage_) + " cannot save; unexpected state";
     return false;
   }
-  bool planCutDebugEndOnly(
-    std::string& message, std::unique_ptr<mtc::Task>& task,
-    std::vector<geometry_msgs::msg::PoseStamped>& targets)
-  {
-    if (!cut_debug_snapshot_) {
-      message = "cut debug session has no snapshot";
-      return false;
-    }
-    const Snapshot& snapshot = *cut_debug_snapshot_;
-    task = std::make_unique<mtc::Task>();
-    task->stages()->setName("Cut debug " + cut_debug_session_cut_ + " endpoint traverse");
-    task->loadRobotModel(shared_from_this());
-    task->add(std::make_unique<mtc::stages::CurrentState>("current robot state"));
-    const auto carton = cartonCollisionObject(snapshot);
-    // The arm starts this stage in contact at the corrected start point, so the carton
-    // is added with the scoped tool/carton allowance in the same atomic scene change;
-    // adding it first would reject the in-contact start state.
-    auto add_carton = std::make_unique<mtc::stages::ModifyPlanningScene>(
-      "add detected carton collision object");
-    add_carton->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
-    add_carton->addObject(carton);
-    if (allow_tool_carton_contact_) {
-      add_carton->allowCollisions(tool_link_, carton_collision_id_, true);
-    }
-    task->add(std::move(add_carton));
-    addCameraPole(*task);
-    const auto configure_pipeline = [this](const std::string& pipeline_name) {
-      auto planner = std::make_shared<mtc::solvers::PipelinePlanner>(
-        shared_from_this(), pipeline_name);
-      planner->setTimeout(planning_timeout_s_);
-      planner->setMaxVelocityScalingFactor(velocity_scaling_);
-      planner->setMaxAccelerationScalingFactor(acceleration_scaling_);
-      return planner;
-    };
-    auto pilz_lin = configure_pipeline(pilz_pipeline_);
-    pilz_lin->setPlannerId("LIN");
-    auto cartesian = std::make_shared<mtc::solvers::CartesianPath>();
-    cartesian->setIKFrame(tool_link_);
-    cartesian->setStepSize(cartesian_step_m_);
-    cartesian->setJumpThreshold(0.0);
-    cartesian->setMinFraction(1.0);
-    cartesian->setMaxVelocityScalingFactor(velocity_scaling_);
-    cartesian->setMaxAccelerationScalingFactor(acceleration_scaling_);
-    mtc::solvers::PlannerInterfacePtr stroke_planner;
-    const auto motion_profile = get_parameter("motion_profile").as_string();
-    if (motion_profile == "ompl_cartesian") {
-      stroke_planner = cartesian;
-    } else {
-      stroke_planner = pilz_lin;
-    }
-    {
-      moveit::core::RobotState ik_state(task->getRobotModel());
-      ik_state.setToDefaultValues();
-      const auto* joint_group = task->getRobotModel()->getJointModelGroup(planning_group_);
-      if (joint_group == nullptr) {
-        message = "planning group is missing from robot model";
-        return false;
-      }
-      if (!ik_state.setFromIK(
-            joint_group, cut_debug_planned_end_.pose, tool_link_, 0.25)) {
-        message = "cut debug endpoint IK infeasible before traverse";
-        return false;
-      }
-    }
-    auto traverse = std::make_unique<mtc::stages::MoveTo>(
-      "cut debug " + cut_debug_session_cut_ + " endpoint traverse [" + motion_profile + "]",
-      stroke_planner);
-    traverse->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
-    traverse->setGroup(planning_group_);
-    traverse->setIKFrame(tool_link_);
-    traverse->setGoal(cut_debug_planned_end_);
-    task->add(std::move(traverse));
-    try {
-      task->init();
-    } catch (const mtc::InitStageException& exception) {
-      std::ostringstream details;
-      details << exception;
-      message = "MTC stage initialization failed: " + details.str();
-      return false;
-    }
-    const auto result = task->plan(static_cast<std::size_t>(max_solutions_));
-    if (result != moveit::core::MoveItErrorCode::SUCCESS || task->solutions().empty()) {
-      task->explainFailure();
-      message = "MTC candidate failed: task=cut debug " + cut_debug_session_cut_ +
-        " endpoint profile=" + motion_profile;
-      return false;
-    }
-    task->introspection().publishSolution(*task->solutions().front());
-    targets = {cut_debug_planned_end_};
-    cut_debug_robot_model_ = task->getRobotModel();
-    return true;
-  }
-  bool planCutDebugLiftOnly(
-    std::string& message, std::unique_ptr<mtc::Task>& task,
-    std::vector<geometry_msgs::msg::PoseStamped>& targets)
-  {
-    if (!cut_debug_snapshot_ || !cut_debug_has_observed_end_) {
-      message = "cut debug session has no corrected endpoint for lift planning";
-      return false;
-    }
-    const Snapshot& snapshot = *cut_debug_snapshot_;
-    geometry_msgs::msg::PoseStamped lift_target = cut_debug_observed_end_;
-    if (cut_debug_session_cut_ == "left") {
-      if (!offsetLeftPoseOutward(
-          snapshot, lift_target, left_lateral_standoff_m_, message)) return false;
-    } else {
-      const double active_cut_clearance_m =
-        cut_debug_session_cut_ == "middle" ? middle_cut_clearance_m_ : cut_clearance_m_;
-      const double lift_m = hover_clearance_m_ - active_cut_clearance_m;
-      if (!std::isfinite(lift_m) || lift_m <= 0.0) {
-        message = "lift height is invalid; hover must exceed cut clearance";
-        return false;
-      }
-      lift_target.pose.position.x += lift_m * snapshot.surface_normal.x;
-      lift_target.pose.position.y += lift_m * snapshot.surface_normal.y;
-      lift_target.pose.position.z += lift_m * snapshot.surface_normal.z;
-    }
-    lift_target.header = snapshot.header;
-    task = std::make_unique<mtc::Task>();
-    task->stages()->setName("Cut debug " + cut_debug_session_cut_ + " lift");
-    task->loadRobotModel(shared_from_this());
-    task->add(std::make_unique<mtc::stages::CurrentState>("current robot state"));
-    const auto carton = cartonCollisionObject(snapshot);
-    // The arm starts this stage in contact at the corrected endpoint, so the carton
-    // is added with the scoped tool/carton allowance in the same atomic scene change.
-    auto add_carton = std::make_unique<mtc::stages::ModifyPlanningScene>(
-      "add detected carton collision object");
-    add_carton->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
-    add_carton->addObject(carton);
-    if (allow_tool_carton_contact_) {
-      add_carton->allowCollisions(tool_link_, carton_collision_id_, true);
-    }
-    task->add(std::move(add_carton));
-    addCameraPole(*task);
-    const auto configure_pipeline = [this](const std::string& pipeline_name) {
-      auto planner = std::make_shared<mtc::solvers::PipelinePlanner>(
-        shared_from_this(), pipeline_name);
-      planner->setTimeout(planning_timeout_s_);
-      planner->setMaxVelocityScalingFactor(transit_velocity_scaling_);
-      planner->setMaxAccelerationScalingFactor(transit_acceleration_scaling_);
-      return planner;
-    };
-    mtc::solvers::PlannerInterfacePtr transit =
-      makeTransitPlanner(configure_pipeline(planning_pipeline_));
-    
-    {
-      moveit::core::RobotState ik_state(task->getRobotModel());
-      ik_state.setToDefaultValues();
-      const auto* joint_group = task->getRobotModel()->getJointModelGroup(planning_group_);
-      if (joint_group == nullptr) {
-        message = "planning group is missing from robot model";
-        return false;
-      }
-      if (!ik_state.setFromIK(joint_group, lift_target.pose, tool_link_, 0.25)) {
-        message = "cut debug lift target IK infeasible";
-        return false;
-      }
-    }
-    auto lift = std::make_unique<mtc::stages::MoveTo>(
-      "cut debug " + cut_debug_session_cut_ + " lift to hover", transit);
-    lift->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
-    lift->setGroup(planning_group_);
-    lift->setIKFrame(tool_link_);
-    lift->setGoal(lift_target);
-    task->add(std::move(lift));
-    if (allow_tool_carton_contact_) {
-      auto forbid_contact = std::make_unique<mtc::stages::ModifyPlanningScene>(
-        "restore knife-tip collision checking after cut debug lift");
-      forbid_contact->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
-      forbid_contact->allowCollisions(tool_link_, carton_collision_id_, false);
-      task->add(std::move(forbid_contact));
-    }
-    try {
-      task->init();
-    } catch (const mtc::InitStageException& exception) {
-      std::ostringstream details;
-      details << exception;
-      message = "MTC stage initialization failed: " + details.str();
-      return false;
-    }
-    const auto result = task->plan(static_cast<std::size_t>(max_solutions_));
-    if (result != moveit::core::MoveItErrorCode::SUCCESS || task->solutions().empty()) {
-      task->explainFailure();
-      message = "MTC candidate failed: task=cut debug " + cut_debug_session_cut_ + " lift";
-      return false;
-    }
-    task->introspection().publishSolution(*task->solutions().front());
-    targets = {lift_target};
-    cut_debug_robot_model_ = task->getRobotModel();
-    return true;
-  }
-
-  bool planCutDebugStartOnly(
-    const Snapshot& snapshot, const std::string& cut,
-    const geometry_msgs::msg::Point& corrected_start,
-    const geometry_msgs::msg::Point& corrected_end,
-    geometry_msgs::msg::PoseStamped planned_start,
-    const std::string& motion_profile, std::unique_ptr<mtc::Task>& task,
-    std::vector<geometry_msgs::msg::PoseStamped>& targets, std::string& message)
-  {
-    task = std::make_unique<mtc::Task>();
-    task->stages()->setName("Cut debug " + cut + " start");
-    task->loadRobotModel(shared_from_this());
-    task->add(std::make_unique<mtc::stages::CurrentState>("current robot state"));
-    const auto carton = cartonCollisionObject(snapshot);
-    // A new session may start while the arm is still in contact from an earlier
-    // session, so the carton is added with the scoped tool/carton allowance in the
-    // same atomic scene change; the common multi-segment planner keeps its stricter
-    // add-then-allow ordering for plans that always start free.
-    auto add_carton = std::make_unique<mtc::stages::ModifyPlanningScene>(
-      "add detected carton collision object");
-    add_carton->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
-    add_carton->addObject(carton);
-    if (allow_tool_carton_contact_) {
-      add_carton->allowCollisions(tool_link_, carton_collision_id_, true);
-    }
-    task->add(std::move(add_carton));
-    addCameraPole(*task);
-    moveit::core::RobotState ik_state(task->getRobotModel());
-    ik_state.setToDefaultValues();
-    const auto& model_variables = task->getRobotModel()->getVariableNames();
-    {
-      std::lock_guard<std::mutex> lock(state_mutex_);
-      if (!current_joint_state_ || current_joint_state_->name.empty() ||
-          current_joint_state_->position.empty()) {
-        message = "no /joint_states received; start the ReBeL driver before planning an H-cut";
-        return false;
-      }
-      for (std::size_t index = 0; index < current_joint_state_->name.size() &&
-                                  index < current_joint_state_->position.size(); ++index) {
-        if (std::find(
-              model_variables.begin(), model_variables.end(),
-              current_joint_state_->name[index]) != model_variables.end()) {
-          ik_state.setVariablePosition(
-            current_joint_state_->name[index], current_joint_state_->position[index]);
-        }
-      }
-      ik_state.update();
-    }
-    const auto* joint_group = task->getRobotModel()->getJointModelGroup(planning_group_);
-    if (joint_group == nullptr) {
-      message = "planning group is missing from robot model";
-      return false;
-    }
-    const auto configure_pipeline = [this](const std::string& pipeline_name) {
-      auto planner = std::make_shared<mtc::solvers::PipelinePlanner>(
-        shared_from_this(), pipeline_name);
-      planner->setTimeout(planning_timeout_s_);
-      planner->setMaxVelocityScalingFactor(velocity_scaling_);
-      planner->setMaxAccelerationScalingFactor(acceleration_scaling_);
-      return planner;
-    };
-    // Free-space approach transits run at their own (default equally slow) scaling so
-    // transit speed can be tuned without ever raising physical cutting speed.
-    const auto configure_transit_pipeline = [this](const std::string& pipeline_name) {
-      auto planner = std::make_shared<mtc::solvers::PipelinePlanner>(
-        shared_from_this(), pipeline_name);
-      planner->setTimeout(planning_timeout_s_);
-      planner->setMaxVelocityScalingFactor(transit_velocity_scaling_);
-      planner->setMaxAccelerationScalingFactor(transit_acceleration_scaling_);
-      return planner;
-    };
-    auto ompl = configure_transit_pipeline(planning_pipeline_);
-    
-    auto chomp = configure_transit_pipeline(chomp_pipeline_);
-    auto pilz_ptp = configure_transit_pipeline(pilz_pipeline_);
-    pilz_ptp->setPlannerId("PTP");
-    auto pilz_lin = configure_pipeline(pilz_pipeline_);
-    pilz_lin->setPlannerId("LIN");
-    auto cartesian = std::make_shared<mtc::solvers::CartesianPath>();
-    cartesian->setIKFrame(tool_link_);
-    cartesian->setStepSize(cartesian_step_m_);
-    cartesian->setJumpThreshold(0.0);
-    cartesian->setMinFraction(1.0);
-    cartesian->setMaxVelocityScalingFactor(velocity_scaling_);
-    cartesian->setMaxAccelerationScalingFactor(acceleration_scaling_);
-    mtc::solvers::PlannerInterfacePtr transit_planner;
-    mtc::solvers::PlannerInterfacePtr stroke_planner;
-    if (motion_profile == "ompl_cartesian") {
-      transit_planner = ompl;
-      stroke_planner = cartesian;
-    } else if (motion_profile == "ompl_pilz") {
-      transit_planner = ompl;
-      stroke_planner = pilz_lin;
-    } else if (motion_profile == "pilz_only") {
-      transit_planner = pilz_ptp;
-      stroke_planner = pilz_lin;
-    } else {
-      transit_planner = chomp;
-      stroke_planner = pilz_lin;
-    }
-    transit_planner = makeTransitPlanner(transit_planner);
-    const bool is_middle = cut == "middle";
-    const bool is_right = cut == "right";
-    const double tilt_deg = is_middle ? 0.0 :
-      (is_right ? right_side_cut_tilt_deg_ : left_side_cut_tilt_deg_);
-    const double facing_sign = is_middle ? 1.0 : -1.0;
-    const double segment_dx = corrected_end.x - corrected_start.x;
-    const double segment_dy = corrected_end.y - corrected_start.y;
-    const double segment_dz = corrected_end.z - corrected_start.z;
-    auto orientation_start_target = corrected_start;
-    orientation_start_target.x += facing_sign * segment_dx;
-    orientation_start_target.y += facing_sign * segment_dy;
-    orientation_start_target.z += facing_sign * segment_dz;
-    if (!is_middle && side_cut_orientation_mode_ == "middle_aligned") {
-      const double seam_dx = snapshot.seam_end.x - snapshot.seam_start.x;
-      const double seam_dy = snapshot.seam_end.y - snapshot.seam_start.y;
-      const double seam_dz = snapshot.seam_end.z - snapshot.seam_start.z;
-      orientation_start_target = corrected_start;
-      orientation_start_target.x += facing_sign * seam_dx;
-      orientation_start_target.y += facing_sign * seam_dy;
-      orientation_start_target.z += facing_sign * seam_dz;
-    }
-    auto hover_start = targetPose(
-      snapshot, corrected_start, orientation_start_target, hover_clearance_m_, tilt_deg);
-    if (cut_debug_correction_enabled_ && !correctionFileForCut(cut).empty()) {
-      CutDebugCorrection correction;
-      std::string correction_error;
-      if (!loadCutDebugCorrectionFile(
-            correctionFileForCut(cut), correction, correction_error)) {
-        message = "cut debug correction rejected: " + correction_error;
-        return false;
-      }
-      if (correction.cut != cut) {
-        message = "cut debug correction record is for cut " + correction.cut +
-          " but session cut is " + cut + "; refusing to silently apply a mismatched correction";
-        return false;
-      }
-      if (!applyCutDebugObservedOrientation(
-          snapshot, cut, correction, correction.observed_start, hover_start, correction_error)) {
-        message = correction_error;
-        return false;
-      }
-    }
-    if (cut == "left") {
-      hover_start = planned_start;
-      if (!offsetLeftPoseOutward(
-          snapshot, hover_start, left_lateral_standoff_m_, message)) return false;
-    }
-    if (cut == "left" && left_adaptive_orientation_enabled_ &&
-        cut_debug_correction_enabled_ && !correctionFileForCut(cut).empty()) {
-      // hover_start is already at its final laterally-offset approach position and
-      // planned_start is the final cut target, so every per-candidate IK probe below
-      // covers the exact poses the MTC stages will target. Neither pose moves after this.
-      std::vector<std::pair<geometry_msgs::msg::PoseStamped*, const char*> > left_poses{
-        {&hover_start, "left cut-debug hover start"},
-        {&planned_start, "left cut-debug planned start"}};
-      if (!adaptLeftCorrectedOrientations(
-            snapshot, joint_group, ik_state, left_poses,
-            "cut debug " + cut + " start", message)) {
-        return false;
-      }
-    }
-    if (is_right) {
-      moveit::core::RobotState approach_ik_state(ik_state);
-      if (!approach_ik_state.setFromIK(joint_group, hover_start.pose, tool_link_, 0.25)) {
-        message = "right-side approach IK infeasible before Cartesian stroke";
-        return false;
-      }
-    }
-    auto entry_alignment = hover_start;
-    if (is_middle && middle_entry_alignment_m_ > 0.0) {
-      const double length = std::sqrt(
-        segment_dx * segment_dx + segment_dy * segment_dy + segment_dz * segment_dz);
-      if (length <= 0.0) {
-        message = "zero-length middle seam direction";
-        return false;
-      }
-      entry_alignment.pose.position.x -= middle_entry_alignment_m_ * segment_dx / length;
-      entry_alignment.pose.position.y -= middle_entry_alignment_m_ * segment_dy / length;
-      entry_alignment.pose.position.z -= middle_entry_alignment_m_ * segment_dz / length;
-    }
-    targets = {planned_start};
-    const std::string segment_label = is_middle ? "middle seam cut" :
-      (is_right ? "right side cut" : "left side cut");
-    const std::string approach_label = cut == "left" ? "approach pose outside " :
-      "approach pose above ";
-    auto transit = std::make_unique<mtc::stages::MoveTo>(
-      approach_label + segment_label + " [" + motion_profile + "]", transit_planner);
-    transit->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
-    transit->setGroup(planning_group_);
-    transit->setIKFrame(tool_link_);
-    if (motion_profile == "chomp_pilz") {
-      transit->setGoal(jointGoal(ik_state, joint_group, entry_alignment));
-    } else {
-      transit->setGoal(entry_alignment);
-    }
-    task->add(std::move(transit));
-    if (is_middle && middle_entry_alignment_m_ > 0.0) {
-      auto align = std::make_unique<mtc::stages::MoveTo>(
-        "align above middle seam start [" + motion_profile + "]", stroke_planner);
-      align->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
-      align->setGroup(planning_group_);
-      align->setIKFrame(tool_link_);
-      align->setGoal(hover_start);
-      task->add(std::move(align));
-    }
-    if (pre_cut_stabilization_duration_s_ > 0.0) {
-      task->add(std::make_unique<StationaryDwell>(
-        "stabilize blade before " + segment_label, planning_group_,
-        pre_cut_stabilization_duration_s_));
-    }
-    const std::string entry_label = cut == "left" ? "enter laterally into " :
-      "descend from aligned ";
-    auto descend = std::make_unique<mtc::stages::MoveTo>(
-      entry_label + segment_label + " start [" + motion_profile + "]", stroke_planner);
-    descend->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
-    descend->setGroup(planning_group_);
-    descend->setIKFrame(tool_link_);
-    descend->setGoal(planned_start);
-    task->add(std::move(descend));
-    try {
-      task->init();
-    } catch (const mtc::InitStageException& exception) {
-      std::ostringstream details;
-      details << exception;
-      message = "MTC stage initialization failed: " + details.str();
-      return false;
-    }
-    const auto result = task->plan(static_cast<std::size_t>(max_solutions_));
-    if (result != moveit::core::MoveItErrorCode::SUCCESS || task->solutions().empty()) {
-      task->explainFailure();
-      message = "MTC candidate failed: task=Cut debug " + cut + " start profile=" +
-        motion_profile + " segments=1";
-      return false;
-    }
-    const std::size_t expected_dwell_count = pre_cut_stabilization_duration_s_ > 0.0 ? 1U : 0U;
-    std::string dwell_error;
-    if (!validateStationaryDwells(
-          *task->solutions().front(), expected_dwell_count, dwell_error)) {
-      message = "planned trajectory has invalid pre-cut stabilization: " + dwell_error;
-      return false;
-    }
-    task->introspection().publishSolution(*task->solutions().front());
-    cut_debug_robot_model_ = task->getRobotModel();
-    return true;
-  }
-
   bool diagnoseExternalSnapshotSections(std::string& message)
   {
     const auto source_path = get_parameter("external_snapshot_file").as_string();
@@ -2441,13 +2254,22 @@ private:
     report << "diagnostic_only snapshot=" << snapshot->snapshot_id
            << " canonical=" << (canonical ? "true" : "false")
            << " validation=" << (canonical ? "ok" : validation);
+    SegmentPlanOptions options;
+    options.timeout_s = planning_timeout_s_;
+    std::optional<std::map<std::string, CutDebugCorrection>> corrections;
     for (const auto& section : sections) {
       std::unique_ptr<mtc::Task> task;
       std::vector<geometry_msgs::msg::PoseStamped> targets;
       std::string result;
-      const bool planned = planCutSegments(
-        *snapshot, {section}, false, true, planning_timeout_s_, motion_profile,
-        "section diagnostic " + section.name, true, task, targets, result);
+      bool planned = false;
+      try {
+        if (!corrections) corrections = loadAllActiveCorrections();
+        planned = planCutSegments(
+          *snapshot, {section}, *corrections, motion_profile,
+          "section diagnostic " + section.name, options, task, targets, result);
+      } catch (const std::exception& exception) {
+        result = exception.what();
+      }
       report << "; " << section.name << "=" << (planned ? "planned" : "failed")
              << " (" << result << ")";
     }
@@ -2481,8 +2303,8 @@ private:
     const auto age_s = std::chrono::duration<double>(
       fs::file_time_type::clock::now() - modified).count();
     if (!debug_allow_stale_snapshot_ && age_s > external_snapshot_max_age_s_) {
-      message = "external snapshot is stale (" + formatMeters(age_s) + " s; maximum " +
-        formatMeters(external_snapshot_max_age_s_) + " s): " + selected.string();
+      message = "external snapshot is stale (" + formatDouble(age_s, 3) + " s; maximum " +
+        formatDouble(external_snapshot_max_age_s_, 3) + " s): " + selected.string();
       return std::nullopt;
     }
     std::ifstream input(selected);
@@ -2565,7 +2387,7 @@ private:
     if (age_ns < -1'000'000'000LL ||
         (!debug_allow_stale_snapshot_ && age_ns > maximum_age_ns)) {
       message = "external snapshot acquisition is stale or invalid; maximum age " +
-        formatMeters(external_snapshot_max_age_s_) + " s: " + selected.string();
+        formatDouble(external_snapshot_max_age_s_, 3) + " s: " + selected.string();
       return std::nullopt;
     }
     snapshot.header.stamp.sec = static_cast<std::int32_t>(snapshot.acquisition_stamp_ns / 1'000'000'000LL);
@@ -2631,15 +2453,7 @@ private:
     const double depth = (magnitude(vector(snapshot.back_left, snapshot.front_left)) +
                           magnitude(vector(snapshot.back_right, snapshot.front_right))) / 2.0;
 
-    const double m00=x_axis[0],m01=y_axis[0],m02=normal[0];
-    const double m10=x_axis[1],m11=y_axis[1],m12=normal[1];
-    const double m20=x_axis[2],m21=y_axis[2],m22=normal[2];
-    geometry_msgs::msg::Quaternion q;
-    const double trace=m00+m11+m22;
-    if(trace>0){double s=std::sqrt(trace+1.0)*2;q.w=.25*s;q.x=(m21-m12)/s;q.y=(m02-m20)/s;q.z=(m10-m01)/s;}
-    else if(m00>m11&&m00>m22){double s=std::sqrt(1+m00-m11-m22)*2;q.w=(m21-m12)/s;q.x=.25*s;q.y=(m01+m10)/s;q.z=(m02+m20)/s;}
-    else if(m11>m22){double s=std::sqrt(1+m11-m00-m22)*2;q.w=(m02-m20)/s;q.x=(m01+m10)/s;q.y=.25*s;q.z=(m12+m21)/s;}
-    else{double s=std::sqrt(1+m22-m00-m11)*2;q.w=(m10-m01)/s;q.x=(m02+m20)/s;q.y=(m12+m21)/s;q.z=.25*s;}
+    const geometry_msgs::msg::Quaternion q = basisQuaternion(x_axis, y_axis, normal);
 
     shape_msgs::msg::SolidPrimitive primitive;
     primitive.type = shape_msgs::msg::SolidPrimitive::BOX;
@@ -2688,7 +2502,7 @@ private:
       snapshot.surface_normal.x, snapshot.surface_normal.y, snapshot.surface_normal.z};
     const double normal_length = length(normal);
     if (!std::isfinite(normal_length) || std::abs(normal_length - 1.0) > 0.05) {
-      message = "snapshot surface_normal must be unit length; norm=" + formatMeters(normal_length);
+      message = "snapshot surface_normal must be unit length; norm=" + formatDouble(normal_length, 3);
       return false;
     }
     const auto back = vector(snapshot.back_left, snapshot.back_right);
@@ -2801,25 +2615,20 @@ private:
         return false;
       }
       const auto motion_profile = get_parameter("motion_profile").as_string();
-      const std::array<std::string, 4> supported_profiles{
-        "ompl_cartesian", "ompl_pilz", "pilz_only", "chomp_pilz"};
-      if (std::find(
-            supported_profiles.begin(), supported_profiles.end(), motion_profile) ==
-          supported_profiles.end()) {
+      if (!isSupportedMotionProfile(motion_profile)) {
         throw std::invalid_argument("unsupported H-cut motion_profile: " + motion_profile);
       }
       publishCartonGeometry(snapshot);
-      if (cut_pattern_ == "combined" || cut_pattern_ == "t_cut" || cut_pattern_ == "t_cut_handoff") {
-        if (cut_pattern_ == "t_cut_handoff") {
-          return planTCutHandoffSnapshot(snapshot, motion_profile, message);
-        }
-        return planCombinedSnapshot(snapshot, motion_profile, cut_pattern_ == "t_cut", message);
+      // Each configured correction record is loaded and validated once per request.
+      const auto corrections = loadAllActiveCorrections();
+      if (cut_pattern_ == "t_cut_handoff") {
+        return planTCutHandoffSnapshot(snapshot, corrections, motion_profile, message);
       }
-      if (cut_pattern_ == "middle_partial_preview") {
-        return planMiddlePartialPreview(snapshot, motion_profile, message);
+      if (cut_pattern_ == "combined" || cut_pattern_ == "t_cut") {
+        return planCombinedSnapshot(
+          snapshot, corrections, motion_profile, cut_pattern_ == "t_cut", message);
       }
 
-      const bool partial_cut = cut_pattern_ == "left_partial" || cut_pattern_ == "right_partial";
       std::vector<CutSegment> segments;
       if (cut_pattern_ == "h") {
         segments = {
@@ -2834,8 +2643,7 @@ private:
       } else if (cut_pattern_ == "right_only") {
         segments = {{"right side cut", snapshot.back_middle_right, snapshot.front_middle_right}};
       } else if (cut_pattern_ == "middle_entry_debug") {
-        segments = {{"middle seam entry debug", snapshot.seam_start, snapshot.seam_end,
-          0.0, 0.0, 0.0, true}};
+        segments = {{"middle seam entry debug", snapshot.seam_start, snapshot.seam_end, true}};
       } else if (cut_pattern_ == "middle_debug_short") {
         const double seam_length = distanceBetween(snapshot.seam_start, snapshot.seam_end);
         if (seam_length < debug_motion_distance_m_) {
@@ -2845,61 +2653,37 @@ private:
         segments = {{"middle debug short move",
           interpolate(snapshot.seam_start, snapshot.seam_end, 0.5 - half_fraction),
           interpolate(snapshot.seam_start, snapshot.seam_end, 0.5 + half_fraction),
-          0.0, 0.0, 0.0, false, true, true}};
-      } else if (cut_pattern_ == "left_partial") {
-        const auto& start = partial_reverse_ ? snapshot.front_left : snapshot.back_left;
-        const auto& end = partial_reverse_ ? snapshot.back_left : snapshot.front_left;
-        segments = {{"left partial side cut",
-          interpolate(start, end, partial_start_fraction_),
-          interpolate(start, end, partial_end_fraction_)}};
+          false, true, true}};
       } else {
-        segments = {{"right partial side cut",
-          interpolate(snapshot.front_right, snapshot.back_right, partial_start_fraction_),
-          interpolate(snapshot.front_right, snapshot.back_right, partial_end_fraction_)}};
+        throw std::invalid_argument("unsupported cut_pattern: " + cut_pattern_);
       }
       std::unique_ptr<mtc::Task> task;
       std::vector<geometry_msgs::msg::PoseStamped> cut_targets;
-      const bool skip_supplied_approach =
-        cut_pattern_ == "left_only" || cut_pattern_ == "middle_only" ||
-        cut_pattern_ == "right_only" || cut_pattern_ == "middle_entry_debug" ||
-        cut_pattern_ == "middle_debug_short" || partial_cut;
-
-      const bool automatic_side_orientation =
-        partial_cut && side_cut_orientation_mode_ == "auto";
-      const std::string requested_side_orientation_mode = side_cut_orientation_mode_;
-      if (automatic_side_orientation) side_cut_orientation_mode_ = "edge_aligned";
-      bool planned = planCutSegments(
-        snapshot, segments, partial_cut, skip_supplied_approach, planning_timeout_s_,
-        motion_profile, "Snapshot-relative " + cut_pattern_ + " dry run", true, task,
-        cut_targets, message);
-      if (!planned && automatic_side_orientation) {
-        side_cut_orientation_mode_ = "middle_aligned";
-        planned = planCutSegments(
-          snapshot, segments, partial_cut, skip_supplied_approach, planning_timeout_s_,
-          motion_profile, "Snapshot-relative " + cut_pattern_ + " top-orientation fallback dry run",
-          true, task, cut_targets, message);
+      SegmentPlanOptions options;
+      options.timeout_s = planning_timeout_s_;
+      options.skip_supplied_approach = cut_pattern_ != "h";
+      if (!planCutSegments(
+            snapshot, segments, corrections, motion_profile,
+            "Snapshot-relative " + cut_pattern_ + " dry run", options, task, cut_targets,
+            message)) {
+        return false;
       }
-      side_cut_orientation_mode_ = requested_side_orientation_mode;
-      if (!planned) return false;
-      publishMarkers(cut_targets, segments);
-      publishTargetPoses(snapshot, cut_targets);
-      planned_snapshot_ = snapshot;
-      planned_task_ = std::move(task);
+      retainPlan(snapshot, segments, cut_targets, std::move(task));
       const bool includes_middle_seam =
         cut_pattern_ == "h" || cut_pattern_ == "middle_only" ||
         cut_pattern_ == "middle_entry_debug" || cut_pattern_ == "middle_debug_short";
       message = "Snapshot-relative " + cut_pattern_ + " dry-run plan [" + motion_profile +
                 "] published to RViz; pre-cut stabilization_s=" +
-                formatSeconds(pre_cut_stabilization_duration_s_) + "; dwell_count=" +
+                formatDouble(pre_cut_stabilization_duration_s_, 3) + "; dwell_count=" +
                 std::to_string(pre_cut_stabilization_duration_s_ > 0.0 ? segments.size() : 0U) +
                 (includes_middle_seam ? "; middle entry alignment_m=" +
-                  formatMeters(middle_entry_alignment_m_) : "") +
+                  formatDouble(middle_entry_alignment_m_, 3) : "") +
                 (cut_pattern_ == "middle_entry_debug" ?
                   "; stops at seam_start before the cut traverse" : "") +
                 (cut_pattern_ == "middle_debug_short" ?
                   "; fixed orientation (x=0,y=1,z=0,w=0); short stroke_m=" +
-                  formatMeters(debug_motion_distance_m_) + "; surface clearance_m=" +
-                  formatMeters(debug_motion_clearance_m_) +
+                  formatDouble(debug_motion_distance_m_, 3) + "; surface clearance_m=" +
+                  formatDouble(debug_motion_clearance_m_, 3) +
                   "; manual execution additionally requires debug_motion_execution_enabled=true" : "") +
                 "; execution remains disabled until execution_enabled is set";
       RCLCPP_INFO(
@@ -2917,184 +2701,122 @@ private:
       return false;
     }
   }
-  bool planMiddlePartialPreview(
-    const Snapshot& snapshot, const std::string& motion_profile, std::string& message)
+  // Publishes the plan's target markers/poses and retains it for explicit execution.
+  void retainPlan(
+    const Snapshot& snapshot, const std::vector<CutSegment>& segments,
+    const std::vector<geometry_msgs::msg::PoseStamped>& cut_targets,
+    std::unique_ptr<mtc::Task> task)
   {
-    const std::array<double, 8> coverage_candidates{
-      {1.0, 0.75, 0.50, 0.25, 0.20, 0.15, 0.10, 0.05}};
-    std::string last_failure = "no candidate attempted";
-    for (const double coverage : coverage_candidates) {
-      const CutSegment segment{
-        "middle seam partial preview", snapshot.seam_start,
-        interpolate(snapshot.seam_start, snapshot.seam_end, coverage)};
-      std::unique_ptr<mtc::Task> preview_task;
-      std::vector<geometry_msgs::msg::PoseStamped> preview_targets;
-      if (!planCutSegments(
-            snapshot, {segment}, false, true, std::min(4.0, planning_timeout_s_),
-            motion_profile,
-            "PREVIEW ONLY middle seam coverage " + formatMeters(coverage), false,
-            preview_task, preview_targets, last_failure)) {
-        continue;
-      }
-      publishMarkers(preview_targets, {segment});
-      publishTargetPoses(snapshot, preview_targets);
-      planned_task_.reset();
-      planned_snapshot_.reset();
-      message =
-        "PREVIEW ONLY: reachable middle-seam prefix published to RViz; coverage_fraction=" +
-        formatMeters(coverage) + "; requested_length_m=" +
-        formatMeters(distanceBetween(snapshot.seam_start, snapshot.seam_end)) +
-        "; preview_length_m=" + formatMeters(distanceBetween(segment.start, segment.end)) +
-        "; pre-cut stabilization_s=" + formatSeconds(pre_cut_stabilization_duration_s_) +
-        "; dwell_count=" +
-        std::to_string(pre_cut_stabilization_duration_s_ > 0.0 ? 1U : 0U) +
-        "; incomplete previews are not retained and cannot be executed";
-      RCLCPP_WARN(get_logger(), "%s", message.c_str());
-      return true;
-    }
-    message =
-      "PREVIEW ONLY: no complete reachable middle-seam prefix at coverage candidates "
-      "[1.00,0.75,0.50,0.25,0.20,0.15,0.10,0.05]; last_failure=" + last_failure;
-    return false;
+    publishMarkers(cut_targets, segments);
+    publishTargetPoses(snapshot, cut_targets);
+    planned_snapshot_ = snapshot;
+    planned_task_ = std::move(task);
+  }
+  // Plans the first-arm T-cut handoff candidate: the full left cut plus the middle seam
+  // prefix ending at `fraction`, under min_fraction=1.0 like every other candidate.
+  bool planHandoffAt(
+    const Snapshot& snapshot, const std::map<std::string, CutDebugCorrection>& corrections,
+    const std::string& motion_profile, double fraction, const std::string& task_name,
+    std::unique_ptr<mtc::Task>& task, std::vector<geometry_msgs::msg::PoseStamped>& targets,
+    std::vector<CutSegment>& segments, std::string& failure)
+  {
+    CutSegment handoff_segment;
+    handoff_segment.name = "middle seam handoff";
+    handoff_segment.start = snapshot.seam_start;
+    handoff_segment.end = interpolate(snapshot.seam_start, snapshot.seam_end, fraction);
+    handoff_segment.handoff_end = true;
+    handoff_segment.terminal_after_cut = true;
+    handoff_segment.handoff_fraction = fraction;
+    segments = std::vector<CutSegment>{
+      {"left side cut", snapshot.back_middle_left, snapshot.front_middle_left},
+      handoff_segment,
+    };
+    SegmentPlanOptions options;
+    options.timeout_s = planning_timeout_s_;
+    return planCutSegments(
+      snapshot, segments, corrections, motion_profile, task_name, options, task, targets,
+      failure);
   }
   bool planTCutHandoffSnapshot(
-    const Snapshot& snapshot, const std::string& motion_profile, std::string& message)
+    const Snapshot& snapshot, const std::map<std::string, CutDebugCorrection>& corrections,
+    const std::string& motion_profile, std::string& message)
   {
     const double fraction = t_cut_middle_handoff_fraction_;
-    if (!std::isfinite(fraction) ||
-        (fraction != 0.0 && (fraction < 0.05 || fraction > 0.95))) {
-      message =
-        "t_cut_middle_handoff_fraction must be finite and either exactly 0.0 (automatic) or within [0.05,0.95]";
+    if (!isValidHandoffFraction(fraction)) {
+      message = kHandoffFractionRule;
       return false;
     }
-    if (fraction != 0.0) {
-      CutSegment handoff_segment;
-      handoff_segment.name = "middle seam handoff";
-      handoff_segment.start = snapshot.seam_start;
-      handoff_segment.end = interpolate(snapshot.seam_start, snapshot.seam_end, fraction);
-      handoff_segment.handoff_end = true;
-      handoff_segment.terminal_after_cut = true;
-      handoff_segment.handoff_fraction = fraction;
-      std::vector<CutSegment> segments{
-        {"left side cut", snapshot.back_middle_left, snapshot.front_middle_left},
-        handoff_segment,
-      };
-      std::unique_ptr<mtc::Task> task;
-      std::vector<geometry_msgs::msg::PoseStamped> cut_targets;
-      if (!planCutSegments(
-            snapshot, segments, false, true, planning_timeout_s_, motion_profile,
-            "Snapshot-relative T-cut handoff canonical waypoint plan", true, task, cut_targets,
-            message)) {
-        return false;
-      }
-      publishMarkers(cut_targets, segments);
-      publishTargetPoses(snapshot, cut_targets);
-      planned_snapshot_ = snapshot;
-      planned_task_ = std::move(task);
-      std::ostringstream handoff_stream;
-      handoff_stream.setf(std::ios::fixed);
-      handoff_stream.precision(2);
-      handoff_stream << fraction;
-      message =
-        "Snapshot-relative T-cut handoff dry-run plan [" + motion_profile + "] published to RViz; "
-        "waypoint_order=approach->back_middle_left->front_middle_left->finish->transition"
-        "->approach->seam_start->middle_seam_handoff_end; middle_handoff_fraction=" +
-        handoff_stream.str() + "; the retained middle traverse is an executable first-arm prefix "
-        "ending at the declared handoff point and is not the complete seam; "
-        "side_knife_facing=opposite_travel; pre-cut stabilization_s=" +
-        formatSeconds(pre_cut_stabilization_duration_s_) + "; dwell_count=" +
-        std::to_string(pre_cut_stabilization_duration_s_ > 0.0 ? segments.size() : 0U) +
-        "; execution remains disabled until execution_enabled is set";
-      return true;
-    }
-    constexpr double kAutoMin = 0.05;
-    constexpr double kAutoMax = 0.95;
-    constexpr double kAutoTolerance = 0.01;
-    // Bounded bisection over [0.05,0.95]: ceil(log2((0.95-0.05)/0.01)) = 7 probes after the
-    // minimum candidate. Feasibility is monotonic along the same middle seam direction, so a
-    // failed probe narrows from above and a success narrows from below. Every probe is a full
-    // planCutSegments handoff candidate under min_fraction=1.0; no partial path is accepted.
-    constexpr int kAutoMaxProbes = 7;
-    auto planHandoffAt = [this, &snapshot, &motion_profile](
-        double probe, std::unique_ptr<mtc::Task>& task,
-        std::vector<geometry_msgs::msg::PoseStamped>& targets,
-        std::vector<CutSegment>& segments, std::string& failure) {
-      CutSegment handoff_segment;
-      handoff_segment.name = "middle seam handoff";
-      handoff_segment.start = snapshot.seam_start;
-      handoff_segment.end = interpolate(snapshot.seam_start, snapshot.seam_end, probe);
-      handoff_segment.handoff_end = true;
-      handoff_segment.terminal_after_cut = true;
-      handoff_segment.handoff_fraction = probe;
-      segments = std::vector<CutSegment>{
-        {"left side cut", snapshot.back_middle_left, snapshot.front_middle_left},
-        handoff_segment,
-      };
-      std::ostringstream name;
-      name.setf(std::ios::fixed);
-      name.precision(2);
-      name << probe;
-      return planCutSegments(
-        snapshot, segments, false, true, planning_timeout_s_, motion_profile,
-        "Snapshot-relative T-cut handoff automatic candidate " + name.str(), true, task, targets,
-        failure);
-    };
     std::unique_ptr<mtc::Task> best_task;
     std::vector<geometry_msgs::msg::PoseStamped> best_targets;
     std::vector<CutSegment> best_segments;
-    std::string probe_failure;
-    if (!planHandoffAt(kAutoMin, best_task, best_targets, best_segments, probe_failure)) {
-      std::ostringstream tolerance_stream;
-      tolerance_stream.setf(std::ios::fixed);
-      tolerance_stream.precision(2);
-      tolerance_stream << kAutoTolerance;
-      message =
-        "Automatic T-cut handoff search failed closed: no fully planned handoff candidate at minimum "
-        "middle_handoff_fraction=0.05; search_tolerance=" + tolerance_stream.str() +
-        "; last_failure=" + probe_failure;
-      return false;
-    }
-    double best_fraction = kAutoMin;
-    double low = kAutoMin;
-    double high = kAutoMax;
-    for (int probe = 0; probe < kAutoMaxProbes && (high - low) > kAutoTolerance; ++probe) {
-      const double mid = 0.5 * (low + high);
-      std::unique_ptr<mtc::Task> candidate_task;
-      std::vector<geometry_msgs::msg::PoseStamped> candidate_targets;
-      std::vector<CutSegment> candidate_segments;
-      std::string candidate_failure;
-      if (planHandoffAt(mid, candidate_task, candidate_targets, candidate_segments, candidate_failure)) {
-        best_fraction = mid;
-        best_task = std::move(candidate_task);
-        best_targets = std::move(candidate_targets);
-        best_segments = std::move(candidate_segments);
-        low = mid;
-      } else {
-        high = mid;
-        probe_failure = std::move(candidate_failure);
+    double best_fraction = fraction;
+    constexpr double kAutoTolerance = 0.01;
+    if (fraction != 0.0) {
+      if (!planHandoffAt(
+            snapshot, corrections, motion_profile, fraction,
+            "Snapshot-relative T-cut handoff canonical waypoint plan", best_task, best_targets,
+            best_segments, message)) {
+        return false;
+      }
+    } else {
+      constexpr double kAutoMin = 0.05;
+      constexpr double kAutoMax = 0.95;
+      // Bounded bisection over [0.05,0.95]: ceil(log2((0.95-0.05)/0.01)) = 7 probes after the
+      // minimum candidate. Feasibility is monotonic along the same middle seam direction, so a
+      // failed probe narrows from above and a success narrows from below. Every probe is a full
+      // planCutSegments handoff candidate under min_fraction=1.0; no partial path is accepted.
+      constexpr int kAutoMaxProbes = 7;
+      const auto candidate_name = [](double probe) {
+        return "Snapshot-relative T-cut handoff automatic candidate " + formatDouble(probe, 2);
+      };
+      std::string probe_failure;
+      if (!planHandoffAt(
+            snapshot, corrections, motion_profile, kAutoMin, candidate_name(kAutoMin),
+            best_task, best_targets, best_segments, probe_failure)) {
+        message =
+          "Automatic T-cut handoff search failed closed: no fully planned handoff candidate at minimum "
+          "middle_handoff_fraction=0.05; search_tolerance=" + formatDouble(kAutoTolerance, 2) +
+          "; last_failure=" + probe_failure;
+        return false;
+      }
+      best_fraction = kAutoMin;
+      double low = kAutoMin;
+      double high = kAutoMax;
+      for (int probe = 0; probe < kAutoMaxProbes && (high - low) > kAutoTolerance; ++probe) {
+        const double mid = 0.5 * (low + high);
+        std::unique_ptr<mtc::Task> candidate_task;
+        std::vector<geometry_msgs::msg::PoseStamped> candidate_targets;
+        std::vector<CutSegment> candidate_segments;
+        std::string candidate_failure;
+        if (planHandoffAt(
+              snapshot, corrections, motion_profile, mid, candidate_name(mid), candidate_task,
+              candidate_targets, candidate_segments, candidate_failure)) {
+          best_fraction = mid;
+          best_task = std::move(candidate_task);
+          best_targets = std::move(candidate_targets);
+          best_segments = std::move(candidate_segments);
+          low = mid;
+        } else {
+          high = mid;
+          probe_failure = std::move(candidate_failure);
+        }
       }
     }
-    publishMarkers(best_targets, best_segments);
-    publishTargetPoses(snapshot, best_targets);
-    planned_snapshot_ = snapshot;
-    planned_task_ = std::move(best_task);
-    std::ostringstream selected_stream;
-    selected_stream.setf(std::ios::fixed);
-    selected_stream.precision(2);
-    selected_stream << best_fraction;
-    std::ostringstream tolerance_stream;
-    tolerance_stream.setf(std::ios::fixed);
-    tolerance_stream.precision(2);
-    tolerance_stream << kAutoTolerance;
+    retainPlan(snapshot, best_segments, best_targets, std::move(best_task));
+    const bool automatic = fraction == 0.0;
     message =
-      "Snapshot-relative T-cut handoff automatic dry-run plan [" + motion_profile + "] published to RViz; "
+      "Snapshot-relative T-cut handoff " + std::string(automatic ? "automatic " : "") +
+      "dry-run plan [" + motion_profile + "] published to RViz; "
       "waypoint_order=approach->back_middle_left->front_middle_left->finish->transition"
-      "->approach->seam_start->middle_seam_handoff_end; automatic_selection selected "
-      "middle_handoff_fraction=" + selected_stream.str() + "; search_tolerance=" +
-      tolerance_stream.str() + "; the retained middle traverse is an executable first-arm prefix "
+      "->approach->seam_start->middle_seam_handoff_end; " +
+      (automatic ? "automatic_selection selected middle_handoff_fraction=" +
+         formatDouble(best_fraction, 2) + "; search_tolerance=" +
+         formatDouble(kAutoTolerance, 2) :
+       "middle_handoff_fraction=" + formatDouble(best_fraction, 2)) +
+      "; the retained middle traverse is an executable first-arm prefix "
       "ending at the declared handoff point and is not the complete seam; "
       "side_knife_facing=opposite_travel; pre-cut stabilization_s=" +
-      formatSeconds(pre_cut_stabilization_duration_s_) + "; dwell_count=" +
+      formatDouble(pre_cut_stabilization_duration_s_, 3) + "; dwell_count=" +
       std::to_string(pre_cut_stabilization_duration_s_ > 0.0 ? best_segments.size() : 0U) +
       "; execution remains disabled until execution_enabled is set";
     return true;
@@ -3102,8 +2824,8 @@ private:
 
 
   bool planCombinedSnapshot(
-    const Snapshot& snapshot, const std::string& motion_profile, bool omit_right,
-    std::string& message)
+    const Snapshot& snapshot, const std::map<std::string, CutDebugCorrection>& corrections,
+    const std::string& motion_profile, bool omit_right, std::string& message)
   {
     std::vector<CutSegment> segments{
       {"left side cut", snapshot.back_middle_left, snapshot.front_middle_left},
@@ -3114,16 +2836,16 @@ private:
     }
     std::unique_ptr<mtc::Task> task;
     std::vector<geometry_msgs::msg::PoseStamped> cut_targets;
+    SegmentPlanOptions options;
+    options.timeout_s = planning_timeout_s_;
     if (!planCutSegments(
-          snapshot, segments, false, true, planning_timeout_s_, motion_profile,
+          snapshot, segments, corrections, motion_profile,
           omit_right ? "Snapshot-relative T-cut canonical waypoint plan" :
-            "Snapshot-relative combined canonical waypoint plan", true, task, cut_targets, message)) {
+            "Snapshot-relative combined canonical waypoint plan", options, task, cut_targets,
+          message)) {
       return false;
     }
-    publishMarkers(cut_targets, segments);
-    publishTargetPoses(snapshot, cut_targets);
-    planned_snapshot_ = snapshot;
-    planned_task_ = std::move(task);
+    retainPlan(snapshot, segments, cut_targets, std::move(task));
     message =
       "Snapshot-relative " + std::string(omit_right ? "T-cut" : "combined") +
       " dry-run plan [" + motion_profile + "] published to RViz; waypoint_order=approach"
@@ -3131,18 +2853,68 @@ private:
       "->seam_end->finish" +
       (omit_right ? "" : "->transition->approach->back_middle_right->front_middle_right->finish") +
       "; side_knife_facing=opposite_travel; pre-cut stabilization_s=" +
-      formatSeconds(pre_cut_stabilization_duration_s_) + "; dwell_count=" +
+      formatDouble(pre_cut_stabilization_duration_s_, 3) + "; dwell_count=" +
       std::to_string(pre_cut_stabilization_duration_s_ > 0.0 ? segments.size() : 0U) +
       "; execution remains disabled until execution_enabled is set";
     return true;
   }
 
+  struct CutPlanners {
+    mtc::solvers::PlannerInterfacePtr transit;
+    mtc::solvers::PlannerInterfacePtr stroke;
+    std::shared_ptr<mtc::solvers::CartesianPath> cartesian;
+  };
+  // Planner stack for one task. Free-space transits run at their own scaling so transit
+  // speed can be tuned without ever raising physical cutting speed, and are wrapped by
+  // makeTransitPlanner. Contact strokes use Cartesian (min_fraction=1.0, never partial)
+  // or Pilz LIN at the contact scaling.
+  CutPlanners makeCutPlanners(const std::string& motion_profile, double timeout_s)
+  {
+    const auto pipeline = [this, timeout_s](
+      const std::string& pipeline_name, const std::string& planner_id, bool transit) {
+      auto planner = std::make_shared<mtc::solvers::PipelinePlanner>(
+        shared_from_this(), pipeline_name);
+      planner->setTimeout(timeout_s);
+      planner->setMaxVelocityScalingFactor(transit ? transit_velocity_scaling_ : velocity_scaling_);
+      planner->setMaxAccelerationScalingFactor(
+        transit ? transit_acceleration_scaling_ : acceleration_scaling_);
+      if (!planner_id.empty()) planner->setPlannerId(planner_id);
+      return planner;
+    };
+    CutPlanners planners;
+    planners.cartesian = std::make_shared<mtc::solvers::CartesianPath>();
+    planners.cartesian->setIKFrame(tool_link_);
+    planners.cartesian->setStepSize(cartesian_step_m_);
+    planners.cartesian->setJumpThreshold(0.0);
+    planners.cartesian->setMinFraction(1.0);
+    planners.cartesian->setMaxVelocityScalingFactor(velocity_scaling_);
+    planners.cartesian->setMaxAccelerationScalingFactor(acceleration_scaling_);
+    mtc::solvers::PlannerInterfacePtr transit;
+    if (motion_profile == "ompl_cartesian") {
+      transit = pipeline(planning_pipeline_, "", true);
+      planners.stroke = planners.cartesian;
+    } else if (motion_profile == "ompl_pilz") {
+      transit = pipeline(planning_pipeline_, "", true);
+      planners.stroke = pipeline(pilz_pipeline_, "LIN", false);
+    } else if (motion_profile == "pilz_only") {
+      transit = pipeline(pilz_pipeline_, "PTP", true);
+      planners.stroke = pipeline(pilz_pipeline_, "LIN", false);
+    } else if (motion_profile == "chomp_pilz") {
+      transit = pipeline(chomp_pipeline_, "", true);
+      planners.stroke = pipeline(pilz_pipeline_, "LIN", false);
+    } else {
+      throw std::invalid_argument("unsupported H-cut motion_profile: " + motion_profile);
+    }
+    planners.transit = makeTransitPlanner(transit);
+    return planners;
+  }
+
   bool planCutSegments(
-    const Snapshot& snapshot, const std::vector<CutSegment>& segments, bool partial_cut,
-    bool skip_supplied_approach, double planner_timeout_s,
-    const std::string& motion_profile, const std::string& task_name, bool explain_failure,
-    std::unique_ptr<mtc::Task>& task, std::vector<geometry_msgs::msg::PoseStamped>& cut_targets,
-    std::string& message)
+    const Snapshot& snapshot, const std::vector<CutSegment>& segments,
+    const std::map<std::string, CutDebugCorrection>& active_corrections,
+    const std::string& motion_profile, const std::string& task_name,
+    const SegmentPlanOptions& options, std::unique_ptr<mtc::Task>& task,
+    std::vector<geometry_msgs::msg::PoseStamped>& cut_targets, std::string& message)
   {
     task = std::make_unique<mtc::Task>();
     task->stages()->setName(task_name);
@@ -3153,6 +2925,13 @@ private:
       "add detected carton collision object");
     add_carton->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
     add_carton->addObject(carton);
+    // A cut-debug start may begin while the arm is still in contact from an earlier
+    // session, so the carton is added with the scoped tool/carton allowance in the same
+    // atomic scene change; whole plans always start free and keep add-then-allow ordering.
+    const bool contact_allowed_from_start = options.cut_debug_start && allow_tool_carton_contact_;
+    if (contact_allowed_from_start) {
+      add_carton->allowCollisions(tool_link_, carton_collision_id_, true);
+    }
     task->add(std::move(add_carton));
     addCameraPole(*task);
     moveit::core::RobotState ik_state(task->getRobotModel());
@@ -3181,88 +2960,16 @@ private:
       throw std::runtime_error("planning group is missing from robot model");
     }
 
-    const auto configure_pipeline = [this, planner_timeout_s](const std::string& pipeline_name) {
-      auto planner = std::make_shared<mtc::solvers::PipelinePlanner>(
-        shared_from_this(), pipeline_name);
-      planner->setTimeout(planner_timeout_s);
-      planner->setMaxVelocityScalingFactor(velocity_scaling_);
-      planner->setMaxAccelerationScalingFactor(acceleration_scaling_);
-      return planner;
-    };
-    // Free-space transits run at their own (default equally slow) scaling so transit
-    // speed can be tuned without ever raising physical cutting speed.
-    const auto configure_transit_pipeline = [this, planner_timeout_s](const std::string& pipeline_name) {
-      auto planner = std::make_shared<mtc::solvers::PipelinePlanner>(
-        shared_from_this(), pipeline_name);
-      planner->setTimeout(planner_timeout_s);
-      planner->setMaxVelocityScalingFactor(transit_velocity_scaling_);
-      planner->setMaxAccelerationScalingFactor(transit_acceleration_scaling_);
-      return planner;
-    };
-    auto ompl = configure_transit_pipeline(planning_pipeline_);
-    
-    auto chomp = configure_transit_pipeline(chomp_pipeline_);
-    auto pilz_ptp = configure_transit_pipeline(pilz_pipeline_);
-    pilz_ptp->setPlannerId("PTP");
-    auto pilz_lin = configure_pipeline(pilz_pipeline_);
-    pilz_lin->setPlannerId("LIN");
-    auto cartesian = std::make_shared<mtc::solvers::CartesianPath>();
-    cartesian->setIKFrame(tool_link_);
-    cartesian->setStepSize(cartesian_step_m_);
-    cartesian->setJumpThreshold(0.0);
-    cartesian->setMinFraction(1.0);
-    cartesian->setMaxVelocityScalingFactor(velocity_scaling_);
-    cartesian->setMaxAccelerationScalingFactor(acceleration_scaling_);
-
-    mtc::solvers::PlannerInterfacePtr transit_planner;
-    mtc::solvers::PlannerInterfacePtr stroke_planner;
-    if (motion_profile == "ompl_cartesian") {
-      transit_planner = ompl;
-      stroke_planner = cartesian;
-    } else if (motion_profile == "ompl_pilz") {
-      transit_planner = ompl;
-      stroke_planner = pilz_lin;
-    } else if (motion_profile == "pilz_only") {
-      transit_planner = pilz_ptp;
-      stroke_planner = pilz_lin;
-    } else {
-      transit_planner = chomp;
-      stroke_planner = pilz_lin;
-    }
-    // Prefer the shortest collision-checked joint interpolation for free-space
-    // transits; the profile's existing planner remains as fallback. Cutting
-    // strokes never use this stack.
-    transit_planner = makeTransitPlanner(transit_planner);
-    if (!skip_supplied_approach && !approach_joint_degrees_.empty()) {
+    const CutPlanners planners = makeCutPlanners(motion_profile, options.timeout_s);
+    const auto& transit_planner = planners.transit;
+    const auto& stroke_planner = planners.stroke;
+    if (!options.skip_supplied_approach && !approach_joint_degrees_.empty()) {
       auto approach = std::make_unique<mtc::stages::MoveTo>(
         "transit to supplied link6 approach [" + motion_profile + "]", transit_planner);
       approach->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
       approach->setGroup(planning_group_);
       approach->setGoal(jointGoalDegrees(joint_group, approach_joint_degrees_));
       task->add(std::move(approach));
-    }
-    std::map<std::string, CutDebugCorrection> active_corrections;
-    if (cut_debug_correction_enabled_) {
-      const std::array<std::string, 3> correction_cuts{{"left", "middle", "right"}};
-      for (const auto& cut : correction_cuts) {
-        const std::string& correction_path = correctionFileForCut(cut);
-        if (correction_path.empty()) continue;
-        CutDebugCorrection loaded;
-        std::string correction_error;
-        if (!loadCutDebugCorrectionFile(correction_path, loaded, correction_error)) {
-          throw std::runtime_error("cut debug correction rejected: " + correction_error);
-        }
-        if (loaded.cut != cut) {
-          throw std::runtime_error(
-            "cut debug correction record is for cut " + loaded.cut + " but was configured in cut_debug_" +
-            cut + "_correction_file; refusing to silently apply a mismatched correction");
-        }
-        active_corrections.emplace(cut, loaded);
-      }
-      if (active_corrections.empty()) {
-        throw std::runtime_error(
-          "cut_debug_correction_enabled is true but no per-cut correction file is set; refusing to plan without an explicit correction record");
-      }
     }
     cut_targets.clear();
     for (std::size_t segment_index = 0; segment_index < segments.size(); ++segment_index) {
@@ -3273,12 +2980,10 @@ private:
       if (segment.name.rfind("left side cut", 0) == 0U) segment_cut = "left";
       else if (is_middle_seam) segment_cut = "middle";
       else if (is_right_side) segment_cut = "right";
+      const bool is_left_side = segment_cut == "left";
       geometry_msgs::msg::Point corrected_start_point = segment.start;
       geometry_msgs::msg::Point corrected_end_point = segment.end;
       const CutDebugCorrection* segment_correction = nullptr;
-      std::array<double, 3> correction_along{1.0, 0.0, 0.0};
-      std::array<double, 3> correction_across{0.0, 1.0, 0.0};
-      std::array<double, 3> correction_normal{0.0, 0.0, 1.0};
       if (!segment_cut.empty()) {
         const auto correction_entry = active_corrections.find(segment_cut);
         if (correction_entry != active_corrections.end()) {
@@ -3286,13 +2991,16 @@ private:
         }
       }
       if (segment_correction != nullptr) {
+        std::array<double, 3> correction_along{};
+        std::array<double, 3> correction_across{};
+        std::array<double, 3> correction_normal{};
         std::string basis_error;
         if (!cutDebugBasis(
               snapshot, segment_cut, correction_along, correction_across, correction_normal,
               basis_error)) {
           throw std::runtime_error("cut debug correction basis failed: " + basis_error);
         }
-        CutLocalDeltas local_start = segment_correction->start_local;
+        const CutLocalDeltas& local_start = segment_correction->start_local;
         CutLocalDeltas local_end = segment_correction->end_local;
         if (segment.handoff_end && segment_cut == "middle") {
           const double fraction = segment.handoff_fraction;
@@ -3303,68 +3011,48 @@ private:
           local_end.normal_m = local_start.normal_m +
             fraction * (segment_correction->end_local.normal_m - local_start.normal_m);
         }
-        corrected_start_point.x += correction_along[0] * local_start.along_m +
-          correction_across[0] * local_start.across_m + correction_normal[0] * local_start.normal_m;
-        corrected_start_point.y += correction_along[1] * local_start.along_m +
-          correction_across[1] * local_start.across_m + correction_normal[1] * local_start.normal_m;
-        corrected_start_point.z += correction_along[2] * local_start.along_m +
-          correction_across[2] * local_start.across_m + correction_normal[2] * local_start.normal_m;
-        corrected_end_point.x += correction_along[0] * local_end.along_m +
-          correction_across[0] * local_end.across_m + correction_normal[0] * local_end.normal_m;
-        corrected_end_point.y += correction_along[1] * local_end.along_m +
-          correction_across[1] * local_end.across_m + correction_normal[1] * local_end.normal_m;
-        corrected_end_point.z += correction_along[2] * local_end.along_m +
-          correction_across[2] * local_end.across_m + correction_normal[2] * local_end.normal_m;
+        corrected_start_point = applyCutLocalDelta(
+          corrected_start_point, correction_along, correction_across, correction_normal,
+          local_start);
+        corrected_end_point = applyCutLocalDelta(
+          corrected_end_point, correction_along, correction_across, correction_normal,
+          local_end);
       }
       const double tilt_deg = is_middle_seam ? 0.0 :
         (is_right_side ? right_side_cut_tilt_deg_ : left_side_cut_tilt_deg_);
       // Side strokes travel back-to-front, but their nominal knife frame faces 180 degrees
-      // away from travel. Position corrections must not rotate that nominal baseline.
-      // Learned orientation records bypass the nominal frame below: their complete taught
-      // TCP quaternions are mapped from the recorded cut basis into the current cut basis.
-      const double facing_sign = is_middle_seam ? 1.0 : -1.0;
-      const double segment_dx = segment.end.x - segment.start.x;
-      const double segment_dy = segment.end.y - segment.start.y;
-      const double segment_dz = segment.end.z - segment.start.z;
-      auto orientation_start_target = corrected_start_point;
-      orientation_start_target.x += facing_sign * segment_dx;
-      orientation_start_target.y += facing_sign * segment_dy;
-      orientation_start_target.z += facing_sign * segment_dz;
-      auto orientation_end_target = corrected_end_point;
-      orientation_end_target.x += facing_sign * segment_dx;
-      orientation_end_target.y += facing_sign * segment_dy;
-      orientation_end_target.z += facing_sign * segment_dz;
-      if (!is_middle_seam && side_cut_orientation_mode_ == "middle_aligned") {
-        const double seam_dx = snapshot.seam_end.x - snapshot.seam_start.x;
-        const double seam_dy = snapshot.seam_end.y - snapshot.seam_start.y;
-        const double seam_dz = snapshot.seam_end.z - snapshot.seam_start.z;
-        orientation_start_target = corrected_start_point;
-        orientation_start_target.x += facing_sign * seam_dx;
-        orientation_start_target.y += facing_sign * seam_dy;
-        orientation_start_target.z += facing_sign * seam_dz;
-        orientation_end_target = corrected_end_point;
-        orientation_end_target.x += facing_sign * seam_dx;
-        orientation_end_target.y += facing_sign * seam_dy;
-        orientation_end_target.z += facing_sign * seam_dz;
-      }
+      // away from travel. Position corrections must not rotate that nominal baseline, so
+      // the direction comes from the uncorrected segment. Learned orientation records
+      // bypass the nominal frame below: their complete taught TCP quaternions are mapped
+      // from the recorded cut basis into the current cut basis.
+      const auto orientation_targets = orientationTargets(
+        snapshot, is_middle_seam, segment.start, segment.end, corrected_start_point,
+        corrected_end_point);
       const double segment_cut_clearance_m =
         is_middle_seam ? middle_cut_clearance_m_ : cut_clearance_m_;
       const double target_clearance_m =
         segment.hover_only ? debug_motion_clearance_m_ : segment_cut_clearance_m;
       const double approach_clearance_m =
         segment.hover_only ? debug_motion_clearance_m_ : hover_clearance_m_;
-      auto hover_start = targetPose(
-        snapshot, corrected_start_point, orientation_start_target, approach_clearance_m, tilt_deg,
-        segment.roll_deg, segment.pitch_deg, segment.yaw_deg);
+      // Left hover poses are the cut poses withdrawn laterally (below), so they are not
+      // derived from the hover clearance.
+      const bool left_lateral_hover = is_left_side && !segment.hover_only;
       auto cut_start = targetPose(
-        snapshot, corrected_start_point, orientation_start_target, target_clearance_m, tilt_deg,
-        segment.roll_deg, segment.pitch_deg, segment.yaw_deg);
-      auto hover_end = targetPose(
-        snapshot, corrected_end_point, orientation_end_target, approach_clearance_m, tilt_deg,
-        segment.roll_deg, segment.pitch_deg, segment.yaw_deg);
+        snapshot, corrected_start_point, orientation_targets.first, target_clearance_m,
+        tilt_deg);
       auto cut_end = targetPose(
-        snapshot, corrected_end_point, orientation_end_target, target_clearance_m, tilt_deg,
-        segment.roll_deg, segment.pitch_deg, segment.yaw_deg);
+        snapshot, corrected_end_point, orientation_targets.second, target_clearance_m,
+        tilt_deg);
+      geometry_msgs::msg::PoseStamped hover_start;
+      geometry_msgs::msg::PoseStamped hover_end;
+      if (!left_lateral_hover) {
+        hover_start = targetPose(
+          snapshot, corrected_start_point, orientation_targets.first, approach_clearance_m,
+          tilt_deg);
+        hover_end = targetPose(
+          snapshot, corrected_end_point, orientation_targets.second, approach_clearance_m,
+          tilt_deg);
+      }
       if (segment.force_fixed_orientation) {
         geometry_msgs::msg::Quaternion fixed;
         fixed.x = 0.0;
@@ -3384,22 +3072,20 @@ private:
             segment_correction->observed_start, segment_correction->observed_end,
             segment.handoff_fraction);
         }
-        if (!applyCutDebugObservedOrientation(
-            snapshot, segment_cut, *segment_correction,
-            segment_correction->observed_start, hover_start, message) ||
-            !applyCutDebugObservedOrientation(
-            snapshot, segment_cut, *segment_correction,
-            segment_correction->observed_start, cut_start, message) ||
-            !applyCutDebugObservedOrientation(
-            snapshot, segment_cut, *segment_correction,
-            handoff_end_observed, hover_end, message) ||
-            !applyCutDebugObservedOrientation(
-            snapshot, segment_cut, *segment_correction,
-            handoff_end_observed, cut_end, message)) {
+        const auto apply_observed = [&](
+          const geometry_msgs::msg::Quaternion& observed, geometry_msgs::msg::PoseStamped& pose) {
+          return applyCutDebugObservedOrientation(
+            snapshot, segment_cut, *segment_correction, observed, pose, message);
+        };
+        if ((!left_lateral_hover &&
+             !apply_observed(segment_correction->observed_start, hover_start)) ||
+            !apply_observed(segment_correction->observed_start, cut_start) ||
+            (!left_lateral_hover && !apply_observed(handoff_end_observed, hover_end)) ||
+            !apply_observed(handoff_end_observed, cut_end)) {
           throw std::runtime_error(message);
         }
       }
-      if (segment_cut == "left" && !partial_cut && !segment.hover_only) {
+      if (left_lateral_hover) {
         hover_start = cut_start;
         hover_end = cut_end;
         if (!offsetLeftPoseOutward(
@@ -3409,40 +3095,34 @@ private:
           throw std::runtime_error(message);
         }
       }
-      if (segment_cut == "left" && segment_correction != nullptr &&
-          !segment.force_fixed_orientation && !(partial_cut && use_approach_pose_as_cut_start_) &&
-          left_adaptive_orientation_enabled_) {
-        // All four poses are at their final positions here, so every IK probe
-        // below covers the exact pose the MTC stages will target.
-        std::vector<std::pair<geometry_msgs::msg::PoseStamped*, const char*> > left_poses{
-          {&hover_start, "left hover start"},
-          {&cut_start, "left cut start"},
-          {&hover_end, "left hover end"},
-          {&cut_end, "left cut end"}};
+      if (is_left_side && segment_correction != nullptr &&
+          !segment.force_fixed_orientation && left_adaptive_orientation_enabled_) {
+        // All probed poses are at their final positions here, so every IK probe below
+        // covers the exact pose the MTC stages will target. A cut-debug start plans only
+        // its start poses, so only those are probed.
+        std::vector<std::pair<geometry_msgs::msg::PoseStamped*, const char*> > left_poses;
+        std::string pose_context;
+        if (options.cut_debug_start) {
+          left_poses = {
+            {&hover_start, "left cut-debug hover start"},
+            {&cut_start, "left cut-debug planned start"}};
+          pose_context = "cut debug " + segment_cut + " start";
+        } else {
+          left_poses = {
+            {&hover_start, "left hover start"},
+            {&cut_start, "left cut start"},
+            {&hover_end, "left hover end"},
+            {&cut_end, "left cut end"}};
+          pose_context = "left " + segment.name + " hover/cut start+end";
+        }
         if (!adaptLeftCorrectedOrientations(
-              snapshot, joint_group, ik_state, left_poses,
-              "left " + segment.name + " hover/cut start+end", message)) {
-          message = "left orientation adaptation failed for segment " + segment.name + ": " +
-            message;
+              snapshot, joint_group, ik_state, left_poses, pose_context, message)) {
+          if (!options.cut_debug_start) {
+            message = "left orientation adaptation failed for segment " + segment.name + ": " +
+              message;
+          }
           return false;
         }
-      }
-      const bool use_supplied_start = partial_cut && use_approach_pose_as_cut_start_;
-      if (use_supplied_start) {
-        const double dx = corrected_end_point.x - corrected_start_point.x;
-        const double dy = corrected_end_point.y - corrected_start_point.y;
-        const double dz = corrected_end_point.z - corrected_start_point.z;
-        const double length = std::sqrt(dx * dx + dy * dy + dz * dz);
-        if (length <= 0.0) throw std::runtime_error("zero-length supplied cut direction");
-        cut_start = poseFromParameters(snapshot, approach_cut_start_xyz_, approach_cut_orientation_xyzw_);
-        if (side_cut_orientation_mode_ == "middle_aligned") {
-          cut_start.pose.orientation = targetPose(
-            snapshot, corrected_start_point, orientation_start_target, 0.0).pose.orientation;
-        }
-        cut_end = cut_start;
-        cut_end.pose.position.x += approach_cut_length_m_ * dx / length;
-        cut_end.pose.position.y += approach_cut_length_m_ * dy / length;
-        cut_end.pose.position.z += approach_cut_length_m_ * dz / length;
       }
       if (segment.force_fixed_orientation) {
         moveit::core::RobotState debug_ik_state(ik_state);
@@ -3459,7 +3139,7 @@ private:
           return false;
         }
       }
-      if (segment.name.rfind("right side cut", 0) == 0U) {
+      if (is_right_side) {
         moveit::core::RobotState approach_ik_state(ik_state);
         if (!approach_ik_state.setFromIK(joint_group, hover_start.pose, tool_link_, 0.25)) {
           message = "right-side approach IK infeasible before Cartesian stroke";
@@ -3479,8 +3159,8 @@ private:
       }
       cut_targets.push_back(cut_start);
       if (!segment.stop_after_start) cut_targets.push_back(cut_end);
-      if (!use_supplied_start) {
-        const std::string first_approach = segment_cut == "left" ?
+      {
+        const std::string first_approach = is_left_side ?
           "approach pose outside " + segment.name : "approach pose above " + segment.name;
         const std::string transit_name = segment_index == 0U ? first_approach :
           "transition from " + segments[segment_index - 1U].name + " finish pose to " +
@@ -3490,9 +3170,7 @@ private:
         transit->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
         transit->setGroup(planning_group_);
         transit->setIKFrame(tool_link_);
-        if (partial_cut) {
-          transit->setGoal(jointGoalDegrees(joint_group, partial_start_joint_degrees_));
-        } else if (motion_profile == "chomp_pilz") {
+        if (motion_profile == "chomp_pilz") {
           transit->setGoal(jointGoal(ik_state, joint_group, entry_alignment));
         } else {
           transit->setGoal(entry_alignment);
@@ -3513,15 +3191,15 @@ private:
           "stabilize blade before " + segment.name, planning_group_,
           pre_cut_stabilization_duration_s_));
       }
-      if (!partial_cut && !segment.hover_only) {
-        if (allow_tool_carton_contact_) {
+      if (!segment.hover_only) {
+        if (allow_tool_carton_contact_ && !contact_allowed_from_start) {
           auto allow_contact = std::make_unique<mtc::stages::ModifyPlanningScene>(
             "allow knife-tip contact with carton for " + segment.name);
           allow_contact->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
           allow_contact->allowCollisions(tool_link_, carton_collision_id_, true);
           task->add(std::move(allow_contact));
         }
-        const std::string entry_label = segment_cut == "left" ? "enter laterally into " :
+        const std::string entry_label = is_left_side ? "enter laterally into " :
           "descend from aligned ";
         auto descend = std::make_unique<mtc::stages::MoveTo>(
           entry_label + segment.name + " start [" + motion_profile + "]", stroke_planner);
@@ -3545,8 +3223,8 @@ private:
       // Terminal handoff: the left arm stops at the cut-level handoff endpoint after the
       // traverse above. Skip the Cartesian hover retract and leave the planned tool/carton
       // contact allowance active; a second arm (not modeled here) resumes from this pose.
-      if (!partial_cut && !segment.hover_only && !segment.terminal_after_cut) {
-        const std::string finish_label = segment_cut == "left" ? "finish pose outside " :
+      if (!segment.hover_only && !segment.terminal_after_cut) {
+        const std::string finish_label = is_left_side ? "finish pose outside " :
           "finish pose above ";
         auto ascend = std::make_unique<mtc::stages::MoveTo>(
           finish_label + segment.name + " [" + motion_profile + "]", stroke_planner);
@@ -3555,7 +3233,7 @@ private:
         ascend->setIKFrame(tool_link_);
         ascend->setGoal(hover_end);
         task->add(std::move(ascend));
-        const bool lift_before_middle = segment_cut == "left" &&
+        const bool lift_before_middle = is_left_side &&
           (segment_index + 1U) < segments.size() &&
           segments[segment_index + 1U].name.rfind("middle seam", 0) == 0U &&
           !segments[segment_index + 1U].hover_only;
@@ -3570,7 +3248,7 @@ private:
           lift_target.pose.position.y += lift_m * snapshot.surface_normal.y;
           lift_target.pose.position.z += lift_m * snapshot.surface_normal.z;
           auto lift = std::make_unique<mtc::stages::MoveTo>(
-            "lift clear of " + segment.name + " to hover [cartesian]", cartesian);
+            "lift clear of " + segment.name + " to hover [cartesian]", planners.cartesian);
           lift->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
           lift->setGroup(planning_group_);
           lift->setIKFrame(tool_link_);
@@ -3596,35 +3274,37 @@ private:
     }
     const auto result = task->plan(static_cast<std::size_t>(max_solutions_));
     if (result != moveit::core::MoveItErrorCode::SUCCESS || task->solutions().empty()) {
-      if (explain_failure) {
+      if (options.explain_failure) {
         task->explainFailure();
       }
       message = "MTC candidate failed: task=" + task_name + " profile=" + motion_profile +
                 " segments=" + std::to_string(segments.size());
       return false;
     }
+    // Serialized once and shared by both fail-closed solution validators.
+    const auto& solution = *task->solutions().front();
+    moveit_task_constructor_msgs::msg::Solution solution_message;
+    solution.toMsg(solution_message);
     const std::size_t expected_dwell_count =
       pre_cut_stabilization_duration_s_ > 0.0 ? segments.size() : 0U;
     std::string dwell_error;
-    if (!validateStationaryDwells(
-          *task->solutions().front(), expected_dwell_count, dwell_error)) {
+    if (!validateStationaryDwells(solution_message, expected_dwell_count, dwell_error)) {
       message = "planned trajectory has invalid pre-cut stabilization: " + dwell_error;
       return false;
     }
     std::string wrist_error;
-    if (!validateFreeSpaceTransitWrist(*task->solutions().front(), wrist_error)) {
+    if (!validateFreeSpaceTransitWrist(solution, solution_message, wrist_error)) {
       message = wrist_error;
       return false;
     }
-    task->introspection().publishSolution(*task->solutions().front());
+    task->introspection().publishSolution(solution);
     return true;
   }
 
   bool validateStationaryDwells(
-    const mtc::SolutionBase& solution, std::size_t expected_count, std::string& error) const
+    const moveit_task_constructor_msgs::msg::Solution& solution_message,
+    std::size_t expected_count, std::string& error) const
   {
-    moveit_task_constructor_msgs::msg::Solution solution_message;
-    solution.toMsg(solution_message);
     const auto seconds = [](const builtin_interfaces::msg::Duration& duration) {
       return static_cast<double>(duration.sec) + 1e-9 * duration.nanosec;
     };
@@ -3676,9 +3356,10 @@ private:
     return true;
   }
 
-  // Free-space transit stack: try the shortest validity-checked joint-space
-  // interpolation first, then the profile's existing planner. Cutting strokes
-  // never use this stack.
+  // Free-space transit stack: resolve pose goals to the IK branch nearest the
+  // propagated start, then try the shortest validity-checked joint-space
+  // interpolation first and the profile's existing planner second. Cutting
+  // strokes never use this stack.
   mtc::solvers::PlannerInterfacePtr makeTransitPlanner(
     const mtc::solvers::PlannerInterfacePtr& fallback) const
   {
@@ -3688,7 +3369,8 @@ private:
     auto multi = std::make_shared<mtc::solvers::MultiPlanner>();
     multi->push_back(direct);
     multi->push_back(fallback);
-    return multi;
+    // Pose goals are resolved to the nearest exact IK branch before either planner runs.
+    return std::make_shared<NearestBranchTransitPlanner>(multi);
   }
 
   // Fail-closed wrist guard for free-space transits: rejects the retained solution
@@ -3697,10 +3379,10 @@ private:
   // intermediate winding cannot hide behind benign endpoints. Cutting, align,
   // descend, ascend, lift, and dwell stages are never examined here.
   bool validateFreeSpaceTransitWrist(
-    const mtc::SolutionBase& solution, std::string& error) const
+    const mtc::SolutionBase& solution,
+    const moveit_task_constructor_msgs::msg::Solution& solution_message,
+    std::string& error) const
   {
-    moveit_task_constructor_msgs::msg::Solution solution_message;
-    solution.toMsg(solution_message);
     const auto* sequence = dynamic_cast<const mtc::SolutionSequence*>(&solution);
     if (sequence == nullptr) {
       error = "planned free-space transit winds the wrist: unexpected solution type; " +
@@ -3810,46 +3492,10 @@ private:
     return std::sqrt(dx * dx + dy * dy + dz * dz);
   }
 
-  geometry_msgs::msg::PoseStamped poseFromParameters(
-    const Snapshot& snapshot, const std::vector<double>& xyz,
-    const std::vector<double>& orientation) const
-  {
-    geometry_msgs::msg::PoseStamped pose;
-    pose.header = snapshot.header;
-    pose.pose.position.x = xyz[0];
-    pose.pose.position.y = xyz[1];
-    pose.pose.position.z = xyz[2];
-    pose.pose.orientation.x = orientation[0];
-    pose.pose.orientation.y = orientation[1];
-    pose.pose.orientation.z = orientation[2];
-    pose.pose.orientation.w = orientation[3];
-    return pose;
-  }
-
-  std::string formatMeters(double value) const
-  {
-    std::ostringstream stream;
-    stream.setf(std::ios::fixed);
-    stream.precision(3);
-    stream << value;
-    return stream.str();
-  }
-
-  std::string formatSeconds(double value) const
-  {
-    std::ostringstream stream;
-    stream.setf(std::ios::fixed);
-    stream.precision(3);
-    stream << value;
-    return stream.str();
-  }
-
-
   geometry_msgs::msg::PoseStamped targetPose(
     const Snapshot& snapshot, const geometry_msgs::msg::Point& point,
     const geometry_msgs::msg::Point& direction_target, double clearance_m,
-    double tilt_deg = 0.0, double roll_deg = 0.0, double pitch_deg = 0.0,
-    double yaw_deg = 0.0) const
+    double tilt_deg = 0.0) const
   {
     const auto normalize = [](std::array<double, 3> value) {
       const double norm = std::sqrt(
@@ -3888,20 +3534,8 @@ private:
       tilted_z_axis[i] = sine * original_x + cosine * z_axis[i];
     }
 
-    const double m00=x_axis[0],m01=y_axis[0],m02=tilted_z_axis[0];
-    const double m10=x_axis[1],m11=y_axis[1],m12=tilted_z_axis[1];
-    const double m20=x_axis[2],m21=y_axis[2],m22=tilted_z_axis[2];
-    geometry_msgs::msg::Quaternion q;
-    const double trace=m00+m11+m22;
-    if(trace>0){double s=std::sqrt(trace+1.0)*2;q.w=.25*s;q.x=(m21-m12)/s;q.y=(m02-m20)/s;q.z=(m10-m01)/s;}
-    else if(m00>m11&&m00>m22){double s=std::sqrt(1+m00-m11-m22)*2;q.w=(m21-m12)/s;q.x=.25*s;q.y=(m01+m10)/s;q.z=(m02+m20)/s;}
-    else if(m11>m22){double s=std::sqrt(1+m11-m00-m22)*2;q.w=(m02-m20)/s;q.x=(m01+m10)/s;q.y=.25*s;q.z=(m12+m21)/s;}
-    else{double s=std::sqrt(1+m22-m00-m11)*2;q.w=(m10-m01)/s;q.x=(m02+m20)/s;q.y=(m12+m21)/s;q.z=.25*s;}
-    q = normalizedQuaternion(q);
-    if (roll_deg != 0.0 || pitch_deg != 0.0 || yaw_deg != 0.0) {
-      q = normalizedQuaternion(multiplyQuaternions(
-        q, localRpyQuaternion(roll_deg, pitch_deg, yaw_deg)));
-    }
+    const geometry_msgs::msg::Quaternion q =
+      normalizedQuaternion(basisQuaternion(x_axis, y_axis, tilted_z_axis));
     geometry_msgs::msg::PoseStamped pose;
     pose.header = snapshot.header;
     pose.pose.position.x = point.x + clearance_m * snapshot.surface_normal.x;
@@ -3915,6 +3549,23 @@ private:
       pose.pose.orientation.w = 0.0;
     }
     return pose;
+  }
+  // Rotation whose columns are the given frame axes (Eigen's rotation-matrix conversion).
+  static geometry_msgs::msg::Quaternion basisQuaternion(
+    const std::array<double, 3>& x_axis, const std::array<double, 3>& y_axis,
+    const std::array<double, 3>& z_axis)
+  {
+    Eigen::Matrix3d basis;
+    basis.col(0) = Eigen::Vector3d(x_axis[0], x_axis[1], x_axis[2]);
+    basis.col(1) = Eigen::Vector3d(y_axis[0], y_axis[1], y_axis[2]);
+    basis.col(2) = Eigen::Vector3d(z_axis[0], z_axis[1], z_axis[2]);
+    const Eigen::Quaterniond rotation(basis);
+    geometry_msgs::msg::Quaternion q;
+    q.x = rotation.x();
+    q.y = rotation.y();
+    q.z = rotation.z();
+    q.w = rotation.w();
+    return q;
   }
   geometry_msgs::msg::Quaternion normalizedQuaternion(
     geometry_msgs::msg::Quaternion quaternion) const
@@ -3930,38 +3581,6 @@ private:
     quaternion.z /= norm;
     quaternion.w /= norm;
     return quaternion;
-  }
-
-  geometry_msgs::msg::Quaternion multiplyQuaternions(
-    const geometry_msgs::msg::Quaternion& left,
-    const geometry_msgs::msg::Quaternion& right) const
-  {
-    geometry_msgs::msg::Quaternion result;
-    result.w = left.w * right.w - left.x * right.x - left.y * right.y - left.z * right.z;
-    result.x = left.w * right.x + left.x * right.w + left.y * right.z - left.z * right.y;
-    result.y = left.w * right.y - left.x * right.z + left.y * right.w + left.z * right.x;
-    result.z = left.w * right.z + left.x * right.y - left.y * right.x + left.z * right.w;
-    return result;
-  }
-
-  geometry_msgs::msg::Quaternion localRpyQuaternion(
-    double roll_deg, double pitch_deg, double yaw_deg) const
-  {
-    const double half_roll = roll_deg * std::acos(-1.0) / 360.0;
-    const double half_pitch = pitch_deg * std::acos(-1.0) / 360.0;
-    const double half_yaw = yaw_deg * std::acos(-1.0) / 360.0;
-    const double cr = std::cos(half_roll);
-    const double sr = std::sin(half_roll);
-    const double cp = std::cos(half_pitch);
-    const double sp = std::sin(half_pitch);
-    const double cy = std::cos(half_yaw);
-    const double sy = std::sin(half_yaw);
-    geometry_msgs::msg::Quaternion q;
-    q.w = cr * cp * cy + sr * sp * sy;
-    q.x = sr * cp * cy - cr * sp * sy;
-    q.y = cr * sp * cy + sr * cp * sy;
-    q.z = cr * cp * sy - sr * sp * cy;
-    return normalizedQuaternion(q);
   }
 
   std::map<std::string, double> jointGoal(
@@ -4074,7 +3693,6 @@ private:
   std::optional<Snapshot> cut_debug_snapshot_;
   geometry_msgs::msg::PoseStamped cut_debug_nominal_start_;
   geometry_msgs::msg::PoseStamped cut_debug_nominal_end_;
-  geometry_msgs::msg::PoseStamped cut_debug_planned_end_;
   geometry_msgs::msg::PoseStamped cut_debug_observed_start_;
   geometry_msgs::msg::PoseStamped cut_debug_observed_end_;
   bool cut_debug_has_observed_start_{false};
@@ -4082,30 +3700,25 @@ private:
   bool cut_debug_dispatch_failed_{false};
   CutLocalDeltas cut_debug_start_local_{};
   CutLocalDeltas cut_debug_end_local_{};
-  geometry_msgs::msg::Quaternion cut_debug_start_delta_local_{};
-  geometry_msgs::msg::Quaternion cut_debug_end_delta_local_{};
   std::string cut_debug_record_path_;
   std::int64_t cut_debug_created_stamp_ns_{0};
   moveit::core::RobotModelConstPtr cut_debug_robot_model_;
   std::unique_ptr<mtc::Task> planned_task_;
   std::thread execution_thread_;
-  std::string external_snapshot_file_, cut_pattern_, side_cut_orientation_mode_;
+  std::string cut_pattern_, side_cut_orientation_mode_;
   std::string planning_frame_, planning_group_, tool_link_, planning_pipeline_, chomp_pipeline_;
-  std::string pilz_pipeline_, motion_profile_, carton_collision_id_, camera_pole_topic_;
+  std::string pilz_pipeline_, carton_collision_id_, camera_pole_topic_;
   double external_snapshot_max_age_s_, carton_height_m_, hover_clearance_m_,
     left_lateral_standoff_m_, cut_clearance_m_, middle_cut_clearance_m_,
     debug_motion_distance_m_, debug_motion_clearance_m_,
     middle_entry_alignment_m_,
     pre_cut_stabilization_duration_s_, left_side_cut_tilt_deg_, right_side_cut_tilt_deg_,
     left_adaptive_orientation_max_deg_, left_adaptive_orientation_step_deg_,
-    partial_start_fraction_,
-    partial_end_fraction_, t_cut_middle_handoff_fraction_, approach_cut_length_m_,
-    cartesian_step_m_, planning_timeout_s_, velocity_scaling_, acceleration_scaling_,
+    t_cut_middle_handoff_fraction_, cartesian_step_m_, planning_timeout_s_, velocity_scaling_, acceleration_scaling_,
     transit_velocity_scaling_, transit_acceleration_scaling_;
-  std::vector<double> partial_start_joint_degrees_, approach_joint_degrees_;
-  std::vector<double> approach_cut_start_xyz_, approach_cut_orientation_xyzw_;
+  std::vector<double> approach_joint_degrees_;
   int max_solutions_;
-  bool partial_reverse_, use_approach_pose_as_cut_start_, debug_fixed_orientation_{false},
+  bool debug_fixed_orientation_{false},
     debug_allow_stale_snapshot_{false}, camera_pole_required_{true},
     allow_tool_carton_contact_{false};
   bool cut_debug_correction_enabled_{false};

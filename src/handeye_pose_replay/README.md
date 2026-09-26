@@ -1,13 +1,12 @@
-# handeye_pose_replay v3
+# handeye_pose_replay
 
-This version avoids loading / re-processing the ReBeL Xacro entirely.
+This package avoids loading / re-processing the ReBeL Xacro entirely.
 
 Instead, it copies the exact `robot_description` and
 `robot_description_semantic` parameters from the already-running MoveIt
 `/move_group` node and then starts the replay.
 
-This avoids errors caused by `initial_positions.yaml` entries for the XEG32
-gripper.
+This avoids mismatches with the XEG32 gripper model used by MoveIt.
 
 Configuration:
 
@@ -17,15 +16,14 @@ Configuration:
     default speed:     5%
     manual confirmation before every pose: enabled
 
-## Replace older package
-
-    cd ~/igus_rebel_ros2/src
-    rm -rf handeye_pose_replay
-    unzip ~/Downloads/handeye_pose_replay_v3.zip
-
 ## Build
 
+The package is part of this repository (`src/handeye_pose_replay`); no
+separate download or unzip step is needed. Build it with colcon from the
+workspace root:
+
     cd ~/igus_rebel_ros2
+    source /opt/ros/humble/setup.bash
     colcon build --packages-select handeye_pose_replay --symlink-install
     source install/setup.bash
 

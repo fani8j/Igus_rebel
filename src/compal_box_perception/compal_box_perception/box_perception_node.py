@@ -47,7 +47,6 @@ from .depth_utils import (
 )
 from .stability import (
     TemporalArrayMedian,
-    TemporalScalarMedian,
     TemporalUnitVectorMedian,
 )
 
@@ -70,35 +69,10 @@ class BoxPerceptionNode(Node):
         self._camera_info = None
         self._pointcloud_geometry_key = None
         self._pointcloud_rays = None
-        self._supports_quad_edge_refinement = hasattr(
-            detect_tape_seam, "refine_quad_edges_by_gradient"
-        )
-        self._supports_seam_refinement = hasattr(
-            detect_tape_seam, "refine_seam_line_by_gradient"
-        )
-        if bool(self._parameter("use_rgb_quad_edge_refinement")) and not self._supports_quad_edge_refinement:
-            self.get_logger().warning(
-                "Copied detector has no refine_quad_edges_by_gradient(); skipping optional RGB quad-edge refinement"
-            )
-        if (
-            bool(self._parameter("use_rgb_front_edge_refinement"))
-            or bool(self._parameter("use_rgb_seam_refinement"))
-        ) and not self._supports_seam_refinement:
-            self.get_logger().warning(
-                "Copied detector has no refine_seam_line_by_gradient(); skipping optional RGB line refinement"
-            )
         self._last_search_roi = None
-        self._seam_ratio_filter = TemporalScalarMedian(
-            window_size=int(self._parameter("seam_ratio_filter_window")),
-            max_jump=float(self._parameter("seam_ratio_max_jump")),
-        )
         self._corner_filter = TemporalArrayMedian(
             window_size=int(self._parameter("corner_filter_window")),
             max_point_jump=float(self._parameter("max_corner_jump_px")),
-        )
-        self._front_ratio_filter = TemporalScalarMedian(
-            window_size=int(self._parameter("front_ratio_filter_window")),
-            max_jump=float(self._parameter("front_ratio_max_jump")),
         )
         self._normal_filter = TemporalUnitVectorMedian(
             window_size=int(self._parameter("normal_filter_window")),
@@ -186,27 +160,9 @@ class BoxPerceptionNode(Node):
             "constrain_auto_roi": True,
             "auto_roi_search_margin_ratio": 0.25,
             "sync_queue_size": 10,
-            "use_rgb_seam_refinement": True,
-            "seam_ratio_min": 0.20,
-            "seam_ratio_max": 0.60,
-            "seam_ratio_step": 0.005,
-            "seam_min_gradient_score": 20.0,
-            "seam_ratio_filter_window": 15,
-            "seam_ratio_max_jump": 0.04,
             "sync_slop_s": 0.05,
             "corner_filter_window": 15,
             "max_corner_jump_px": 10.0,
-            "use_rgb_quad_edge_refinement": True,
-            "quad_edge_search_range_px": 8.0,
-            "quad_edge_offset_step_px": 0.5,
-            "quad_edge_min_gradient_score": 20.0,
-            "use_rgb_front_edge_refinement": False,
-            "front_ratio_min": 0.70,
-            "front_ratio_max": 1.00,
-            "front_ratio_step": 0.005,
-            "front_min_gradient_score": 40.0,
-            "front_ratio_filter_window": 15,
-            "front_ratio_max_jump": 0.05,
             "use_depth_plane_top_face": True,
             "plane_fit_height_ratio": 0.65,
             "plane_max_normal_deviation_deg": 20.0,
@@ -252,22 +208,10 @@ class BoxPerceptionNode(Node):
             int(value) <= 0 for value in roi_reference_size
         ):
             raise ValueError("manual_roi_reference_size must contain positive width, height")
-        seam_ratio_min = float(self._parameter("seam_ratio_min"))
-        seam_ratio_max = float(self._parameter("seam_ratio_max"))
-        if not 0.0 <= seam_ratio_min < seam_ratio_max <= 1.0:
-            raise ValueError("seam ratio bounds must satisfy 0 <= min < max <= 1")
-        if int(self._parameter("seam_ratio_filter_window")) < 1:
-            raise ValueError("seam_ratio_filter_window must be positive")
-        if float(self._parameter("seam_ratio_max_jump")) <= 0.0:
-            raise ValueError("seam_ratio_max_jump must be positive")
         if int(self._parameter("corner_filter_window")) < 1:
             raise ValueError("corner_filter_window must be positive")
         if float(self._parameter("max_corner_jump_px")) <= 0.0:
             raise ValueError("max_corner_jump_px must be positive")
-        front_ratio_min = float(self._parameter("front_ratio_min"))
-        front_ratio_max = float(self._parameter("front_ratio_max"))
-        if not 0.0 <= front_ratio_min < front_ratio_max <= 1.0:
-            raise ValueError("front ratio bounds must satisfy 0 <= min < max <= 1")
         search_margin = float(self._parameter("auto_roi_search_margin_ratio"))
         if search_margin < 0.0:
             raise ValueError("auto_roi_search_margin_ratio must be non-negative")
@@ -730,16 +674,6 @@ class BoxPerceptionNode(Node):
         response.snapshot = snapshot
         return response
 
-    @staticmethod
-    def _seam_line_at_ratio(result: dict, ratio: float) -> list:
-        back_left = np.asarray(result["back_left"], dtype=np.float64)
-        back_right = np.asarray(result["back_right"], dtype=np.float64)
-        front_left = np.asarray(result["front_left"], dtype=np.float64)
-        front_right = np.asarray(result["front_right"], dtype=np.float64)
-        left = back_left + ratio * (front_left - back_left)
-        right = back_right + ratio * (front_right - back_right)
-        return np.stack((left, right)).tolist()
-
     def _expected_top_normal_camera(self, camera_frame: str, stamp) -> np.ndarray:
         transform = self._tf_buffer.lookup_transform(
             camera_frame,
@@ -791,22 +725,7 @@ class BoxPerceptionNode(Node):
         message.vector.z = float(normal[2])
         self._normal_pub.publish(message)
 
-    @staticmethod
-    def _apply_front_ratio(result: dict, ratio: float) -> dict:
-        back_left = np.asarray(result["back_left"], dtype=np.float64)
-        back_right = np.asarray(result["back_right"], dtype=np.float64)
-        front_left = np.asarray(result["front_left"], dtype=np.float64)
-        front_right = np.asarray(result["front_right"], dtype=np.float64)
-        refined_front_left = back_left + ratio * (front_left - back_left)
-        refined_front_right = back_right + ratio * (front_right - back_right)
-        corners = np.stack(
-            (back_left, back_right, refined_front_right, refined_front_left)
-        )
-        return BoxPerceptionNode._result_from_corners(result["roi"], corners)
-
     def _reset_geometry_filters(self) -> None:
-        self._seam_ratio_filter.reset()
-        self._front_ratio_filter.reset()
         self._corner_filter.reset()
         self._normal_filter.reset()
 

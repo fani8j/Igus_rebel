@@ -5,7 +5,6 @@
 #include <mutex>
 #include <math.h>
 #include "rclcpp/rclcpp.hpp"
-#include "std_msgs/msg/int16.hpp"
 #include "igus_rebel_msgs/msg/digital_output.hpp"
 #include "igus_rebel_msgs/srv/set_digital_output.hpp"
 #include <hardware_interface/system_interface.hpp>
@@ -21,13 +20,6 @@ namespace Igus
 {
     class Rebel : public SystemInterface
     {
-    public:
-        enum class ControlMode
-        {
-            POSITION,
-            VELOCITY
-        };
-
     private:
         rclcpp::Node::SharedPtr node_;
         
@@ -36,7 +28,6 @@ namespace Igus
 
         // Current commanded jog
         float j1, j2, j3, j4, j5, j6;
-        ControlMode controlMode;
 
         bool continueAlive;
         bool continueMessage;
@@ -52,7 +43,6 @@ namespace Igus
         double pos[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
         double last_pos[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
         double vel[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-        double eff[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 
         CriMessages::Kinstate lastKinstate;
         std::array<int, 16> lastErrorJoints;
@@ -71,7 +61,6 @@ namespace Igus
         int Ccnt();
         void Command(const std::string &);
         void GetConfig(const std::string &);
-        void SetControlMode(const ControlMode &);
 
         // Function to react to specific status values, to display warnings, error messages, etc.
         void ProcessStatus(const CriMessages::Status &);
@@ -91,8 +80,6 @@ namespace Igus
         Rebel();
         ~Rebel();
 
-        void SetJog(const float &, const float &, const float &, const float &, const float &, const float &);
-        void GetJoints(float &, float &, float &, float &, float &, float &);
         void SetDigitalOut(const int &, const bool &);
 
         // Interaction with hardware for ROS2
@@ -108,8 +95,6 @@ namespace Igus
 
         void dio_callback(const std::shared_ptr<igus_rebel_msgs::srv::SetDigitalOutput::Request> request,
                           std::shared_ptr<igus_rebel_msgs::srv::SetDigitalOutput::Response> response);
-
-        void GetReferenceInfo();
 
         void Start();
         void Stop();

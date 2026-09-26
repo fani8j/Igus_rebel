@@ -145,8 +145,9 @@ detected center in the documented workspace core before any low-speed trial.
 `pre_cut_stabilization_duration_s` adds a stationary hold at the final,
 collision-checked approach pose before each segment enables carton contact and
 descends toward the cut. The default is 1.0 second and applies through the common
-segment builder to combined, H, individual, partial, preview, and diagnostic plan
-patterns. The hold is an explicit two-waypoint robot trajectory with identical
+segment builder to combined, H, t_cut, t_cut_handoff, individual, diagnostic and
+staged cut-debug start plans. The staged cut-debug start plan uses the same builder,
+so it must also pass the dwell check and the free-space wrist guard (joint6 <= pi). The hold is an explicit two-waypoint robot trajectory with identical
 joint positions, zero velocity, zero acceleration, and the configured duration;
 it is not a callback sleep. Generated plans are rejected unless every expected
 hold has that structure and timing. Runtime values must be finite within
@@ -287,11 +288,11 @@ order, collision policy, stabilization dwell, and execution gates are unchanged.
 
 Free-space transits (initial approach and inter-segment finish-to-approach
 moves) use dedicated `transit_velocity_scaling` /
-`transit_acceleration_scaling` (`box_h_cut_executor.yaml`, default 0.05;
-finite values in `(0, 1]` only, out-of-range fails closed). Contact
+`transit_acceleration_scaling` (`box_h_cut_executor.yaml`, default 0.15, raised from 0.05
+with operator approval on 2026-09-26; finite values in `(0, 1]` only, out-of-range fails closed). Contact
 descend/traverse/retract strokes keep the 0.05 `velocity_scaling` /
 `acceleration_scaling`, and `pre_cut_stabilization_duration_s` stays 1.0 s,
-so no physical cutting speed changes by default. Each free-space transit
+so cutting speed is unchanged. Each free-space transit
 tries a direct collision-checked joint interpolation first via MultiPlanner
 ordering ([joint interpolation, existing transit]), falling back to the
 original transit solver. Full cut poses, `min_fraction=1.0` acceptance, the
@@ -306,9 +307,7 @@ the current TCP before physical use. Faster transit shortens only non-contact
 portions and is no guarantee of a fast plan or a physically safe stale TCP: the
 correction opt-in (`cut_debug_correction_enabled`, default `false`) and both
 execution gates (`execution_enabled`, `debug_motion_execution_enabled`, both
-default `false`) are unchanged, and no physical dispatch is recommended. Tune
-mock-only first (e.g. 0.10 transit scaling shortens only non-contact
-portions); physical speed needs separate review.
+default `false`) are unchanged, and no physical dispatch is recommended.
 ## T-cut handoff
 
 `cut_pattern: t_cut_handoff` is first-arm-only: the full left cut plus an

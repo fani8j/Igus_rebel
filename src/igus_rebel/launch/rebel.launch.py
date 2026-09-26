@@ -8,8 +8,7 @@ from launch.substitutions import (
     PathJoinSubstitution,
     PythonExpression,
 )
-from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
-from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.actions import DeclareLaunchArgument
 from ament_index_python.packages import get_package_share_directory
 import os
 
@@ -89,19 +88,11 @@ def generate_launch_description():
         output="both",
     )
 
-    robot_velocity_controller_spawner = Node(
-        package="controller_manager",
-        executable="spawner",
-        arguments=["rebel_arm_velocity_controller", "--controller-manager", "/controller_manager"],
-        output="both",
-    )
-    
     return LaunchDescription([
         hardware_protocol_arg,
         ros2_control_node,
         robot_state_pub_node,
         joint_state_broadcaster_spawner,
         robot_trajectory_controller_spawner,
-        # robot_velocity_controller_spawner,
     ])
     

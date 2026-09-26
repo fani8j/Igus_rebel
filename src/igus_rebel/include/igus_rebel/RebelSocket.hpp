@@ -17,7 +17,6 @@ namespace Igus
         int sock;
         std::string ip;
         int port;
-        int timeout;
         std::list<std::string> unprocessedMessages;
 
         bool continueReceive = false;
@@ -44,7 +43,7 @@ namespace Igus
         bool IsSocketOk();
 
     public:
-        RebelSocket(const std::string &, const int &, const int &);
+        RebelSocket(const std::string &, const int &);
         ~RebelSocket();
 
         void Start();

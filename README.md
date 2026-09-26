@@ -41,7 +41,7 @@ source install/setup.bash
 The `rosdep install` step installs MoveIt Task Constructor and the other
 distribution-specific dependencies required by `igus_rebel_moveit_config`.
 
-The ros node expects to reach the robot at the IP and port `192.168.3.11:3920`, this IP is fixed in **src/igus_rebel/include/Rebel.hpp**, line 88. You can change the IP here, make sure to build the code by `colcon build` after changes.
+The ros node expects to reach the robot at the IP and port `192.168.50.133:3920`, this IP is fixed in **src/igus_rebel/include/igus_rebel/Rebel.hpp**, line 88. You can change the IP here, make sure to build the code by `colcon build` after changes.
 
 ## Installation: Using docker ##
 
@@ -90,12 +90,15 @@ To simulate the robot in Gazebo and control the simulated robot with MoveIt run:
 ros2 launch igus_rebel_moveit_config igus_rebel_simulated.launch.py
 ```
 
+Note: the Gazebo model (`igus_rebel_robot2.urdf.xacro`) does not include the XEG-32, so
+`xeg32_tool_tip` has no TF in simulation.
+
 ## Calibrated TCP and visual comparison
 
 The XEG wrapper defines `link6 -> igus_tool0 -> xeg32_tool_tip` independently
 of gripper visuals. The tool frame is +52.7 mm along link6 Z and rotated pi
-about Z; the TCP is `[70.456, 49.743, 153.532]` mm from that tool frame.
-The last value includes the +137 mm CobotPump offset active during calibration.
+about Z; the TCP is `[5.937, 94.121, 130.699]` mm from that tool frame (touch-corrected
+2026-09-24; see the comment in `igus_rebel_xeg32_wrapper.urdf.xacro`).
 See `src/igus_rebel_moveit_config/XEG32_MOVEIT_CHANGES.md` for frame details.
 
 The rough knife model remains removed. `xeg32_tool_tip` remains the exact
@@ -116,7 +119,7 @@ Then start MoveIt/RViz in the second terminal:
 ```bash
 ros2 launch igus_rebel_moveit_config move_group.launch.py \
   hardware_protocol:=mock_hardware use_gui:=true run_teleop:=false \
-  run_mtc_program:=false run_box_motion_executor:=false run_box_h_cut_executor:=false
+  run_box_h_cut_executor:=false
 ```
 
 The MoveIt launch alone does not publish the arm TF tree. Add an RViz TF display
@@ -308,11 +311,10 @@ freshly taught correction on the current tool before enabling this opt-in.
 
 Free-space transits (initial approach and inter-segment finish-to-approach
 moves) use dedicated `transit_velocity_scaling` /
-`transit_acceleration_scaling` (default 0.05; finite values in `(0, 1]` only,
+`transit_acceleration_scaling` (default 0.15, raised from 0.05 with operator approval on 2026-09-26; finite values in `(0, 1]` only,
 out-of-range fails closed). Contact descend/traverse/retract strokes keep the
 0.05 `velocity_scaling` / `acceleration_scaling`, and
-`pre_cut_stabilization_duration_s` stays 1.0 s, so no physical cutting speed
-changes by default. Each free-space transit tries a direct collision-checked
+`pre_cut_stabilization_duration_s` stays 1.0 s, so cutting speed is unchanged. Each free-space transit tries a direct collision-checked
 joint interpolation first via MultiPlanner ordering ([joint interpolation,
 existing transit]), falling back to the original transit solver. Full cut
 poses, `min_fraction=1.0` acceptance, the scoped tool/carton contact policy,
@@ -327,9 +329,7 @@ Faster transit shortens only non-contact portions and is no
 guarantee of a fast plan or a physically safe stale TCP: the correction
 opt-in (`cut_debug_correction_enabled`, default `false`) and both execution
 gates (`execution_enabled`, `debug_motion_execution_enabled`, both default
-`false`) are unchanged, and no physical dispatch is recommended. Tune
-mock-only first (e.g. 0.10 transit scaling shortens only non-contact
-portions); physical speed needs separate review.
+`false`) are unchanged, and no physical dispatch is recommended.
 
 ## T-cut handoff (first arm only, plan-only by default)
 
@@ -416,7 +416,7 @@ string message
 
 ## Teleoperation
 
-You can use a teleop keyboard program or a gamepad to control the arm manually. The gamepad is already available within moveit program, it's plug-and-play.
+You can use a teleop keyboard program or a gamepad to control the arm manually. The gamepad node (`servo_gamepad_input`, mapping in `config/gamepad.yaml`) starts with the MoveIt launch when `run_gamepad:=true` is passed (default `false`).
 
 You can also run the following command to start teleop_keyboard:
 

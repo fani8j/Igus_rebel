@@ -225,10 +225,8 @@ ros2 launch igus_rebel_moveit_config move_group.launch.py \
   hardware_protocol:=__HARDWARE__ \
   use_gui:=true \
   run_teleop:=true \
-  run_mtc_program:=false \
-  run_box_motion_executor:=false \
   run_box_h_cut_executor:=true</code></pre></div>
-        <p><code>run_teleop:=true</code> launches the MoveIt Servo node, joystick node, and gamepad teleop. The keyboard teleop is a separate executable started later.</p>
+        <p><code>run_teleop:=true</code> launches the MoveIt Servo node; add <code>run_gamepad:=true</code> for the joystick and gamepad teleop. The keyboard teleop is a separate executable started later.</p>
         <div class="callout stop" id="physicalLaunchWarning" hidden><strong>Physical hardware selected.</strong> Launching with <code>hardware_protocol:=rebel</code> connects to the controller. Do not continue if another CRI client is active.</div>
       </section>
 

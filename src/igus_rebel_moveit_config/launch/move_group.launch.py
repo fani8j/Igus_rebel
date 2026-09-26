@@ -5,12 +5,10 @@ from ament_index_python.packages import get_package_prefix, get_package_share_di
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
-    IncludeLaunchDescription,
     OpaqueFunction,
     TimerAction,
 )
 from launch.conditions import IfCondition
-from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import (
     Command,
     FindExecutable,
@@ -26,11 +24,6 @@ def opaque_func(context, *args, **kwargs):
     namespace = LaunchConfiguration("namespace")
     hardware_protocol = LaunchConfiguration('hardware_protocol')
     use_sim_time = LaunchConfiguration('use_sim_time')
-    run_mtc_program = LaunchConfiguration("run_mtc_program")
-    execute_mtc = LaunchConfiguration("execute_mtc")
-    mtc_start_delay = LaunchConfiguration("mtc_start_delay")
-    run_box_motion_executor = LaunchConfiguration("run_box_motion_executor")
-    box_motion_start_delay = LaunchConfiguration("box_motion_start_delay")
     run_box_h_cut_executor = LaunchConfiguration("run_box_h_cut_executor")
     box_h_cut_start_delay = LaunchConfiguration("box_h_cut_start_delay")
 
@@ -145,10 +138,6 @@ def opaque_func(context, *args, **kwargs):
         "chomp": chomp_context,
         "pilz_industrial_motion_planner": pilz_context,
     }
-    executor_extra_pipelines = {
-        "chomp": chomp_context,
-        "pilz_industrial_motion_planner": pilz_context,
-    }
 
     moveit_controllers = {
         "moveit_simple_controller_manager": controllers_dict,
@@ -188,10 +177,6 @@ def opaque_func(context, *args, **kwargs):
             "trajectory_execution.execution_duration_monitoring": False,
             "publish_robot_description": True,
             "publish_robot_description_semantic": True,
-            "publish_geometry_updates": True,
-            "publish_state_updates": True,
-            "publish_transforms_updates": False,
-            "publish_planning_scene_hz": 2.0,
             "capabilities": "move_group/ExecuteTaskSolutionCapability",
         },
         executor_ompl,
@@ -213,52 +198,6 @@ def opaque_func(context, *args, **kwargs):
         ],
     )
 
-    mtc_params_file = PathJoinSubstitution(
-        [
-            FindPackageShare("igus_rebel_moveit_config"),
-            "config",
-            "mtc_ptp_lin.yaml",
-        ]
-    )
-    mtc_node = Node(
-        condition=IfCondition(run_mtc_program),
-        package="igus_rebel_moveit_config",
-        executable="rebel_mtc_ptp_lin",
-        namespace=namespace,
-        parameters=[
-            mtc_params_file,
-            {"execute": execute_mtc},
-            {"use_sim_time": use_sim_time},
-            moveit_args,
-        ],
-        output="screen",
-    )
-    delayed_mtc_node = TimerAction(period=mtc_start_delay, actions=[mtc_node])
-
-    box_motion_params_file = PathJoinSubstitution(
-        [
-            FindPackageShare("igus_rebel_moveit_config"),
-            "config",
-            "box_motion_executor.yaml",
-        ]
-    )
-    box_motion_node = Node(
-        condition=IfCondition(run_box_motion_executor),
-        package="igus_rebel_moveit_config",
-        executable="box_motion_executor",
-        namespace=namespace,
-        parameters=[
-            box_motion_params_file,
-            {"use_sim_time": use_sim_time},
-            moveit_args,
-            executor_ompl,
-            executor_extra_pipelines,
-        ],
-        output="screen",
-    )
-    delayed_box_motion_node = TimerAction(
-        period=box_motion_start_delay, actions=[box_motion_node]
-    )
     box_h_cut_params_file = PathJoinSubstitution(
         [
             FindPackageShare("igus_rebel_moveit_config"),
@@ -275,8 +214,6 @@ def opaque_func(context, *args, **kwargs):
             box_h_cut_params_file,
             {"use_sim_time": use_sim_time},
             moveit_args,
-            executor_ompl,
-            executor_extra_pipelines,
         ],
         additional_env={"FASTDDS_BUILTIN_TRANSPORTS": "UDPv4"},
         output="screen",
@@ -301,7 +238,7 @@ def opaque_func(context, *args, **kwargs):
         package="igus_rebel_moveit_config",
         executable="calibration_verification",
         parameters=[
-            moveit_args, executor_ompl, executor_extra_pipelines,
+            moveit_args,
             calibration_params,
             {"use_sim_time": use_sim_time},
         ],
@@ -403,8 +340,6 @@ def opaque_func(context, *args, **kwargs):
         servo_node,
         joy_node,
         teleop_twist_joy_node,
-        delayed_mtc_node,
-        delayed_box_motion_node,
         delayed_box_h_cut_node,
         launch_rviz
     ]
@@ -412,33 +347,7 @@ def opaque_func(context, *args, **kwargs):
 
 def generate_launch_description():
     namespace_arg = DeclareLaunchArgument("namespace", default_value="")
-    prefix_arg = DeclareLaunchArgument("prefix", default_value="")
     use_gui_arg = DeclareLaunchArgument("use_gui", default_value="true")
-    run_mtc_program_arg = DeclareLaunchArgument(
-        "run_mtc_program",
-        default_value="false",
-        description="Plan the configured PTP then LIN task",
-    )
-    execute_mtc_arg = DeclareLaunchArgument(
-        "execute_mtc",
-        default_value="false",
-        description="Execute the MTC solution after planning; false is planning-only",
-    )
-    mtc_start_delay_arg = DeclareLaunchArgument(
-        "mtc_start_delay",
-        default_value="3.0",
-        description="Seconds to wait for controllers before starting the MTC task",
-    )
-    run_box_motion_executor_arg = DeclareLaunchArgument(
-        "run_box_motion_executor",
-        default_value="false",
-        description="Start the plan-only carton hover MTC executor",
-    )
-    box_motion_start_delay_arg = DeclareLaunchArgument(
-        "box_motion_start_delay",
-        default_value="3.0",
-        description="Seconds to wait for MoveIt before starting the box executor",
-    )
     run_box_h_cut_executor_arg = DeclareLaunchArgument(
         "run_box_h_cut_executor",
         default_value="false",
@@ -479,11 +388,6 @@ def generate_launch_description():
     ld.add_action(namespace_arg)
     ld.add_action(use_gui_arg)
     ld.add_action(hardware_protocol_arg)
-    ld.add_action(run_mtc_program_arg)
-    ld.add_action(execute_mtc_arg)
-    ld.add_action(mtc_start_delay_arg)
-    ld.add_action(run_box_motion_executor_arg)
-    ld.add_action(box_motion_start_delay_arg)
     ld.add_action(run_box_h_cut_executor_arg)
     ld.add_action(box_h_cut_start_delay_arg)
 

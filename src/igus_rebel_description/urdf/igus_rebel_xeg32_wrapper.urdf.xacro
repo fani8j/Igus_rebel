@@ -55,16 +55,4 @@
     <child link="xeg32_tool_tip"/>
     <origin xyz="0.005937 0.094121 0.130699" rpy="0 0 0"/>
   </joint>
-
-  <link name="xeg32_tool_tip_proposed">
-    <visual>
-      <geometry><sphere radius="0.006"/></geometry>
-      <material name="xeg32_tool_tip_proposed_marker"><color rgba="1 0.1 0.1 1"/></material>
-    </visual>
-  </link>
-  <joint name="igus_tool0_to_xeg32_tool_tip_proposed" type="fixed">
-    <parent link="igus_tool0"/>
-    <child link="xeg32_tool_tip_proposed"/>
-    <origin xyz="0.088936 0.046766 0.135060" rpy="0 0 0"/>
-  </joint>
 </robot>

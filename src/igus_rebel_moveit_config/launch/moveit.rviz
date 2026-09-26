@@ -170,11 +170,6 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
-        xeg32_tool_tip_proposed:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
       Name: RobotState
       Robot Alpha: 1
       Robot Description: robot_description
@@ -327,11 +322,6 @@ Visualization Manager:
             Show Axes: false
             Show Trail: false
             Value: true
-          xeg32_tool_tip_proposed:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
         Loop Animation: false
         Robot Alpha: 0.5
         Robot Color: 150; 50; 150
@@ -466,11 +456,6 @@ Visualization Manager:
             Show Axes: false
             Show Trail: false
             Value: true
-          xeg32_tool_tip_proposed:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
         Robot Alpha: 1
         Show Robot Collision: false
         Show Robot Visual: true
@@ -576,11 +561,6 @@ Visualization Manager:
             Show Trail: false
             Value: true
           xeg32_tool_tip:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          xeg32_tool_tip_proposed:
             Alpha: 1
             Show Axes: false
             Show Trail: false

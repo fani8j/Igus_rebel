@@ -26,23 +26,6 @@ box_perception:
     plane_min_inlier_ratio: 0.25
     corner_filter_window: 15
     max_corner_jump_px: 10.0
-    # The copied original detector performs its own corner refinement and does not
-    # expose the former gradient-refinement helper APIs.
-    use_rgb_quad_edge_refinement: false
-    quad_edge_search_range_px: 8.0
-    quad_edge_offset_step_px: 0.5
-    quad_edge_min_gradient_score: 20.0
-    use_rgb_front_edge_refinement: false
-    front_ratio_min: 0.70
-    front_ratio_max: 1.00
-    front_ratio_step: 0.005
-    front_ratio_filter_window: 15
-    front_ratio_max_jump: 0.05
-    use_rgb_seam_refinement: false
-    seam_ratio_min: 0.20
-    seam_ratio_max: 0.60
-    seam_ratio_step: 0.005
-    seam_min_gradient_score: 20.0
     sync_slop_s: 0.10
 
     seam_inset_ratio: 0.10

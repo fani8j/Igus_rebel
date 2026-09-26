@@ -12,11 +12,10 @@ namespace Igus
     //
     // Constructor(s)/ Destructor(s)
     //
-    RebelSocket::RebelSocket(const std::string &ip, const int &port, const int &timeout)
+    RebelSocket::RebelSocket(const std::string &ip, const int &port)
         : sock(0),
           ip(ip),
           port(port),
-          timeout(timeout),
           unprocessedMessages(),
           fragmentBuffer{0}
     {

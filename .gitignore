@@ -7,3 +7,22 @@ log*/
 
 **/.vscode/*
 /*.zip
+# Python byproducts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Archives, recordings and generated artifacts
+*.zip
+*.db3
+*.sqlite3
+*.usd
+frames_*.gv
+frames_*.pdf
+symlink_install_manifest.txt
+scan_results/
+isaac_exports/
+backups/
+docs/
+workspace_scan_artifacts/*.sqlite3
+workspace_scan_artifacts/*.jsonl

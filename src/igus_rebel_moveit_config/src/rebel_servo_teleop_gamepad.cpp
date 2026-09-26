@@ -1,7 +1,10 @@
-#include <chrono>
-#include <control_msgs/msg/joint_jog.hpp>
-#include <sensor_msgs/msg/joy.hpp>
+#include <functional>
+#include <iostream>
+#include <memory>
+#include <string>
+
 #include <geometry_msgs/msg/twist_stamped.hpp>
+#include <sensor_msgs/msg/joy.hpp>
 #if __has_include(<moveit_msgs/srv/servo_command_type.hpp>)
 #include <moveit_msgs/srv/servo_command_type.hpp>
 #define IGUS_REBEL_HAS_SERVO_COMMAND_TYPE 1
@@ -9,23 +12,17 @@
 #define IGUS_REBEL_HAS_SERVO_COMMAND_TYPE 0
 #endif
 #include <rclcpp/rclcpp.hpp>
-#include <signal.h>
-#include <stdio.h>
 
 #define MAX_LINEAR_VEL 0.10
 #define MAX_ANGULAR_VEL 0.5
 
-// Some constants used in the Servo Teleop demo
 namespace
 {
     const std::string TWIST_TOPIC = "delta_twist_cmds";
-    const std::string JOINT_TOPIC = "delta_joint_cmds";
     const size_t ROS_QUEUE_SIZE = 10;
-    const std::string PLANNING_FRAME_ID = "base_link";
-    const std::string EE_FRAME_ID = "xeg32_tool_tip";
 } // namespace
 
-// Converts key-presses to Twist or Jog commands for Servo, in lieu of a controller
+// Converts joystick axes to Twist commands for MoveIt Servo while the enable button is held.
 class JoyServo
 {
 public:
@@ -39,28 +36,29 @@ private:
     rclcpp::Node::SharedPtr nh_;
 
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_pub_;
-    rclcpp::Publisher<control_msgs::msg::JointJog>::SharedPtr joint_pub_;
 #if IGUS_REBEL_HAS_SERVO_COMMAND_TYPE
     rclcpp::Client<moveit_msgs::srv::ServoCommandType>::SharedPtr switch_input_;
     std::shared_ptr<moveit_msgs::srv::ServoCommandType::Request> request_;
 #endif
     rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_sub_;
-    double joint_vel_cmd_;
-    std::string command_frame_id_;
-    bool status_enable_ = false;
+    std::string command_frame_id_{"base_link"};
 
-    // Axis and button mappings
-    int axis_linear_x_, axis_linear_y_, axis_linear_z_, button_linear_z_down_;
-    int axis_angular_x_, axis_angular_y_, axis_angular_z_, button_angular_z_right_;
-    int button_enable_;
+    // Axis and button mappings (overridden by config/gamepad.yaml)
+    int axis_linear_x_ = 1;
+    int axis_linear_y_ = 0;
+    int axis_linear_z_ = 7;
+    int axis_angular_x_ = 2;
+    int axis_angular_y_ = 3;
+    int axis_angular_z_ = 6;
+    int button_enable_ = 7;
 };
 
-JoyServo::JoyServo() : joint_vel_cmd_(1.0), command_frame_id_{"base_link"}
+JoyServo::JoyServo()
 {
-    nh_ = rclcpp::Node::make_shared("servo_keyboard_input");
+    nh_ = rclcpp::Node::make_shared("servo_gamepad_input");
+    initializeParams();
 
     twist_pub_ = nh_->create_publisher<geometry_msgs::msg::TwistStamped>(TWIST_TOPIC, ROS_QUEUE_SIZE);
-    joint_pub_ = nh_->create_publisher<control_msgs::msg::JointJog>(JOINT_TOPIC, ROS_QUEUE_SIZE);
     joy_sub_ = nh_->create_subscription<sensor_msgs::msg::Joy>(
         "joy", ROS_QUEUE_SIZE, std::bind(&JoyServo::joyCallback, this, std::placeholders::_1));
 
@@ -80,32 +78,14 @@ JoyServo::JoyServo() : joint_vel_cmd_(1.0), command_frame_id_{"base_link"}
 
 void JoyServo::initializeParams()
 {
-    // Initialize axis and button mappings defaults
-    axis_linear_x_ = 1;
-    axis_linear_y_ = 0;
-    axis_linear_z_ = 7;
-
-    axis_angular_x_ = 2;
-    axis_angular_y_ = 3;
-    axis_angular_z_ = 6;
-
-    button_enable_ = 7;
-
-    // Get parameters from the parameter server, if they exist
-    nh_->declare_parameter("axis_linear_x", axis_linear_x_);
-    nh_->declare_parameter("axis_linear_y", axis_linear_y_);
-    nh_->declare_parameter("axis_linear_z", axis_linear_z_);
-    nh_->declare_parameter("axis_angular_x", axis_angular_x_);
-    nh_->declare_parameter("axis_angular_y", axis_angular_y_);
-    nh_->declare_parameter("axis_angular_z", axis_angular_z_);
-    nh_->declare_parameter("button_enable", button_enable_);
-    nh_->get_parameter("axis_linear_x", axis_linear_x_);
-    nh_->get_parameter("axis_linear_y", axis_linear_y_);
-    nh_->get_parameter("axis_linear_z", axis_linear_z_);
-    nh_->get_parameter("axis_angular_x", axis_angular_x_);
-    nh_->get_parameter("axis_angular_y", axis_angular_y_);
-    nh_->get_parameter("axis_angular_z", axis_angular_z_);
-    nh_->get_parameter("button_enable", button_enable_);
+    command_frame_id_ = nh_->declare_parameter("command_frame_id", command_frame_id_);
+    axis_linear_x_ = nh_->declare_parameter("axis_linear_x", axis_linear_x_);
+    axis_linear_y_ = nh_->declare_parameter("axis_linear_y", axis_linear_y_);
+    axis_linear_z_ = nh_->declare_parameter("axis_linear_z", axis_linear_z_);
+    axis_angular_x_ = nh_->declare_parameter("axis_angular_x", axis_angular_x_);
+    axis_angular_y_ = nh_->declare_parameter("axis_angular_y", axis_angular_y_);
+    axis_angular_z_ = nh_->declare_parameter("axis_angular_z", axis_angular_z_);
+    button_enable_ = nh_->declare_parameter("button_enable", button_enable_);
 }
 
 void JoyServo::joyCallback(const sensor_msgs::msg::Joy::SharedPtr msg)
@@ -123,14 +103,14 @@ void JoyServo::joyCallback(const sensor_msgs::msg::Joy::SharedPtr msg)
     try
     {
         // Enable button must be held to send commands
-        if (msg->buttons[button_enable_])
+        if (msg->buttons.at(button_enable_))
         {
-            twist_msg->twist.linear.x = MAX_LINEAR_VEL * msg->axes[axis_linear_x_];
-            twist_msg->twist.linear.y = MAX_LINEAR_VEL * msg->axes[axis_linear_y_];
-            twist_msg->twist.linear.z = MAX_LINEAR_VEL * msg->axes[axis_linear_z_];
-            twist_msg->twist.angular.x = MAX_ANGULAR_VEL * msg->axes[axis_angular_x_];
-            twist_msg->twist.angular.y = MAX_ANGULAR_VEL * msg->axes[axis_angular_y_];
-            twist_msg->twist.angular.z = MAX_ANGULAR_VEL * msg->axes[axis_angular_z_];
+            twist_msg->twist.linear.x = MAX_LINEAR_VEL * msg->axes.at(axis_linear_x_);
+            twist_msg->twist.linear.y = MAX_LINEAR_VEL * msg->axes.at(axis_linear_y_);
+            twist_msg->twist.linear.z = MAX_LINEAR_VEL * msg->axes.at(axis_linear_z_);
+            twist_msg->twist.angular.x = MAX_ANGULAR_VEL * msg->axes.at(axis_angular_x_);
+            twist_msg->twist.angular.y = MAX_ANGULAR_VEL * msg->axes.at(axis_angular_y_);
+            twist_msg->twist.angular.z = MAX_ANGULAR_VEL * msg->axes.at(axis_angular_z_);
         }
         else
         {
@@ -147,10 +127,7 @@ void JoyServo::joyCallback(const sensor_msgs::msg::Joy::SharedPtr msg)
 
 void JoyServo::spin()
 {
-    while (rclcpp::ok())
-    {
-        rclcpp::spin_some(nh_);
-    }
+    rclcpp::spin(nh_);
 }
 
 int main(int argc, char **argv)

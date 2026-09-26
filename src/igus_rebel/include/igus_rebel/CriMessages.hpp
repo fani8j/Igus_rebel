@@ -101,11 +101,6 @@ namespace Igus
         class CriMessage
         {
         public:
-            MessageType GetType()
-            {
-                return type;
-            }
-
             static MessageType GetMessageType(const std::string &);
 
         protected:
@@ -123,9 +118,6 @@ namespace Igus
 
             template <class T, std::size_t N>
             static std::string ArrayToString(std::array<T, N> &);
-
-            template <class T>
-            std::string VectorToString(std::vector<T> &vector);
         };
 
         class Status : public CriMessage
@@ -151,8 +143,6 @@ namespace Igus
             explicit Status();
             bool IsValid() const { return valid; }
             static std::string ModeToString(const Mode &);
-            void Print();
-            void Log();
 
         private:
             bool valid;
@@ -264,9 +254,6 @@ namespace Igus
             // is unclear on the question if the robot will always return the same number of paris.
             // (Probably it will, but why risk it?)
             std::vector<std::pair<float, float>> minMaxPairs;
-
-            std::string ToString();
-            void Print();
         };
     }
 }

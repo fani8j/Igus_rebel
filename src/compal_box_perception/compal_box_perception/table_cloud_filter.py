@@ -21,14 +21,6 @@ def _field_offsets(fields) -> dict:
     return {f.name: f.offset for f in fields}
 
 
-def _numpy_dtype_for_field(datatype: int):
-    if datatype == PointField.FLOAT32:
-        return np.float32
-    if datatype == PointField.UINT32:
-        return np.uint32
-    raise ValueError(f"unsupported point field datatype {datatype}")
-
-
 class TableCloudFilter(Node):
     """Crop + decimate the registered cloud into a light visualization topic."""
 

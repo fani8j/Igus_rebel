@@ -40,13 +40,10 @@ namespace Igus
         const std::string STATUS_ERROR = "ERROR";
         const std::string STATUS_KINSTATE = "KINSTATE";
         const std::string STATUS_OPMODE = "OPMODE";
-        const std::string STATUS_FRAMEROBOT = "FRAMEROBOT";
 
-        const std::string COMMAND_CONNECT = "Connect";
         const std::string COMMAND_RESET = "Reset";
         const std::string COMMAND_ENABLE = "Enable";
         const std::string COMMAND_DISABLE = "Disable";
-        const std::string COMMAND_DISCONNECT = "Disconnect";
         const std::string COMMAND_MOTIONTYPEJOINT = "MotionTypeJoint";
         const std::string COMMAND_MOTIONTYPECARTBASE = "MotionTypeCartBase";
         const std::string COMMAND_QUIT = "QUIT";

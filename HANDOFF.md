@@ -1,5 +1,17 @@
 # Handoff — H-cut planning and mock verification
 
+> **Update 2026-09-26 (later session) — supersedes §3, §4 step 2, the "Blocking" item in §6, and the first open question in §10.**
+>
+> - **Committed** the prior work as `ca25c0e` on branch `hcut-path-consistency`. CLAUDE.md added.
+> - **Controller IP** confirmed `192.168.50.133` (as in `Rebel.hpp`); README fixed. **Current TCP** `0.005937 0.094121 0.130699` confirmed correct by the operator.
+> - **Transit scaling** raised to `0.15` (operator-approved); contact strokes stay `0.05`. Nominal mock t_cut is now ~24.4 s (was 50.2 s at 0.05).
+> - **Wrist winding fixed:** root cause was random-restart pose-goal IK picking opposite spherical-wrist branches (joint4/joint6 limits ±3.124 rad, no wrap). New `NearestBranchTransitPlanner` wraps the transit stack and plans to the exact-pose, collision-free IK branch nearest the start state. Wrist guard, `min_fraction=1.0`, collisions, dwells and gates unchanged. Corrected t_cut (original Sep 16 left file) now passes 5/5 mock runs (left→middle joint6 1.66 rad); previously failed 2/5. Evidence: `scan_results/hcut_wrist_branch_20260926/`.
+> - **Old left translations are not reusable:** re-basing the Sep 16 record (taught with TCP `0.068936 0.046766 0.125060`) onto the current TCP puts the blade ~30 mm above the carton; the tool hardware likely changed. New record keeping only the taught orientation: `/home/farhan/cut_debug_corrections/left_capture_frame_000001_20260916_235239_389784_orient_only_tcp20260924.json` (zero translation deltas). Full t_cut plans with it (`scan_results/hcut_left_orient_only_20260926/`).
+> - **Taught angle unreachable on the replay carton:** the roll search selects +45 deg (its limit). Roll 0 needs joint3 2.69–2.87 rad vs the 2.618 rad limit because this carton's left cut is ~10 cm closer to the base than the teaching carton; +45 is the smallest feasible roll. No carton/pole contact involved. A one-line `Left roll diag` result is logged per candidate; the expensive per-pose IK/collision detail needs `left_roll_diagnostics_enabled:=true`. Evidence: `scan_results/hcut_left_roll_diag_20260926/`.
+> - **Operator decision:** keep nearest-feasible-roll behaviour (taught angle first, roll up to ±45 deg, log the choice). Nothing committed since `ca25c0e` (operator said not yet).
+> - **Repo cleanup (2026-09-26, operator-approved):** removed `box_motion_executor`, `rebel_mtc_ptp_lin`, `point_target_moveit`, `compare_detection`, the broken Setup-Assistant launches, the `left_partial`/`right_partial`/`middle_partial_preview` cut modes and their params, dead CRI driver code, the `xeg32_tool_tip_proposed` marker, old mesh/USD/backup assets, and ~930 MB of untracked archives/build junk. `cut_pattern` now defaults to `t_cut` (the §8 `param set` step is no longer needed); `side_cut_orientation_mode` accepts `edge_aligned`/`middle_aligned` (`auto` removed); `motion_profile` is validated when set; the staged cut-debug start now passes the wrist guard; gamepad node is `servo_gamepad_input` and loads `gamepad.yaml`. Before/after mock regression (target poses identical): `scan_results/cleanup_regression_20260926/`.
+> - Still true: all of this is mock-only; no physical validation; `xeg32_tool_tip` has no collision geometry; no H-cut regression tests yet (§4 step 4).
+
 ## 1. Goal
 
 Build a snapshot-relative, plan-only-by-default T/H-cut workflow for the igus ReBeL with XEG-32 under ROS 2 Humble. The current problem is that independently sampled pose-goal IK can wind the wrist during free-space transitions, producing visually odd rotations and long trajectories; the saved taught left-cut pose also predates a TCP change. Preserve the detected cut geometry, collision checking, full Cartesian completion, and explicit execution gates while improving planning consistency. No physical cutting result has been established.
@@ -54,7 +66,7 @@ The exact service response is `scan_results/hcut_path_consistency_20260926/plan_
 - `src/igus_rebel_moveit_config/config/box_h_cut_executor.yaml` — H-cut geometry, corrections, speeds, planner defaults, and fail-closed gates.
 - `src/igus_rebel_moveit_config/launch/move_group.launch.py` — MoveIt/executor/RViz/camera-pole launch wiring; explicit `hardware_protocol` selection.
 - `src/igus_rebel/launch/rebel.launch.py` — ros2_control robot driver and `mock_hardware` controller launch.
-- `src/igus_rebel_description/urdf/igus_rebel_xeg32_wrapper.urdf.xacro` — active and proposed TCP visual links and transform to `igus_tool0`.
+- `src/igus_rebel_description/urdf/igus_rebel_xeg32_wrapper.urdf.xacro` — active TCP visual link and transform to `igus_tool0`.
 - `src/igus_rebel_moveit_config/scripts/camera_pole_collision.py` — fixed external camera-pole planning-scene object from TF.
 - `src/igus_rebel_moveit_config/CMakeLists.txt` — executable dependencies, install targets; inspect before adding tests.
 - `README.md`, `src/igus_rebel_moveit_config/XEG32_MOVEIT_CHANGES.md` — workflow and safety documentation.
@@ -92,7 +104,7 @@ In another sourced terminal with the same domain:
 ```bash
 ros2 launch igus_rebel_moveit_config move_group.launch.py \
   hardware_protocol:=mock_hardware use_gui:=true run_teleop:=false \
-  run_box_h_cut_executor:=true run_box_motion_executor:=false
+  run_box_h_cut_executor:=true
 ```
 
 The camera pole is required. In the prior **mock-only** fixture, two additional sourced terminals in that same domain ran these static TF publishers (verify against the current calibration before reusing; these are not a substitute for live physical TF):

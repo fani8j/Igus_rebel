@@ -341,6 +341,7 @@ public:
     preapproach_distance_m_ = declare_parameter<double>("preapproach_distance_m", 0.080);
     cartesian_step_m_ = declare_parameter<double>("cartesian_step_m", 0.003);
     planning_timeout_s_ = declare_parameter<double>("planning_timeout_s", 15.0);
+    max_solutions_ = declare_parameter<int>("max_solutions", 1);
     velocity_scaling_ = declare_parameter<double>("velocity_scaling", 0.05);
     acceleration_scaling_ = declare_parameter<double>("acceleration_scaling", 0.05);
 

@@ -244,22 +244,6 @@ namespace Igus
             return msg.str();
         }
 
-        template <class T>
-        std::string CriMessage::VectorToString(std::vector<T> &vector)
-        {
-            std::ostringstream msg;
-            msg << std::showpoint;
-            msg << std::fixed;
-            msg << std::setprecision(FLOAT_PRINT_PRECISION);
-
-            for (T val : vector)
-            {
-                msg << val << " ";
-            }
-
-            return msg.str();
-        }
-
         Status::Status(const std::string &messageString) : Status()
         {
             std::string::size_type modeStart = messageString.find(CriKeywords::STATUS_MODE);
@@ -403,17 +387,6 @@ namespace Igus
             }
 
             return std::string();
-        }
-
-        void Status::Print()
-        {
-            std::cout << ToString();
-        }
-
-        void Status::Log()
-        {
-            rclcpp::Clock::SharedPtr clock_ = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
-            // RCLCPP_INFO_THROTTLE(rclcpp::get_logger("igus_rebel"), *clock_, 60, "Rebel status:\n%s", ToString().c_str());
         }
 
         std::string Status::ToString()
@@ -721,25 +694,6 @@ namespace Igus
             {
                 minMaxPairs.push_back(std::pair<float, float>(minMax.at(i), minMax.at(i + 1)));
             }
-        }
-
-        std::string KinematicLimits::ToString()
-        {
-            std::ostringstream msg;
-
-            for (size_t i = 0; i < minMaxPairs.size() - 1; i++)
-            {
-                msg << "(" << minMaxPairs.at(i).first << ", " << minMaxPairs.at(i).second << ") ";
-            }
-
-            msg << "(" << minMaxPairs.at(minMaxPairs.size() - 1).first << ", " << minMaxPairs.at(minMaxPairs.size() - 1).second << ")";
-
-            return msg.str();
-        }
-
-        void KinematicLimits::Print()
-        {
-            std::cout << "Kinematic limits: " << ToString() << std::endl;
         }
     }
 }

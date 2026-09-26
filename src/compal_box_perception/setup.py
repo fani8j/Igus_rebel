@@ -26,7 +26,6 @@ setup(
     entry_points={
         "console_scripts": [
             "box_perception_node = compal_box_perception.box_perception_node:main",
-            "compare_detection = compal_box_perception.compare_detection:main",
             "aruco_verification = compal_box_perception.aruco_verification:main",
             "aruco_transform_filter = compal_box_perception.aruco_transform_filter:main",
             "table_cloud_filter = compal_box_perception.table_cloud_filter:main",

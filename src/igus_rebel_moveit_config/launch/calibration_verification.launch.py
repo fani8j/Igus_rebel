@@ -47,8 +47,7 @@ def generate_launch_description():
         include(motion, "move_group.launch.py", {
             "hardware_protocol": LaunchConfiguration("hardware_protocol"),
             "use_gui": LaunchConfiguration("use_gui"),
-            "run_teleop": "false", "run_mtc_program": "false",
-            "run_box_motion_executor": "false", "run_box_h_cut_executor": "false",
+            "run_teleop": "false", "run_box_h_cut_executor": "false",
             "run_calibration_verification": "true",
             "calibration_verification_config": LaunchConfiguration("motion_config"),
             "calibration_execution_allowed": LaunchConfiguration("execution_allowed"),
