@@ -122,9 +122,12 @@ Operator present, explicit approval in the conversation before each motion step.
 
 1. E-stop within reach and tested; workspace clear; only one CRI client connected (close
    the igus software's control session and any other driver).
-2. Launch the driver alone and pass the protocol explicitly:
-   `ros2 launch igus_rebel rebel.launch.py hardware_protocol:=rebel`.
-3. In the log confirm: `Connected to ReBeL at 192.168.50.133:3920`;
+2. Prefer the wired LAN (default `robot_ip` 192.168.3.11; this PC needs an address on
+   192.168.3.x). Launch the driver alone and pass the protocol explicitly:
+   `ros2 launch igus_rebel rebel.launch.py hardware_protocol:=rebel`
+   (Wi-Fi alternative: add `robot_ip:=192.168.50.133`; measured Wi-Fi latency spikes
+   up to ~160 ms can trip the 200 ms stale-STATUS stop, so avoid Wi-Fi for motion).
+3. In the log confirm: `CRI controller target <ip>:3920` and `Connected to ReBeL at <ip>:3920`;
    `First STATUS: joints [deg] ...` with joint values matching the pendant; the override
    values reported by `Robot velocity override is X %` (and in `First STATUS`) before
    and after `Sent CRI 'Override 100.0' ...` — note the value before, it tells what the

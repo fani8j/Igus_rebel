@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A colcon workspace driving an igus ReBeL 6-DoF arm with an XEG-32 gripper and knife TCP over ROS 2 (Humble on Ubuntu 22.04 is the primary target; Jazzy also supported). The main application is **snapshot-relative carton cutting**: a perception snapshot of a taped carton is turned into MoveIt Task Constructor (MTC) plans for left/middle/right cuts (`cut_pattern`: `t_cut` (default), `t_cut_handoff`, `h`, `combined`, single-cut and debug patterns).
 
-The robot controller is reached over CRI/TCP on port 3920; the IP is hard-coded in `src/igus_rebel/include/igus_rebel/Rebel.hpp` (rebuild after changing it).
+The robot controller is reached over CRI/TCP on port 3920 at `192.168.3.11` (wired LAN, default) or `192.168.50.133` (Wi-Fi); select it with the `rebel.launch.py` arg `robot_ip:=...` (ros2_control hardware parameter `robot_ip`).
 
 ## Build and test
 

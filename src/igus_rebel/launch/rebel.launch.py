@@ -20,6 +20,11 @@ def generate_launch_description():
         choices=["mock_hardware", "gazebo", "isaac_topic", "rebel"],
         description="Which hardware protocol or mock hardware should be used",
     )
+    robot_ip_arg = DeclareLaunchArgument(
+        "robot_ip",
+        default_value="192.168.3.11",
+        description="CRI controller IPv4 address (192.168.3.11 wired LAN, 192.168.50.133 Wi-Fi)",
+    )
 
     igus_rebel_pkg = get_package_share_directory("igus_rebel")
     igus_rebel_desc_pkg = get_package_share_directory("igus_rebel_description")
@@ -52,6 +57,8 @@ def generate_launch_description():
                 robot_description_file,
                 " hardware_protocol:=",
                 LaunchConfiguration("hardware_protocol"),
+                " robot_ip:=",
+                LaunchConfiguration("robot_ip"),
             ]
         ),
         value_type=str,
@@ -93,6 +100,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         hardware_protocol_arg,
+        robot_ip_arg,
         ros2_control_node,
         robot_state_pub_node,
         joint_state_broadcaster_spawner,

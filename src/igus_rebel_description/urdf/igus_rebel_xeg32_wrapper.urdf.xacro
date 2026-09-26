@@ -4,6 +4,8 @@
 
   <!-- Keep the ReBeL arm hardware configuration independent from the gripper. -->
   <xacro:arg name="hardware_protocol" default="rebel"/>
+  <!-- CRI controller address: 192.168.3.11 = wired LAN (default), 192.168.50.133 = Wi-Fi. -->
+  <xacro:arg name="robot_ip" default="192.168.3.11"/>
   <xacro:arg name="include_ros2_control" default="true"/>
   <xacro:arg name="attach_xeg32" default="true"/>
 
@@ -18,7 +20,8 @@
   <xacro:if value="$(arg include_ros2_control)">
     <xacro:igus_rebel_control
       arm_id="rebel_arm"
-      hardware_protocol="$(arg hardware_protocol)"/>
+      hardware_protocol="$(arg hardware_protocol)"
+      robot_ip="$(arg robot_ip)"/>
   </xacro:if>
 
   <!-- Same world attachment used by igus_rebel_robot2.urdf.xacro. -->

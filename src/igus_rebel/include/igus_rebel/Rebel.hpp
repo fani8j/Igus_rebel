@@ -115,9 +115,12 @@ public:
   // pi / 180
   const double degToRad = Safety::kDegToRad;
 
-  // IP & port
-  const std::string ip = "192.168.50.133";
-  const int port = 3920;
+  // Controller address. Default is the ReBeL wired LAN address; override with the
+  // ros2_control hardware parameters robot_ip / robot_port (launch arg robot_ip:=...).
+  static constexpr const char * kDefaultIp = "192.168.3.11";
+  static constexpr int kDefaultPort = 3920;
+  std::string ip = kDefaultIp;
+  int port = kDefaultPort;
 
   Rebel();
   // For tests against a local fake CRI server only; the plugin uses Rebel().

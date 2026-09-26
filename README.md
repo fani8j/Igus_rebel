@@ -41,7 +41,13 @@ source install/setup.bash
 The `rosdep install` step installs MoveIt Task Constructor and the other
 distribution-specific dependencies required by `igus_rebel_moveit_config`.
 
-The ros node expects to reach the robot at the IP and port `192.168.50.133:3920`, this IP is fixed in **src/igus_rebel/include/igus_rebel/Rebel.hpp**, line 119 (`const std::string ip`). You can change the IP here, make sure to build the code by `colcon build` after changes.
+The driver connects to the CRI controller on port 3920. The default address is the wired
+LAN `192.168.3.11`; choose another at launch without rebuilding, e.g. over Wi-Fi:
+`ros2 launch igus_rebel rebel.launch.py hardware_protocol:=rebel robot_ip:=192.168.50.133`.
+The address reaches the driver as the ros2_control hardware parameters `robot_ip` /
+`robot_port` (xacro arg `robot_ip`); an invalid value makes the driver refuse to start.
+Prefer the wired LAN for motion: Wi-Fi latency spikes (up to ~160 ms measured) can trip
+the 200 ms stale-STATUS fail-closed stop.
 
 ## Installation: Using docker ##
 

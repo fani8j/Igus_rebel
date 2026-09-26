@@ -1,5 +1,7 @@
 #include "igus_rebel/Rebel.hpp"
 
+#include <arpa/inet.h>
+
 #include <algorithm>
 #include <cmath>
 #include <sstream>
@@ -459,6 +461,36 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
   if (SystemInterface::on_init(hardware_info) != CallbackReturn::SUCCESS) {
     return CallbackReturn::ERROR;
   }
+
+  const auto & params = hardware_info.hardware_parameters;
+  const auto ip_it = params.find("robot_ip");
+  if (ip_it != params.end() && !ip_it->second.empty()) {
+    in_addr parsed{};
+    if (inet_pton(AF_INET, ip_it->second.c_str(), &parsed) != 1) {
+      RCLCPP_FATAL(logger_, "Invalid robot_ip '%s' (expected IPv4 address)", ip_it->second.c_str());
+      return CallbackReturn::ERROR;
+    }
+    ip = ip_it->second;
+  }
+  const auto port_it = params.find("robot_port");
+  if (port_it != params.end() && !port_it->second.empty()) {
+    int parsed_port = 0;
+    try {
+      std::size_t used = 0;
+      parsed_port = std::stoi(port_it->second, &used);
+      if (used != port_it->second.size()) {
+        parsed_port = 0;
+      }
+    } catch (const std::exception &) {
+      parsed_port = 0;
+    }
+    if (parsed_port < 1 || parsed_port > 65535) {
+      RCLCPP_FATAL(logger_, "Invalid robot_port '%s'", port_it->second.c_str());
+      return CallbackReturn::ERROR;
+    }
+    port = parsed_port;
+  }
+  RCLCPP_INFO(logger_, "CRI controller target %s:%d", ip.c_str(), port);
 
   ZeroJog();
   lastWriteNs = 0;

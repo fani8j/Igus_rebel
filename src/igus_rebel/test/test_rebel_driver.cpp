@@ -21,6 +21,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
@@ -511,6 +512,42 @@ TEST(RebelDriverInit, FailsWhenNoStatusArrives)
   const auto framesAfterInit = server.Frames().size();
   std::this_thread::sleep_for(100ms);
   EXPECT_EQ(server.Frames().size(), framesAfterInit);
+}
+
+TEST(RebelDriverInit, DefaultTargetIsWiredLanAddress)
+{
+  Igus::Rebel rebel;
+  EXPECT_EQ(rebel.ip, "192.168.3.11");
+  EXPECT_EQ(rebel.port, 3920);
+}
+
+TEST(RebelDriverInit, HardwareParametersOverrideTarget)
+{
+  FakeCriServer server;
+  // Constructed with an unused port; the hardware parameters must redirect it.
+  Igus::Rebel rebel("10.255.255.1", 1);
+  hardware_interface::HardwareInfo info;
+  info.hardware_parameters["robot_ip"] = "127.0.0.1";
+  info.hardware_parameters["robot_port"] = std::to_string(server.port());
+  ASSERT_EQ(rebel.on_init(info), CallbackReturn::SUCCESS);
+  EXPECT_EQ(rebel.ip, "127.0.0.1");
+  EXPECT_EQ(rebel.port, server.port());
+  rebel.Stop();
+}
+
+TEST(RebelDriverInit, RejectsInvalidTargetParameters)
+{
+  for (const auto & bad : std::vector<std::pair<std::string, std::string>>{
+    {"robot_ip", "192.168.3"}, {"robot_ip", "robot.local"}, {"robot_port", "0"},
+    {"robot_port", "70000"}, {"robot_port", "39x"}})
+  {
+    Igus::Rebel rebel("127.0.0.1", 1);
+    hardware_interface::HardwareInfo info;
+    info.hardware_parameters[bad.first] = bad.second;
+    const auto start = Clock::now();
+    EXPECT_EQ(rebel.on_init(info), CallbackReturn::ERROR) << bad.first << "=" << bad.second;
+    EXPECT_LT(Clock::now() - start, 500ms) << "must fail before connecting";
+  }
 }
 
 TEST(RebelDriverInit, FailsWhenConnectionIsRefused)

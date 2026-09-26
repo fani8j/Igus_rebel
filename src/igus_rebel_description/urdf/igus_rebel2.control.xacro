@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <!-- igus_rebel.control.xacro -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
-    <xacro:macro name="igus_rebel_control" params="arm_id hardware_protocol">
+    <xacro:macro name="igus_rebel_control" params="arm_id hardware_protocol robot_ip:=192.168.3.11 robot_port:=3920">
         <xacro:macro name="joint_control" params="joint">
             <joint name="${joint}">
                 <xacro:if value="${hardware_protocol == 'gazebo' or hardware_protocol == 'isaac_topic' or hardware_protocol == 'mock_hardware'}">
@@ -31,6 +31,8 @@
                 </xacro:if>
                 <xacro:if value="${hardware_protocol == 'rebel'}">
                     <plugin>Igus/Rebel</plugin>
+                    <param name="robot_ip">${robot_ip}</param>
+                    <param name="robot_port">${robot_port}</param>
                 </xacro:if>
             </hardware>
             <xacro:joint_control joint="joint1" />
