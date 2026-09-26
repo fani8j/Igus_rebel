@@ -160,8 +160,10 @@ Operator present, explicit approval in the conversation before each motion step.
   disabled as `Adjacent` although a fixed motor link sits between them; justified in the
   SRDF comment (primitives overlap in most states) but not a strict Setup Assistant
   result. Review, ideally with finer collision geometry.
-- **TRAC-IK**: needs `sudo apt install ros-humble-trac-ik-kinematics-plugin`, then the
-  commented block in `kinematics.yaml` and a mock regression.
+- **TRAC-IK** (optional): no Humble apt binary exists, so it would need a source build,
+  then the commented block in `kinematics.yaml` and a mock regression. Not needed now:
+  KDL plus NearestBranchTransitPlanner plans the corrected t_cut 5/5. `ros-humble-pick-ik`
+  is available as a binary but deprecated by PickNik.
 - **Deferred driver rework**: CPR Position Interface and lifecycle
   (`on_configure`/`on_activate`) restructuring wait until the operator can test on the
   robot.

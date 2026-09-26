@@ -7,9 +7,9 @@ igus_rebel_arm:
   kinematics_solver_timeout: 0.25  # [s] per IK call
   position_only_ik: false
 
-# TRAC-IK (not installed; enable with
-#   sudo apt install ros-humble-trac-ik-kinematics-plugin
-# then replace the block above with this one and rebuild/relaunch). Distance returns the
+# TRAC-IK (not installed; there is no Humble apt binary, so build the ROS 2 trac_ik
+# packages from source into src/ first, then replace the block above with this one and
+# rebuild/relaunch). Distance returns the
 # solution closest to the seed state, which suits the wrist-branch-sensitive H-cut transits.
 # Re-run the H-cut mock regression before any physical use.
 # igus_rebel_arm:

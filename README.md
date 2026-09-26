@@ -123,7 +123,7 @@ aborts a goal on a path error above 0.25 rad per joint, a final error above 0.02
 settle time above 3.0 s, or a residual velocity above 0.05 rad/s.
 
 IK uses KDL with a 0.25 s timeout (`config/kinematics.yaml`). A commented TRAC-IK block
-is provided; enabling it needs `sudo apt install ros-humble-trac-ik-kinematics-plugin`
+is provided; TRAC-IK has no Humble apt binary, so enabling it needs a source build
 and a mock regression before physical use. Ruckig time parameterization was evaluated
 and is not enabled: it did not change the H-cut plans, lengthened OMPL plans, and no
 manufacturer jerk limit is available.
