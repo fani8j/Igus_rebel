@@ -154,8 +154,8 @@ Operator present, explicit approval in the conversation before each motion step.
 
 ## 5. Open questions
 
-- **ArUco marker size**: `aruco_verification.yaml` has `marker_size_m: 0.059`; the
-  verification guide said 60 mm. Measure the printed marker and set the value.
+- ~~ArUco marker size~~ resolved: designed 60 mm, prints at 59 mm; `marker_size_m: 0.059`
+  (measured print) is correct. Re-measure after any reprint.
 - **SRDF adjacency deviation**: `link1-link2`, `link2-link3` and `link4-link5` are kept
   disabled as `Adjacent` although a fixed motor link sits between them; justified in the
   SRDF comment (primitives overlap in most states) but not a strict Setup Assistant

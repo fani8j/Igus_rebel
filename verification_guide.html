@@ -74,11 +74,11 @@ camera_pole <b class="ok">Applying camera_pole</b>, no spawner exit-1. If a spaw
 <h2>2 · Confirm the chart is detected</h2>
 <p>Lay <code>aruco_tcp_hover_test_A4.pdf</code> flat (100% scale).
 Detector wants DICT_4X4_50 ID&nbsp;13, stable 5/5.</p>
-<div class="warn"><b>Open question — marker size:</b> <code>marker_size_m</code> in
-<code>compal_box_perception/config/aruco_verification.yaml</code> is <code>0.059</code> (59&nbsp;mm),
-while this guide previously stated a 60&nbsp;mm marker edge. Measure the printed black marker
-edge with a ruler and set <code>marker_size_m</code> to the measured value before trusting any
-hover miss; a 1&nbsp;mm size error scales the detected distance by about 1.7&nbsp;%.</div>
+<div class="warn"><b>Marker size:</b> the marker is designed at 60&nbsp;mm but prints at
+59&nbsp;mm, so <code>marker_size_m</code> in
+<code>compal_box_perception/config/aruco_verification.yaml</code> is <code>0.059</code> (the measured
+print). If you reprint it, measure the black marker edge and update the value; a 1&nbsp;mm size
+error scales the detected distance by about 1.7&nbsp;%.</div>
 <pre><button class="copy">copy</button><code class="cmd">ros2 topic echo /calibration_verification/board_pose --once
 ros2 topic hz /camera/color/image_raw</code></pre>
 <div class="check">Pass: board_pose publishes, image rate <b class="ok">&gt;5&nbsp;Hz</b>.
