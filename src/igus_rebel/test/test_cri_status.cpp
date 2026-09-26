@@ -233,6 +233,12 @@ TEST(CriParse, ParsesWellFormedMessages)
   EXPECT_EQ(std::get<Igus::CriMessages::Cyclestat>(cycle.payload).cycletime, 10);
   EXPECT_EQ(std::get<Igus::CriMessages::Cyclestat>(cycle.payload).workload, 37);
 
+  // iRC V15 (V980-15-000-2) sends decimal values, observed on the real controller.
+  auto cycleV15 = ParseMessage("49 CYCLESTAT 12.0 0.2");
+  ASSERT_TRUE(cycleV15.ok);
+  EXPECT_FLOAT_EQ(std::get<Igus::CriMessages::Cyclestat>(cycleV15.payload).cycletime, 12.0f);
+  EXPECT_FLOAT_EQ(std::get<Igus::CriMessages::Cyclestat>(cycleV15.payload).workload, 0.2f);
+
   auto message = ParseMessage("12 MESSAGE Hello robot");
   ASSERT_TRUE(message.ok);
   EXPECT_EQ(std::get<Igus::CriMessages::Message>(message.payload).message, "Hello robot");

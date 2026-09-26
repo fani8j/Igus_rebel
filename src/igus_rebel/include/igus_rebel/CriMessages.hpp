@@ -191,8 +191,8 @@ class Cyclestat : public CriMessage
 {
 public:
   explicit Cyclestat(const std::string &);
-  int cycletime;
-  int workload;
+  float cycletime;  // ms
+  float workload;   // as sent by the controller (iRC V15: fraction, e.g. 0.2 = 20 %)
 };
 
 // Result of ParseMessage(). `ok` is false if the message could not be parsed (the

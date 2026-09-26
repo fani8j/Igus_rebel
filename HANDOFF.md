@@ -61,6 +61,16 @@
   `/home/farhan/cut_debug_corrections/left_capture_frame_000001_20260916_235239_389784_orient_only_tcp20260924.json`
   (taught blade angle, geometry-derived positions; the original 2026-09-16 record's
   translations are invalid on the current TCP).
+- **Knife camera (new package `knife_camera`, 2026-09-27)**: Logitech C930e knife-view
+  webcam via `usb_cam` (apt `ros-humble-usb-cam`, `v4l-utils`), launched separately with
+  `ros2 launch knife_camera knife_camera.launch.py` (not wired into `move_group.launch.py`).
+  Publishes `/knife_camera/image_raw` (+ `/compressed`, `/camera_info`), 1280x720 MJPEG
+  -> rgb8 at 30 Hz, frame `knife_camera_optical_frame`, uncalibrated (the knife tip is a
+  fixed pixel; camera and knife move together). Manual focus from
+  `config/knife_camera_controls.yaml` (`focus_absolute: 110`, tuned by the operator with
+  `ros2 run knife_camera focus_tune.sh`), applied with v4l2-ctl because usb_cam 0.8.1's
+  `focus_auto`/`exposure_auto` names fail on kernel 6.x; auto exposure/WB kept,
+  `exposure_dynamic_framerate` off. Crosshair overlay at the knife-tip pixel is deferred.
 - Camera calibration: both `calibration_verification.launch.py` and `box_perception.launch.py`
   default to `calibration_name:=rebel_handeye_h_v2` (newest, eye-on-base, base_link ->
   camera_link = -0.0524, -0.3063, 0.4521 m), the same transform as the mock fixture in §6.
@@ -154,6 +164,18 @@ Operator present, explicit approval in the conversation before each motion step.
    driver (ros2_control stops the component after the ERROR).
 9. Only after the above: MoveIt, then (separately approved) H-cut planning with
    `execution_enabled=false`, and inspection in RViz.
+
+### First real-robot driver check (2026-09-27, LAN, no motion)
+
+Driver-only run on the real controller (iRC V980-15-000-2, "igus-REBEL/REBEL-6DOF-03",
+gripper config `knivetool1_clear.xml`): connected to 192.168.3.11:3920 (LAN ping 0.09 ms
+avg); SetActive/Reset/Enable/MotionTypeJoint/Override 100.0 all accepted; override was
+already 100 % (so the Sep 9 tracking ratio is not explained by override); all six axes
+enabled; `/joint_states` matched the controller's first STATUS exactly (velocities 0);
+~15 min idle with no stale-STATUS/read() errors; Ctrl-C deactivated with zero jog and
+exited cleanly. Follow-ups: the controller reports `LowVoltErr=DIO (0x04)` (digital-I/O
+supply low, check the 24 V DIO/gripper supply); V15 CYCLESTAT sends decimals (parser
+fixed); Stop() now logs Disable/Quit. No motion commanded yet.
 
 ## 5. Open questions
 

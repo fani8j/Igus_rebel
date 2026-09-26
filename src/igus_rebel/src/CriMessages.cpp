@@ -447,12 +447,12 @@ CmdAck::CmdAck(const std::string & messageString)
 
 Cyclestat::Cyclestat(const std::string & messageString)
 {
-  // "<counter> CYCLESTAT <cycletime> <workload>"
+  // "<counter> CYCLESTAT <cycletime> <workload>"; iRC V15 sends decimals ("10.1 0.2").
   const std::string payload = PayloadAfterType(messageString, CriKeywords::TYPE_CYCLESTAT);
   const auto tokens = Tokenize(payload);
   if (
-    tokens.size() < 2 || !ParseInt(tokens[0].first, cycletime) ||
-    !ParseInt(tokens[1].first, workload))
+    tokens.size() < 2 || !ParseFloat(tokens[0].first, cycletime) ||
+    !ParseFloat(tokens[1].first, workload))
   {
     throw std::invalid_argument("CYCLESTAT without cycletime and workload");
   }

@@ -296,7 +296,7 @@ void Rebel::HandleMessage(const std::string & msg)
         const auto & cyclestat = std::get<CriMessages::Cyclestat>(parsed.payload);
         RCLCPP_INFO_THROTTLE(
           logger_, throttleClock_, 120000,
-          "Rebel cycle statistics -- Cycletime: %d -- Workload: %d%%", cyclestat.cycletime,
+          "Rebel cycle statistics -- Cycletime: %.1f ms -- Workload: %.2f", cyclestat.cycletime,
           cyclestat.workload);
         break;
       }
@@ -762,8 +762,11 @@ void Rebel::Stop()
   }
 
   if (rebelSocket && rebelSocket->IsConnected()) {
+    RCLCPP_INFO(logger_, "Stopping: sending Disable and Quit to the ReBeL");
     Command(CriKeywords::COMMAND_DISABLE);
     Command(CriKeywords::COMMAND_QUIT);
+  } else {
+    RCLCPP_WARN(logger_, "Stopping while disconnected: Disable and Quit not sent");
   }
 
   if (rebelSocket) {
