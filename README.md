@@ -420,7 +420,35 @@ current TCP, so only an orientation-only derivative
 zero translation deltas) is used in mock. A mock replay may opt into it, but a
 physical cut requires operator verification of the blade pose on the current tool
 before enabling this opt-in. On the replay carton the taught angle itself is
-unreachable (joint3 limit) and the search selects +45 degrees.
+unreachable (joint3 limit) and the search selects +45 degrees. With the real controller
+limits (2026-09-27) even +45 degrees is unreachable there.
+
+### Parallel left orientation (opt-in, plan-only evidence)
+
+`left_parallel_orientation_enabled` (default `false`) replaces the left side-cut
+orientation with a geometry-derived one that keeps the blade as parallel to the detected
+carton top face as the arm can reach. Blade model (the planner's tool convention): tool Y
+is the blade length, tool X the blade-plane normal, tool Z the edge. The metric is
+`theta_p = acos(|tool X . surface_normal|)`, the angle between the blade plane and the top
+face: 0 is flat, 90 the perpendicular knife. The nominal left cut has 80 degrees, the
+taught 2026-09-16 record 27 degrees, its +45 degree roll 58 degrees. Candidates rotate the
+flat reference (X = -normal, Y = -along, Z toward the carton side) by tilt (about the cut
+line) and pitch (about `across`) within `+/-left_parallel_max_tilt_deg` and yaw (about the
+normal) within `+/-left_parallel_max_yaw_deg` on a `left_parallel_step_deg` grid, ordered by
+`theta_p`, then deviation of the blade from the cut line. The first candidate that passes
+the left X-or-Z penetration gate, collision-aware IK and a collision-checked Cartesian chain
+(hover start, entry, cut, exit, lift; no joint jump above 5 degrees per step) from every
+collision-free hover-start wrist branch, with every joint at least
+`left_parallel_min_joint_margin_deg` inside its URDF bound, is used for all left poses.
+TCP positions and the cut line are unchanged. The search is deterministic, bounded by
+`left_parallel_search_timeout_s`, runs once per request (the `t_cut_handoff` probes reuse
+it) and fails closed; it also fails closed when a left correction record is active (clear
+the left slot to combine it with a middle record). While enabled, a plan is refused if any
+left contact stroke moves a joint more than 1 rad. MTC with `min_fraction=1.0`, the dwell
+check, the wrist guard and both execution gates stay authoritative. On the replay carton
+(`scan_results/parallel_left_20260927/`) it selects tilt -10, pitch -5, yaw -10 degrees:
+`theta_p` 11.2 degrees, joint3 at most 133.8 degrees. Mock planning only; the blade pose
+and cutting behaviour have not been checked on the robot.
 
 ## H-cut free-space transit consistency (plan-only by default)
 
@@ -437,7 +465,7 @@ edit `box_h_cut_executor.yaml` and restart the executor to change them.
 Each free-space transit first resolves a pose goal to the exact-pose, collision-free
 IK branch nearest the propagated start state (`NearestBranchTransitPlanner`: seeds
 from the start and its equivalent spherical-wrist branches, prefers branches with
-joint6 change <= pi, then the smallest joint distance). It then tries a direct
+joint6 change <= pi, then branches with every joint at least 2 deg inside its URDF bound, then the smallest joint distance). It then tries a direct
 collision-checked joint interpolation and, if that fails, the profile's pipeline
 planner (MultiPlanner order [joint interpolation, existing transit]). If every IK
 branch fails, the original pose goal is retried once. All attempts of one transit

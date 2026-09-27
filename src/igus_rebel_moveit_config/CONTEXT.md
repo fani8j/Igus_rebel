@@ -43,3 +43,12 @@ cut. Application is opt-in (`cut_debug_correction_enabled`, default `false`)
 and fails closed on a schema, status or cut-slot mismatch, a missing or mismatched
 `planning_frame`/`tool_link`, a non-orthonormal recorded basis, non-finite values, or a
 mapped penetration axis that no longer points into the carton.
+
+## Blade parallelism (left side cut)
+Tool Y is the blade length, tool X the blade-plane normal and tool Z the edge. `theta_p =
+acos(|tool X . surface_normal|)` is the angle between the blade plane and the detected
+carton top face: 0 is a blade lying flat on the top plane, 90 the perpendicular (nominal)
+knife. The left cut line runs along the top-left edge (back_middle_left ->
+front_middle_left), so a flat blade meets the tape where it wraps over that edge, edge-first
+from outside the carton (the lateral entry). `left_parallel_orientation_enabled` searches
+for the smallest reachable `theta_p` (opt-in, plan-only).

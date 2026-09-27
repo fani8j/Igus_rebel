@@ -3,6 +3,7 @@
 #include <geometry_msgs/msg/pose_array.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <moveit/planning_scene/planning_scene.h>
+#include <moveit/robot_state/cartesian_interpolator.h>
 #include <moveit/robot_state/robot_state.h>
 #include <moveit/robot_trajectory/robot_trajectory.h>
 #include <moveit/task_constructor/solvers/cartesian_path.h>
@@ -87,8 +88,9 @@ private:
 // joint6 +/- pi); every IK result is expanded with its in-bounds wrist flip, each
 // re-verified by forward kinematics, bounds and collision. (joint6 +/- 2pi variants are
 // never generated: joint6 is limited to about +/-3.124 rad, so they are always out of
-// bounds.) Candidates whose joint6 change would exceed pi are ranked last, then by L1
-// joint distance, so the transit takes the short wrist branch. If every branch fails,
+// bounds.) Candidates whose joint6 change would exceed pi are ranked last, then those
+// with any joint within 2 deg of its URDF bound, then by L1 joint distance, so the
+// transit takes the short wrist branch. If every branch fails,
 // the original pose goal is retried once. All attempts share one time budget of
 // min(stage timeout, max_total_s). The target pose is never altered and the trajectory
 // is still produced by the wrapped planner; the solution-level wrist guard remains
@@ -245,12 +247,30 @@ public:
       for (std::size_t i = 0; i < values.size(); ++i) sum += std::abs(values[i] - start_values[i]);
       return sum;
     };
+    // A goal branch with any joint within kNearLimitRad of its URDF bound (which is itself
+    // 1 deg inside the controller limit) is ranked after branches with margin, so the
+    // transit does not park a cut on a wrist branch the controller may refuse.
+    constexpr double kNearLimitRad = 2.0 * kPi / 180.0;
+    const auto near_limit = [&](const std::vector<double>& values) {
+      for (std::size_t i = 0; i < values.size(); ++i) {
+        const auto& bounds = model.getVariableBounds(variables[i]);
+        if (bounds.position_bounded_ &&
+            (values[i] - bounds.min_position_ < kNearLimitRad ||
+             bounds.max_position_ - values[i] < kNearLimitRad)) {
+          return true;
+        }
+      }
+      return false;
+    };
     std::stable_sort(
       candidates.begin(), candidates.end(),
       [&](const std::vector<double>& lhs, const std::vector<double>& rhs) {
         const bool lhs_long = wrist_travel(lhs) > kPi;
         const bool rhs_long = wrist_travel(rhs) > kPi;
         if (lhs_long != rhs_long) return !lhs_long;
+        const bool lhs_near = near_limit(lhs);
+        const bool rhs_near = near_limit(rhs);
+        if (lhs_near != rhs_near) return !lhs_near;
         return joint_distance(lhs) < joint_distance(rhs);
       });
 
@@ -396,9 +416,13 @@ struct PlannerSettings {
     cut_debug_middle_correction_file, cut_debug_right_correction_file, cut_debug_output_dir;
   double pre_cut_stabilization_duration_s{0.0}, left_side_cut_tilt_deg{0.0},
     right_side_cut_tilt_deg{0.0}, left_adaptive_orientation_max_deg{0.0},
-    left_adaptive_orientation_step_deg{0.0}, t_cut_middle_handoff_fraction{0.0};
+    left_adaptive_orientation_step_deg{0.0}, t_cut_middle_handoff_fraction{0.0},
+    left_parallel_max_tilt_deg{0.0}, left_parallel_max_yaw_deg{0.0},
+    left_parallel_step_deg{0.0}, left_parallel_min_joint_margin_deg{0.0},
+    left_parallel_search_timeout_s{0.0};
   bool debug_fixed_orientation{false}, debug_allow_stale_snapshot{false},
-    cut_debug_correction_enabled{false}, left_adaptive_orientation_enabled{true};
+    cut_debug_correction_enabled{false}, left_adaptive_orientation_enabled{true},
+    left_parallel_orientation_enabled{false};
 };
 class BoxHCutExecutor : public rclcpp::Node
 {
@@ -612,6 +636,18 @@ private:
         "left_adaptive_orientation_max_deg", kPlan, 45.0, &S::left_adaptive_orientation_max_deg),
       field<double>(
         "left_adaptive_orientation_step_deg", kPlan, 5.0, &S::left_adaptive_orientation_step_deg),
+      // Opt-in geometry-derived left side-cut orientation that keeps the blade plane as
+      // parallel to the detected top face as reachability allows (see
+      // searchLeftParallelOrientation). Default off: plans are unchanged.
+      field<bool>(
+        "left_parallel_orientation_enabled", kPlan, false, &S::left_parallel_orientation_enabled),
+      field<double>("left_parallel_max_tilt_deg", kPlan, 45.0, &S::left_parallel_max_tilt_deg),
+      field<double>("left_parallel_max_yaw_deg", kPlan, 30.0, &S::left_parallel_max_yaw_deg),
+      field<double>("left_parallel_step_deg", kPlan, 5.0, &S::left_parallel_step_deg),
+      field<double>(
+        "left_parallel_min_joint_margin_deg", kPlan, 5.0, &S::left_parallel_min_joint_margin_deg),
+      field<double>(
+        "left_parallel_search_timeout_s", kPlan, 90.0, &S::left_parallel_search_timeout_s),
       // Expensive per-pose IK/collision probing that explains each rejected left roll
       // candidate. Read at use time; the roll search itself is unaffected.
       runtime("left_roll_diagnostics_enabled", rclcpp::ParameterValue(false)),
@@ -658,7 +694,12 @@ private:
   // Shared by startup and every runtime change: returns the first violated rule.
   static std::optional<std::string> validateSettings(const PlannerSettings& s)
   {
-    const std::array<std::pair<const char*, double>, 21> doubles{{
+    const std::array<std::pair<const char*, double>, 26> doubles{{
+      {"left_parallel_max_tilt_deg", s.left_parallel_max_tilt_deg},
+      {"left_parallel_max_yaw_deg", s.left_parallel_max_yaw_deg},
+      {"left_parallel_step_deg", s.left_parallel_step_deg},
+      {"left_parallel_min_joint_margin_deg", s.left_parallel_min_joint_margin_deg},
+      {"left_parallel_search_timeout_s", s.left_parallel_search_timeout_s},
       {"external_snapshot_max_age_s", s.external_snapshot_max_age_s},
       {"carton_height_m", s.carton_height_m}, {"hover_clearance_m", s.hover_clearance_m},
       {"left_lateral_standoff_m", s.left_lateral_standoff_m},
@@ -734,6 +775,15 @@ private:
         s.left_adaptive_orientation_step_deg > s.left_adaptive_orientation_max_deg) {
       return std::string(
         "left adaptive orientation bounds must satisfy 0 < step <= max <= 90 degrees");
+    }
+    if (!within(s.left_parallel_max_tilt_deg, 0.0, 45.0) ||
+        !within(s.left_parallel_max_yaw_deg, 0.0, 45.0) ||
+        !within(s.left_parallel_step_deg, 1.0, 15.0) ||
+        !within(s.left_parallel_min_joint_margin_deg, 0.0, 20.0) ||
+        !within(s.left_parallel_search_timeout_s, 1.0, 600.0)) {
+      return std::string(
+        "left parallel orientation bounds: max_tilt and max_yaw within [0,45] deg, step within "
+        "[1,15] deg, min_joint_margin within [0,20] deg, search_timeout within [1,600] s");
     }
     for (const double scaling : {s.velocity_scaling, s.acceleration_scaling,
                                  s.transit_velocity_scaling, s.transit_acceleration_scaling}) {
@@ -1772,6 +1822,337 @@ private:
         detail << failing_categories[index];
       }
     }
+    error = detail.str();
+    return false;
+  }
+  // Opt-in (left_parallel_orientation_enabled) geometry-derived LEFT side-cut orientation.
+  // Blade model: tool Y is the blade length, tool X the blade-plane normal, tool Z the edge.
+  // Parallelism metric theta_p = acos(|tool X . n|): the angle between the blade plane and
+  // the detected top face (n = surface normal); 0 is flat on the face, 90 the nominal
+  // perpendicular knife. Reference F0: X = -n (flat, blade normal down), Y = -along (blade
+  // opposite travel, as the nominal side cut), Z = X x Y (edge facing the carton side).
+  // Candidates are R = Rot(n, yaw) * Rot(across, pitch) * Rot(along, tilt) * F0 on a
+  // step grid within +/-max_tilt (tilt, pitch) and +/-max_yaw (yaw), ordered by theta_p,
+  // then blade deviation from the cut line, then total angle, so the order (and the
+  // result) is deterministic. The TCP positions and the cut line are unchanged. The first
+  // candidate that passes all of the following is used for every left pose:
+  //   - the existing left X-or-Z penetration gate (>= 0.7);
+  //   - collision-aware IK at the first pose (hover start, fully collision-free) from the
+  //     current state seed or fixed-seed random restarts;
+  //   - a collision-checked Cartesian chain through the remaining poses (entry, cut, exit
+  //     and lift: tool/carton contact allowed exactly as in the task) at cartesian_step_m
+  //     reaching fraction 1.0, without any joint step above kMaxStrokeJointStepRad
+  //     between waypoints and with every joint at least left_parallel_min_joint_margin_deg
+  //     inside its URDF bounds along the whole chain.
+  // It is a prefilter: MTC, min_fraction=1.0, the dwell check and the transit wrist guard
+  // remain the final authority. No candidate within left_parallel_search_timeout_s fails
+  // closed.
+  // In-bounds spherical-wrist flips (joint4 +/- pi, -joint5, joint6 +/- pi), the same
+  // variants NearestBranchTransitPlanner generates.
+  static std::vector<std::vector<double> > wristVariants(
+    const moveit::core::JointModelGroup* group, const std::vector<double>& values)
+  {
+    constexpr double kPi = 3.14159265358979323846;
+    std::vector<std::vector<double> > variants;
+    const auto& names = group->getVariableNames();
+    const auto index_of = [&](const std::string& name) -> std::optional<std::size_t> {
+        const auto it = std::find(names.begin(), names.end(), name);
+        if (it == names.end()) return std::nullopt;
+        return static_cast<std::size_t>(std::distance(names.begin(), it));
+      };
+    const auto j4 = index_of("joint4");
+    const auto j5 = index_of("joint5");
+    const auto j6 = index_of("joint6");
+    if (!j4 || !j5 || !j6 || values.size() != names.size()) return variants;
+    const auto& model = group->getParentModel();
+    const auto within = [&](std::size_t index, double value) {
+        const auto& bounds = model.getVariableBounds(names[index]);
+        return !bounds.position_bounded_ ||
+          (value >= bounds.min_position_ && value <= bounds.max_position_);
+      };
+    for (const double turn4 : {-kPi, kPi}) {
+      if (!within(*j4, values[*j4] + turn4)) continue;
+      for (const double turn6 : {-kPi, kPi}) {
+        if (!within(*j6, values[*j6] + turn6)) continue;
+        auto flipped = values;
+        flipped[*j4] += turn4;
+        flipped[*j5] = -flipped[*j5];
+        flipped[*j6] += turn6;
+        if (within(*j5, flipped[*j5])) variants.push_back(flipped);
+      }
+    }
+    return variants;
+  }
+  bool searchLeftParallelOrientation(
+    const Snapshot& snapshot,
+    const moveit::core::JointModelGroup* joint_group,
+    const moveit::core::RobotState& seed_state,
+    const std::vector<std::pair<geometry_msgs::msg::PoseStamped*, const char*> >& labeled_poses,
+    const std::string& pose_context, std::string& error)
+  {
+    constexpr double kDeg = 3.14159265358979323846 / 180.0;
+    constexpr double kMaxStrokeJointStepRad = 5.0 * kDeg;
+    constexpr int kRandomBranchAttempts = 3;  // fixed-seed restarts
+    constexpr double kIkTimeoutS = 0.1;
+    CutBasis basis;
+    if (!cutDebugBasis(snapshot, "left", basis, error)) return false;
+    planning_scene::PlanningScene scene(seed_state.getRobotModel());
+    if (!scene.processCollisionObjectMsg(cartonCollisionObject(snapshot))) {
+      error = "cannot add carton to left parallel orientation probe";
+      return false;
+    }
+    {
+      std::lock_guard<std::mutex> lock(camera_pole_mutex_);
+      if (camera_pole_) {
+        if (!scene.processCollisionObjectMsg(*camera_pole_)) {
+          error = "cannot add camera pole to left parallel orientation probe";
+          return false;
+        }
+      } else if (settings_.camera_pole_required) {
+        error = "camera pole collision object is unavailable for left parallel orientation probe";
+        return false;
+      }
+    }
+    const moveit::core::GroupStateValidityCallbackFn valid_state =
+      [this, &scene](moveit::core::RobotState* state,
+                     const moveit::core::JointModelGroup* group, const double* values) {
+        state->setJointGroupPositions(group, values);
+        state->update();
+        return !scene.isStateColliding(*state, settings_.planning_group);
+      };
+    const auto* tool = seed_state.getRobotModel()->getLinkModel(settings_.tool_link);
+    if (tool == nullptr || labeled_poses.empty()) {
+      error = "left parallel orientation probe has no tool link or poses";
+      return false;
+    }
+    const Eigen::Vector3d into_unit = -basis.normal;
+    Eigen::Matrix3d reference;
+    reference.col(0) = -basis.normal;
+    reference.col(1) = -basis.along;
+    reference.col(2) = reference.col(0).cross(reference.col(1));
+    struct Candidate {
+      double tilt, pitch, yaw, theta_p, blade_deviation, total;
+      Eigen::Quaterniond orientation;
+    };
+    const auto multiples = [&](double max_deg) {
+      std::vector<double> values;
+      const double step = settings_.left_parallel_step_deg;
+      const int count = static_cast<int>(std::floor(max_deg / step + 1e-9));
+      for (int k = -count; k <= count; ++k) values.push_back(k * step);
+      return values;
+    };
+    std::vector<Candidate> candidates;
+    for (const double tilt : multiples(settings_.left_parallel_max_tilt_deg)) {
+      for (const double pitch : multiples(settings_.left_parallel_max_tilt_deg)) {
+        for (const double yaw : multiples(settings_.left_parallel_max_yaw_deg)) {
+          const Eigen::Matrix3d rotation =
+            (Eigen::AngleAxisd(yaw * kDeg, basis.normal) *
+             Eigen::AngleAxisd(pitch * kDeg, basis.across) *
+             Eigen::AngleAxisd(tilt * kDeg, basis.along)).toRotationMatrix() * reference;
+          const double dot_x = rotation.col(0).dot(into_unit);
+          const double dot_z = rotation.col(2).dot(into_unit);
+          if (dot_x < 0.7 && dot_z < 0.7) continue;  // existing left penetration gate
+          Candidate candidate;
+          candidate.tilt = tilt;
+          candidate.pitch = pitch;
+          candidate.yaw = yaw;
+          candidate.theta_p =
+            std::acos(std::min(1.0, std::abs(rotation.col(0).dot(basis.normal)))) / kDeg;
+          candidate.blade_deviation =
+            std::acos(std::clamp(rotation.col(1).dot(-basis.along), -1.0, 1.0)) / kDeg;
+          candidate.total = std::abs(tilt) + std::abs(pitch) + std::abs(yaw);
+          candidate.orientation = Eigen::Quaterniond(rotation).normalized();
+          candidates.push_back(candidate);
+        }
+      }
+    }
+    const auto rounded = [](double value) { return std::round(value * 1e6); };
+    std::sort(candidates.begin(), candidates.end(), [&](const Candidate& a, const Candidate& b) {
+        const auto key = [&](const Candidate& c) {
+          return std::make_tuple(
+            rounded(c.theta_p), rounded(c.blade_deviation), rounded(c.total), c.tilt, c.pitch, c.yaw);
+        };
+        return key(a) < key(b);
+      });
+    const auto& bounds = joint_group->getActiveJointModelsBounds();
+    const double margin = settings_.left_parallel_min_joint_margin_deg * kDeg;
+    std::vector<std::pair<double, double> > limits;
+    for (const auto* joint_bounds : bounds) {
+      if (joint_bounds->size() != 1U || !(*joint_bounds)[0].position_bounded_) {
+        error = "left parallel orientation probe expects single-variable bounded joints";
+        return false;
+      }
+      limits.emplace_back((*joint_bounds)[0].min_position_, (*joint_bounds)[0].max_position_);
+    }
+    const auto inside_margin = [&](const std::vector<double>& q, double& worst) {
+        for (std::size_t j = 0; j < q.size() && j < limits.size(); ++j) {
+          worst = std::min(worst, std::min(q[j] - limits[j].first, limits[j].second - q[j]));
+        }
+        return worst >= margin;
+      };
+    std::vector<Eigen::Isometry3d> targets;
+    for (const auto& labeled : labeled_poses) {
+      Eigen::Isometry3d target = Eigen::Isometry3d::Identity();
+      target.translation() = toEigen(labeled.first->pose.position);
+      targets.push_back(target);
+    }
+    const auto started = std::chrono::steady_clock::now();
+    std::size_t tried = 0;
+    std::size_t ik_failures = 0;
+    std::size_t chain_failures = 0;
+    std::size_t margin_failures = 0;
+    for (const auto& candidate : candidates) {
+      const double elapsed = std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - started).count();
+      if (elapsed > settings_.left_parallel_search_timeout_s) break;
+      ++tried;
+      for (auto& target : targets) target.linear() = candidate.orientation.toRotationMatrix();
+      random_numbers::RandomNumberGenerator rng(1234U);
+      std::vector<double> seed_positions;
+      seed_state.copyJointGroupPositions(joint_group, seed_positions);
+      // Every collision-free first-pose branch the free-space transit could select: IK
+      // from the current state, its spherical-wrist flip and fixed-seed random restarts,
+      // each expanded with its in-bounds wrist flip (the NearestBranchTransitPlanner
+      // candidate set). Every such branch must carry the whole left chain, because the
+      // transit picks the branch and the contact strokes run with jump detection off.
+      std::vector<std::vector<double> > branches;
+      const auto add_branch = [&](const std::vector<double>& values) {
+          for (const auto& other : branches) {
+            double diff = 0.0;
+            for (std::size_t j = 0; j < values.size(); ++j) {
+              diff = std::max(diff, std::abs(values[j] - other[j]));
+            }
+            if (diff < 1e-3) return;
+          }
+          moveit::core::RobotState probe(seed_state);
+          probe.setJointGroupPositions(joint_group, values);
+          probe.update();
+          if (!probe.satisfiesBounds(joint_group) ||
+              scene.isStateColliding(probe, settings_.planning_group)) {
+            return;
+          }
+          const Eigen::Isometry3d& reached = probe.getGlobalLinkTransform(tool);
+          if ((reached.translation() - targets.front().translation()).norm() > 1e-5 ||
+              Eigen::AngleAxisd(reached.linear().transpose() * targets.front().linear()).angle() >
+              1e-4) {
+            return;
+          }
+          branches.push_back(values);
+        };
+      scene.getAllowedCollisionMatrixNonConst().setEntry(
+        settings_.tool_link, settings_.carton_collision_id, false);
+      std::vector<std::vector<double> > seeds{seed_positions};
+      for (const auto& variant : wristVariants(joint_group, seed_positions)) seeds.push_back(variant);
+      for (int attempt = 0; attempt < kRandomBranchAttempts; ++attempt) {
+        moveit::core::RobotState random_state(seed_state);
+        random_state.setToRandomPositions(joint_group, rng);
+        std::vector<double> values;
+        random_state.copyJointGroupPositions(joint_group, values);
+        seeds.push_back(values);
+      }
+      for (const auto& seed : seeds) {
+        moveit::core::RobotState state(seed_state);
+        state.setJointGroupPositions(joint_group, seed);
+        state.update();
+        if (!state.setFromIK(joint_group, targets.front(), settings_.tool_link, kIkTimeoutS,
+                             valid_state)) {
+          continue;
+        }
+        std::vector<double> solution;
+        state.copyJointGroupPositions(joint_group, solution);
+        add_branch(solution);
+        for (const auto& variant : wristVariants(joint_group, solution)) add_branch(variant);
+      }
+      const bool any_ik = !branches.empty();
+      bool feasible = any_ik;
+      double best_worst = std::numeric_limits<double>::infinity();
+      std::vector<double> best_start;
+      double best_distance = std::numeric_limits<double>::infinity();
+      for (const auto& start : branches) {
+        if (!feasible) break;
+        moveit::core::RobotState state(seed_state);
+        state.setJointGroupPositions(joint_group, start);
+        state.update();
+        double worst = std::numeric_limits<double>::infinity();
+        bool ok = inside_margin(start, worst);
+        std::vector<double> previous = start;
+        // Entry/cut/exit/lift strokes all run under the scoped tool/carton allowance.
+        scene.getAllowedCollisionMatrixNonConst().setEntry(
+          settings_.tool_link, settings_.carton_collision_id, settings_.allow_tool_carton_contact);
+        bool chain_ok = true;
+        for (std::size_t leg = 1; leg < targets.size() && chain_ok; ++leg) {
+          std::vector<moveit::core::RobotStatePtr> waypoints;
+          const double fraction = moveit::core::CartesianInterpolator::computeCartesianPath(
+            &state, joint_group, waypoints, tool, targets[leg], true,
+            moveit::core::MaxEEFStep(settings_.cartesian_step_m, 0.0),
+            moveit::core::JumpThreshold(0.0), valid_state);
+          if (fraction < 1.0 - 1e-9) {
+            chain_ok = false;
+            break;
+          }
+          for (const auto& waypoint : waypoints) {
+            std::vector<double> q;
+            waypoint->copyJointGroupPositions(joint_group, q);
+            for (std::size_t j = 0; j < q.size(); ++j) {
+              if (std::abs(q[j] - previous[j]) > kMaxStrokeJointStepRad) chain_ok = false;
+            }
+            if (!waypoint->satisfiesBounds(joint_group)) chain_ok = false;
+            ok = inside_margin(q, worst) && ok;
+            previous = q;
+          }
+        }
+        if (!chain_ok) {
+          ++chain_failures;
+          feasible = false;
+          break;
+        }
+        if (!ok) {
+          ++margin_failures;
+          feasible = false;
+          break;
+        }
+        best_worst = std::min(best_worst, worst);
+        double distance = 0.0;
+        for (std::size_t j = 0; j < start.size(); ++j) distance += std::abs(start[j] - seed_positions[j]);
+        if (distance < best_distance) {
+          best_distance = distance;
+          best_start = start;
+        }
+      }
+      if (!any_ik) ++ik_failures;
+      if (!feasible) continue;
+      for (const auto& labeled : labeled_poses) {
+        labeled.first->pose.orientation = toMsg(candidate.orientation);
+      }
+      std::ostringstream start_deg;
+      start_deg << std::fixed << std::setprecision(1);
+      for (std::size_t j = 0; j < best_start.size(); ++j) {
+        start_deg << (j ? "," : "") << best_start[j] / kDeg;
+      }
+      RCLCPP_INFO(
+        get_logger(),
+        "Left parallel orientation selected for %s: tilt %+.1f pitch %+.1f yaw %+.1f deg, "
+        "blade-plane angle to top face theta_p %.2f deg, blade %.2f deg off the cut line, "
+        "gate x=%.4f z=%.4f, min joint margin %.2f deg over all %zu hover-start branches "
+        "(nearest [%s] deg) (candidate %zu of %zu, %.1f s)",
+        pose_context.c_str(), candidate.tilt, candidate.pitch, candidate.yaw, candidate.theta_p,
+        candidate.blade_deviation,
+        (candidate.orientation * Eigen::Vector3d::UnitX()).dot(into_unit),
+        (candidate.orientation * Eigen::Vector3d::UnitZ()).dot(into_unit), best_worst / kDeg,
+        branches.size(), start_deg.str().c_str(), tried, candidates.size(),
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count());
+      return true;
+    }
+    std::ostringstream detail;
+    detail << std::fixed << std::setprecision(1);
+    detail << "left parallel orientation search failed closed for " << pose_context << ": tried " <<
+      tried << " of " << candidates.size() << " gate-passing candidates (max_tilt=" <<
+      settings_.left_parallel_max_tilt_deg << " max_yaw=" << settings_.left_parallel_max_yaw_deg <<
+      " step=" << settings_.left_parallel_step_deg << " deg, timeout " <<
+      settings_.left_parallel_search_timeout_s << " s); no collision-aware IK: " << ik_failures <<
+      ", Cartesian chain/jump/bounds failures: " << chain_failures <<
+      ", joint margin < " << settings_.left_parallel_min_joint_margin_deg << " deg: " <<
+      margin_failures;
     error = detail.str();
     return false;
   }
@@ -3106,7 +3487,58 @@ private:
           throw std::runtime_error(message);
         }
       }
-      if (is_left_side && segment_correction != nullptr &&
+      const bool left_parallel = is_left_side && !segment.force_fixed_orientation &&
+        !segment.hover_only && settings_.left_parallel_orientation_enabled;
+      if (left_parallel) {
+        if (segment_correction != nullptr) {
+          message =
+            "left_parallel_orientation_enabled cannot be combined with an active left correction "
+            "record; clear cut_debug_left_correction_file or disable cut_debug_correction_enabled";
+          return false;
+        }
+        // Same poses the MTC stages target; the lift exists only before a middle segment.
+        const bool lift_follows = !options.cut_debug_start &&
+          (segment_index + 1U) < segments.size() &&
+          segments[segment_index + 1U].cut == CutKind::kMiddle &&
+          !segments[segment_index + 1U].hover_only;
+        auto lift_probe = hover_end;
+        const double lift_m = settings_.hover_clearance_m - settings_.cut_clearance_m;
+        lift_probe.pose.position.x += lift_m * snapshot.surface_normal.x;
+        lift_probe.pose.position.y += lift_m * snapshot.surface_normal.y;
+        lift_probe.pose.position.z += lift_m * snapshot.surface_normal.z;
+        std::vector<std::pair<geometry_msgs::msg::PoseStamped*, const char*> > left_poses;
+        if (options.cut_debug_start) {
+          left_poses = {{&hover_start, "left hover start"}, {&cut_start, "left cut start"}};
+        } else {
+          left_poses = {
+            {&hover_start, "left hover start"}, {&cut_start, "left cut start"},
+            {&cut_end, "left cut end"}, {&hover_end, "left hover end"}};
+          if (lift_follows) left_poses.push_back({&lift_probe, "left lift"});
+        }
+        const std::string pose_context = options.cut_debug_start ?
+          "cut debug left start" : "left " + segment.name;
+        LeftRollCache* cache = options.left_roll_cache;
+        if (cache != nullptr && cache->computed && cache->orientations.size() == 1U) {
+          if (!cache->feasible) {
+            message = cache->error;
+            return false;
+          }
+          for (const auto& labeled : left_poses) {
+            labeled.first->pose.orientation = cache->orientations.front();
+          }
+        } else {
+          const bool feasible = searchLeftParallelOrientation(
+            snapshot, joint_group, ik_state, left_poses, pose_context, message);
+          if (cache != nullptr) {
+            cache->computed = true;
+            cache->feasible = feasible;
+            cache->error = feasible ? std::string() : message;
+            cache->orientations = {hover_start.pose.orientation};
+          }
+          if (!feasible) return false;
+        }
+      }
+      if (is_left_side && segment_correction != nullptr && !left_parallel &&
           !segment.force_fixed_orientation && settings_.left_adaptive_orientation_enabled) {
         // All probed poses are at their final positions here, so every IK probe below
         // covers the exact pose the MTC stages will target. A cut-debug start plans only
@@ -3298,6 +3730,73 @@ private:
       message = wrist_error;
       return false;
     }
+    if (settings_.left_parallel_orientation_enabled &&
+        !validateLeftContactJointTravel(solution, wrist_error)) {
+      message = wrist_error;
+      return false;
+    }
+    return true;
+  }
+
+  // Parallel-left mode only: the Cartesian contact strokes run with jump detection off,
+  // so a wrist flip through the joint5 singularity inside a left entry/cut/exit/lift stroke
+  // would otherwise be accepted. Rejects any such stroke whose joint travel exceeds
+  // kMaxLeftContactJointTravelRad for any joint (a constant-orientation 25-60 mm stroke
+  // needs far less).
+  bool validateLeftContactJointTravel(const mtc::SolutionBase& solution, std::string& error) const
+  {
+    constexpr double kMaxLeftContactJointTravelRad = 1.0;
+    std::vector<const mtc::SubTrajectory*> leaves;
+    std::function<void(const mtc::SolutionBase*)> collect = [&](const mtc::SolutionBase* node) {
+      if (node == nullptr) return;
+      if (const auto* wrapped = dynamic_cast<const mtc::WrappedSolution*>(node)) {
+        collect(wrapped->wrapped());
+        return;
+      }
+      if (const auto* nested = dynamic_cast<const mtc::SolutionSequence*>(node)) {
+        for (const auto* child : nested->solutions()) collect(child);
+        return;
+      }
+      if (const auto* sub = dynamic_cast<const mtc::SubTrajectory*>(node)) leaves.push_back(sub);
+    };
+    collect(&solution);
+    std::size_t examined = 0U;
+    for (const auto* leaf : leaves) {
+      const auto* creator = leaf->creator();
+      const std::string name = creator != nullptr ? creator->name() : std::string();
+      const bool left_contact = name.rfind("enter laterally into left side cut", 0) == 0U ||
+        name.rfind("cut left side cut", 0) == 0U ||
+        name.rfind("finish pose outside left side cut", 0) == 0U ||
+        name.rfind("lift clear of left side cut", 0) == 0U;
+      if (!left_contact) continue;
+      ++examined;
+      const auto& trajectory = leaf->trajectory();
+      if (!trajectory || trajectory->getWayPointCount() == 0U) {
+        error = "left contact stroke '" + name + "' has no trajectory; refusing to guess";
+        return false;
+      }
+      std::vector<double> previous;
+      std::vector<double> travel;
+      for (std::size_t index = 0; index < trajectory->getWayPointCount(); ++index) {
+        std::vector<double> values;
+        trajectory->getWayPoint(index).copyJointGroupPositions(settings_.planning_group, values);
+        if (previous.empty()) travel.assign(values.size(), 0.0);
+        for (std::size_t j = 0; j < values.size() && !previous.empty(); ++j) {
+          travel[j] += std::abs(values[j] - previous[j]);
+        }
+        previous = values;
+      }
+      for (std::size_t j = 0; j < travel.size(); ++j) {
+        if (travel[j] > kMaxLeftContactJointTravelRad) {
+          error = "left contact stroke '" + name + "' moves joint" + std::to_string(j + 1) + " " +
+            formatDouble(travel[j], 3) + " rad (> " +
+            formatDouble(kMaxLeftContactJointTravelRad, 1) +
+            " rad): wrist branch change during contact; refusing the parallel left plan";
+          return false;
+        }
+      }
+    }
+    (void)examined;  // plans without a left segment have nothing to check
     return true;
   }
 
