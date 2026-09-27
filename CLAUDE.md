@@ -36,6 +36,7 @@ Existing tests: `igus_rebel` (gtests `test_cri_status`, `test_cri_framing`, `tes
 - `compal_box_perception` (Python) — RGB-D carton/tape-seam detection, ArUco verification, table cloud filtering. `compal_box_msgs` holds its interfaces.
 - `igus_rebel_msgs` — robot services (e.g. `SetCartesianIncrement`, digital outputs).
 - `handeye_pose_replay`, `rebel_tcp_gui` — calibration/utility tools.
+- `knife_camera` — Logitech C930e knife-view webcam: `usb_cam` launch publishing `/knife_camera/image_raw` with a fixed manual focus set via v4l2-ctl (`config/knife_camera_controls.yaml`; usb_cam's own focus params use pre-kernel-6 control names and silently fail). Launched on its own, not from `move_group.launch.py`.
 
 The H-cut executor reads an external canonical snapshot (`external_snapshot_file`, set in the YAML to `/home/farhan/Igus_rebel/outputs/seam_3d_base_link.json`, produced by a separate vision repo) and rejects stale snapshots.
 

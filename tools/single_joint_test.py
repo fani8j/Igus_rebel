@@ -25,6 +25,7 @@ JOINTS = ["joint1", "joint2", "joint3", "joint4", "joint5", "joint6"]
 ACTION = "/rebel_arm_trajectory_controller/follow_joint_trajectory"
 MAX_DELTA_DEG = 10.0
 MIN_DURATION_S = 4.0
+REST_VELOCITY = 0.01  # rad/s
 
 
 class SingleJointTest(Node):
@@ -37,22 +38,29 @@ class SingleJointTest(Node):
     def _on_state(self, msg):
         self._state = msg
 
-    def current_positions(self, timeout_s=5.0):
-        self._state = None
-        end = time.monotonic() + timeout_s
-        while self._state is None and time.monotonic() < end:
-            rclpy.spin_once(self, timeout_sec=0.1)
-        if self._state is None:
-            raise RuntimeError("no /joint_states received (same ROS_DOMAIN_ID as the driver?)")
-        by_name = dict(zip(self._state.name, self._state.position))
-        velocities = dict(zip(self._state.name, self._state.velocity or []))
-        missing = [j for j in JOINTS if j not in by_name]
-        if missing:
-            raise RuntimeError(f"joint_states is missing {missing}")
-        moving = [j for j in JOINTS if abs(velocities.get(j, 0.0)) > 1e-3]
-        if moving:
-            raise RuntimeError(f"arm is not at rest (velocity on {moving})")
-        return [by_name[j] for j in JOINTS]
+    def current_positions(self, settle_s=3.0):
+        """Joint positions once the arm is at rest; waits up to settle_s for it to settle."""
+        end = time.monotonic() + settle_s
+        moving = []
+        while True:
+            self._state = None
+            deadline = time.monotonic() + 5.0
+            while self._state is None and time.monotonic() < deadline:
+                rclpy.spin_once(self, timeout_sec=0.1)
+            if self._state is None:
+                raise RuntimeError(
+                    "no /joint_states received (same ROS_DOMAIN_ID as the driver?)")
+            by_name = dict(zip(self._state.name, self._state.position))
+            velocities = dict(zip(self._state.name, self._state.velocity or []))
+            missing = [j for j in JOINTS if j not in by_name]
+            if missing:
+                raise RuntimeError(f"joint_states is missing {missing}")
+            moving = [j for j in JOINTS if abs(velocities.get(j, 0.0)) > REST_VELOCITY]
+            if not moving:
+                return [by_name[j] for j in JOINTS]
+            if time.monotonic() > end:
+                raise RuntimeError(f"arm is not at rest (velocity on {moving})")
+            time.sleep(0.1)
 
     def move(self, target, duration_s):
         if not self._client.wait_for_server(timeout_sec=5.0):
