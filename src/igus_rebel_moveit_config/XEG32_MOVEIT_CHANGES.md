@@ -337,7 +337,7 @@ closed at startup.
 Each free-space transit is wrapped by `NearestBranchTransitPlanner`: a pose goal is
 first resolved to the exact-pose, collision-free IK branch nearest the propagated
 start (seeded from the start and its equivalent spherical-wrist branches; branches
-with joint6 change <= pi first, then smallest joint distance), then planned with a
+with joint6 change <= pi first, then branches at least 2 deg inside every URDF bound, then smallest joint distance), then planned with a
 direct collision-checked joint interpolation first and the profile's pipeline planner
 second (MultiPlanner [joint interpolation, existing transit]). If every branch fails,
 the original pose goal is retried once. All attempts share one `planning_timeout_s`
@@ -404,3 +404,21 @@ Then relaunch MoveIt. The planning-group dropdown should contain both:
 
 - `igus_rebel_arm`
 - `xeg32_gripper`
+
+## Parallel left orientation (opt-in, 2026-09-27)
+
+With the real controller limits the taught left angle and every +/-45 degree roll of it
+are unreachable on the replay carton. `left_parallel_orientation_enabled` (default `false`)
+derives the left orientation from the detected cut basis instead: it searches tilt/pitch
+within +/-45 degrees and yaw within +/-30 degrees of a flat blade (tool X = -normal,
+Y = -along, Z toward the carton side) for the smallest blade-plane angle to the top face
+(`theta_p`) whose whole left chain passes the left penetration gate, collision-aware IK and
+a collision-checked, jump-free Cartesian chain from every collision-free hover-start wrist
+branch, with a joint-limit margin (default 5 degrees). It fails closed with an active left
+correction record, on timeout, and (while enabled) when a planned left contact stroke moves
+any joint more than 1 rad. Replay carton result: tilt -10, pitch -5, yaw -10 degrees,
+`theta_p` 11.2 degrees (nominal 80, taught 27). Evidence (mock, plan-only):
+`scan_results/parallel_left_20260927/`. `NearestBranchTransitPlanner` now ranks goal
+branches with a joint within 2 degrees of its URDF bound after those with margin (joint6
+rule first), which keeps the middle seam off a joint4 = -177.6 degree branch after the
+parallel left cut; the default plans are unchanged.

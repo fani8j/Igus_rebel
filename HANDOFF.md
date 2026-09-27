@@ -91,6 +91,21 @@
   default to `calibration_name:=rebel_handeye_h_v2` (newest, eye-on-base, base_link ->
   camera_link = -0.0524, -0.3063, 0.4521 m), the same transform as the mock fixture in §6.
 
+- **Parallel left orientation (2026-09-27, opt-in, mock only)**: new planning parameters
+  `left_parallel_orientation_enabled` (default `false`), `left_parallel_max_tilt_deg` 45,
+  `left_parallel_max_yaw_deg` 30, `left_parallel_step_deg` 5,
+  `left_parallel_min_joint_margin_deg` 5, `left_parallel_search_timeout_s` 90. It derives the
+  left orientation from the cut basis, minimizing the blade-plane angle to the carton top
+  face (`theta_p`, see CONTEXT.md) subject to the penetration gate, collision-aware IK and
+  a jump-free collision-checked left chain from every hover-start wrist branch with joint
+  margin; fails closed with an active left correction record. Replay carton: tilt -10,
+  pitch -5, yaw -10 deg, `theta_p` 11.2 deg (nominal 80, taught 27, old +45 roll 58),
+  t_cut/t_cut_handoff/combined plan in mock. `NearestBranchTransitPlanner` now ranks
+  goal branches within 2 deg of a URDF bound after the others (after the joint6 rule).
+  Evidence `scan_results/parallel_left_20260927/` (offline grid `grid_run`, `refine_run`;
+  executor runs `run3`, `run3/summary.txt`, `run3/regression_vs_joint_limits_20260927.txt`).
+  Not checked on the robot: blade pose, contact point, cutting.
+
 ## 2. Verified in mock (evidence)
 
 All under `scan_results/`. Mock/fake-server evidence only.
@@ -214,6 +229,15 @@ fixed); Stop() now logs Disable/Quit. No motion commanded yet.
   re-decided (see open questions). `approach_joint_degrees` joint5 94.37 -> 94.0.
 
 ## 5. Open questions
+
+- **Parallel left pose on the robot**: with the parallel mode the replay left cut runs at
+  joint3 up to 133.8 deg and joint5 down to -87.7 deg (5-6 deg inside the URDF bounds) and
+  the left-to-middle transit turns joint6 by 2.97 rad (guard pi). The blade model (tool X =
+  blade normal) is inferred from the planner convention and the taught record, not
+  measured. Before any physical use: check in RViz, then a supervised dry approach without
+  contact, then the blade/tape contact point. `left_parallel_min_joint_margin_deg` 8 gives
+  `theta_p` 20.6 deg with 8.8 deg margin but the search then takes about 220 s (raise
+  `left_parallel_search_timeout_s`).
 
 - ~~ArUco marker size~~ resolved: designed 60 mm, prints at 59 mm; `marker_size_m: 0.059`
   (measured print) is correct. Re-measure after any reprint.

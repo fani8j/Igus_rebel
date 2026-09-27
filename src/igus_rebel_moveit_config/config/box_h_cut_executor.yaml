@@ -12,7 +12,7 @@ box_h_cut_executor:
     # - PLANNING (validated, then applied and any retained plan cleared): motion_profile,
     #   cut_pattern, t_cut_middle_handoff_fraction, debug_fixed_orientation,
     #   debug_allow_stale_snapshot, pre_cut_stabilization_duration_s, side tilts,
-    #   left_adaptive_orientation_*, cut_debug_cut, cut_debug_correction_enabled,
+    #   left_adaptive_orientation_*, left_parallel_*, cut_debug_cut, cut_debug_correction_enabled,
     #   cut_debug_*_correction_file and cut_debug_output_dir. Rejected with "busy" while a
     #   plan/diagnose/cut-debug/execute call is running, during trajectory execution, and
     #   while a cut debug session is active (call clear_plan first).
@@ -224,3 +224,28 @@ box_h_cut_executor:
     # expensive per-pose IK/collision probing (kinematic restarts, contact pairs) to
     # explain every rejected candidate; it never changes candidate selection.
     left_roll_diagnostics_enabled: false
+    # Opt-in geometry-derived LEFT side-cut orientation with the blade as parallel to
+    # the detected top face as reachability allows (plan-only mock evidence:
+    # scan_results/parallel_left_20260927). Blade model: tool Y = blade length, tool X =
+    # blade-plane normal, tool Z = edge. theta_p = acos(|tool X . surface_normal|) is the
+    # blade-plane angle to the top face (nominal perpendicular knife: 80 deg with the -10
+    # deg tilt; taught 2026-09-16 record: 27 deg). Candidates rotate the flat reference
+    # (X = -normal, Y = -along, Z toward the carton side) by tilt (about the cut line) and
+    # pitch (about 'across') within +/-max_tilt and yaw (about the normal) within
+    # +/-max_yaw on a step grid, ordered by theta_p. The first one whose left chain
+    # (hover start -> entry -> cut -> exit -> lift) passes the left X-or-Z penetration
+    # gate, collision-aware IK and a collision-checked Cartesian path with no joint jump
+    # from EVERY collision-free hover-start wrist branch, with every joint at least
+    # min_joint_margin inside its URDF bound, is used for all left poses. TCP positions
+    # and the cut line are unchanged. Fails closed when nothing passes within
+    # search_timeout_s, and when a left correction record is active (clear the left slot
+    # to combine with a middle record). While enabled, a plan is also refused if any left
+    # contact stroke moves a joint more than 1 rad. MTC, min_fraction=1.0, the dwell
+    # check, the wrist guard and both execution gates are unchanged. Not verified on the
+    # robot or with a physical cut.
+    left_parallel_orientation_enabled: false
+    left_parallel_max_tilt_deg: 45.0
+    left_parallel_max_yaw_deg: 30.0
+    left_parallel_step_deg: 5.0
+    left_parallel_min_joint_margin_deg: 5.0
+    left_parallel_search_timeout_s: 90.0
