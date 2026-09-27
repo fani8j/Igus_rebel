@@ -1,0 +1,9 @@
+# V4L2 controls applied with v4l2-ctl, in this order, before usb_cam opens the
+# camera and again once it is streaming. Names are the kernel 6.x names shown
+# by `v4l2-ctl -d <dev> --list-ctrls`.
+controls:
+  # Manual focus: autofocus must be off before focus_absolute is accepted.
+  focus_automatic_continuous: 0
+  focus_absolute: 110         # 0..255, step 5; tuned 2026-09-27 with focus_tune.sh
+  # Keep auto exposure, but don't let it drop below 30 fps in dim light.
+  exposure_dynamic_framerate: 0

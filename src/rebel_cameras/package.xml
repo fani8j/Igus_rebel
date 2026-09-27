@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>rebel_cameras</name>
+  <version>0.0.0</version>
+  <description>One launch for the cell cameras: Gemini 336 (scene), Gemini 305 (wrist) and the C930e knife camera.</description>
+  <maintainer email="hucenrotiacompal@gmail.com">fani8j</maintainer>
+  <license>TODO: License declaration</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>orbbec_camera</exec_depend>
+  <exec_depend>knife_camera</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

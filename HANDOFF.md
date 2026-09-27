@@ -71,6 +71,22 @@
   `ros2 run knife_camera focus_tune.sh`), applied with v4l2-ctl because usb_cam 0.8.1's
   `focus_auto`/`exposure_auto` names fail on kernel 6.x; auto exposure/WB kept,
   `exposure_dynamic_framerate` off. Crosshair overlay at the knife-tip pixel is deferred.
+- **Cameras (`rebel_cameras`, 2026-09-27)**: `ros2 launch rebel_cameras cameras.launch.py`
+  starts the Gemini 336 (`/camera`, serial CP96563000LY), Gemini 305 (`/wrist_camera`,
+  CV27561000NP) and the knife webcam. Measured together on an isolated domain: all at
+  target rate (336 15 Hz, 305 15 Hz, C930e 30 Hz); CPU about 20 % / 16 % / 8 % of one core;
+  stamp->receive latency 63 / 36 / 7 ms; ApproximateTimeSynchronizer sets within 21 ms max.
+  Findings: (1) the 336's colored point cloud costs about one full core and runs at about
+  4 Hz while anything subscribes (1.66 M points at 1080p); the node builds it only on
+  demand. (2) The 336 temporal filter halves depth noise (1.46 -> 0.74 mm median);
+  RGB color format and the hardware noise filter gave no gain; `uvc_backend:=v4l2` fails
+  on both Orbbecs. (3) The 305 (fw 1.0.70, orbbec_camera 2.9.3) hangs on every driver start
+  except the first after a USB reconnect; the launch USB-resets it first. (4) The apt
+  usb_cam 0.8.1 stamped knife frames 0.3-0.9 s early (tv_usec/1000 bug); fixed by the
+  vendored `src/third_party/usb_cam`. No hardware trigger between cameras; the two
+  Orbbecs free-run, so their phase offset is arbitrary per start (up to 33 ms at 15 fps).
+  Open: the 305's intended use (only a top view so far; no hand-eye TF, so its frames
+  are not connected to the robot tree).
 - Camera calibration: both `calibration_verification.launch.py` and `box_perception.launch.py`
   default to `calibration_name:=rebel_handeye_h_v2` (newest, eye-on-base, base_link ->
   camera_link = -0.0524, -0.3063, 0.4521 m), the same transform as the mock fixture in §6.
@@ -176,6 +192,26 @@ enabled; `/joint_states` matched the controller's first STATUS exactly (velociti
 exited cleanly. Follow-ups: the controller reports `LowVoltErr=DIO (0x04)` (digital-I/O
 supply low, check the 24 V DIO/gripper supply); V15 CYCLESTAT sends decimals (parser
 fixed); Stop() now logs Disable/Quit. No motion commanded yet.
+
+### First real-robot motion tests (2026-09-27, LAN, operator at the E-stop)
+
+- `tools/single_joint_test.py`: every joint moved +5 deg over 6 s and back from home;
+  all goals succeeded with +-0.02 deg final error, smooth, no tolerance/joint errors.
+- Joint3 driven with the MoveIt joint slider toward 145 deg: the controller stopped it
+  at 140 deg ("Joint limit max exceeded: A3 requested 140.0 allowed 140.0") and the JTC
+  aborted the goal on goal_time (fail-safe worked). At 140 deg the link2 to motor4 gap
+  is about 1.5 cm, so that pair cannot touch within the controller range; it stays
+  collision-checked.
+- Controller limits (CRI `CONFIG GetKinematicLimits`, `tools/cri_query_limits.py`):
+  A1 +-179, A2 -80..140, A3 -80..140, A4 +-179, A5 +-95, A6 +-179 deg. The URDF had
+  A2 lower -85 and A3 upper 150; all URDF limits are now 1 deg inside the controller
+  limits (the controller also rejects a target exactly at its limit).
+- Mock regression with the corrected limits (`scan_results/joint_limits_20260927/`):
+  nominal t_cut, t_cut_handoff, h, combined, Pilz and cut-debug starts are unchanged.
+  The taught-angle left correction (orient-only record) is now INFEASIBLE on the replay
+  carton: the old passing +45 deg roll needed joint3 = 139..141 deg, beyond the real
+  controller limit, so it could never have run on the robot. The left cut must be
+  re-decided (see open questions). `approach_joint_degrees` joint5 94.37 -> 94.0.
 
 ## 5. Open questions
 

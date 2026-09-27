@@ -97,7 +97,9 @@ box_h_cut_executor:
     debug_motion_distance_m: 0.010
     debug_motion_clearance_m: 0.030
     # Supplied joint-space transit used only by cut_pattern h before its first cut.
-    approach_joint_degrees: [51.52, 15.99, 124.79, -65.84, 94.37, 125.94]
+    # joint5 was 94.37 before the 2026-09-27 limit fix; MoveIt already clamped it to the
+    # 94 deg bound, so 94.0 keeps the same plan without the clamp warning.
+    approach_joint_degrees: [51.52, 15.99, 124.79, -65.84, 94.0, 125.94]
     # Middle seam only: the free-space approach ends this far before seam_start (against
     # the seam direction), then a short aligned stroke reaches the hover start pose.
     middle_entry_alignment_m: 0.010

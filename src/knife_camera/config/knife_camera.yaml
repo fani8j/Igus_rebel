@@ -1,0 +1,28 @@
+# usb_cam parameters for the Logitech C930e knife-view camera.
+#
+# Camera controls (focus etc.) are NOT set here: usb_cam 0.8.1 uses the old
+# v4l2-ctl names (focus_auto, exposure_auto, white_balance_temperature_auto)
+# which kernel 6.x no longer accepts, so those calls fail silently. The launch
+# file applies config/knife_camera_controls.yaml with v4l2-ctl instead. All
+# usb_cam control parameters are therefore "leave alone" (-1 / auto).
+/**:
+  ros__parameters:
+    video_device: "/dev/v4l/by-id/usb-046d_Logitech_Webcam_C930e_794B00AE-video-index0"
+    camera_name: "knife_camera"
+    frame_id: "knife_camera_optical_frame"
+    camera_info_url: ""   # uncalibrated; the knife tip is a fixed pixel
+    pixel_format: "mjpeg2rgb"
+    av_device_format: "YUV422P"
+    image_width: 1280
+    image_height: 720
+    framerate: 30.0
+    io_method: "mmap"
+    brightness: -1        # usb_cam's own default is 50, not "leave alone"
+    contrast: -1
+    saturation: -1
+    sharpness: -1
+    gain: -1
+    auto_white_balance: true
+    autoexposure: true
+    autofocus: false
+    focus: -1

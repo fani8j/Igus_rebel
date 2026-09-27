@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <robot
   name="igus_rebel">
+  <!-- Joint position limits are 1 deg inside the controller limits reported by
+       CRI "CONFIG GetKinematicLimits" on the REBEL-6DOF-03 (2026-09-27):
+       A1 +-179, A2 -80..140, A3 -80..140, A4 +-179, A5 +-95, A6 +-179 deg.
+       Query again with tools/cri_query_limits.py after controller changes. -->
   <link
     name="base_link">
     <inertial>
@@ -129,8 +133,8 @@
     <axis
       xyz="0 0 1" />
     <limit
-      lower="-3.1241"
-      upper="3.1241"
+      lower="-3.106686"
+      upper="3.106686"
       effort="330"
       velocity="0.785" />
     <dynamics
@@ -231,8 +235,8 @@
     <axis
       xyz="0 -1 0" />
     <limit
-      lower="-1.4835"
-      upper="2.4435"
+      lower="-1.378810"
+      upper="2.426008"
       effort="330"
       velocity="0.785" />
     <dynamics
@@ -333,8 +337,8 @@
     <axis
       xyz="0 -1 0" />
     <limit
-      lower="-1.39626"
-      upper="2.61799"
+      lower="-1.378810"
+      upper="2.426008"
       effort="330"
       velocity="0.785" />
     <dynamics
@@ -435,8 +439,8 @@
     <axis
       xyz="0 0 1" />
     <limit
-      lower="-3.12414"
-      upper="3.12414"
+      lower="-3.106686"
+      upper="3.106686"
       effort="330"
       velocity="0.785" />
     <dynamics
@@ -537,8 +541,8 @@
     <axis
       xyz="0 -1 0" />
     <limit
-      lower="-1.65806"
-      upper="1.65806"
+      lower="-1.640609"
+      upper="1.640609"
       effort="330"
       velocity="0.785" />
     <dynamics
@@ -592,8 +596,8 @@
     <axis
       xyz="0 0 1" />
     <limit
-      lower="-3.12414"
-      upper="3.12414"
+      lower="-3.106686"
+      upper="3.106686"
       effort="330"
       velocity="0.785" />
     <dynamics

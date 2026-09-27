@@ -1,0 +1,32 @@
+# Gemini 336, static scene camera. Passed to orbbec_camera's
+# gemini_330_series.launch.py as config_file_path (keys are its launch args).
+# camera_name must stay "camera": perception topics (/camera/...), the hand-eye
+# TF (camera_link) and camera_pole_collision.py depend on it.
+camera_name: camera
+serial_number: CP96563000LY
+
+enable_color: true
+color_width: 1920          # seam pipeline intrinsics are 1080p
+color_height: 1080
+color_fps: 15
+color_format: MJPG         # RGB measured no cheaper here
+
+enable_depth: true
+depth_width: 1280
+depth_height: 800
+depth_fps: 15
+device_preset: High Accuracy
+
+depth_registration: true
+align_mode: SW
+align_target_stream: COLOR
+enable_frame_sync: true
+
+# Only the colored (registered) cloud is used. The node builds it only while
+# something subscribes, and then it costs ~1 core (1.66 M points at 1080p).
+enable_point_cloud: false
+enable_colored_point_cloud: true
+
+# Halves temporal depth noise on a static scene (measured 1.46 -> 0.74 mm
+# median); take snapshots ~1 s after the scene is still.
+enable_temporal_filter: true

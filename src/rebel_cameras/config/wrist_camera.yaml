@@ -1,0 +1,25 @@
+# Gemini 305, wrist camera (top view). Passed to orbbec_camera's
+# gemini_301_series.launch.py as config_file_path. Ideal range 7-50 cm.
+camera_name: wrist_camera
+serial_number: CV27561000NP
+
+enable_color: true
+color_width: 1280
+color_height: 800
+color_fps: 15
+color_format: MJPG         # less USB bandwidth; shares a bus with the 336
+
+enable_depth: true
+depth_width: 1280
+depth_height: 800
+depth_fps: 15
+
+depth_registration: true
+align_mode: SW
+align_target_stream: COLOR
+enable_frame_sync: true
+
+enable_point_cloud: false
+enable_colored_point_cloud: false
+
+enable_temporal_filter: true
