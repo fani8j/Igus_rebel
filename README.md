@@ -185,30 +185,29 @@ to inspect `igus_tool0` and `xeg32_tool_tip`. Restart both launches after model 
 
 ## Collision geometry for the gripper-mounted tooling
 
-The knife handpiece, its holder, and the wrist camera + bracket are mounted on the
-XEG-32 gripper and are collision-checked (`xeg32_knife_handpiece`,
-`xeg32_knife_holder`, `xeg32_wrist_camera`; fixed links off `igus_tool0`, see
+The knife handpiece and its holder are mounted on the XEG-32 gripper and are
+collision-checked (`xeg32_knife_handpiece`, `xeg32_knife_holder`; fixed links off
+`igus_tool0`, see
 `igus_rebel_moveit_config/XEG32_MOVEIT_CHANGES.md` for the placement reasoning and
-mesh sizes). The knife handpiece and holder collision meshes come from CAD; the
-wrist camera + bracket is a conservative estimate from photos, since there is no
-CAD for it. Only the exposed ~20 mm of blade below the TCP is left uncollided
+mesh sizes). The knife handpiece and holder collision meshes come from CAD;
+the wrist camera was uninstalled on 2026-09-28 (it protruded past the blade tip along the knife axis and hit the carton) and its collision link removed; it will return with the redesigned combined knife/camera holder. Only the exposed ~20 mm of blade below the TCP is left uncollided
 (along with `xeg32_tool_tip` itself), matching the fact that it must contact the
 carton to cut. The scoped tool/carton contact allowance used during cut strokes
-only ever applies to the configured `tool_link` (`xeg32_tool_tip`); the three
-tooling links above are never included in it and must never touch
+only ever applies to the configured `tool_link` (`xeg32_tool_tip`); the tooling links above are never included in it and must never touch
 `detected_carton`. The XEG-32 base and carriage meshes remain modeled and
 collision-checked too, alongside robot self-collision and the snapshot-derived
 `detected_carton`. `xeg32_tool_tip` remains the kinematic TCP and green visual
 marker with no collision geometry of its own.
 
-The Logitech knife-view webcam (separate from the wrist camera above) is not
-modeled. As of 2026-09-28, modeling the wrist camera's collision geometry
-revealed that it collides with `detected_carton` (and, for some cut patterns,
+The Logitech knife-view webcam is not modeled. With the wrist camera modeled
+(2026-09-28, before it was uninstalled), its collision geometry revealed that it collides with `detected_carton` (and, for some cut patterns,
 `camera_pole`) at the recorded replay carton's cut approach poses, given the
 H-cut executor's tight hover/lateral clearances (10/25 mm) and a small
 (~102x111x200 mm) carton; see the "Gripper-mounted tooling collision geometry"
 finding in `XEG32_MOVEIT_CHANGES.md` and `scan_results/tool_collision_20260928/`
-before running H-cut with a wrist camera physically mounted.
+before running H-cut with a wrist camera physically mounted. Without the camera
+the mock regression matches the pre-tooling results again, including the
+parallel left mode (`scan_results/tool_collision_nocam_20260928/`).
 
 The fixed external camera pole remains a required planning-scene obstacle.
 `move_group.launch.py` starts `camera_pole_collision.py`, which derives the

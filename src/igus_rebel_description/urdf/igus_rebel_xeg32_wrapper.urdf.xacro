@@ -105,27 +105,8 @@
       <child link="xeg32_knife_holder"/>
       <origin xyz="0 0 0" rpy="0 0 0"/>
     </joint>
-
-    <link name="xeg32_wrist_camera">
-      <visual>
-        <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/wrist_camera_bracket.stl"/></geometry>
-        <material name="xeg32_wrist_camera_material"><color rgba="0.1 0.1 0.1 0.6"/></material>
-      </visual>
-      <collision>
-        <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/wrist_camera_bracket.stl"/></geometry>
-      </collision>
-      <visual>
-        <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/wrist_camera_body.stl"/></geometry>
-        <material name="xeg32_wrist_camera_material"/>
-      </visual>
-      <collision>
-        <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/wrist_camera_body.stl"/></geometry>
-      </collision>
-    </link>
-    <joint name="igus_tool0_to_xeg32_wrist_camera" type="fixed">
-      <parent link="igus_tool0"/>
-      <child link="xeg32_wrist_camera"/>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-    </joint>
+    <!-- Wrist camera removed 2026-09-28: it protruded past the blade tip along the knife
+         axis and hit the carton; it is uninstalled until the combined knife/camera holder
+         is redesigned. -->
   </xacro:if>
 </robot>

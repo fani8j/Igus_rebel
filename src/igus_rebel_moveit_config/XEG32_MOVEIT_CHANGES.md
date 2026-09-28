@@ -13,7 +13,7 @@ The group contains:
 - `xeg32_right_carriage_link`
 - `xeg32_knife_handpiece` (added 2026-09-28)
 - `xeg32_knife_holder` (added 2026-09-28)
-- `xeg32_wrist_camera` (added 2026-09-28)
+- (`xeg32_wrist_camera` was added and removed on 2026-09-28; camera uninstalled)
 
 Both carriage joints are fixed (`lock_joints` defaults to true), so the group has no
 actuated joints and the SRDF lists no passive joint. The arm group is defined by its
@@ -53,6 +53,10 @@ Regenerate the matrix by sampling whenever collision geometry changes, rather th
 disabling all XEG collisions.
 
 ## Gripper-mounted tooling collision geometry (2026-09-28)
+
+**Update:** the wrist camera was uninstalled on 2026-09-28 (it protruded past the blade tip along the knife axis and hit the carton) and its collision link removed; it will return with the redesigned combined knife/camera holder; the regression without it matches the pre-tooling results
+(`scan_results/tool_collision_nocam_20260928/`). The text below documents the
+version that still included the camera.
 
 The ultrasonic knife handpiece, its holder, and the wrist camera + bracket are now
 collision-checked. Previously only the bare XEG-32 body/carriages were modeled;

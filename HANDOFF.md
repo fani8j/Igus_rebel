@@ -109,14 +109,16 @@
 - **Gripper-mounted tooling collision geometry (2026-09-28, mock only)**: added
   collision (and simple visual) meshes for the ultrasonic knife handpiece
   (`xeg32_knife_handpiece`), its holder (`xeg32_knife_holder`, from
-  `JK-Final version.step`) and the wrist camera + bracket (`xeg32_wrist_camera`,
-  estimated from photos, no CAD), all fixed to `igus_tool0`; added to the
+  `JK-Final version.step`) and (briefly) the wrist camera + bracket, all fixed to `igus_tool0`; added to the
   `xeg32_gripper` SRDF group and end effector, with the self-collision matrix
   regenerated (see XEG32_MOVEIT_CHANGES.md). The scoped tool/carton contact
   allowance is unaffected (it only ever applies to `xeg32_tool_tip`). Finding: the
-  wrist camera collides with `detected_carton`/`camera_pole` for most cut patterns on
-  the recorded replay carton (see §5 open question); the handpiece and holder cause
-  no regressions. Evidence `scan_results/tool_collision_20260928/` (regression
+  wrist camera collided with `detected_carton`/`camera_pole` for most cut patterns (it
+  protrudes past the blade tip along the knife axis); the operator uninstalled it and
+  its link was removed the same day. Without it the regression matches the
+  pre-tooling results (all nominal patterns, parallel left t_cut/handoff at theta_p
+  11.17 deg; `scan_results/tool_collision_nocam_20260928/`); handpiece and holder
+  cause no regressions. Evidence `scan_results/tool_collision_20260928/` (regression
   summary, SRDF regen sampling, render PNGs).
 
 ## 2. Verified in mock (evidence)
@@ -252,19 +254,20 @@ fixed); Stop() now logs Disable/Quit. No motion commanded yet.
   sharpened edge is the ANGLED end running from the tip toward tool -Y (toward the robot
   centre at home). The planner pushes along tool Z (tip first) and travels along tool
   -Y, so the sharp edge leads; theta_p = acos(|tool X . n|) measures the blade faces.
-  As of 2026-09-28 the ultrasonic handpiece, its holder and the Gemini wrist camera on
-  its bracket above the gripper are in the collision model (`xeg32_knife_handpiece`,
-  `xeg32_knife_holder`, `xeg32_wrist_camera`; see XEG32_MOVEIT_CHANGES.md). The Logitech
+  As of 2026-09-28 the ultrasonic handpiece and its holder are in the collision model
+  (`xeg32_knife_handpiece`, `xeg32_knife_holder`; see XEG32_MOVEIT_CHANGES.md); the
+  wrist camera is uninstalled until the holder redesign. The Logitech
   knife webcam below the gripper is still not modeled (operator). Before any physical
   use: check in RViz, then a supervised dry approach without
   contact, then the blade/tape contact point. `left_parallel_min_joint_margin_deg` 8 gives
   `theta_p` 20.6 deg with 8.8 deg margin but the search then takes about 220 s (raise
-  `left_parallel_search_timeout_s`). Parallel left mode was not re-verified against the
-  new tooling collision geometry (see the open item below); it was already failing for
-  unrelated reasons in this environment (taught angle unreachable, roll search timeout)
-  independent of this change.
+  `left_parallel_search_timeout_s`). Parallel left mode was re-verified with the handpiece/holder geometry: t_cut and
+  t_cut_handoff plan (28.1 s / 27.4 s, theta_p 11.17 deg).
 
-- **Wrist camera collision blocks most H-cut plans (2026-09-28, mock only)**: adding
+- **Wrist camera for the redesigned holder (was: camera collision blocked most H-cut
+  plans, 2026-09-28)**: resolved for now by uninstalling the camera. When the combined
+  knife/camera holder is redesigned, keep the camera behind the blade tip along the
+  knife axis, add its collision geometry from CAD and re-run the regression. History: adding
   `xeg32_wrist_camera` collision geometry (a conservative estimate from photos, no CAD)
   made the recorded replay carton's `t_cut`, `t_cut_handoff`, `h`, `combined` and
   cut-debug-left-start plans fail closed: the camera collides with `detected_carton`
