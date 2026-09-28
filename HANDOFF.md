@@ -87,6 +87,36 @@
   Orbbecs free-run, so their phase offset is arbitrary per start (up to 33 ms at 15 fps).
   Open: the 305's intended use (only a top view so far; no hand-eye TF, so its frames
   are not connected to the robot tree).
+- **Camera performance for the capture/detector (2026-09-28)**: the 336 itself holds 15 or 30
+  fps; the bottleneck is the colored cloud `/camera/depth_registered/points` (1.7 M points,
+  34 MB). While anything subscribes to it (the detector's `rgbd_recorder.py`, or an RViz
+  PointCloud2 display added by hand) the driver runs at ~130 % CPU, the cloud arrives at
+  ~4 Hz and every /camera topic is ~0.6-0.7 s behind capture (vs ~50 ms without it).
+  30 fps does not help (cloud stays ~4 Hz; a Python consumer only keeps up with ~13 pairs/s).
+  Measured options: `point_cloud_decimation_filter_factor: 2` -> cloud 9.4 Hz, 85 ms, 4x
+  fewer points (changes the detector input); `align_mode: HW` is not supported for
+  1080p color + 1280x800 depth. HW D2C probe (15 fps): accepted only with depth <= 848x480
+  (any color up to 1920x1080); every 1280x800 / 1280x720 depth pair is rejected. HW
+  1920x1080 + 848x480 gave no gain while the cloud is subscribed (driver ~124 % CPU, cloud
+  ~1.4 Hz, same ~0.6 s lag; depth +2 mm median vs current, p90 24 mm at edges) because the
+  cost is building the 1080p colored cloud, not the alignment. GPU (RTX 5070 Ti, torch
+  cu128 installed): depth->xyz+rgb back-projection 9.4 ms vs 100 ms numpy, identical
+  results. Verified: the driver cloud equals the aligned depth image
+  back-projected with the color K (same 1,710,913 points, 0.000 mm difference), so the
+  recorder can build an identical PCD from `/camera/depth/image_raw` and the driver never
+  builds the cloud. Prototype timings (scratch, not committed): per-capture process with
+  depth path ~0.55 s vs ~0.75 s now; persistent capture node 167 ms trigger->cloud with
+  115 ms frame age. Detector code (`~/Downloads/seam_handoff_20260908/scripts`) not changed.
+- **Detector recorder speed-up (2026-09-28, other repo, uncommitted)**: in
+  `~/Downloads/speed_wt/seam_handoff_20260908` (branch `perf/speed`) `rgbd_recorder.py`
+  gained `depth_topic` (builds the PCD from `/camera/depth/image_raw` + color K, numpy or
+  torch/CUDA; output equals the driver cloud: same order, <0.4 um, rgb identical) and a
+  persistent `--serve` mode; `capture_and_query_depth.py` defaults to `--depth-topic
+  /camera/depth/image_raw --recorder-mode serve` (`--recorder-mode once --depth-topic ""`
+  restores the old path). Hardware (isolated domain): old per-attempt capture ~1.0-1.2 s;
+  serve median ~230-260 ms (min ~150 ms, tail up to ~1.2-1.5 s from Python deserializing
+  1080p rgb+depth); manifests pass CQD's loader. Not yet run end-to-end with detection.
+  Once adopted, set `enable_colored_point_cloud: false` in scene_camera.yaml.
 - Camera calibration: both `calibration_verification.launch.py` and `box_perception.launch.py`
   default to `calibration_name:=rebel_handeye_h_v2` (newest, eye-on-base, base_link ->
   camera_link = -0.0524, -0.3063, 0.4521 m), the same transform as the mock fixture in §6.
@@ -253,6 +283,19 @@ the blade at cut depth; no cut stroke is planned. The operator confirmed this is
 correct stop point for handing over to the side-camera (side_tape) program's StartCut;
 the script prints the left cut length (|back_middle_left - front_middle_left|, 55.7 mm
 on the replay carton). Mock-verified (`scan_results/mock_demo_20260928_140620/`).
+
+### First real left-cut approach (dry run, 2026-09-29)
+
+Real robot, fresh snapshot, `left_start` (staged cut-debug start, parallel left pose
+theta_p 5 deg) executed with the cut start temporarily raised to +10 mm
+(`cut_clearance_m` 0.010, `hover_clearance_m` 0.03; both restored afterwards). All
+three segments reached their goals without joint/tolerance errors, and the operator
+confirmed the blade stopped ~10 mm above the left cut start at the right angle; the
+side_tape knife camera locked onto the tape edge (its e_lat/e_yaw are uncalibrated
+until its Jacobian calibration is run). The moves overshot at the end of fast
+transits, so the free-space transit was slowed to `transit_velocity_scaling` 0.20
+(~9 deg/s) and `transit_acceleration_scaling` 0.10 (0.52 rad/s^2); if overshoot
+remains at this speed, review the JTC gains in `igus_rebel/config/controller.yaml`.
 
 ## 5. Open questions
 

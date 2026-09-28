@@ -154,8 +154,10 @@ box_h_cut_executor:
     # 0.2863 * 5.24 = 1.50 rad/s^2, i.e. the operator-approved 0.15 transit scaling
     # (2026-09-26) at the former limits. Contact strokes keep the scaling above and
     # pre_cut_stabilization_duration_s stays 1.0 s. Finite values in (0, 1] only.
-    transit_velocity_scaling: 0.4127
-    transit_acceleration_scaling: 0.2863
+    # 2026-09-29: lowered after the first real-robot moves overshot at transit ends
+    # (operator). 0.20 * 0.785 = 0.157 rad/s (~9 deg/s); 0.10 * 5.24 = 0.52 rad/s^2.
+    transit_velocity_scaling: 0.20
+    transit_acceleration_scaling: 0.10
     max_solutions: 1
     # Physical trajectory dispatch stays disabled until an operator deliberately enables it.
     execution_enabled: false
