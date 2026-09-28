@@ -232,10 +232,15 @@ fixed); Stop() now logs Disable/Quit. No motion commanded yet.
 
 - **Parallel left pose on the robot**: with the parallel mode the replay left cut runs at
   joint3 up to 133.8 deg and joint5 down to -87.7 deg (5-6 deg inside the URDF bounds) and
-  the left-to-middle transit turns joint6 by 2.97 rad (guard pi). The physical blade
-  orientation relative to the TCP frame is NOT yet established (2026-09-28: two drafted
-  models were rejected by the operator). Until it is, theta_p and the parallel search
-  rest on the unverified assumption tool X = blade-face normal. Before any physical use: check in RViz, then a supervised dry approach without
+  the left-to-middle transit turns joint6 by 2.97 rad (guard pi). Blade model confirmed by
+  the operator on 2026-09-28 (photo + answers): the tool is an ULTRASONIC knife whose
+  handpiece is clamped upright in the XEG-32; the short blade's pointed tip is at the TCP
+  pointing along tool +Z (up at home), its flat faces are normal to tool X, and the
+  sharpened edge is the ANGLED end running from the tip toward tool -Y (toward the robot
+  centre at home). The planner pushes along tool Z (tip first) and travels along tool
+  -Y, so the sharp edge leads; theta_p = acos(|tool X . n|) measures the blade faces.
+  Not in the collision model yet: the ultrasonic handpiece, the Gemini wrist camera on
+  its bracket above the gripper and the Logitech knife webcam below it. Before any physical use: check in RViz, then a supervised dry approach without
   contact, then the blade/tape contact point. `left_parallel_min_joint_margin_deg` 8 gives
   `theta_p` 20.6 deg with 8.8 deg margin but the search then takes about 220 s (raise
   `left_parallel_search_timeout_s`).
