@@ -58,4 +58,74 @@
     <child link="xeg32_tool_tip"/>
     <origin xyz="0.005937 0.094121 0.130699" rpy="0 0 0"/>
   </joint>
+
+  <!-- Tooling mounted on the XEG-32 gripper (2026-09-28): the ultrasonic knife
+       handpiece + holder and the wrist camera + bracket. Collision-only
+       conservative hulls, registered from operator-confirmed measurements and
+       the JK-Final version.step CAD (handpiece, holder) or estimated from
+       photos scaled against the gripper (wrist camera); see
+       XEG32_MOVEIT_CHANGES.md and HANDOFF.md for the placement reasoning.
+       xeg32_tool_tip itself (the TCP, the exposed ~20 mm of blade below it)
+       intentionally carries no collision geometry. All origins here are
+       identity: the meshes are already expressed in igus_tool0 coordinates. -->
+  <xacro:if value="$(arg attach_xeg32)">
+    <link name="xeg32_knife_handpiece">
+      <visual>
+        <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/knife_handpiece.stl"/></geometry>
+        <material name="xeg32_knife_handpiece_material"><color rgba="0.2 0.2 0.2 0.6"/></material>
+      </visual>
+      <collision>
+        <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/knife_handpiece.stl"/></geometry>
+      </collision>
+    </link>
+    <joint name="igus_tool0_to_xeg32_knife_handpiece" type="fixed">
+      <parent link="igus_tool0"/>
+      <child link="xeg32_knife_handpiece"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+
+    <link name="xeg32_knife_holder">
+      <visual>
+        <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/knife_holder_ring.stl"/></geometry>
+        <material name="xeg32_knife_holder_material"><color rgba="0.6 0.6 0.6 0.6"/></material>
+      </visual>
+      <collision>
+        <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/knife_holder_ring.stl"/></geometry>
+      </collision>
+      <visual>
+        <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/knife_holder_body.stl"/></geometry>
+        <material name="xeg32_knife_holder_material"/>
+      </visual>
+      <collision>
+        <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/knife_holder_body.stl"/></geometry>
+      </collision>
+    </link>
+    <joint name="igus_tool0_to_xeg32_knife_holder" type="fixed">
+      <parent link="igus_tool0"/>
+      <child link="xeg32_knife_holder"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+
+    <link name="xeg32_wrist_camera">
+      <visual>
+        <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/wrist_camera_bracket.stl"/></geometry>
+        <material name="xeg32_wrist_camera_material"><color rgba="0.1 0.1 0.1 0.6"/></material>
+      </visual>
+      <collision>
+        <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/wrist_camera_bracket.stl"/></geometry>
+      </collision>
+      <visual>
+        <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/wrist_camera_body.stl"/></geometry>
+        <material name="xeg32_wrist_camera_material"/>
+      </visual>
+      <collision>
+        <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/wrist_camera_body.stl"/></geometry>
+      </collision>
+    </link>
+    <joint name="igus_tool0_to_xeg32_wrist_camera" type="fixed">
+      <parent link="igus_tool0"/>
+      <child link="xeg32_wrist_camera"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+  </xacro:if>
 </robot>

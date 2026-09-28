@@ -11,6 +11,9 @@ The group contains:
 - `xeg32_base_link`
 - `xeg32_left_carriage_link`
 - `xeg32_right_carriage_link`
+- `xeg32_knife_handpiece` (added 2026-09-28)
+- `xeg32_knife_holder` (added 2026-09-28)
+- `xeg32_wrist_camera` (added 2026-09-28)
 
 Both carriage joints are fixed (`lock_joints` defaults to true), so the group has no
 actuated joints and the SRDF lists no passive joint. The arm group is defined by its
@@ -18,8 +21,12 @@ chain only, and the SRDF has no virtual joint (the URDF root is already `world`)
 The self-collision matrix was regenerated on 2026-09-27 with the Setup Assistant's
 `computeDefaultCollisions` (100,000 samples): 17 adjacent and 59 never-colliding pairs
 are disabled, 29 pairs stay checked (including link2-motor4, base_link-link4 and
-base_link-motor5, which do collide). `xeg32_camera_tilt_joint` and the camera-mount link are removed
-from the URDF and SRDF with the absent camera holder.
+base_link-motor5, which do collide). It was regenerated again on 2026-09-28 after
+adding the three tooling links below (see "Gripper-mounted tooling collision
+geometry"): 8 more `Adjacent`/rigid-overlap pairs and 27 more never-colliding pairs
+are disabled; every other pairing of the three new links (for example against
+`base_link`, `link1`, `motor1`, `motor2`) collided in at least one sample and stays
+checked.
 
 ## Added end effector
 
@@ -44,6 +51,82 @@ convex hull, used for both carriage links together with `part_1__3.stl`).
 
 Regenerate the matrix by sampling whenever collision geometry changes, rather than
 disabling all XEG collisions.
+
+## Gripper-mounted tooling collision geometry (2026-09-28)
+
+The ultrasonic knife handpiece, its holder, and the wrist camera + bracket are now
+collision-checked. Previously only the bare XEG-32 body/carriages were modeled;
+MoveIt could route any of this real hardware into the carton, the camera pole, or
+the arm without noticing. New fixed links, all attached to `igus_tool0` with
+identity origins (the meshes are authored directly in `igus_tool0` coordinates):
+
+- `xeg32_knife_handpiece` — `meshes/xeg32_collision/knife_handpiece.stl`, a padded
+  box (32 x 29 x 58 mm) on the handpiece axis (tool0 Z through the TCP's X/Y,
+  `0.005937, 0.094121`), from the holder face (TCP Z - 75 mm) up to 20 mm below the
+  TCP. The top 20 mm (the exposed blade tip that must contact the carton) is
+  deliberately left with no collision geometry, matching `xeg32_tool_tip`.
+- `xeg32_knife_holder` — two convex hulls derived from `JK-Final version.step`
+  ("new gr holder-fin", the printed holder; the thin plate "new gr holder-fin_1" is
+  folded in via extra padding rather than placed independently, since its position
+  relative to the other two STEP parts is not given): `knife_holder_ring.stl` (the
+  clamp ring around the handpiece) and `knife_holder_body.stl` (the mounting body
+  that bolts to the gripper). Split into two hulls, not one, because the part is
+  L-shaped and a single hull would fill the concave notch between the ring and the
+  body with material that is not there. Registered so the ring's bore axis is the
+  handpiece axis and its tip-facing face sits at the holder face, rotated so the
+  body extends from the ring toward the gripper body (tool0 -Y, since the gripper
+  bbox center is close to Y=0 and the handpiece/ring sit at Y=+0.094).
+- `xeg32_wrist_camera` — two padded boxes estimated from the operator's photos
+  using the gripper (`xeg32_base_link` + carriages span tool0 X -0.088..0.103,
+  Y -0.068..0.070, Z -0.0007..0.065) as scale, since there is no CAD for it:
+  `wrist_camera_bracket.stl` (30 x 30 x 65 mm, gripper top up to 125 mm) and
+  `wrist_camera_body.stl` (70 x 70 x 70 mm, 115-185 mm above the gripper top),
+  reflecting the photos' slender bracket rising to a bulkier camera body. The
+  Logitech knife-view webcam is intentionally not modeled (operator).
+
+All three links are in the `xeg32_gripper` SRDF group and end effector. The SRDF's
+self-collision matrix was regenerated the same way as the 2026-09-27 pass (see
+`config/igus_rebel2.srdf`'s comment block and
+`scan_results/tool_collision_20260928/srdf_regen/`): pairs that are rigidly
+attached to each other or to `link6` are disabled as `Adjacent`;
+`xeg32_base_link`-`xeg32_knife_holder` and `xeg32_knife_holder`-
+`xeg32_right_carriage_link` are also disabled, on the same rigid-overlap
+reasoning, even though the tool's own `computeDefaultCollisions` reason string for
+them is `Default` (in collision at the default/home state) rather than `Adjacent`;
+pairs that never collided across 100,000 samples are disabled as `Never`. Every
+other pairing of the three new links against the rest of the arm (`base_link`,
+`link1`, `motor1`, `motor2`) collided in at least one sample and stays checked.
+
+The H-cut executor's scoped tool/carton contact allowance
+(`allow_tool_carton_contact`) only ever toggles the single configured
+`tool_link` (`xeg32_tool_tip`, which still carries no collision geometry) against
+`detected_carton`; it has no per-link list to update, so the three new links are
+never included in that allowance and must never touch `detected_carton`.
+
+**Finding (mock-only regression, `scan_results/tool_collision_20260928/`):** with
+all three links active, `xeg32_knife_handpiece` and `xeg32_knife_holder` introduce
+no new failures (confirmed by disabling each via a runtime AllowedCollisionMatrix
+override and replanning: t_cut/t_cut_handoff/h/combined/cut-debug-left all
+reproduce their pre-change plans and durations exactly). `xeg32_wrist_camera`,
+however, collides with `detected_carton` (and, for the `h`/`combined` patterns,
+also with `camera_pole`) at the recorded replay carton's approach and cut poses,
+across every camera size tried (from an initial 90 x 100 x 145 mm box down to the
+70 x 70 mm body committed here): disabling `xeg32_wrist_camera` alone (leaving the
+other two links checked) reproduces the pre-change plans exactly for
+`t_cut`/`t_cut_handoff`/`h`/`combined`/cut-debug-left-start. With the wrist camera
+modeled as committed, only the middle-only cut-debug-start scenario and the
+diagnostic-only service calls still "succeed" (the diagnostic call itself always
+returns success even when every section it probes fails); every other snapshot
+plan on the recorded replay carton (a small ~102 x 111 x 200 mm box) fails closed.
+This reflects the H-cut executor's tight clearances (`hover_clearance_m` 10 mm,
+`left_lateral_standoff_m` 25 mm) against a camera mount that, even conservatively
+sized from the photos, does not have that much clearance from a carton this small
+at these wrist orientations. This is a genuine, previously-invisible reach
+conflict, not a modeling artifact of an oversized box — narrowing the box further
+did not remove it. Before running H-cut with a wrist camera physically mounted,
+either revisit the camera's real mounting position/size against the photos more
+precisely, or open up the H-cut hover/lateral clearances, and re-run this
+regression to confirm.
 
 ## Tool center point
 
@@ -101,8 +184,11 @@ change clears the retained plan.
 The rotated-box workspace map below was produced with an earlier model (TCP, joint
 limits and gripper collision geometry have changed since) and uses the complete
 combined H-cut, the recorded carton geometry, scoped tool/carton contact, the
-then-modeled gripper-mounted camera holder (since removed because no camera is mounted
-on the gripper; do not reintroduce it), the fixed external `camera_pole` obstacle
+then-modeled gripper-mounted camera holder (removed for years because no tooling
+collision geometry was mounted on the gripper at all; a wrist camera, knife handpiece
+and knife holder were re-added on 2026-09-28, see "Gripper-mounted tooling collision
+geometry" above — this historical map predates that and is not evidence for it), the
+fixed external `camera_pole` obstacle
 (still required today), the selected -10/-5 degree side tilts, and all other MoveIt
 collisions. Its focused
 grid passed 70/100 samples. The conservative sampled core is carton top-center X

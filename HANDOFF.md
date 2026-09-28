@@ -106,6 +106,19 @@
   executor runs `run3`, `run3/summary.txt`, `run3/regression_vs_joint_limits_20260927.txt`).
   Not checked on the robot: blade pose, contact point, cutting.
 
+- **Gripper-mounted tooling collision geometry (2026-09-28, mock only)**: added
+  collision (and simple visual) meshes for the ultrasonic knife handpiece
+  (`xeg32_knife_handpiece`), its holder (`xeg32_knife_holder`, from
+  `JK-Final version.step`) and the wrist camera + bracket (`xeg32_wrist_camera`,
+  estimated from photos, no CAD), all fixed to `igus_tool0`; added to the
+  `xeg32_gripper` SRDF group and end effector, with the self-collision matrix
+  regenerated (see XEG32_MOVEIT_CHANGES.md). The scoped tool/carton contact
+  allowance is unaffected (it only ever applies to `xeg32_tool_tip`). Finding: the
+  wrist camera collides with `detected_carton`/`camera_pole` for most cut patterns on
+  the recorded replay carton (see §5 open question); the handpiece and holder cause
+  no regressions. Evidence `scan_results/tool_collision_20260928/` (regression
+  summary, SRDF regen sampling, render PNGs).
+
 ## 2. Verified in mock (evidence)
 
 All under `scan_results/`. Mock/fake-server evidence only.
@@ -239,11 +252,35 @@ fixed); Stop() now logs Disable/Quit. No motion commanded yet.
   sharpened edge is the ANGLED end running from the tip toward tool -Y (toward the robot
   centre at home). The planner pushes along tool Z (tip first) and travels along tool
   -Y, so the sharp edge leads; theta_p = acos(|tool X . n|) measures the blade faces.
-  Not in the collision model yet: the ultrasonic handpiece, the Gemini wrist camera on
-  its bracket above the gripper and the Logitech knife webcam below it. Before any physical use: check in RViz, then a supervised dry approach without
+  As of 2026-09-28 the ultrasonic handpiece, its holder and the Gemini wrist camera on
+  its bracket above the gripper are in the collision model (`xeg32_knife_handpiece`,
+  `xeg32_knife_holder`, `xeg32_wrist_camera`; see XEG32_MOVEIT_CHANGES.md). The Logitech
+  knife webcam below the gripper is still not modeled (operator). Before any physical
+  use: check in RViz, then a supervised dry approach without
   contact, then the blade/tape contact point. `left_parallel_min_joint_margin_deg` 8 gives
   `theta_p` 20.6 deg with 8.8 deg margin but the search then takes about 220 s (raise
-  `left_parallel_search_timeout_s`).
+  `left_parallel_search_timeout_s`). Parallel left mode was not re-verified against the
+  new tooling collision geometry (see the open item below); it was already failing for
+  unrelated reasons in this environment (taught angle unreachable, roll search timeout)
+  independent of this change.
+
+- **Wrist camera collision blocks most H-cut plans (2026-09-28, mock only)**: adding
+  `xeg32_wrist_camera` collision geometry (a conservative estimate from photos, no CAD)
+  made the recorded replay carton's `t_cut`, `t_cut_handoff`, `h`, `combined` and
+  cut-debug-left-start plans fail closed: the camera collides with `detected_carton`
+  (and, for `h`/`combined`, also `camera_pole`) at the approach/cut poses, given the
+  10 mm hover / 25 mm lateral-standoff clearances and the small (~102x111x200 mm)
+  carton. Confirmed via a runtime AllowedCollisionMatrix override that
+  `xeg32_knife_handpiece`/`xeg32_knife_holder` cause no regressions and that this is
+  specifically the wrist camera, and that shrinking the camera box (from an initial
+  90x100x145 mm down to the committed 70x70x70 mm body + 30x30x65 mm bracket) does not
+  remove the conflict. Full regression table in
+  `scan_results/tool_collision_20260928/summary.json` and the XEG32_MOVEIT_CHANGES.md
+  finding. Open: either the real camera mount has more clearance than this estimate
+  (needs a real measurement/CAD, not photos), or the hover/lateral clearances need to
+  open up, or the camera needs to be relocated, before H-cut can plan normally with the
+  wrist camera modeled. Do not loosen this collision check to make plans pass without
+  resolving which of those is true.
 
 - ~~ArUco marker size~~ resolved: designed 60 mm, prints at 59 mm; `marker_size_m: 0.059`
   (measured print) is correct. Re-measure after any reprint.
