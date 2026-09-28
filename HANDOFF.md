@@ -347,3 +347,13 @@ shutdown bug).
 - 2026-09-27: P0/P1/P2 hardening round (§1), paused once for a PC restart and then
   completed; limits 0.785/5.24 with rescaled scalings, `Override 100`, SRDF regenerated;
   docs re-verified. Not committed.
+- 2026-09-28: mock-only H-cut collision regression after removing the gripper-mounted
+  `xeg32_wrist_camera` collision link; 19 isolated domain-206 scenarios are in
+  `scan_results/tool_collision_nocam_20260928/summary.txt` with per-scenario
+  executor/move_group logs. The knife handpiece/holder links remained loaded.
+  Nominal T/H/combined and alternate-planner plans recover the earlier
+  joint-limits-baseline metrics; left-parallel T-cut and handoff plan with
+  theta_p 11.17 deg and max free-space joint6 travel 2.9695 rad. The five
+  correction/left-roll failures remain; the negative diagnostic service still
+  reports mismatched correction slots. This is planning evidence only: no
+  trajectory was executed and no physical robot was contacted.

@@ -340,6 +340,37 @@ inspection only: `execute_planned_h_cut` refuses any plan or cut-debug session l
 with it (and anything while it is true), before every other gate. `clear_plan` answers
 `busy` instead of waiting while planning or execution is active.
 
+### Offline mock H-cut recording
+
+From the workspace root, `tools/mock_hcut_demo.sh [cut_pattern]` launches only
+`mock_hardware` on an isolated localhost ROS domain (`MOCK_DOMAIN_ID`, default 210).
+It re-stamps a historical snapshot **for mock use only**, checks for
+`mock_components/GenericSystem`, plans, and asks before dispatching mock motion.
+`RECORD=1` (default) records joint states, markers, target poses, carton and camera
+pole collision objects, planning scene updates, and MTC `/solution` and
+`/description` to `scan_results/mock_demo_<timestamp>/bag`. It saves
+`planned_trajectory.json` from the published MTC Solution before prompting for
+execution. After dispatch it waits for observed motion followed by 3 seconds
+below 0.01 rad/s (maximum 180 seconds), then stops rosbag with SIGINT before
+the final prompt. `RECORD=0` disables capture and the completion wait.
+
+```bash
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+python3 tools/render_hcut_video.py scan_results/mock_demo_<timestamp>
+```
+
+This creates `plan.mp4`, `execution.mp4`, `plan_final.png`, and
+`execution_final.png` in the demo directory. Options `--fps`,
+`--max-seconds`, and `--output-dir` control rendering. Each frame has a
+workspace isometric view and a carton close-up, shaded robot/gripper/tool meshes,
+recorded carton and camera-pole boxes, a TCP trail and MTC stage label. The
+offline renderer uses simplified CAD silhouettes for the arm: these are visual
+context, not collision geometry or a blade-clearance measurement. The execution
+file requires confirmed mock dispatch (not a plan-only session). Recording does
+not prove blade clearance, cutting force, or safe physical execution. No RViz screen
+capture is attempted: XWayland `ffmpeg x11grab` may capture a black window.
+
 ## Staged per-cut correction workflow (plan-only by default)
 
 The H-cut executor (`box_h_cut_executor`) plans the canonical snapshot-relative

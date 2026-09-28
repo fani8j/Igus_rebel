@@ -10,6 +10,7 @@ set -euo pipefail
 WS="$(cd "$(dirname "$0")/.." && pwd)"
 PATTERN="${1:-t_cut}"
 PARALLEL="${PARALLEL:-true}"
+RECORD="${RECORD:-1}"
 SNAPSHOT_SRC="${SNAPSHOT_SRC:-$WS/scan_results/p0p1_regression_20260927/source_snapshot.json}"
 export ROS_DOMAIN_ID="${MOCK_DOMAIN_ID:-210}" ROS_LOCALHOST_ONLY=1
 
@@ -30,6 +31,7 @@ json.dump(d, open(sys.argv[2], "w"), indent=2)
 EOF
 
 PIDS=()
+bag_pid=""
 start() {  # start a background process in its own process group, log to $OUT
   local name="$1"; shift
   setsid "$@" > "$OUT/$name.log" 2>&1 &
@@ -37,6 +39,15 @@ start() {  # start a background process in its own process group, log to $OUT
 }
 cleanup() {
   echo "Stopping mock stack..."
+  if [[ -n "$bag_pid" ]]; then
+    kill -INT -- "-$bag_pid" 2>/dev/null || true
+    # rosbag2 needs time to flush metadata and close its sqlite database.
+    for _ in $(seq 1 30); do
+      kill -0 "$bag_pid" 2>/dev/null || break
+      sleep 1
+    done
+    wait "$bag_pid" 2>/dev/null || true
+  fi
   for p in "${PIDS[@]}"; do kill -INT -- "-$p" 2>/dev/null || true; done
   sleep 3
   for p in "${PIDS[@]}"; do kill -KILL -- "-$p" 2>/dev/null || true; done
@@ -79,20 +90,69 @@ echo "Hardware: mock_components/GenericSystem (mock)."
 ros2 param set /box_h_cut_executor cut_pattern "$PATTERN" > /dev/null
 ros2 param set /box_h_cut_executor external_snapshot_file "$SNAP" > /dev/null
 ros2 param set /box_h_cut_executor left_parallel_orientation_enabled "$PARALLEL" > /dev/null
+if [[ "$RECORD" == 1 ]]; then
+  # Humble MTC advertises these global introspection topics when task.init()
+  # runs inside planning. Subscribe now, before they appear, to avoid missing
+  # its single published Solution. Verified with ros2 topic list -t on domain 212.
+  solution_topic=/solution
+  description_topic=/description
+  record_topics=(/joint_states /box_motion/h_cut_markers /box_motion/cut_target_poses
+    /collision_object /box_motion/camera_pole_collision /monitored_planning_scene "$solution_topic")
+  [[ -z "$description_topic" ]] || record_topics+=("$description_topic")
+  printf '%s\n' "${record_topics[@]}" > "$OUT/recorded_topics.txt"
+  start bag ros2 bag record -o "$OUT/bag" "${record_topics[@]}"
+  bag_pid="${PIDS[-1]}"
+  # Subscribe before planning: a Solution may only be published once.
+  start plan_capture python3 "$WS/tools/render_hcut_video.py" --capture-plan "$OUT" \
+    --solution-topic "$solution_topic" --description-topic "$description_topic"
+  for _ in $(seq 1 30); do
+    [[ -f "$OUT/plan_capture.ready" && -d "$OUT/bag" ]] && break
+    sleep 1
+  done
+  [[ -f "$OUT/plan_capture.ready" && -d "$OUT/bag" ]] || { echo "Recorder not ready; see $OUT"; exit 1; }
+fi
 echo "Planning $PATTERN (parallel left pose: $PARALLEL); the parallel search takes about 1 minute..."
 RESULT="$(ros2 service call /box_h_cut_executor/plan_h_cut std_srvs/srv/Trigger '{}' 2>&1 | tee "$OUT/plan_response.txt")"
 echo "$RESULT" | grep -E 'success=|message=' | sed 's/^/  /' | cut -c1-400
 grep -q 'success=True' <<< "$RESULT" || { echo "Planning failed; see $OUT"; read -rp "Press Enter to stop..."; exit 1; }
+
+if [[ "$RECORD" == 1 ]]; then
+  for _ in $(seq 1 20); do
+    [[ -s "$OUT/planned_trajectory.json" ]] && break
+    sleep 1
+  done
+  [[ -s "$OUT/planned_trajectory.json" ]] || { echo "Planned trajectory not captured; see $OUT"; exit 1; }
+fi
 
 echo
 echo "The plan is shown in RViz (MotionPlanning / Task display)."
 read -rp "Execute it on the MOCK robot to watch the motion? [y/N] " ans
 if [[ "$ans" =~ ^[Yy]$ ]]; then
   is_mock || { echo "ABORT: hardware is not mock"; exit 1; }
+  if [[ "$RECORD" == 1 ]]; then
+    start stationary python3 "$WS/tools/render_hcut_video.py" --wait-stationary "$OUT"
+    stationary_pid="${PIDS[-1]}"
+    for _ in $(seq 1 15); do
+      [[ -f "$OUT/stationary.ready" ]] && break
+      sleep 1
+    done
+    [[ -f "$OUT/stationary.ready" ]] || { echo "Joint-state watcher not ready"; exit 1; }
+    date +%s.%N > "$OUT/execution_start.txt"
+  fi
   ros2 param set /box_h_cut_executor execution_enabled true > /dev/null
   ros2 service call /box_h_cut_executor/execute_planned_h_cut std_srvs/srv/Trigger '{}' \
     | tee "$OUT/execute_response.txt" | grep -E 'success=|message=' | sed 's/^/  /' | cut -c1-300
   ros2 param set /box_h_cut_executor execution_enabled false > /dev/null || true
   echo "Motion dispatched to the mock robot; watch RViz."
+  if [[ "$RECORD" == 1 ]]; then
+    echo "Waiting for motion to finish (up to 3 minutes)..."
+    wait "$stationary_pid" || echo "WARNING: mock motion did not settle before timeout"
+  fi
+fi
+if [[ "$RECORD" == 1 ]]; then
+  kill -INT -- "-$bag_pid" 2>/dev/null || true
+  wait "$bag_pid" || true
+  bag_pid=""
+  echo "Recording saved: $OUT/bag; plan: $OUT/planned_trajectory.json"
 fi
 read -rp "Press Enter to stop the mock stack... "
