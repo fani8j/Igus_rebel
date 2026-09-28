@@ -1,0 +1,16 @@
+# Knife camera side-tape config. Copy per mount; fill tip_uv/J from the
+# calibration tool, then set calibrated: true. Control refuses to run otherwise.
+camera:
+  image_topic: /knife_camera/image_raw
+  width: 1280
+  height: 720
+  rotate_180: true
+mount:
+  mount_id: uncalibrated
+  calibrated: false
+  tip_uv: null
+  J: null
+target:
+  offset_mm: 0.0
+  edge_polarity: null
+  max_edge_angle_deg: 5.0

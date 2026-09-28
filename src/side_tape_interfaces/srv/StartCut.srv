@@ -1,0 +1,5 @@
+# Start the vision-corrected cut from READY. Length from the MoveIt-planned cut.
+float64 cut_length_mm
+---
+bool accepted
+string message

@@ -1,0 +1,9 @@
+# Operator/static-camera hint: expected tape edge as two points in the DE-ROTATED
+# knife-camera image. Resets the tracker and seeds its search with this line.
+float64 u0
+float64 v0
+float64 u1
+float64 v1
+---
+bool accepted
+string message
