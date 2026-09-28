@@ -243,6 +243,17 @@ fixed); Stop() now logs Disable/Quit. No motion commanded yet.
   controller limit, so it could never have run on the robot. The left cut must be
   re-decided (see open questions). `approach_joint_degrees` joint5 94.37 -> 94.0.
 
+### Left cut hand-over to the side-camera program (2026-09-28)
+
+`tools/mock_hcut_demo.sh left_start` (and the same `start_cut_debug_session` +
+`execute_planned_h_cut` sequence on the robot, with `cut_debug_cut left`, both execution
+gates, optionally `left_parallel_orientation_enabled true`) moves only to the FIRST left
+cut point: approach outside the left cut, 1 s dwell, lateral entry to the cut start with
+the blade at cut depth; no cut stroke is planned. The operator confirmed this is the
+correct stop point for handing over to the side-camera (side_tape) program's StartCut;
+the script prints the left cut length (|back_middle_left - front_middle_left|, 55.7 mm
+on the replay carton). Mock-verified (`scan_results/mock_demo_20260928_140620/`).
+
 ## 5. Open questions
 
 - **Parallel left pose on the robot**: with the parallel mode the replay left cut runs at
