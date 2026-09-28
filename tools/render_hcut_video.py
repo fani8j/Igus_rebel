@@ -440,7 +440,8 @@ def render_video(kind, samples, boxes, children, visuals, output, fps, max_secon
     width, height = fig.canvas.get_width_height()
     cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "rawvideo",
            "-pix_fmt", "rgb24", "-s", f"{width}x{height}", "-r", str(fps),
-           "-i", "-", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(output / f"{kind}.mp4")]
+           "-i", "-", "-an", "-c:v", "libx264", "-profile:v", "main", "-pix_fmt", "yuv420p",
+           "-movflags", "+faststart", str(output / f"{kind}.mp4")]
     started = time.monotonic()
     try:
         with subprocess.Popen(cmd, stdin=subprocess.PIPE) as encoder:
