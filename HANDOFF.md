@@ -232,10 +232,12 @@ fixed); Stop() now logs Disable/Quit. No motion commanded yet.
 
 - **Parallel left pose on the robot**: with the parallel mode the replay left cut runs at
   joint3 up to 133.8 deg and joint5 down to -87.7 deg (5-6 deg inside the URDF bounds) and
-  the left-to-middle transit turns joint6 by 2.97 rad (guard pi). The blade model (tool X =
-  blade-face normal, tool Y along the blade with the tip at -Y, tool Z the edge) was
-  confirmed by the operator on 2026-09-28: at home the flat faces point to base +-X and
-  the tip points toward the robot centre (-Y from the TCP). Before any physical use: check in RViz, then a supervised dry approach without
+  the left-to-middle transit turns joint6 by 2.97 rad (guard pi). The blade model was
+  confirmed by the operator on 2026-09-28: tool X = blade-face normal; the tip is at the
+  TCP pointing along tool +Z (straight up at home) with the blade body running down (-Z)
+  toward the gripper; the cutting edge faces tool -Y (toward the robot centre at home).
+  So the planner pushes the tip into the carton (tool Z) and the edge leads the cut
+  (travel along tool -Y); theta_p (tool X vs. top face) is unaffected. Before any physical use: check in RViz, then a supervised dry approach without
   contact, then the blade/tape contact point. `left_parallel_min_joint_margin_deg` 8 gives
   `theta_p` 20.6 deg with 8.8 deg margin but the search then takes about 220 s (raise
   `left_parallel_search_timeout_s`).
