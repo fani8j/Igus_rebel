@@ -37,6 +37,8 @@ Existing tests: `igus_rebel` (gtests `test_cri_status`, `test_cri_framing`, `tes
 - `igus_rebel_msgs` — robot services (e.g. `SetCartesianIncrement`, digital outputs).
 - `handeye_pose_replay`, `rebel_tcp_gui` — calibration/utility tools.
 - `knife_camera` — Logitech C930e knife-view webcam: `usb_cam` launch publishing `/knife_camera/image_raw` with a fixed manual focus set via v4l2-ctl (`config/knife_camera_controls.yaml`; usb_cam's own focus params use pre-kernel-6 control names and silently fail). Launched on its own, not from `move_group.launch.py`.
+- `rebel_cameras` — one launch for all three cameras: `ros2 launch rebel_cameras cameras.launch.py` (args `scene`/`wrist`/`knife`, `reset_wrist_usb`). Configs `config/scene_camera.yaml` (Gemini 336, `camera_name: camera` — perception, hand-eye TF and camera pole depend on it) and `config/wrist_camera.yaml` (Gemini 305, `/wrist_camera`). The 305 only streams on the first driver start after a USB (re)connect, so the launch USB-resets it first (`scripts/usb_reset.py`, no sudo via the orbbec udev rule). Sync is software only (host-clock stamps + ApproximateTimeSynchronizer); check with `ros2 run rebel_cameras camera_sync_check.py`.
+- `third_party/usb_cam` — usb_cam 0.8.1 vendored with the upstream timestamp fix (see its `VENDORED.md`); the apt 0.8.1 stamps images 0-1 s early. It overlays the apt package; don't replace it with upstream `main` (15 Hz regression).
 
 The H-cut executor reads an external canonical snapshot (`external_snapshot_file`, set in the YAML to `/home/farhan/Igus_rebel/outputs/seam_3d_base_link.json`, produced by a separate vision repo) and rejects stale snapshots.
 
