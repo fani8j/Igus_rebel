@@ -5,10 +5,14 @@
 #
 #   tools/mock_hcut_demo.sh [cut_pattern]          (default t_cut)
 #   PARALLEL=false tools/mock_hcut_demo.sh         (nominal left cut instead of parallel)
+#   tools/mock_hcut_demo.sh left_start             (stop at the FIRST LEFT CUT POINT: staged
+#                                                   cut-debug start, then hand over to side_tape)
 set -euo pipefail
 
 WS="$(cd "$(dirname "$0")/.." && pwd)"
 PATTERN="${1:-t_cut}"
+MODE=plan
+if [[ "$PATTERN" == left_start ]]; then MODE=left_start; fi
 PARALLEL="${PARALLEL:-true}"
 RECORD="${RECORD:-1}"
 SNAPSHOT_SRC="${SNAPSHOT_SRC:-$WS/scan_results/p0p1_regression_20260927/source_snapshot.json}"
@@ -87,7 +91,11 @@ if ! is_mock; then
 fi
 echo "Hardware: mock_components/GenericSystem (mock)."
 
-ros2 param set /box_h_cut_executor cut_pattern "$PATTERN" > /dev/null
+if [[ "$MODE" == plan ]]; then
+  ros2 param set /box_h_cut_executor cut_pattern "$PATTERN" > /dev/null
+else
+  ros2 param set /box_h_cut_executor cut_debug_cut left > /dev/null
+fi
 ros2 param set /box_h_cut_executor external_snapshot_file "$SNAP" > /dev/null
 ros2 param set /box_h_cut_executor left_parallel_orientation_enabled "$PARALLEL" > /dev/null
 if [[ "$RECORD" == 1 ]]; then
@@ -111,8 +119,22 @@ if [[ "$RECORD" == 1 ]]; then
   done
   [[ -f "$OUT/plan_capture.ready" && -d "$OUT/bag" ]] || { echo "Recorder not ready; see $OUT"; exit 1; }
 fi
-echo "Planning $PATTERN (parallel left pose: $PARALLEL); the parallel search takes about 1 minute..."
-RESULT="$(ros2 service call /box_h_cut_executor/plan_h_cut std_srvs/srv/Trigger '{}' 2>&1 | tee "$OUT/plan_response.txt")"
+if [[ "$MODE" == plan ]]; then
+  echo "Planning $PATTERN (parallel left pose: $PARALLEL); the parallel search takes about 1 minute..."
+  RESULT="$(ros2 service call /box_h_cut_executor/plan_h_cut std_srvs/srv/Trigger '{}' 2>&1 | tee "$OUT/plan_response.txt")"
+else
+  echo "Planning to the FIRST LEFT CUT POINT only (parallel left pose: $PARALLEL)..."
+  RESULT="$(ros2 service call /box_h_cut_executor/start_cut_debug_session std_srvs/srv/Trigger '{}' 2>&1 | tee "$OUT/plan_response.txt")"
+  # Left cut = back_middle_left -> front_middle_left of the snapshot (for side_tape StartCut).
+  CUT_LENGTH_MM="$(python3 -c '
+import json, math, sys
+d = json.load(open(sys.argv[1]))
+a, b = d["back_middle_left"], d["front_middle_left"]
+length = 1000 * math.dist([a[k] for k in "xyz"], [b[k] for k in "xyz"])
+print(f"{length:.1f}")
+' "$SNAP")"
+  echo "$CUT_LENGTH_MM" > "$OUT/left_cut_length_mm.txt"
+fi
 echo "$RESULT" | grep -E 'success=|message=' | sed 's/^/  /' | cut -c1-400
 grep -q 'success=True' <<< "$RESULT" || { echo "Planning failed; see $OUT"; read -rp "Press Enter to stop..."; exit 1; }
 
@@ -140,9 +162,14 @@ if [[ "$ans" =~ ^[Yy]$ ]]; then
     date +%s.%N > "$OUT/execution_start.txt"
   fi
   ros2 param set /box_h_cut_executor execution_enabled true > /dev/null
+  # A staged cut-debug dispatch also needs the debug motion gate.
+  if [[ "$MODE" == left_start ]]; then
+    ros2 param set /box_h_cut_executor debug_motion_execution_enabled true > /dev/null
+  fi
   ros2 service call /box_h_cut_executor/execute_planned_h_cut std_srvs/srv/Trigger '{}' \
     | tee "$OUT/execute_response.txt" | grep -E 'success=|message=' | sed 's/^/  /' | cut -c1-300
   ros2 param set /box_h_cut_executor execution_enabled false > /dev/null || true
+  ros2 param set /box_h_cut_executor debug_motion_execution_enabled false > /dev/null || true
   echo "Motion dispatched to the mock robot; watch RViz."
   if [[ "$RECORD" == 1 ]]; then
     echo "Waiting for motion to finish (up to 3 minutes)..."
@@ -154,5 +181,9 @@ if [[ "$RECORD" == 1 ]]; then
   wait "$bag_pid" || true
   bag_pid=""
   echo "Recording saved: $OUT/bag; plan: $OUT/planned_trajectory.json"
+fi
+if [[ "$MODE" == left_start ]]; then
+  echo "Stopped at the first left cut point. Left cut length: ${CUT_LENGTH_MM} mm"
+  echo "Hand over to the side-camera program (side_tape StartCut, cut_length_mm: ${CUT_LENGTH_MM})."
 fi
 read -rp "Press Enter to stop the mock stack... "
