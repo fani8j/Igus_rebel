@@ -21,8 +21,10 @@ rebel_arm_trajectory_controller:
     state_interfaces: [position, velocity]
 
     # Same trajectory tolerances as controller.yaml; see the rationale there.
+    # stopped_velocity_tolerance is disabled (was 0.05) so this matches controller.yaml and
+    # streamed MoveIt Servo commands behave the same way in mock as on the real robot.
     constraints:
-      stopped_velocity_tolerance: 0.05
+      stopped_velocity_tolerance: 0.0
       goal_time: 3.0
       joint1: {trajectory: 0.25, goal: 0.02}
       joint2: {trajectory: 0.25, goal: 0.02}

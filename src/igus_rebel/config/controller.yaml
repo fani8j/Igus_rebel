@@ -39,10 +39,21 @@ rebel_arm_trajectory_controller:
     #  - goal 0.02 rad: ~2.3x the observed error when the tuning runs were declared settled.
     #  - goal_time 3.0 s: 0.1 rad -> 0.02 rad needs ~1.1 s at tau 0.7 s; a 1.0 s limit
     #    would abort normal moves. 0 would wait forever (MoveIt duration monitoring is off).
-    #  - stopped_velocity_tolerance 0.05 rad/s: the goal check also requires |velocity| below
-    #    this; near the goal the arm still creeps at ~1.5 * error rad/s.
+    #  - stopped_velocity_tolerance 0.0 (disabled; was 0.05 rad/s): joint_trajectory_controller
+    #    applies these "goal" tolerances to every trajectory it receives, including each
+    #    single-point message MoveIt Servo streams to this same topic (command_out_topic in
+    #    servo.yaml). Servo's points legitimately end with a nonzero target velocity (that's
+    #    what keeps it moving smoothly into the next point) that the real velocity-tracking
+    #    error can exceed right when a streamed burst starts (2026-09-29 real-arm bag: teleop
+    #    and side_tape commands were silently dropped because "State tolerances failed ...
+    #    Velocity Error: -0.0799, Velocity Tolerance: 0.05" then "Exceeded goal_time_tolerance:
+    #    holding position"). A velocity-at-goal check is meaningless for a point whose whole
+    #    purpose is to still be moving, so it is disabled; the position `goal` tolerance above
+    #    and `goal_time` below still catch a stalled/runaway joint at the end of a planned
+    #    (action-based) MTC trajectory, and Servo's own per-cycle position delta is far under
+    #    the 0.02 rad goal tolerance so it does not trip that check either.
     constraints:
-      stopped_velocity_tolerance: 0.05
+      stopped_velocity_tolerance: 0.0
       goal_time: 3.0
       joint1: {trajectory: 0.25, goal: 0.02}
       joint2: {trajectory: 0.25, goal: 0.02}
