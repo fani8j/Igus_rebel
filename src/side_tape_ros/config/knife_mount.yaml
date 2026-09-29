@@ -19,7 +19,7 @@ mount:
 target:
   offset_mm: 0.0
   edge_polarity: null
-  max_edge_angle_deg: 8.0
+  max_edge_angle_deg: 12.0
   parallax_mm_per_mm: -0.41
   align_standoff_mm: 9.0
 control:
@@ -32,6 +32,7 @@ control:
 tracker:
   coast_frames: 15
   min_conf: 0.15
+  use_polarity: false
 robot:
   carton_allowed_links:
   - xeg32_tool_tip
