@@ -44,6 +44,17 @@ class SideTapePerception(Node):
             raise ValueError("debug_rate_hz must be >= 0")
         self.debug_period = 1.0 / debug_rate if debug_rate else None
         self.bridge = CvBridge()
+        self._provisional = self.cfg.mount.tip_uv is None or self.cfg.mount.J is None
+        if self._provisional:
+            # Preview before calibration: rough tip/J so the debug image works; e_lat is meaningless
+            # and control stays blocked (mount.calibrated is false).
+            if self.cfg.mount.tip_uv is None:
+                self.cfg.mount.tip_uv = [self.cfg.camera.width / 2.0, self.cfg.camera.height / 2.0]
+            if self.cfg.mount.J is None:
+                self.cfg.mount.J = [[-10.0, 0.0], [0.0, -10.0]]
+            self.cfg.mount.calibrated = False
+            self.get_logger().warn("UNCALIBRATED PREVIEW: tip_uv/J missing -> using rough values; "
+                                   "run calib_tip_mask and calib_jacobian. Control is blocked.")
         backend = ClassicalBackend(self.cfg.detector, load_mask(self.cfg, config_path))
         self.tracker = EdgeTracker(self.cfg, backend)
         self._seq = 0
@@ -126,7 +137,7 @@ class SideTapePerception(Node):
         image = derotate_image(image, self.cfg.camera.rotate_180)
         obs = self.tracker.step(image, stamp_to_s(header.stamp), self._seq)
         self._seq += 1
-        if obs.state.value == "LOST" and self._phase not in ("ALIGN", "CUT", "HOLD", "READY"):
+        if obs.state.value == "LOST" and self._phase in ("IDLE", "DONE"):
             # LOST is sticky in the tracker; re-search automatically only while the
             # controller is not using observations (never mid-align/cut/hold).
             self.tracker.reset()
@@ -144,6 +155,9 @@ class SideTapePerception(Node):
                              self.cfg.detector.roi_half_h,
                              self.cfg.camera.width, self.cfg.camera.height)
             overlay = draw_overlay(image, obs, self.cfg, roi=roi, seed=self._seed_line)
+            if self._provisional:
+                cv2.putText(overlay, "UNCALIBRATED PREVIEW (no J) - e_lat not meaningful", (20, 700),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
             debug_msg = self.bridge.cv2_to_imgmsg(overlay, encoding="bgr8")
             debug_msg.header = header
             self.debug_pub.publish(debug_msg)

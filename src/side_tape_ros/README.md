@@ -161,6 +161,12 @@ Offline: `python3 -m precision_box_detector.side_tape.replay --config <yaml> --i
 - Never start from the **home** pose (singular): Servo refuses/halts there. MoveIt must place the arm at a
   normal working pose first (the in-material start pose is fine).
 - Topics are `/delta_twist_cmds` and `/status` (root namespace); only the services live under `/servo_node/`.
+- **Real robot, 2026-09-29:** with `publish_period: 0.01` Servo did not move the real arm at calibration speeds
+  (0.00 mm at 5 mm/s): the JTC (velocity interface, 100 Hz) samples every new stamp-0 Servo trajectory only at its
+  start (= current state). `servo.yaml` now has `publish_period: 0.034` so the JTC runs ~3 cycles per message.
+  Expect the arm to follow somewhat slower than commanded; calibration fits the TF-measured motion.
+  That alone was not enough (bag: JTC reference velocity 0, output = P x one Servo step ≈ 0.3 % jog, joints did
+  not move). `publish_joint_velocities: true` gives the JTC a real reference velocity (ff_velocity_scale 1).
 - On `hardware_protocol:=mock_hardware` Servo appears frozen: Humble Servo sends a stamp-0 single-point
   trajectory every 10 ms and the mock JTC (100 Hz, **position** interface) re-seeds from the current state on
   every message. The real controller uses the velocity interface with feed-forward, so the real arm moves.

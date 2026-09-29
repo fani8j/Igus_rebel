@@ -50,7 +50,7 @@ from precision_box_detector.side_tape import geometry as geo  # noqa: E402
 from precision_box_detector.side_tape.config import load_config  # noqa: E402
 
 _RATE_HZ = 30.0
-_SETTLE_S = 0.4
+_SETTLE_S = 1.5  # real arm lags ~0.7 s; wait ~2 tau before sampling
 _AVG_FRAMES = 8
 _TF_TOLERANCE_MM = 1.0
 _TEMPLATE_HALF_PX = 18
@@ -170,9 +170,67 @@ def _wait_for_image(node: CalibNode, timeout_s: float = 5.0) -> bool:
     return False
 
 
+def _refine_dot(gray: np.ndarray, u: float, v: float, half: int = 25) -> tuple[float, float]:
+    """Snap a click to the centroid of the dark blob under it (falls back to the click)."""
+    h, w = gray.shape
+    x0, y0 = int(max(0, u - half)), int(max(0, v - half))
+    x1, y1 = int(min(w, u + half + 1)), int(min(h, v + half + 1))
+    roi = cv2.GaussianBlur(gray[y0:y1, x0:x1], (5, 5), 0)
+    _, th = cv2.threshold(roi, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    n, labels, stats, cents = cv2.connectedComponentsWithStats(th)
+    lu, lv = int(round(u)) - x0, int(round(v)) - y0
+    if n <= 1 or not (0 <= lv < th.shape[0] and 0 <= lu < th.shape[1]) or labels[lv, lu] == 0:
+        return float(u), float(v)
+    cu, cv_ = cents[labels[lv, lu]]
+    return float(x0 + cu), float(y0 + cv_)
+
+
+def _click_point(gray: np.ndarray, tip_uv) -> tuple[float, float]:
+    """Show the (de-rotated) frame; left-click the marker dot, Enter to accept, Esc to cancel."""
+    import matplotlib
+    matplotlib.use("TkAgg")
+    import matplotlib.pyplot as plt
+
+    picked = []
+    state = {"ok": False}
+    fig, ax = plt.subplots(figsize=(12, 7))
+    ax.imshow(gray, cmap="gray")
+    ax.set_title("LEFT-click your marker dot on the box face | ENTER: use it | ESC: cancel")
+    if tip_uv is not None:
+        ax.plot([tip_uv[0]], [tip_uv[1]], "r+", markersize=20, markeredgewidth=2)
+    mark, = ax.plot([], [], "o", markersize=18, markerfacecolor="none", markeredgecolor="lime", markeredgewidth=2)
+
+    def on_click(event):
+        toolbar = getattr(fig.canvas, "toolbar", None)
+        if event.inaxes is not ax or event.button != 1 or (toolbar is not None and getattr(toolbar, "mode", "")):
+            return
+        picked[:] = [_refine_dot(gray, float(event.xdata), float(event.ydata))]
+        mark.set_data([picked[0][0]], [picked[0][1]])
+        fig.canvas.draw_idle()
+
+    def on_key(event):
+        if event.key == "enter" and picked:
+            state["ok"] = True
+            plt.close(fig)
+        elif event.key == "escape":
+            plt.close(fig)
+
+    fig.canvas.mpl_connect("button_press_event", on_click)
+    fig.canvas.mpl_connect("key_press_event", on_key)
+    print("Window open: LEFT-click your marker dot, then press ENTER in the window.", flush=True)
+    plt.show()
+    if not state["ok"]:
+        raise RuntimeError("no dot picked (click the dot, then press Enter in the window)")
+    print(f"picked dot at ({picked[0][0]:.1f}, {picked[0][1]:.1f}); next time you can pass "
+          f"--point {picked[0][0]:.1f} {picked[0][1]:.1f}")
+    return picked[0]
+
+
 def _pick_target_point(node: CalibNode, args) -> tuple[float, float]:
     if args.point is not None:
         return float(args.point[0]), float(args.point[1])
+    if getattr(args, "pick", False):
+        return _click_point(node.latest_gray, node.cfg.mount.tip_uv)
     gray = node.latest_gray
     h, w = gray.shape
     if node.cfg.mount.tip_uv is not None:
@@ -257,6 +315,42 @@ def _match_subpixel(gray: np.ndarray, template: np.ndarray, center: tuple, half:
     return peak_u, peak_v, float(max_val)
 
 
+def _spin_for(node: CalibNode, seconds: float) -> None:
+    """Wait while processing callbacks (time.sleep would leave TF/images stale)."""
+    end = time.monotonic() + seconds
+    while time.monotonic() < end and rclpy.ok():
+        rclpy.spin_once(node, timeout_sec=0.02)
+
+
+def _sample_pose_and_dot(node: CalibNode, template: np.ndarray, search_center):
+    """Average the dot pixel over N frames and the TF position over the same window."""
+    _check_jog_safety(node)
+    p_a = node.lookup_tf_m()
+    (u, v), (su, sv) = _average_tracked_position(node, template, search_center)
+    p_b = node.lookup_tf_m()
+    if p_a is None or p_b is None:
+        raise RuntimeError("TF lookup failed while sampling")
+    if float(np.linalg.norm(p_b - p_a)) * 1000.0 > 0.3:
+        raise RuntimeError("the arm was still moving while sampling (>0.3 mm); increase settle time")
+    return (p_a + p_b) / 2.0, u, v, su, sv
+
+
+def fit_jacobian(samples):
+    """Joint least-squares fit of [du, dv] = J @ [d_cut, d_lat] + bias over all samples.
+
+    ``samples`` = [(d_cut_mm, d_lat_mm, du_px, dv_px), ...]. Using both measured
+    displacement components absorbs small cross-axis motion during a jog; the bias
+    absorbs a reference-pixel offset. Returns (J 2x2, rms_px over both image axes).
+    """
+    arr = np.asarray(samples, dtype=np.float64)
+    A = np.column_stack([arr[:, 0], arr[:, 1], np.ones(len(arr))])
+    coef_u, *_ = np.linalg.lstsq(A, arr[:, 2], rcond=None)
+    coef_v, *_ = np.linalg.lstsq(A, arr[:, 3], rcond=None)
+    J = np.array([[coef_u[0], coef_u[1]], [coef_v[0], coef_v[1]]])
+    resid = np.concatenate([arr[:, 2] - A @ coef_u, arr[:, 3] - A @ coef_v])
+    return J, float(np.sqrt(np.mean(resid ** 2)))
+
+
 def _average_tracked_position(node: CalibNode, template: np.ndarray, search_center, n: int = _AVG_FRAMES):
     samples = []
     last_stamp = None
@@ -324,8 +418,12 @@ def _jog(node: CalibNode, axis_base: np.ndarray, distance_mm: float, speed_mps: 
     # process (or TF/Servo) is so delayed that the jog takes much longer than
     # nominal, stop trusting it and abort loudly rather than silently letting
     # the arm keep moving on an ever-larger overshoot margin.
-    max_duration_s = (target_mm / 1000.0) / max(speed_mps, 1e-6) * 1.5 + 0.5
-    t_deadline = time.monotonic() + max_duration_s
+    # Real arm lags commands (tau ~0.7 s, igus_rebel controller.yaml): allow 2x nominal + 3 tau.
+    nominal_s = (target_mm / 1000.0) / max(speed_mps, 1e-6)
+    max_duration_s = nominal_s * 2.0 + 3.0 * 0.7
+    t_start = time.monotonic()
+    t_deadline = t_start + max_duration_s
+    travelled_mm = 0.0
     while True:
         _check_jog_safety(node)
         p_now = node.lookup_tf_m()
@@ -337,6 +435,12 @@ def _jog(node: CalibNode, axis_base: np.ndarray, distance_mm: float, speed_mps: 
         # (not the commanded one) is what the J fit uses.
         if travelled_mm >= target_mm - speed_mps * 1000.0 * 0.08 or time.monotonic() > t_deadline:
             break
+        if time.monotonic() - t_start > 2.5 and abs(travelled_mm) < 0.3:
+            _publish_zero(node)
+            raise RuntimeError(
+                f"the arm is not moving: {travelled_mm:+.2f} mm after 2.5 s of commanding "
+                f"{speed_mps * 1000:.1f} mm/s (Servo running and unpaused? check `ros2 topic echo /status`, "
+                f"that /rebel_arm_trajectory_controller/joint_trajectory changes, and try --speed-mps 0.005)")
         stamp = node.get_clock().now().to_msg()
         msg = TwistStamped()
         msg.header.stamp = stamp
@@ -347,7 +451,10 @@ def _jog(node: CalibNode, axis_base: np.ndarray, distance_mm: float, speed_mps: 
     _publish_zero(node)
     _check_jog_safety(node)
     if time.monotonic() > t_deadline:
-        raise RuntimeError("jog exceeded its time budget without reaching the target distance")
+        elapsed = time.monotonic() - t_start
+        raise RuntimeError(
+            f"jog exceeded its time budget: moved {travelled_mm:.2f} of {target_mm:.1f} mm in {elapsed:.1f} s "
+            f"(commanded {speed_mps * 1000:.1f} mm/s -> measured ~{travelled_mm / max(elapsed, 1e-3):.2f} mm/s)")
 
     p_end = node.lookup_tf_m()
     if p_end is not None:
@@ -441,10 +548,31 @@ def _run(node: CalibNode, args) -> int:
         u0, v0 = _pick_target_point(node, args)
         template = _extract_template(node.latest_gray, u0, v0)
         print(f"target pixel (de-rotated): ({u0:.1f}, {v0:.1f}), template {template.shape[::-1]} px")
+        preview = cv2.cvtColor(node.latest_gray, cv2.COLOR_GRAY2BGR)
+        half = template.shape[0] // 2
+        cv2.rectangle(preview, (int(u0) - half, int(v0) - half), (int(u0) + half, int(v0) + half), (0, 255, 0), 2)
+        cv2.circle(preview, (int(round(u0)), int(round(v0))), 3, (0, 255, 0), -1)
+        if node.cfg.mount.tip_uv is not None:
+            tu, tv = (int(round(x)) for x in node.cfg.mount.tip_uv)
+            cv2.drawMarker(preview, (tu, tv), (0, 0, 255), cv2.MARKER_CROSS, 24, 2)
+        preview_path = Path.home() / "side_tape_calib_target.png"
+        cv2.imwrite(str(preview_path), preview)
+        print(f"target preview (green box = tracked target, red cross = knife tip): {preview_path}\n"
+              "  -> the green box must be on your marker dot on the BOX, not on the blade/holder.")
     else:
         u0 = v0 = None
         template = None
 
+    # The TF buffer starts empty: give it up to 5 s to receive the robot's transforms.
+    tf_deadline = time.monotonic() + 5.0
+    while True:
+        try:
+            R = node.lookup_rotation()
+            break
+        except Tf2Exception:
+            if time.monotonic() > tf_deadline:
+                break
+            rclpy.spin_once(node, timeout_sec=0.1)
     try:
         R = node.lookup_rotation()
     except Tf2Exception as exc:
@@ -475,17 +603,33 @@ def _run(node: CalibNode, args) -> int:
     while node.last_goal_statuses is None and rclpy.ok() and time.monotonic() < deadline:
         rclpy.spin_once(node, timeout_sec=0.1)
     if node.last_goal_statuses is None:
-        print("REFUSED: no MoveIt trajectory status received; ownership is unknown.")
-        return 1
+        # The action status topic only publishes when a goal is sent (latched, transient-local).
+        # A live action server that has sent nothing means no goal since the controller started.
+        status_topic = f"{node.cfg.robot.trajectory_action}/_action/status"
+        if node.count_publishers(status_topic) > 0:
+            print("no MoveIt trajectory has run since the controller started (action server up, "
+                  "no goal status yet) -> treating as idle.")
+            node.last_goal_statuses = []
+        else:
+            print(f"REFUSED: no trajectory action server found ({status_topic} has no publisher); "
+                  "ownership is unknown.")
+            return 1
     if control_math.trajectory_goal_active(node.last_goal_statuses):
         print("REFUSED: a MoveIt trajectory goal is active; cannot start Servo.")
         return 1
-    ok, msg = node.call_trigger(node.cli_start, "start_servo")
-    if not ok:
-        print(f"REFUSED: start_servo failed: {msg}")
-        _publish_zero(node)
-        node.call_trigger(node.cli_pause, "pause_servo")
-        return 1
+    # Servo is normally already started by the bringup (start_servo.py); a 2nd start_servo restarts
+    # its loop in Humble. Unpause first and only start it if /status stays silent.
+    node.call_trigger(node.cli_unpause, "unpause_servo")
+    t_wait = time.monotonic() + 0.5
+    while time.monotonic() < t_wait:
+        rclpy.spin_once(node, timeout_sec=0.05)
+    if node.last_servo_status_at is None or time.monotonic() - node.last_servo_status_at > 0.3:
+        ok, msg = node.call_trigger(node.cli_start, "start_servo")
+        if not ok:
+            print(f"REFUSED: start_servo failed: {msg}")
+            _publish_zero(node)
+            node.call_trigger(node.cli_pause, "pause_servo")
+            return 1
     if control_math.trajectory_goal_active(node.last_goal_statuses):
         _publish_zero(node)
         node.call_trigger(node.cli_pause, "pause_servo")
@@ -498,36 +642,39 @@ def _run(node: CalibNode, args) -> int:
         return 1
 
     exit_code = 0
-    cut_samples: list[tuple[float, float, float]] = [(0.0, 0.0, 0.0)]
-    lat_samples: list[tuple[float, float, float]] = [(0.0, 0.0, 0.0)]
+    samples: list[tuple[float, float, float, float]] = []
     try:
+        _spin_for(node, _SETTLE_S)
+        p_ref, u_ref, v_ref, _, _ = _sample_pose_and_dot(node, template, (u0, v0))
+        print(f"reference: dot at ({u_ref:.2f}, {v_ref:.2f}) px")
+        samples.append((0.0, 0.0, 0.0, 0.0))
         for name, axis, dist in plan:
             print(f"jogging {name} ({dist:+.1f} mm)...")
             _jog(node, axis, dist, args.speed_mps, p0)
-            time.sleep(_SETTLE_S)
-            p_meas = node.lookup_tf_m()
-            if p_meas is None:
-                raise RuntimeError("TF lookup failed after a jog")
-            # Fit on the MEASURED displacement along the axis, not the commanded one:
-            # any overshoot/undershoot would otherwise scale J directly.
-            dist_meas = float((p_meas - p0) @ axis) * 1000.0
-            print(f"  commanded {dist:+.2f} mm, measured {dist_meas:+.2f} mm along axis")
-            (u, v), (su, sv) = _average_tracked_position(node, template, (u0, v0))
-            _check_jog_safety(node)
+            _spin_for(node, _SETTLE_S)
+            p_meas, u, v, su, sv = _sample_pose_and_dot(node, template, (u_ref, v_ref))
+            d = (p_meas - p_ref) * 1000.0
+            d_cut, d_lat = float(d @ cut_b), float(d @ lat_b)
+            print(f"  commanded {dist:+.2f} mm; measured cut {d_cut:+.2f} mm, lateral {d_lat:+.2f} mm")
             print(f"  tracked at ({u:.2f}, {v:.2f}) px, jitter std ({su:.2f}, {sv:.2f}) px")
-            du, dv = u - u0, v - v0
-            if name.endswith("cut"):
-                cut_samples.append((dist_meas, du, dv))
-            else:
-                lat_samples.append((dist_meas, du, dv))
-            print(f"  returning to start...")
+            samples.append((d_cut, d_lat, u - u_ref, v - v_ref))
+            print("  returning to start...")
             _jog(node, axis, -dist, args.speed_mps, p0)
-            time.sleep(_SETTLE_S)
+            _spin_for(node, _SETTLE_S)
+            # The arm drifts ~0.5 mm across the jogged axis; remove the in-plane leftover
+            # (cut and lateral only -- never a depth move toward the box) before the next jog.
+            for fix_axis in (cut_b, lat_b):
+                p_now = node.lookup_tf_m()
+                if p_now is None:
+                    raise RuntimeError("TF lookup failed while returning to start")
+                off_mm = float((p_now - p0) @ fix_axis) * 1000.0
+                if abs(off_mm) > 0.3:
+                    _jog(node, fix_axis, -off_mm, args.speed_mps, p0)
+                    _spin_for(node, _SETTLE_S)
             _check_back_at_start(node, p0, name)
 
-        cut_col, cut_rms = _fit_axis_column(cut_samples)
-        lat_col, lat_rms = _fit_axis_column(lat_samples)
-        J = np.column_stack([cut_col, lat_col])
+        J, rms = fit_jacobian(samples)
+        cut_rms = lat_rms = rms
         print(f"fitted J =\n{J}")
         print(f"residuals (px RMS): cut={cut_rms:.3f} lateral={lat_rms:.3f}")
         if not np.all(np.isfinite(J)) or not np.all(np.isfinite((cut_rms, lat_rms))):
@@ -550,10 +697,12 @@ def _run(node: CalibNode, args) -> int:
         exit_code = 1
     finally:
         _publish_zero(node)
-        ok, msg = node.call_trigger(node.cli_pause, "pause_servo")
-        if not ok:
-            print(f"WARNING: pause_servo failed on exit: {msg}")
-            exit_code = 1
+        # After a successful run leave Servo unpaused (teleop keeps working); pause after errors.
+        if exit_code != 0 or node.cfg.robot.pause_servo_on_exit:
+            ok, msg = node.call_trigger(node.cli_pause, "pause_servo")
+            if not ok:
+                print(f"WARNING: pause_servo failed on exit: {msg}")
+                exit_code = 1
     return exit_code
 
 
@@ -566,6 +715,8 @@ def main(argv=None) -> None:
     parser.add_argument("--raw", action="store_true", help="subscribe to raw sensor_msgs/Image instead of JPEG")
     parser.add_argument("--force-save", action="store_true", help="write J despite unsafe fit residual/scale")
     parser.add_argument("--point", type=float, nargs=2, metavar=("U", "V"), default=None)
+    parser.add_argument("--pick", action="store_true",
+                        help="click the marker dot in a window instead of auto-picking (recommended)")
     parser.add_argument("--config", type=str, default=core_path.DEFAULT_CONFIG)
     args = parser.parse_args(argv)
 

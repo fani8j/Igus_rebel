@@ -105,7 +105,9 @@ def test_map_servo_status_int_none_is_unknown():
 
 def test_servo_status_for_supervisor_direct_labels():
     assert cm.servo_status_for_supervisor("OK", dry_run=False) == ServoStatus.OK
-    assert cm.servo_status_for_supervisor("WARN", dry_run=False) == ServoStatus.WARN
+    # decelerate codes: Servo already slows itself; only halts and missing status stop us
+    assert cm.servo_status_for_supervisor("WARN", dry_run=False) == ServoStatus.OK
+    assert cm.servo_status_for_supervisor("UNKNOWN", dry_run=False) == ServoStatus.WARN
     assert cm.servo_status_for_supervisor("HALT", dry_run=False) == ServoStatus.HALT
     assert cm.servo_status_for_supervisor("HALT", dry_run=True) == ServoStatus.HALT
 

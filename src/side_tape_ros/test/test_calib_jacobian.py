@@ -99,3 +99,17 @@ def test_compressed_decode_and_derotate():
     np.testing.assert_array_equal(_decode_compressed_gray(encoded.tobytes(), True), gray[::-1, ::-1])
     with pytest.raises(ValueError, match="decode"):
         _decode_compressed_gray(b"not a jpeg", True)
+
+
+def test_fit_jacobian_absorbs_cross_motion_and_bias():
+    """Regression (real arm 2026-09-29): lateral jogs also moved ~0.5 mm along the cut and the
+    reference pixel was off by a few px; the per-axis fit gave 2.5 px residuals."""
+    import numpy as np
+    from side_tape_ros.calib_jacobian import fit_jacobian
+    J_true = np.array([[-6.1, -0.9], [1.1, -7.6]])
+    bias = np.array([4.0, -1.5])
+    moves = [(0, 0), (2.5, 0.1), (-3.0, -0.2), (0.4, 2.6), (-0.5, -2.7)]
+    samples = [(c, l, *(J_true @ [c, l] + bias)) for c, l in moves]
+    J, rms = fit_jacobian(samples)
+    np.testing.assert_allclose(J, J_true, atol=1e-9)
+    assert rms < 1e-9

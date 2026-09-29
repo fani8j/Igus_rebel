@@ -323,6 +323,10 @@ def _run_air_align(node: _Sequencer, args, aborted: dict) -> int:
         print("[sequencer] FAILED: did not reach READY within align-timeout")
         return 1
     print("[sequencer] READY.")
+    if args.align_only:
+        print("[sequencer] --align-only: the tip is on the target line; NOT cutting. The controller stays "
+              "READY (no motion) and pauses Servo after control.ready_timeout_s.")
+        return 0
 
     if not args.auto:
         try:
@@ -384,6 +388,8 @@ def main(argv=None) -> None:
     parser.add_argument("--measure-timeout", type=float, default=15.0)
     parser.add_argument("--lock-timeout", type=float, default=10.0)
     parser.add_argument("--align-timeout", type=float, default=20.0)
+    parser.add_argument("--align-only", action="store_true",
+                         help="air_align: probe + align the tip onto the target line, stop at READY, never cut")
     parser.add_argument("--seed-json", default=None,
                          help="planner snapshot (or bare block) with the static camera's side_tape_seed; "
                               "checks the in-material start pose against it before start_cut")
@@ -405,8 +411,14 @@ def main(argv=None) -> None:
         if args.cfg.seed.expected_penetration_mm is None:
             parser.error("set seed.expected_penetration_mm in the config to use --seed-json")
 
+    if args.align_only:
+        if args.mode not in (None, "air_align"):
+            parser.error("--align-only only works with --mode air_align")
+        args.mode = "air_align"
+        if args.cut_length_mm is None:
+            args.cut_length_mm = 0.0
     if not args.measure_only and args.cut_length_mm is None:
-        parser.error("--cut-length-mm is required unless --measure-only is given")
+        parser.error("--cut-length-mm is required unless --measure-only or --align-only is given")
 
     mode = _resolve_mode(args)
     if args.measure_only:

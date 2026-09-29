@@ -97,6 +97,7 @@ class SideTapeController(Node):
         self._last_tcp = TcpState()
         self._last_control = ControlOutput.zero(Phase.IDLE, "startup")
         self._prev_should_drive = False
+        self._zero_ticks = 0
         self._prev_terminal = True  # IDLE at startup
 
         # -- Servo lifecycle / ACM bookkeeping (findings 7c, 7d, 8) -----------
@@ -174,6 +175,18 @@ class SideTapeController(Node):
             return
         with self._lock:
             self._latest_obs = obs
+
+    def _servo_status_fresh(self, wait_s: float) -> bool:
+        """True once a Servo /status message newer than now-0.3 s arrives (waits up to wait_s)."""
+        deadline = time.monotonic() + wait_s
+        while True:
+            with self._lock:
+                t = self._last_servo_status_time_s
+            if t is not None and self._now_s() - t < 0.3:
+                return True
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(0.02)
 
     def _on_servo_status(self, msg: Int8) -> None:
         with self._lock:
@@ -307,11 +320,18 @@ class SideTapeController(Node):
             return
 
         if should_drive:
-            cmd = TwistStamped()
-            cmd.header.stamp = stamp
-            cmd.header.frame_id = self.cfg.robot.base_frame
-            cmd.twist.linear.x, cmd.twist.linear.y, cmd.twist.linear.z = (float(v) for v in v_safe)
-            self.pub_twist.publish(cmd)
+            # All-zero command (HOLD, probe settle, stops): send a few zeros, then go silent so
+            # Servo halts and the JTC just holds. A continuous zero stream made Servo re-send a
+            # frozen target every 34 ms and the JTC chase any drift at error/0.034 s (up to
+            # 0.7 rad/s on joint5, real arm 2026-09-29); the calibration tool never did that.
+            is_zero = not any(abs(float(v)) > 1e-9 for v in v_safe)
+            self._zero_ticks = self._zero_ticks + 1 if is_zero else 0
+            if self._zero_ticks <= 5:
+                cmd = TwistStamped()
+                cmd.header.stamp = stamp
+                cmd.header.frame_id = self.cfg.robot.base_frame
+                cmd.twist.linear.x, cmd.twist.linear.y, cmd.twist.linear.z = (float(v) for v in v_safe)
+                self.pub_twist.publish(cmd)
         elif entering_terminal and not self._prev_terminal:
             # freshly IDLE/DONE/abort_stop: one zero twist, then pause Servo
             # and restore the ACM entries we (may have) widened (finding 8).
@@ -320,7 +340,8 @@ class SideTapeController(Node):
             zero.header.frame_id = self.cfg.robot.base_frame
             self.pub_twist.publish(zero)
             # Non-blocking: this runs under self._lock inside the control tick.
-            self._pause_servo_async("phase exit")
+            if self.cfg.robot.pause_servo_on_exit:
+                self._pause_servo_async("phase exit")
             self._servo_unpaused_by_us = False
             self._restore_carton_acm_async("phase exit")
 
@@ -526,14 +547,19 @@ class SideTapeController(Node):
         ok, msg = self._check_servo_params()
         if not ok:
             return False, f"servo_params_refused:{msg}"
-        if not self._servo_started_once:
-            ok, msg = self._call_trigger(self._servo_start_client, "start_servo")
-            if not ok:
-                return False, f"start_servo_failed:{msg}"
-            self._servo_started_once = True
+        # The bringup now starts Servo itself (start_servo.py) and a 2nd start_servo restarts
+        # Servo's loop in Humble: unpause first; call start_servo only if /status stays silent.
         ok, msg = self._call_trigger(self._servo_unpause_client, "unpause_servo")
         if not ok:
             return False, f"unpause_servo_failed:{msg}"
+        if not self._servo_status_fresh(0.5):
+            ok, msg = self._call_trigger(self._servo_start_client, "start_servo")
+            if not ok:
+                return False, f"start_servo_failed:{msg}"
+            self._call_trigger(self._servo_unpause_client, "unpause_servo")
+            if not self._servo_status_fresh(2.0):
+                return False, "servo_not_running:/status silent after start_servo"
+        self._servo_started_once = True
         with self._lock:
             self._servo_unpaused_by_us = True
         ok, msg = self._apply_carton_acm()
@@ -711,7 +737,8 @@ class SideTapeController(Node):
             if not self.dry_run:
                 self.pub_twist.publish(zero)
                 if self._servo_pause_client.service_is_ready():
-                    self._call_trigger(self._servo_pause_client, "pause_servo", timeout_sec=1.0)
+                    if self.cfg.robot.pause_servo_on_exit:
+                        self._call_trigger(self._servo_pause_client, "pause_servo", timeout_sec=1.0)
                 if self._acm_applied and self._acm_original is not None:
                     names, enabled = self._acm_original
                     ok, msg = self._apply_acm_blocking(names, enabled)

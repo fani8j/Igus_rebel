@@ -163,7 +163,10 @@ def servo_status_for_supervisor(status_label: str, dry_run: bool) -> ServoStatus
     if status_label == "HALT":
         return ServoStatus.HALT
     if status_label == "WARN":
-        return ServoStatus.WARN
+        # Decelerate codes (1, 3, 6): Servo is already scaling the motion down itself (e.g. the
+        # knife near the carton). HOLDing on them blocked every real-robot align; halts (2, 4, 5)
+        # still abort, and an unknown/missing status still counts as unsafe below.
+        return ServoStatus.OK
     return ServoStatus.OK if dry_run else ServoStatus.WARN
 
 
