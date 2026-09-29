@@ -40,6 +40,8 @@ import rclpy
 from rclpy.node import Node
 from rclpy.signals import SignalHandlerOptions
 from std_srvs.srv import Trigger
+from std_msgs.msg import Float64
+from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 
 from rclpy.time import Time
 from tf2_ros import Buffer, TransformListener
@@ -74,6 +76,9 @@ class _Sequencer(Node):
         self.cli_align = self.create_client(Trigger, "/side_tape/start_align")
         self.cli_cut = self.create_client(StartCut, "/side_tape/start_cut")
         self.cli_abort = self.create_client(Trigger, "/side_tape/abort")
+        latched = QoSProfile(history=HistoryPolicy.KEEP_LAST, depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                             durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.pub_standoff = self.create_publisher(Float64, "/side_tape/standoff_mm", latched)
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
@@ -388,6 +393,9 @@ def main(argv=None) -> None:
     parser.add_argument("--measure-timeout", type=float, default=15.0)
     parser.add_argument("--lock-timeout", type=float, default=10.0)
     parser.add_argument("--align-timeout", type=float, default=20.0)
+    parser.add_argument("--standoff-mm", type=float, default=None,
+                         help="tip distance in front of the face for the parallax correction; default: "
+                              "target.align_standoff_mm for air_align/--align-only, 0 for in_material")
     parser.add_argument("--align-only", action="store_true",
                          help="air_align: probe + align the tip onto the target line, stop at READY, never cut")
     parser.add_argument("--seed-json", default=None,
@@ -431,6 +439,23 @@ def main(argv=None) -> None:
     rclpy.init(args=None, signal_handler_options=SignalHandlerOptions.NO)
     node = _Sequencer()
     aborted = {"flag": False}
+
+    # Parallax correction: tell perception how far the tip is in front of the face.
+    standoff = args.standoff_mm
+    if standoff is None:
+        if mode == "in_material" and not args.align_only:
+            standoff = 0.0
+        else:
+            try:
+                standoff = float(load_config(args.config_path).target.align_standoff_mm)
+            except (ConfigError, OSError) as exc:
+                print(f"[sequencer] WARNING: cannot read align_standoff_mm ({exc}); using 0")
+                standoff = 0.0
+    node.pub_standoff.publish(Float64(data=float(standoff)))
+    t_pub = time.monotonic()
+    while time.monotonic() - t_pub < 1.0:  # let perception apply it before the first decision
+        rclpy.spin_once(node, timeout_sec=0.05)
+    print(f"[sequencer] standoff {standoff:.1f} mm (parallax correction in perception)")
 
     def _on_signal(signum, frame):  # noqa: ARG001
         aborted["flag"] = True

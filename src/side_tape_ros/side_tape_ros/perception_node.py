@@ -11,7 +11,8 @@ import numpy as np
 from builtin_interfaces.msg import Time
 from cv_bridge import CvBridge
 from rclpy.node import Node
-from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
+from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
+from std_msgs.msg import Float64
 from sensor_msgs.msg import CompressedImage, Image
 from side_tape_interfaces.msg import Observation as ObservationMsg, SupervisorStatus
 from side_tape_interfaces.srv import SetSeed
@@ -75,10 +76,19 @@ class SideTapePerception(Node):
         self.observation_pub = self.create_publisher(ObservationMsg, "/side_tape/observation", 10)
         self.debug_pub = self.create_publisher(Image, "/side_tape/debug_image", 1)
         self.create_subscription(SupervisorStatus, "/side_tape/status", self._on_status, 10)
+        # Latched: the sequencer sets how far the tip is in front of the face (parallax correction).
+        latched = QoSProfile(history=HistoryPolicy.KEEP_LAST, depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                             durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.create_subscription(Float64, "/side_tape/standoff_mm", self._on_standoff, latched)
         self.create_service(SetSeed, "/side_tape/set_seed", self._on_seed)
         self.create_service(Trigger, "/side_tape/reset_tracker", self._on_reset)
         self.create_timer(5.0, self._log_stats)
         self.get_logger().info(f"tracking {topic} (no robot output)")
+
+    def _on_standoff(self, msg):
+        self.tracker.set_standoff_mm(msg.data)
+        self.get_logger().info(f"standoff {msg.data:.1f} mm -> effective offset "
+                               f"{self.tracker.effective_offset_mm:+.2f} mm")
 
     def _on_status(self, msg):
         self._phase = msg.phase
@@ -154,7 +164,8 @@ class SideTapePerception(Node):
             roi = roi_around(center, self.cfg.detector.roi_half_w,
                              self.cfg.detector.roi_half_h,
                              self.cfg.camera.width, self.cfg.camera.height)
-            overlay = draw_overlay(image, obs, self.cfg, roi=roi, seed=self._seed_line)
+            overlay = draw_overlay(image, obs, self.cfg, roi=roi, seed=self._seed_line,
+                                   offset_mm=self.tracker.effective_offset_mm)
             if self._provisional:
                 cv2.putText(overlay, "UNCALIBRATED PREVIEW (no J) - e_lat not meaningful", (20, 700),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
