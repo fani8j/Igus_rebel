@@ -6,7 +6,7 @@
 # override_velocity_scaling_factor = 0.0 # valid range [0.0:1.0]
 
 ## Properties of outgoing commands
-publish_period: 0.01  # 1/Nominal publish rate [seconds]
+publish_period: 0.034  # 1/Nominal publish rate [seconds]. Was 0.01: with the JTC also at 100 Hz, every stamp-0 Servo trajectory was sampled only at its start (= current state) -> the arm did not move for slow commands. 0.034 gives the JTC ~3 cycles per message.
 # max_expected_latency: 0.5  # delay between sending a command and the robot executing it [seconds]
 incoming_command_timeout:  0.1  # side_tape controller publishes at 100 Hz; limits coast after a crash to ~1.5 mm at 15 mm/s (was 0.3)
 
@@ -24,7 +24,7 @@ command_out_type: trajectory_msgs/JointTrajectory
 
 # What to publish? Can save some bandwidth as most robots only require positions or velocities
 publish_joint_positions: true
-publish_joint_velocities: false
+publish_joint_velocities: true  # was false: the JTC (velocity interface, ff_velocity_scale 1) then had reference velocity 0 and sent only P*one-step error (~0.3% jog) -> the real arm did not move (bag 2026-09-29)
 publish_joint_accelerations: false
 
 ## Plugins for smoothing outgoing commands

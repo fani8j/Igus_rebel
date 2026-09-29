@@ -50,6 +50,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <mutex>
 #include <thread>
 
 #include <control_msgs/msg/joint_jog.hpp>
@@ -62,6 +63,7 @@
 #define IGUS_REBEL_HAS_SERVO_COMMAND_TYPE 0
 #include <std_srvs/srv/trigger.hpp>
 #endif
+#include <std_msgs/msg/int8.hpp>
 #include <rclcpp/rclcpp.hpp>
 #ifndef WIN32
 #include <poll.h>
@@ -71,12 +73,12 @@
 #include <conio.h>
 #endif
 
-// Servo applies each command for its incoming-command timeout.
-constexpr double SERVO_COMMAND_TIMEOUT_S = 0.3;
+// A keypress holds one velocity command for this long; Servo's own input timeout is shorter.
+constexpr double KEYPRESS_DURATION_S = 0.3;
 constexpr double DEFAULT_CARTESIAN_INCREMENT_M = 0.005;
 constexpr double MAX_CARTESIAN_INCREMENT_M = 0.03;
 constexpr double DEFAULT_LINEAR_VELOCITY_MPS =
-    DEFAULT_CARTESIAN_INCREMENT_M / SERVO_COMMAND_TIMEOUT_S;
+    DEFAULT_CARTESIAN_INCREMENT_M / KEYPRESS_DURATION_S;
 constexpr double DEFAULT_ANGULAR_VELOCITY_RPS = 0.15;
 constexpr double MIN_LINEAR_VELOCITY_MPS = 0.001;
 constexpr double MAX_LINEAR_VELOCITY_MPS = 0.10;
@@ -230,6 +232,9 @@ private:
     const std::shared_ptr<igus_rebel_msgs::srv::SetCartesianIncrement::Request> request,
     std::shared_ptr<igus_rebel_msgs::srv::SetCartesianIncrement::Response> response);
   void stopSpinning();
+  void publishActiveCommand();
+  void queueTwist(const geometry_msgs::msg::TwistStamped& command);
+  void queueJoint(const control_msgs::msg::JointJog& command);
 #if IGUS_REBEL_HAS_SERVO_COMMAND_TYPE
   void switchCommandType(int8_t command_type, const char* label);
 #else
@@ -244,10 +249,19 @@ private:
   rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_pub_;
   rclcpp::Publisher<control_msgs::msg::JointJog>::SharedPtr joint_pub_;
   rclcpp::Service<igus_rebel_msgs::srv::SetCartesianIncrement>::SharedPtr increment_service_;
+  rclcpp::TimerBase::SharedPtr command_timer_;
+  std::mutex command_mutex_;
+  enum class CommandType { NONE, TWIST, JOINT };
+  CommandType active_type_{ CommandType::NONE };
+  geometry_msgs::msg::TwistStamped active_twist_;
+  control_msgs::msg::JointJog active_joint_;
+  std::chrono::steady_clock::time_point command_deadline_;
 #if IGUS_REBEL_HAS_SERVO_COMMAND_TYPE
   rclcpp::Client<moveit_msgs::srv::ServoCommandType>::SharedPtr switch_input_;
 #else
   rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr start_servo_;
+  rclcpp::Subscription<std_msgs::msg::Int8>::SharedPtr servo_status_;
+  std::atomic<bool> servo_active_{ false };
 #endif
   std::atomic<double> cartesian_velocity_mps_;
   std::atomic<double> angular_velocity_rps_;
@@ -264,6 +278,7 @@ KeyboardServo::KeyboardServo()
 
   twist_pub_ = nh_->create_publisher<geometry_msgs::msg::TwistStamped>(TWIST_TOPIC, ROS_QUEUE_SIZE);
   joint_pub_ = nh_->create_publisher<control_msgs::msg::JointJog>(JOINT_TOPIC, ROS_QUEUE_SIZE);
+  command_timer_ = nh_->create_wall_timer(std::chrono::milliseconds(20), [this]() { publishActiveCommand(); });
   increment_service_ = nh_->create_service<igus_rebel_msgs::srv::SetCartesianIncrement>(
     "~/set_cartesian_increment",
     [this](
@@ -279,6 +294,8 @@ KeyboardServo::KeyboardServo()
 #else
   // Humble's servo_node stays idle until ~/start_servo is called.
   start_servo_ = nh_->create_client<std_srvs::srv::Trigger>("servo_node/start_servo");
+  servo_status_ = nh_->create_subscription<std_msgs::msg::Int8>(
+    "/status", 10, [this](std_msgs::msg::Int8::ConstSharedPtr) { servo_active_.store(true); });
 #endif
 
   // Service callbacks and client responses are handled on a dedicated thread,
@@ -347,6 +364,16 @@ void KeyboardServo::startServo()
                 static_cast<long>(SERVICE_WAIT_TIMEOUT.count()));
     return;
   }
+  // Humble's second start call stops and reinitializes its calculation thread.
+  // Status is emitted only from that running thread, so avoid a redundant start.
+  const auto status_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (!servo_active_.load() && std::chrono::steady_clock::now() < status_deadline)
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  if (servo_active_.load())
+  {
+    RCLCPP_INFO(nh_->get_logger(), "Servo already active; skipping start_servo");
+    return;
+  }
   auto result = start_servo_->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
   if (result.wait_for(SERVICE_RESPONSE_TIMEOUT) != std::future_status::ready)
   {
@@ -379,10 +406,52 @@ void KeyboardServo::setCartesianIncrement(
     return;
   }
 
-  cartesian_velocity_mps_.store(increment / SERVO_COMMAND_TIMEOUT_S, std::memory_order_relaxed);
+  cartesian_velocity_mps_.store(increment / KEYPRESS_DURATION_S, std::memory_order_relaxed);
   response->success = true;
   response->message = "Cartesian keyboard increment set to " + std::to_string(increment) + " m";
   RCLCPP_INFO(nh_->get_logger(), "%s", response->message.c_str());
+}
+
+void KeyboardServo::queueTwist(const geometry_msgs::msg::TwistStamped& command)
+{
+  std::lock_guard<std::mutex> lock(command_mutex_);
+  active_twist_ = command;
+  command_deadline_ = std::chrono::steady_clock::now() +
+                      std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                        std::chrono::duration<double>(KEYPRESS_DURATION_S));
+  active_type_ = CommandType::TWIST;
+}
+
+void KeyboardServo::queueJoint(const control_msgs::msg::JointJog& command)
+{
+  std::lock_guard<std::mutex> lock(command_mutex_);
+  active_joint_ = command;
+  command_deadline_ = std::chrono::steady_clock::now() +
+                      std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                        std::chrono::duration<double>(KEYPRESS_DURATION_S));
+  active_type_ = CommandType::JOINT;
+}
+
+void KeyboardServo::publishActiveCommand()
+{
+  std::lock_guard<std::mutex> lock(command_mutex_);
+  if (active_type_ == CommandType::NONE)
+    return;
+  if (std::chrono::steady_clock::now() >= command_deadline_)
+  {
+    active_type_ = CommandType::NONE;
+    return;
+  }
+  if (active_type_ == CommandType::TWIST)
+  {
+    active_twist_.header.stamp = nh_->now();
+    twist_pub_->publish(active_twist_);
+  }
+  else
+  {
+    active_joint_.header.stamp = nh_->now();
+    joint_pub_->publish(active_joint_);
+  }
 }
 
 int main(int argc, char** argv)
@@ -603,19 +672,17 @@ int KeyboardServo::keyLoop(KeyboardReader& input)
         return 0;
     }
 
-    // If a key requiring a publish was pressed, publish the message now
+    // A new key replaces the active velocity and extends its deadline.
     if (publish_twist)
     {
-      twist_msg->header.stamp = nh_->now();
       twist_msg->header.frame_id = command_frame_id_;
-      twist_pub_->publish(std::move(twist_msg));
+      queueTwist(*twist_msg);
       publish_twist = false;
     }
     else if (publish_joint)
     {
-      joint_msg->header.stamp = nh_->now();
       joint_msg->header.frame_id = PLANNING_FRAME_ID;
-      joint_pub_->publish(std::move(joint_msg));
+      queueJoint(*joint_msg);
       publish_joint = false;
     }
   }

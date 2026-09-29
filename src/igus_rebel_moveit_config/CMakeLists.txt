@@ -25,6 +25,7 @@ ament_target_dependencies(rebel_servo_teleop_keyboard
   rclcpp
   control_msgs
   geometry_msgs
+  std_msgs
   moveit_msgs
   igus_rebel_msgs
   std_srvs
@@ -35,6 +36,7 @@ ament_target_dependencies(rebel_servo_teleop_gamepad
   rclcpp
   sensor_msgs
   geometry_msgs
+  std_msgs
   moveit_msgs
   std_srvs
 )
@@ -73,6 +75,7 @@ install(TARGETS
 )
 install(PROGRAMS
   scripts/camera_pole_collision.py
+  scripts/start_servo.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

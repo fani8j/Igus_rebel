@@ -13,6 +13,7 @@
 #define IGUS_REBEL_HAS_SERVO_COMMAND_TYPE 0
 #include <std_srvs/srv/trigger.hpp>
 #endif
+#include <std_msgs/msg/int8.hpp>
 #include <rclcpp/rclcpp.hpp>
 
 #define MAX_LINEAR_VEL 0.10
@@ -47,6 +48,8 @@ private:
     rclcpp::Client<moveit_msgs::srv::ServoCommandType>::SharedPtr switch_input_;
 #else
     rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr start_servo_;
+    rclcpp::Subscription<std_msgs::msg::Int8>::SharedPtr servo_status_;
+    bool servo_active_{ false };
 #endif
     rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_sub_;
     std::string command_frame_id_{"base_link"};
@@ -82,7 +85,18 @@ JoyServo::JoyServo()
 #else
     // Humble's servo_node stays idle until ~/start_servo is called.
     start_servo_ = nh_->create_client<std_srvs::srv::Trigger>("servo_node/start_servo");
-    servo_ready = callStartupService<std_srvs::srv::Trigger>(
+    servo_status_ = nh_->create_subscription<std_msgs::msg::Int8>(
+        "/status", 10,
+        [this](std_msgs::msg::Int8::ConstSharedPtr) { servo_active_ = true; });
+    rclcpp::executors::SingleThreadedExecutor status_executor;
+    status_executor.add_node(nh_);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (!servo_active_ && std::chrono::steady_clock::now() < deadline)
+        status_executor.spin_once(std::chrono::milliseconds(20));
+    status_executor.remove_node(nh_);
+    if (servo_active_)
+        RCLCPP_INFO(nh_->get_logger(), "Servo already active; skipping start_servo");
+    servo_ready = servo_active_ || callStartupService<std_srvs::srv::Trigger>(
         start_servo_, std::make_shared<std_srvs::srv::Trigger::Request>(), "servo_node/start_servo");
 #endif
 

@@ -196,6 +196,13 @@ def opaque_func(context, *args, **kwargs):
         ],
         output="screen",
     )
+    start_servo_node = Node(
+        condition=IfCondition(LaunchConfiguration("run_teleop")),
+        package=PACKAGE,
+        executable="start_servo.py",
+        output="screen",
+    )
+
 
     joy_node = Node(
         condition=IfCondition(LaunchConfiguration("run_gamepad")),
@@ -233,6 +240,7 @@ def opaque_func(context, *args, **kwargs):
         camera_pole_node,
         calibration_node,
         servo_node,
+        start_servo_node,
         joy_node,
         teleop_twist_joy_node,
         delayed_box_h_cut_node,
