@@ -20,6 +20,7 @@ from std_srvs.srv import Trigger
 
 from . import core_path  # noqa: F401  -- core must be on sys.path before imports
 from .conversions import observation_to_msg, stamp_to_s
+from .fast_frame import RoiCanvas
 from precision_box_detector.side_tape.backends.classical import ClassicalBackend
 from precision_box_detector.side_tape.config import load_config
 from precision_box_detector.side_tape.geometry import (derotate_image, line_from_points,
@@ -40,6 +41,11 @@ class SideTapePerception(Node):
         # Raw 1280x720 frames over DDS arrive at ~2-8 Hz (measured); the JPEG
         # image_transport topic arrives at ~28 Hz and decodes in ~3 ms.
         self.declare_parameter("use_compressed", True)
+        # Opt-in: rotate only the tracker ROI instead of the whole frame (same backend input
+        # inside the ROI). Frames that need the full image (debug overlay) use the full path.
+        self.declare_parameter("fast_decode", False)
+        self._fast_decode = bool(self.get_parameter("fast_decode").value)
+        self._canvas = None
         debug_rate = float(self.get_parameter("debug_rate_hz").value)
         if debug_rate < 0:
             raise ValueError("debug_rate_hz must be >= 0")
@@ -80,6 +86,9 @@ class SideTapePerception(Node):
         latched = QoSProfile(history=HistoryPolicy.KEEP_LAST, depth=1, reliability=ReliabilityPolicy.RELIABLE,
                              durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.create_subscription(Float64, "/side_tape/standoff_mm", self._on_standoff, latched)
+        # Additive offset trim (mm) on top of the effective offset; persists until a new value is
+        # published (tracker resets do not clear it). The sequencer always publishes it (0 = none).
+        self.create_subscription(Float64, "/side_tape/offset_trim_mm", self._on_offset_trim, latched)
         self.create_service(SetSeed, "/side_tape/set_seed", self._on_seed)
         self.create_service(Trigger, "/side_tape/reset_tracker", self._on_reset)
         self.create_timer(5.0, self._log_stats)
@@ -89,6 +98,11 @@ class SideTapePerception(Node):
         self.tracker.set_standoff_mm(msg.data)
         self.get_logger().info(f"standoff {msg.data:.1f} mm -> effective offset "
                                f"{self.tracker.effective_offset_mm:+.2f} mm")
+
+    def _on_offset_trim(self, msg):
+        self.tracker.set_offset_trim_mm(msg.data)
+        self.get_logger().info(f"offset trim {msg.data:+.3f} mm -> effective offset "
+                               f"{self.tracker.effective_offset_mm:+.3f} mm")
 
     def _on_status(self, msg):
         self._phase = msg.phase
@@ -144,7 +158,21 @@ class SideTapePerception(Node):
                 f"{self.cfg.camera.width}x{self.cfg.camera.height}; frame skipped",
                 throttle_duration_sec=5.0)
             return
-        image = derotate_image(image, self.cfg.camera.rotate_180)
+        full_frame = True
+        if self._fast_decode:
+            debug_due = (self.debug_period is not None
+                         and time.monotonic() - self._last_debug_s >= self.debug_period)
+            roi = None if debug_due else self._tracker_roi()
+            if roi is None:
+                image = derotate_image(image, self.cfg.camera.rotate_180)
+            else:
+                if self._canvas is None:
+                    self._canvas = RoiCanvas(self.cfg.camera.width, self.cfg.camera.height,
+                                             self.cfg.camera.rotate_180, 1 if image.ndim == 2 else image.shape[2])
+                image = self._canvas.fill(image, roi)
+                full_frame = False  # only the ROI window is valid
+        else:
+            image = derotate_image(image, self.cfg.camera.rotate_180)
         obs = self.tracker.step(image, stamp_to_s(header.stamp), self._seq)
         self._seq += 1
         if obs.state.value == "LOST" and self._phase in ("IDLE", "DONE"):
@@ -158,7 +186,7 @@ class SideTapePerception(Node):
         self.observation_pub.publish(result)
         self._proc_samples.append(obs.proc_ms)
         now = time.monotonic()
-        if self.debug_period is not None and now - self._last_debug_s >= self.debug_period:
+        if full_frame and self.debug_period is not None and now - self._last_debug_s >= self.debug_period:
             center = (lookahead_center(self.cfg.tip, self.cfg.J, self.cfg.detector.lookahead_mm)
                       if self._mode == "cut" else self.cfg.tip)
             roi = roi_around(center, self.cfg.detector.roi_half_w,
@@ -173,6 +201,16 @@ class SideTapePerception(Node):
             debug_msg.header = header
             self.debug_pub.publish(debug_msg)
             self._last_debug_s = now
+
+    def _tracker_roi(self):
+        """The ROI the tracker will hand the backend this frame (None if it cannot be built)."""
+        center = (lookahead_center(self.cfg.tip, self.cfg.J, self.cfg.detector.lookahead_mm)
+                  if self._mode == "cut" else self.cfg.tip)
+        try:
+            return roi_around(center, self.cfg.detector.roi_half_w, self.cfg.detector.roi_half_h,
+                              self.cfg.camera.width, self.cfg.camera.height)
+        except ValueError:
+            return None
 
     def _log_stats(self):
         if self._proc_samples:

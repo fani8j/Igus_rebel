@@ -11,6 +11,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/SupervisorStatus.msg"
   "srv/StartCut.srv"
   "srv/SetSeed.srv"
+  "srv/StartInsert.srv"
+  "srv/StartLateral.srv"
   DEPENDENCIES std_msgs builtin_interfaces
 )
 

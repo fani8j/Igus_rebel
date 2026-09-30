@@ -1,5 +1,3 @@
-# J calibrated 2026-09-29T02:05:17.293044+00:00 residual 0.594 px
-# parallax -0.41 mm/mm measured 2026-09-29 (camera -3.20 at 9.1 mm standoff vs -0.02 at contact on the real gap)
 camera:
   image_topic: /knife_camera/image_raw
   width: 1280
@@ -9,19 +7,21 @@ mount:
   mount_id: uncalibrated
   calibrated: true
   tip_uv:
-  - 616.1021505376345
-  - 108.31720430107532
+  - 611.9287200832466
+  - 112.32192160943467
   J:
   - - -7.978591912692873
     - 1.4363881752149157
   - - 0.24140745333872282
     - -7.380710049168425
 target:
-  offset_mm: 0.0
+  offset_mm: -0.26
   edge_polarity: null
   max_edge_angle_deg: 12.0
   parallax_mm_per_mm: -0.41
   align_standoff_mm: 9.0
+detector:
+  refine: robust
 control:
   v_cut_mps: 0.005
   retract_mm: 5.0

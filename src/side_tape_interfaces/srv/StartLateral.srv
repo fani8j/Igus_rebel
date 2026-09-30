@@ -1,0 +1,11 @@
+# ENTRY mode retry: one TF-closed-loop lateral move (in the AIR only) from INSERTED.
+# lateral_mm is the signed displacement along tool +lateral (correcting move = -e_lat_mm).
+# air_depth_mm: the largest measured net depth from the READY pose at which the tip is still in
+# front of the face; the controller refuses the move if the TF-measured net depth is beyond it.
+# Depth and along-cut are held on TF. Ends in phase INSERTED.
+float64 lateral_mm
+float64 air_depth_mm
+---
+bool accepted
+string message
+uint32 move_id  # see StartInsert.srv

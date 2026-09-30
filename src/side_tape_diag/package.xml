@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>side_tape_diag</name>
+  <version>0.0.1</version>
+  <description>Read-only diagnostics: reproduces MoveIt Servo's collision-proximity check and reports the closest link pairs.</description>
+  <maintainer email="hucenrotiacompal@gmail.com">farhan</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>rclcpp</depend>
+  <depend>moveit_core</depend>
+  <depend>moveit_ros_planning</depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>

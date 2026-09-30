@@ -39,6 +39,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from . import core_path  # noqa: F401  (adds the pure-Python core to sys.path)
+from precision_box_detector.side_tape.line_hold import LineHoldCfg  # noqa: E402
 from precision_box_detector.side_tape.supervisor import ServoStatus  # noqa: E402
 from precision_box_detector.side_tape.types import ControlOutput  # noqa: E402
 
@@ -59,6 +60,13 @@ __all__ = [
     "parse_get_parameters_result",
     "servo_params_ok",
     "servo_incoming_timeout_warning",
+    "LINE_HOLD_PARAMS",
+    "line_hold_cfg_from_params",
+    "line_hold_enable_params",
+    "LINE_HOLD_RESTORE_PARAMS",
+    "check_line_hold_args",
+    "CUT_MODE_VISION_PARAMS",
+    "params_mismatch",
 ]
 
 # action_msgs/msg/GoalStatus status codes that mean "MoveIt is driving (or
@@ -329,3 +337,93 @@ def servo_incoming_timeout_warning(incoming_timeout_s: float) -> str | None:
         return (f"servo incoming_command_timeout={incoming_timeout_s} > 0.1s "
                 f"recommended for a 100 Hz publisher")
     return None
+
+
+# -- cut_mode / line_hold ROS parameters ----------------------------------------
+
+# ROS parameter name -> LineHoldCfg field
+LINE_HOLD_PARAMS = {
+    "cut_mode": "mode",
+    "line_vision_gain": "vision_gain",
+    "line_min_conf": "min_conf",
+    "line_max_nudge_mm": "max_nudge_mm",
+    "line_check_tol_mm": "check_tol_mm",
+    "line_check_frames": "check_frames",
+}
+
+
+def line_hold_cfg_from_params(current: LineHoldCfg, updates: dict) -> LineHoldCfg:
+    """New validated :class:`LineHoldCfg` = ``current`` with the ROS parameters in
+    ``updates`` (``{ros_name: python_value}``) applied. Raises ``ValueError`` on an unknown
+    name, a wrong type or an out-of-range value; ``current`` is never modified."""
+    from dataclasses import replace
+
+    fields = {}
+    for name, value in updates.items():
+        if name not in LINE_HOLD_PARAMS:
+            raise ValueError(f"unknown line_hold parameter {name!r}")
+        field = LINE_HOLD_PARAMS[name]
+        if field == "mode":
+            if not isinstance(value, str):
+                raise ValueError(f"{name} must be a string")
+        elif field == "check_frames":
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ValueError(f"{name} must be an integer")
+        else:
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError(f"{name} must be a number")
+            if not math.isfinite(value):
+                raise ValueError(f"{name} must be finite, got {value!r}")
+            value = float(value)
+        fields[field] = value
+    return replace(current, **fields).validate()
+
+
+# What the sequencer sets on /side_tape_controller for --line-hold, and puts back afterwards.
+LINE_HOLD_RESTORE_PARAMS = {"cut_mode": "vision", "line_vision_gain": 0.0}
+
+
+def line_hold_enable_params(gain: float) -> dict:
+    """``{ros_name: value}`` for ``sequencer --line-hold [--line-vision-gain G]`` (validated)."""
+    cfg = line_hold_cfg_from_params(LineHoldCfg(), {"cut_mode": "line_hold", "line_vision_gain": float(gain)})
+    return {"cut_mode": cfg.mode, "line_vision_gain": float(cfg.vision_gain)}
+
+
+def check_line_hold_args(line_hold: bool, gain, measure_only: bool, align_only: bool) -> str | None:
+    """Error message for an invalid ``--line-hold`` combination, else ``None``."""
+    if gain is not None and not line_hold:
+        return "--line-vision-gain needs --line-hold"
+    if line_hold and measure_only:
+        return "--line-hold cannot be combined with --measure-only (no cut is made)"
+    if line_hold and align_only:
+        return "--line-hold cannot be combined with --align-only (no cut is made)"
+    if line_hold:
+        try:
+            line_hold_enable_params(0.0 if gain is None else gain)
+        except ValueError as exc:
+            return f"--line-vision-gain: {exc}"
+    return None
+
+
+# What the sequencer sets (and verifies) before start_cut when --line-hold is NOT given: the default
+# cut mode is stated explicitly, never assumed from whatever an earlier run left on the controller.
+CUT_MODE_VISION_PARAMS = {"cut_mode": "vision"}
+
+
+def params_mismatch(want: dict, got: dict) -> list:
+    """Compare the parameters the sequencer set (``want``) with what it read back (``got``, from
+    :func:`parse_get_parameters_result`; ``None`` = unreadable/not set). Returns human-readable
+    mismatches; an empty list means every value matches (floats within 1e-9)."""
+    bad = []
+    for name, w in want.items():
+        g = got.get(name)
+        if g is None:
+            bad.append(f"{name}: wanted {w!r}, read back nothing")
+        elif isinstance(g, float) and not math.isfinite(g) or isinstance(w, float) and not math.isfinite(w):
+            bad.append(f"{name}: wanted {w!r}, read back {g!r} (not finite: never a match)")
+        elif isinstance(w, bool) or isinstance(w, str):
+            if type(g) is not type(w) or g != w:
+                bad.append(f"{name}: wanted {w!r}, read back {g!r}")
+        elif isinstance(g, bool) or isinstance(g, str) or abs(float(g) - float(w)) > 1e-9 * max(1.0, abs(float(w))):
+            bad.append(f"{name}: wanted {w!r}, read back {g!r}")
+    return bad

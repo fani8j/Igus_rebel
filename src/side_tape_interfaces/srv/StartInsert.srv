@@ -1,0 +1,16 @@
+# ENTRY mode (sequencer --entry): one TF-closed-loop move along the tool depth axis from READY
+# (first insertion, depth_mm > 0) or INSERTED (any signed move, e.g. the back-out of a retry).
+# depth_mm is the signed displacement along +depth: + = INTO the box face, - = back OUT.
+# Lateral and along-cut are held on TF at their values at the start of the move. Ends in phase
+# INSERTED (zero twist, Servo left running). Separate from StartCut, which is unchanged.
+float64 depth_mm
+float64 speed_mm_s
+# Absolute net depth limit (mm from the ENTRY START pose) enforced on every controller tick; taken at an
+# entry start (IDLE/DONE/READY), kept for the whole entry. 0 = the supervisor's default ceiling.
+float64 depth_limit_mm
+---
+bool accepted
+string message
+# Counts accepted entry moves; the same id is in /side_tape/status while (and after) this move runs, so the
+# caller can tell its own completion from a stale status. 0 when not accepted.
+uint32 move_id

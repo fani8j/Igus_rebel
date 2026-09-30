@@ -1,6 +1,6 @@
 # Published by side_tape_controller every control tick (throttled).
 builtin_interfaces/Time stamp
-string phase            # IDLE | ALIGN | READY | CUT | DONE | HOLD | ABORT
+string phase            # IDLE | ALIGN | READY | CUT | DONE | HOLD | ABORT | INSERT | SHIFT | INSERTED (entry mode)
 string[] reasons
 bool dry_run            # true: twists are NOT sent to Servo
 bool arm_owned
@@ -14,3 +14,4 @@ float64 depth_dev_mm
 float64 v_cut_mps       # last commanded, cut frame
 float64 v_lat_mps
 float64 v_depth_mps
+uint32 move_id      # entry mode: id of the last accepted start_insert / start_lateral move (0 = none)

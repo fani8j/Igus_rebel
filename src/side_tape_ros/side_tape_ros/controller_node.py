@@ -6,6 +6,11 @@ and turns its :class:`ControlOutput` into a base-frame twist. See
 docs/side_seam_architecture.md S3/S4/S4b and side_tape_ros/control_math.py
 (all the non-ROS math lives there and is unit-tested there).
 
+ENTRY mode (``sequencer --entry``, see precision_box_detector/side_tape/insert_move.py): the services
+``/side_tape/start_insert`` (StartInsert) and ``/side_tape/start_lateral`` (StartLateral) run one TF-closed-loop
+depth / lateral move each (phases INSERT / SHIFT, resting phase INSERTED); ``start_insert`` from IDLE does the same
+live Servo preparation as ``start_align``. ``start_cut`` / ``start_align`` are unchanged.
+
 Safety defaults: ``dry_run:=true`` (the default) never touches Servo at all --
 no service calls, no ``delta_twist_cmds`` publish -- only the always-on
 ``/side_tape/twist_preview``. Only pass ``dry_run:=false`` once the whole
@@ -26,6 +31,7 @@ from geometry_msgs.msg import TwistStamped
 from moveit_msgs.msg import AllowedCollisionEntry, PlanningScene, PlanningSceneComponents
 from moveit_msgs.srv import ApplyPlanningScene, GetPlanningScene
 from rcl_interfaces.srv import GetParameters
+from rcl_interfaces.msg import SetParametersResult
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 from rclpy.duration import Duration
 from rclpy.executors import MultiThreadedExecutor
@@ -40,11 +46,12 @@ from tf2_ros import TransformException as Tf2Exception
 
 from . import control_math, conversions, core_path  # noqa: F401
 from precision_box_detector.side_tape.config import ConfigError, load_config  # noqa: E402
+from precision_box_detector.side_tape.line_hold import LineHoldCfg  # noqa: E402
 from precision_box_detector.side_tape.supervisor import Supervisor, TcpState  # noqa: E402
 from precision_box_detector.side_tape.types import ControlOutput, Phase  # noqa: E402
 from side_tape_interfaces.msg import Observation as ObservationMsg  # noqa: E402
 from side_tape_interfaces.msg import SupervisorStatus as SupervisorStatusMsg  # noqa: E402
-from side_tape_interfaces.srv import StartCut  # noqa: E402
+from side_tape_interfaces.srv import StartCut, StartInsert, StartLateral  # noqa: E402
 
 # Parameter names read from the live Servo node at the start of any live
 # motion (finding 7d); see docs S4b / launch/move_group.launch.py's
@@ -84,6 +91,26 @@ class SideTapeController(Node):
         self.supervisor = Supervisor(self.cfg)
         self._lock = threading.RLock()
 
+        # -- cut_mode (opt-in "line_hold"; default "vision" = original behaviour) ------
+        _d = LineHoldCfg()
+        self.declare_parameter("cut_mode", _d.mode)
+        self.declare_parameter("line_vision_gain", float(_d.vision_gain))
+        self.declare_parameter("line_min_conf", float(_d.min_conf))
+        self.declare_parameter("line_max_nudge_mm", float(_d.max_nudge_mm))
+        self.declare_parameter("line_check_tol_mm", float(_d.check_tol_mm))
+        self.declare_parameter("line_check_frames", int(_d.check_frames))
+        try:
+            self.supervisor.set_line_hold(control_math.line_hold_cfg_from_params(
+                _d, {n: self.get_parameter(n).value for n in control_math.LINE_HOLD_PARAMS}))
+        except ValueError as exc:
+            self.get_logger().fatal(f"invalid cut_mode / line_hold parameters: {exc}")
+            raise
+        # Validated atomically (all changed params together) and applied to the supervisor
+        # here; it takes effect at the NEXT start_cut, never inside a running cut.
+        self.add_on_set_parameters_callback(self._on_set_parameters)
+        if self.supervisor.line_cfg.mode != "vision":
+            self.get_logger().warn(f"cut_mode={self.supervisor.line_cfg.mode} {self.supervisor.line_cfg}")
+
         # -- state filled in by subscriptions / freezing --------------------
         self._latest_obs = None  # precision_box_detector.side_tape.types.Observation
         self._last_delivered_frame_seq: int | None = None
@@ -99,6 +126,10 @@ class SideTapeController(Node):
         self._prev_should_drive = False
         self._zero_ticks = 0
         self._prev_terminal = True  # IDLE at startup
+        self._last_move_id = 0  # supervisor.move_id as of the last control tick (published in the status)
+        # One start_* transaction at a time: the lock is released while Servo is being prepared, so without
+        # this a second start could be accepted (and re-freeze the axes) while the first is still in flight.
+        self._start_txn = threading.Lock()
 
         # -- Servo lifecycle / ACM bookkeeping (findings 7c, 7d, 8) -----------
         self._servo_started_once = False  # start_servo restarts Servo's loop: call at most once
@@ -143,7 +174,11 @@ class SideTapeController(Node):
         # -- our services -----------------------------------------------------
         self.create_service(Trigger, "/side_tape/start_align", self._on_start_align, callback_group=cbg)
         self.create_service(StartCut, "/side_tape/start_cut", self._on_start_cut, callback_group=cbg)
+        # ENTRY mode (sequencer --entry): TF-closed-loop depth / lateral moves, see supervisor.py.
+        self.create_service(StartInsert, "/side_tape/start_insert", self._on_start_insert, callback_group=cbg)
+        self.create_service(StartLateral, "/side_tape/start_lateral", self._on_start_lateral, callback_group=cbg)
         self.create_service(Trigger, "/side_tape/abort", self._on_abort, callback_group=cbg)
+        self.create_service(Trigger, "/side_tape/stop", self._on_stop, callback_group=cbg)
         self.create_service(Trigger, "/side_tape/acknowledge_abort", self._on_acknowledge_abort, callback_group=cbg)
         self.create_service(Trigger, "/side_tape/resume", self._on_resume, callback_group=cbg)
 
@@ -159,6 +194,19 @@ class SideTapeController(Node):
         # absolute clamp inputs (defence in depth, task spec)
         self._v_clamp_args = (self.cfg.control.v_cut_mps, self.cfg.control.v_lat_max_mps,
                                self.cfg.control.v_retract_mps)
+
+    def _on_set_parameters(self, params) -> SetParametersResult:
+        updates = {p.name: p.value for p in params if p.name in control_math.LINE_HOLD_PARAMS}
+        if not updates:
+            return SetParametersResult(successful=True)
+        try:
+            with self._lock:
+                new = control_math.line_hold_cfg_from_params(self.supervisor.line_cfg, updates)
+                self.supervisor.set_line_hold(new)
+        except ValueError as exc:
+            return SetParametersResult(successful=False, reason=str(exc))
+        self.get_logger().info(f"cut_mode/line_hold parameters -> {new}")
+        return SetParametersResult(successful=True)
 
     # -- time ---------------------------------------------------------------
 
@@ -234,8 +282,10 @@ class SideTapeController(Node):
             tf = self._lookup_tf_now()
             tf_fresh = False
             p_base_m = None
+            tf_stamp_s = None
             if tf is not None:
                 stamp_s = tf.header.stamp.sec + tf.header.stamp.nanosec * 1e-9
+                tf_stamp_s = stamp_s
                 age = now_s - stamp_s
                 tf_fresh = -0.05 <= age < 0.2  # small clock skew allowed; ~2 missed TF samples
                 p_base_m = np.array([tf.transform.translation.x, tf.transform.translation.y,
@@ -256,7 +306,9 @@ class SideTapeController(Node):
 
             if self._vecs is not None and p_base_m is not None:
                 along, lat, depth = control_math.tcp_state_mm(p_base_m, self._vecs)
-                tcp = TcpState(along_mm=along, lat_dev_mm=lat, depth_dev_mm=depth)
+                # tf_stamp_s: the TF SAMPLE time (not this tick's time); line_hold keys its lateral
+                # history by it so image-stamp lookups compare like with like.
+                tcp = TcpState(along_mm=along, lat_dev_mm=lat, depth_dev_mm=depth, tf_stamp_s=tf_stamp_s)
             else:
                 tcp = TcpState()
 
@@ -274,12 +326,16 @@ class SideTapeController(Node):
             v_safe, nan_detected = control_math.sanitize_linear_velocity(v_base, *self._v_clamp_args)
             if nan_detected:
                 self.get_logger().error("NaN/inf in commanded velocity: zeroing and aborting")
-                self.supervisor.abort(now_s, "nan_velocity")
+                if self.supervisor.phase in (Phase.INSERT, Phase.SHIFT, Phase.INSERTED):
+                    self.supervisor.stop(now_s, "nan_velocity")  # entry: motionless, never a retract
+                else:
+                    self.supervisor.abort(now_s, "nan_velocity")
                 control = ControlOutput.zero(self.supervisor.phase, "nan_velocity")
 
             self._publish_twists(now_s, v_safe, control, arm_owned)
 
             self._last_arm_owned = arm_owned
+            self._last_move_id = self.supervisor.move_id
             self._last_servo_label = servo_label
             self._last_tcp = tcp
             self._last_control = control
@@ -298,7 +354,7 @@ class SideTapeController(Node):
         # always reflect the real phase -- an ownership gap must not corrupt
         # the one-shot "just entered terminal" edge detection used below.
         is_abort_stop = "operator_required" in control.reasons
-        should_drive = control.phase in (Phase.ALIGN, Phase.CUT, Phase.HOLD) or (
+        should_drive = control.phase in (Phase.ALIGN, Phase.CUT, Phase.HOLD, Phase.INSERT, Phase.SHIFT) or (
             control.phase == Phase.ABORT and not is_abort_stop)
         entering_terminal = control.phase in (Phase.DONE, Phase.IDLE) or (
             control.phase == Phase.ABORT and is_abort_stop)
@@ -310,6 +366,10 @@ class SideTapeController(Node):
             if not self.dry_run and self._servo_unpaused_by_us:
                 self._pause_servo_async("arm_ownership_lost")
                 self._servo_unpaused_by_us = False
+            if entering_terminal and not self._prev_terminal:
+                # e.g. INSERTED -> IDLE hand-back when MoveIt takes the arm: the widened carton ACM must not
+                # outlive our session (non-blocking, we are inside the control tick).
+                self._restore_carton_acm_async("terminal phase without arm ownership")
             self._prev_should_drive = should_drive
             self._prev_terminal = entering_terminal
             return
@@ -332,6 +392,13 @@ class SideTapeController(Node):
                 cmd.header.frame_id = self.cfg.robot.base_frame
                 cmd.twist.linear.x, cmd.twist.linear.y, cmd.twist.linear.z = (float(v) for v in v_safe)
                 self.pub_twist.publish(cmd)
+        elif control.phase == Phase.INSERTED and self._prev_should_drive:
+            # move finished: one explicit zero twist, then silence. Servo stays unpaused and running
+            # (INSERTED is a resting phase, not terminal: retry moves and the executor hand-back follow).
+            zero = TwistStamped()
+            zero.header.stamp = stamp
+            zero.header.frame_id = self.cfg.robot.base_frame
+            self.pub_twist.publish(zero)
         elif entering_terminal and not self._prev_terminal:
             # freshly IDLE/DONE/abort_stop: one zero twist, then pause Servo
             # and restore the ACM entries we (may have) widened (finding 8).
@@ -360,6 +427,7 @@ class SideTapeController(Node):
             obs = self._latest_obs
             arm_owned = self._last_arm_owned
             servo_label = self._last_servo_label
+            move_id = self._last_move_id
         msg = SupervisorStatusMsg()
         msg.stamp = self.get_clock().now().to_msg()
         msg.phase = control.phase.value
@@ -376,6 +444,7 @@ class SideTapeController(Node):
         msg.v_cut_mps = control.v_cut_mps
         msg.v_lat_mps = control.v_lat_mps
         msg.v_depth_mps = control.v_depth_mps
+        msg.move_id = int(move_id)
         self.pub_status.publish(msg)
 
     # -- Servo service helper ---------------------------------------------------
@@ -572,7 +641,24 @@ class SideTapeController(Node):
 
     # -- services -----------------------------------------------------------
 
+    def _serialized(self, fn, request, response, name, ok_field):
+        """Run a start_* handler as THE one in-flight start transaction; refuse (never queue) otherwise."""
+        if not self._start_txn.acquire(blocking=False):
+            setattr(response, ok_field, False)
+            response.message = f"{name}_refused:busy:another start request is in progress"
+            return response
+        try:
+            return fn(request, response)
+        finally:
+            self._start_txn.release()
+
     def _on_start_align(self, request, response):
+        return self._serialized(self._start_align_impl, request, response, "start_align", "success")
+
+    def _on_start_cut(self, request, response):
+        return self._serialized(self._start_cut_impl, request, response, "start_cut", "accepted")
+
+    def _start_align_impl(self, request, response):
         # Finding 7b: check every cheap precondition (phase, calibrated, lock
         # streak, edge angle) BEFORE touching Servo at all. arm_owned itself
         # can't be checked here yet -- in live mode it only becomes true once
@@ -622,7 +708,7 @@ class SideTapeController(Node):
             response.message = "align_started" if accepted else ";".join(self.supervisor._reason)
             return response
 
-    def _on_start_cut(self, request, response):
+    def _start_cut_impl(self, request, response):
         with self._lock:
             phase = self.supervisor.phase
         if phase == Phase.READY:
@@ -689,6 +775,129 @@ class SideTapeController(Node):
                 self._undo_live_servo_prep("start_cut refused")
             response.accepted = accepted
             response.message = "cut_started" if accepted else ";".join(self.supervisor._reason)
+            return response
+
+    def _start_entry_move(self, request_name: str, response, starter):
+        """start_insert from READY / INSERTED, start_lateral from INSERTED. Servo is already running (the
+        entry's first move did the live prep). The cut frame is the ONE entry-wide reference: it is frozen
+        here only when the entry starts (READY, at rest) and NEVER between the moves of a running entry, so
+        TcpState.depth_dev_mm is the net depth from the entry start at every tick."""
+        with self._lock:
+            now_s = self._now_s()
+            phase = self.supervisor.phase
+            if phase not in (Phase.READY, Phase.INSERTED):
+                response.accepted = False
+                response.message = f"{request_name}_refused:wrong_phase:{phase.value}"
+                return response
+            if control_math.trajectory_goal_active(self._last_goal_statuses):
+                response.accepted = False
+                response.message = f"{request_name}_refused:trajectory_active"
+                return response
+            if phase == Phase.READY:
+                vecs = self._freeze_at_current_pose()
+                if vecs is None:
+                    response.accepted = False
+                    response.message = f"{request_name}_refused:tf_unavailable"
+                    return response
+                self._vecs = vecs
+            elif self._vecs is None:
+                response.accepted = False
+                response.message = f"{request_name}_refused:no_entry_reference"
+                return response
+            self._control_step(now_s)  # refreshes tcp / arm_owned
+            starter(self._now_s())
+            accepted = self.supervisor.phase in (Phase.INSERT, Phase.SHIFT)
+            response.accepted = accepted
+            response.move_id = int(self.supervisor.move_id) if accepted else 0
+            response.message = f"{request_name.replace('start_', '')}_started" if accepted \
+                else ";".join(str(r) for r in self.supervisor._reason)
+            return response
+
+    def _limit_arg(self, request):
+        v = float(request.depth_limit_mm)
+        return None if v == 0.0 else v  # NaN / negative are passed on and refused by the supervisor
+
+    def _on_start_insert(self, request, response):
+        return self._serialized(self._start_insert_impl, request, response, "start_insert", "accepted")
+
+    def _on_start_lateral(self, request, response):
+        return self._serialized(self._start_lateral_impl, request, response, "start_lateral", "accepted")
+
+    def _on_stop(self, request, response):
+        """Motionless stop (never a retract): any active phase latches the ABORT stop; the operator
+        recovers with acknowledge_abort. Used by the sequencer on any failure / timeout / lost reply."""
+        with self._lock:
+            self.supervisor.stop(self._now_s(), "operator_stop")
+            ph = self.supervisor.phase
+            response.success = ph in (Phase.IDLE, Phase.DONE) or (ph == Phase.ABORT and self.supervisor._abort_stop)
+            response.message = f"phase={ph.value}"
+            return response
+
+    def _start_lateral_impl(self, request, response):
+        return self._start_entry_move(
+            "start_lateral", response,
+            lambda now: self.supervisor.start_lateral(now, float(request.lateral_mm), float(request.air_depth_mm)))
+
+    def _start_insert_impl(self, request, response):
+        with self._lock:
+            phase = self.supervisor.phase
+        if phase in (Phase.IDLE, Phase.DONE):
+            return self._start_insert_from_idle(request, response)
+        return self._start_entry_move(
+            "start_insert", response,
+            lambda now: self.supervisor.start_insert(now, float(request.depth_mm), float(request.speed_mm_s),
+                                                     self._limit_arg(request)))
+
+    def _start_insert_from_idle(self, request, response):
+        """First move of an entry (TF only, no vision): same shape as _start_align_impl. The cheap,
+        non-mutating preconditions first, then the live Servo preparation (Servo parameter contract,
+        unpause, carton ACM), then re-freeze the axes and start; a refusal after the Servo side effects
+        undoes them. The phase is RE-CHECKED under the lock before the frozen reference is replaced."""
+        depth, speed, limit = float(request.depth_mm), float(request.speed_mm_s), self._limit_arg(request)
+        with self._lock:
+            now_s = self._now_s()
+            ok, reason = self.supervisor.can_start_insert(now_s, depth, speed, limit)
+            trajectory_active = control_math.trajectory_goal_active(self._last_goal_statuses)
+        if not ok:
+            response.accepted = False
+            response.message = reason
+            return response
+        if trajectory_active:
+            response.accepted = False
+            response.message = "start_insert_refused:trajectory_active"
+            return response
+        if self._freeze_at_current_pose() is None:
+            response.accepted = False
+            response.message = "start_insert_refused:tf_unavailable"
+            return response
+        ok, msg = self._prepare_live_servo()
+        if not ok:
+            response.accepted = False
+            response.message = f"start_insert_refused:{msg}"
+            return response
+        with self._lock:
+            now_s = self._now_s()
+            if self.supervisor.phase not in (Phase.IDLE, Phase.DONE):
+                # something changed the state while Servo was being prepared: never touch the frozen
+                # reference of whatever is active now (and do not undo the Servo prep under it)
+                response.accepted = False
+                response.message = f"start_insert_refused:phase_changed:{self.supervisor.phase.value}"
+                return response
+            vecs = self._freeze_at_current_pose()
+            if vecs is None:
+                response.accepted = False
+                response.message = "start_insert_refused:tf_unavailable"
+                self._undo_live_servo_prep("tf_unavailable")
+                return response
+            self._vecs = vecs
+            self._control_step(now_s)  # refresh arm_owned with the just-changed Servo state
+            self.supervisor.start_insert(self._now_s(), depth, speed, limit)
+            accepted = self.supervisor.phase == Phase.INSERT
+            if not accepted:
+                self._undo_live_servo_prep("start_insert refused")
+            response.accepted = accepted
+            response.move_id = int(self.supervisor.move_id) if accepted else 0
+            response.message = "insert_started" if accepted else ";".join(str(r) for r in self.supervisor._reason)
             return response
 
     def _undo_live_servo_prep(self, why: str) -> None:
