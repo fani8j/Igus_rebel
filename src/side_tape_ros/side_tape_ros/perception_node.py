@@ -38,6 +38,9 @@ class SideTapePerception(Node):
         self.cfg = load_config(config_path)
         self.declare_parameter("image_topic", self.cfg.camera.image_topic)
         self.declare_parameter("debug_rate_hz", 5.0)
+        # Smooth live view: half-size JPEG overlay on <debug topic>/compressed (0 = off).
+        self.declare_parameter("debug_jpeg_rate_hz", 15.0)
+        self.declare_parameter("debug_jpeg_scale", 0.5)
         # Raw 1280x720 frames over DDS arrive at ~2-8 Hz (measured); the JPEG
         # image_transport topic arrives at ~28 Hz and decodes in ~3 ms.
         self.declare_parameter("use_compressed", True)
@@ -50,6 +53,12 @@ class SideTapePerception(Node):
         if debug_rate < 0:
             raise ValueError("debug_rate_hz must be >= 0")
         self.debug_period = 1.0 / debug_rate if debug_rate else None
+        jpeg_rate = float(self.get_parameter("debug_jpeg_rate_hz").value)
+        self.jpeg_scale = float(self.get_parameter("debug_jpeg_scale").value)
+        if jpeg_rate < 0 or not 0.1 <= self.jpeg_scale <= 1.0:
+            raise ValueError("debug_jpeg_rate_hz must be >= 0 and debug_jpeg_scale in [0.1, 1]")
+        self.jpeg_period = 1.0 / jpeg_rate if jpeg_rate else None
+        self._last_jpeg_s = float("-inf")
         self.bridge = CvBridge()
         self._provisional = self.cfg.mount.tip_uv is None or self.cfg.mount.J is None
         if self._provisional:
@@ -81,6 +90,7 @@ class SideTapePerception(Node):
         self._topic = topic
         self.observation_pub = self.create_publisher(ObservationMsg, "/side_tape/observation", 10)
         self.debug_pub = self.create_publisher(Image, "/side_tape/debug_image", 1)
+        self.debug_jpeg_pub = self.create_publisher(CompressedImage, "/side_tape/debug_image/compressed", 1)
         self.create_subscription(SupervisorStatus, "/side_tape/status", self._on_status, 10)
         # Latched: the sequencer sets how far the tip is in front of the face (parallax correction).
         latched = QoSProfile(history=HistoryPolicy.KEEP_LAST, depth=1, reliability=ReliabilityPolicy.RELIABLE,
@@ -186,7 +196,9 @@ class SideTapePerception(Node):
         self.observation_pub.publish(result)
         self._proc_samples.append(obs.proc_ms)
         now = time.monotonic()
-        if full_frame and self.debug_period is not None and now - self._last_debug_s >= self.debug_period:
+        raw_due = self.debug_period is not None and now - self._last_debug_s >= self.debug_period
+        jpeg_due = self.jpeg_period is not None and now - self._last_jpeg_s >= self.jpeg_period
+        if full_frame and (raw_due or jpeg_due):
             center = (lookahead_center(self.cfg.tip, self.cfg.J, self.cfg.detector.lookahead_mm)
                       if self._mode == "cut" else self.cfg.tip)
             roi = roi_around(center, self.cfg.detector.roi_half_w,
@@ -197,10 +209,22 @@ class SideTapePerception(Node):
             if self._provisional:
                 cv2.putText(overlay, "UNCALIBRATED PREVIEW (no J) - e_lat not meaningful", (20, 700),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-            debug_msg = self.bridge.cv2_to_imgmsg(overlay, encoding="bgr8")
-            debug_msg.header = header
-            self.debug_pub.publish(debug_msg)
-            self._last_debug_s = now
+            if raw_due:
+                debug_msg = self.bridge.cv2_to_imgmsg(overlay, encoding="bgr8")
+                debug_msg.header = header
+                self.debug_pub.publish(debug_msg)
+                self._last_debug_s = now
+            if jpeg_due:
+                small = overlay if self.jpeg_scale >= 0.999 else cv2.resize(
+                    overlay, None, fx=self.jpeg_scale, fy=self.jpeg_scale, interpolation=cv2.INTER_AREA)
+                ok, buf = cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                if ok:
+                    jmsg = CompressedImage()
+                    jmsg.header = header
+                    jmsg.format = "jpeg"
+                    jmsg.data = buf.tobytes()
+                    self.debug_jpeg_pub.publish(jmsg)
+                self._last_jpeg_s = now
 
     def _tracker_roi(self):
         """The ROI the tracker will hand the backend this frame (None if it cannot be built)."""
