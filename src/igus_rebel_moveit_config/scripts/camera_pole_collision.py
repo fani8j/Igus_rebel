@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Maintain the fixed external camera pole in MoveIt's planning scene.
 
-The pole is an upright 0.15 x 0.15 x 1.0 m box in ``base_link``. Its
-front face passes through ``camera_link`` and its depth extends opposite the
-camera optical +Z direction, projected horizontally. This node never requests
-robot motion.
+Two objects in ``base_link``: ``camera_pole``, the real upright 0.03 x 0.03 x
+1.0 m pole just behind the camera head, and ``camera_head``, a 0.10 m cube
+centred on ``camera_link`` (the camera itself, about 0.45-0.5 m up). "Behind"
+is opposite the camera optical +Z direction, projected horizontally. Only
+``camera_pole`` is published on the latched topic (its consumers expect one
+box). This node never requests robot motion.
 
 The pole is re-applied to move_group every ``reapply_period_s`` seconds and
 immediately whenever the ``apply_planning_scene`` service reappears, so a
@@ -29,7 +31,29 @@ from moveit_msgs.srv import ApplyPlanningScene
 from shape_msgs.msg import SolidPrimitive
 
 
-def pole_object(camera, optical, frame):
+POLE_SIZE = 0.03
+HEAD_SIZE = 0.10
+
+
+def _box(object_id, frame, x, y, z, yaw, dims):
+    pose = Pose()
+    pose.position.x, pose.position.y, pose.position.z = x, y, z
+    pose.orientation.z = math.sin(yaw / 2.0)
+    pose.orientation.w = math.cos(yaw / 2.0)
+    primitive = SolidPrimitive()
+    primitive.type = SolidPrimitive.BOX
+    primitive.dimensions = list(dims)
+    collision = CollisionObject()
+    collision.header.frame_id = frame
+    collision.id = object_id
+    collision.operation = CollisionObject.ADD
+    collision.primitives = [primitive]
+    collision.primitive_poses = [pose]
+    return collision
+
+
+def pole_objects(camera, optical, frame):
+    """(camera_pole, camera_head) collision objects."""
     q = optical.transform.rotation
     norm = math.sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w)
     if not math.isfinite(norm) or norm < 1e-9:
@@ -48,24 +72,12 @@ def pole_object(camera, optical, frame):
         raise ValueError("invalid camera position")
 
     yaw = math.atan2(fy, fx)
-    pose = Pose()
-    pose.position.x = position.x - 0.075 * fx
-    pose.position.y = position.y - 0.075 * fy
-    pose.position.z = 0.5
-    pose.orientation.z = math.sin(yaw / 2.0)
-    pose.orientation.w = math.cos(yaw / 2.0)
-
-    primitive = SolidPrimitive()
-    primitive.type = SolidPrimitive.BOX
-    primitive.dimensions = [0.15, 0.15, 1.0]
-
-    collision = CollisionObject()
-    collision.header.frame_id = frame
-    collision.id = "camera_pole"
-    collision.operation = CollisionObject.ADD
-    collision.primitives = [primitive]
-    collision.primitive_poses = [pose]
-    return collision
+    back = HEAD_SIZE / 2.0 + POLE_SIZE / 2.0
+    pole = _box("camera_pole", frame, position.x - back * fx, position.y - back * fy, 0.5,
+                yaw, (POLE_SIZE, POLE_SIZE, 1.0))
+    head = _box("camera_head", frame, position.x, position.y, position.z,
+                yaw, (HEAD_SIZE, HEAD_SIZE, HEAD_SIZE))
+    return pole, head
 
 
 class CameraPoleCollision(Node):
@@ -136,7 +148,7 @@ class CameraPoleCollision(Node):
         try:
             camera = self.buffer.lookup_transform(self.base, self.camera, Time())
             optical = self.buffer.lookup_transform(self.base, self.optical, Time())
-            collision = pole_object(camera, optical, self.base)
+            collision, head = pole_objects(camera, optical, self.base)
         except (TransformException, ValueError) as exc:
             self.get_logger().warning(
                 f"Waiting for valid camera TF: {exc}", throttle_duration_sec=10.0
@@ -161,7 +173,7 @@ class CameraPoleCollision(Node):
         request = ApplyPlanningScene.Request()
         request.scene.is_diff = True
         request.scene.robot_state.is_diff = True
-        request.scene.world.collision_objects = [collision]
+        request.scene.world.collision_objects = [collision, head]
         if pose_changed:
             # Latched topic consumers (H-cut executor, calibration verification)
             # only need a new message when the geometry changes.
@@ -174,7 +186,9 @@ class CameraPoleCollision(Node):
             self.get_logger().info(
                 "Applying camera_pole: centre="
                 f"({pose.position.x:.4f}, {pose.position.y:.4f}, 0.5000) in {self.base}; "
-                "size=0.15 x 0.15 x 1.0 m"
+                f"size={POLE_SIZE} x {POLE_SIZE} x 1.0 m; camera_head: {HEAD_SIZE} m cube at "
+                f"({head.primitive_poses[0].position.x:.4f}, {head.primitive_poses[0].position.y:.4f}, "
+                f"{head.primitive_poses[0].position.z:.4f})"
             )
 
 
