@@ -7,15 +7,15 @@ mount:
   mount_id: uncalibrated
   calibrated: true
   tip_uv:
-  - 611.9287200832466
-  - 112.32192160943467
+  - 608.2500947593113
+  - 104.46139804895569
   J:
   - - -7.978591912692873
     - 1.4363881752149157
   - - 0.24140745333872282
     - -7.380710049168425
 target:
-  offset_mm: -0.26
+  offset_mm: 1.70
   edge_polarity: null
   max_edge_angle_deg: 12.0
   parallax_mm_per_mm: -0.41
