@@ -12,6 +12,7 @@
   <depend>rclcpp</depend>
   <depend>rclcpp_lifecycle</depend>
   <depend>igus_rebel_msgs</depend>
+  <depend>std_srvs</depend>
   <depend>hardware_interface</depend>
   <depend>pluginlib</depend>
 

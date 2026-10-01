@@ -38,6 +38,55 @@ bool IsCommandStale(
   return now - lastWrite > timeout;
 }
 
+StatusHealth ClassifyStatusAge(
+  bool haveStatus, std::chrono::nanoseconds age, std::chrono::nanoseconds staleTimeout,
+  std::chrono::nanoseconds coastTimeout, std::chrono::nanoseconds latchTimeout)
+{
+  if (!haveStatus || age > latchTimeout) {
+    return StatusHealth::Latch;
+  }
+  if (age > coastTimeout) {
+    return StatusHealth::Hold;
+  }
+  return age > staleTimeout ? StatusHealth::Coast : StatusHealth::Fresh;
+}
+
+bool GapResumeAllowed(StatusHealth gapTier, bool motionDuringGap)
+{
+  switch (gapTier) {
+    case StatusHealth::Fresh:
+    case StatusHealth::Coast:
+      return true;
+    case StatusHealth::Hold:
+      return !motionDuringGap;
+    case StatusHealth::Latch:
+      return false;
+  }
+  return false;
+}
+
+const char * StatusHealthName(StatusHealth tier)
+{
+  switch (tier) {
+    case StatusHealth::Fresh: return "fresh";
+    case StatusHealth::Coast: return "coast";
+    case StatusHealth::Hold: return "hold";
+    case StatusHealth::Latch: return "latch";
+  }
+  return "?";
+}
+
+bool IsCommandMoving(double maxAbsVelocityRadS)
+{
+  return !std::isfinite(maxAbsVelocityRadS) || maxAbsVelocityRadS > kHoldIdleVelocityRadS;
+}
+
+bool MotionDuringGap(
+  std::int64_t lastMovingNs, std::int64_t lastStatusBeforeGapNs, std::chrono::nanoseconds lookback)
+{
+  return lastMovingNs != 0 && lastMovingNs >= lastStatusBeforeGapNs - lookback.count();
+}
+
 bool IsStatusStale(
   SteadyClock::time_point lastStatus, SteadyClock::time_point now,
   std::chrono::nanoseconds timeout)

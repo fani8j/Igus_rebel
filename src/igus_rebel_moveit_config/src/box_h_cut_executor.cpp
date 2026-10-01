@@ -1,4 +1,6 @@
 #include <Eigen/Geometry>
+#include <control_msgs/msg/joint_jog.hpp>
+#include <geometry_msgs/msg/twist_stamped.hpp>
 #include <std_msgs/msg/header.hpp>
 #include <geometry_msgs/msg/pose_array.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
@@ -19,6 +21,7 @@
 #include <moveit_msgs/msg/collision_object.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
+#include <std_msgs/msg/string.hpp>
 #include <std_srvs/srv/trigger.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <boost/property_tree/json_parser.hpp>
@@ -350,6 +353,26 @@ struct SegmentPlanOptions {
   bool cut_debug_start{false};
   // Optional per-request cache of the left roll search (t_cut_handoff probes).
   LeftRollCache* left_roll_cache{nullptr};
+  // Side-tape hand-off standoff variant only: for a stop_after_start segment, the final
+  // Cartesian entry stage targets this pose INSTEAD OF the segment's true (in-material)
+  // cut_start, so a standoff approach never targets, or passes through, a pose behind the
+  // outer wall plane. Every upstream stage (approach transit, hover/entry-alignment) is
+  // still derived from the true geometry; only the terminal entry target is substituted.
+  std::optional<geometry_msgs::msg::PoseStamped> stop_pose_override;
+  // Side-tape hand-off planning: the left_parallel search is restricted to candidates within
+  // side_tape_handoff_max_search_angle_deg of F0 and ordered smallest-deviation-first.
+  bool side_tape_handoff{false};
+};
+// The candidate the left_parallel search last selected (angles relative to F0).
+struct LeftParallelSelection {
+  bool valid{false};
+  double tilt_deg{0.0}, pitch_deg{0.0}, yaw_deg{0.0}, theta_p_deg{0.0};
+  double rotation_from_f0_deg{0.0};
+  std::size_t candidate_index{0}, candidate_count{0};
+  double maxAbsAngleDeg() const
+  {
+    return std::max({std::abs(tilt_deg), std::abs(pitch_deg), std::abs(yaw_deg)});
+  }
 };
 struct Snapshot {
   std::string snapshot_id;
@@ -396,6 +419,56 @@ struct CutDebugCorrection {
   geometry_msgs::msg::Quaternion observed_start{};
   geometry_msgs::msg::Quaternion observed_end{};
 };
+// Side-tape hand-off (left face only, see CONTEXT.md). kActive: the truncated approach
+// dispatch completed successfully; side_tape is expected to be driving the cut.
+// kApproachFailed: the approach dispatch did NOT complete (aborted/exception); the arm pose
+// is uncertain but the carton and hand-off geometry are kept so side_tape_retract can still
+// recover. kNone/kRetracted (same meaning): no hand-off in progress. While status is kActive
+// or kApproachFailed, the carton collision object and this record must survive every
+// clear/replan attempt; only a successful retract, or an explicit clear_plan after verifying
+// the tip is outside the carton (kApproachFailed only), returns to kNone.
+// kCutting: ~/continue_side_cut is executing (cut stroke + retract); kCutFailed: that
+// execution did not complete (arm somewhere along the stroke/retract), state is kept so
+// side_tape_retract can still recover.
+enum class SideTapeHandoffStatus : std::uint8_t {
+  kNone, kActive, kApproachFailed, kRetracted, kCutting, kCutFailed};
+struct SideTapeHandoffInfo {
+  SideTapeHandoffStatus status{SideTapeHandoffStatus::kNone};
+  bool inProgress() const
+  {
+    return status == SideTapeHandoffStatus::kActive ||
+      status == SideTapeHandoffStatus::kApproachFailed ||
+      status == SideTapeHandoffStatus::kCutting || status == SideTapeHandoffStatus::kCutFailed;
+  }
+  std::string face;
+  std::string variant;
+  double cut_length_mm{0.0};
+  double cut_length_euclidean_mm{0.0};
+  double penetration_mm{0.0};
+  double standoff_mm{0.0};
+  double min_wall_distance_mm{0.0};  // standoff only; NaN for in_material (not applicable)
+  geometry_msgs::msg::PoseStamped start_pose;
+  // Tool-frame axes used for the orientation check at plan time (echoed into the record).
+  Eigen::Vector3d cut_axis_tool{Eigen::Vector3d::UnitX()};
+  Eigen::Vector3d lateral_axis_tool{Eigen::Vector3d::UnitY()};
+  Eigen::Vector3d depth_axis_tool{Eigen::Vector3d::UnitZ()};
+  // Measured base_link directions of those axes at the start pose (unit vectors).
+  Eigen::Vector3d cut_dir_base{Eigen::Vector3d::UnitX()};
+  Eigen::Vector3d lateral_dir_base{Eigen::Vector3d::UnitY()};
+  Eigen::Vector3d depth_dir_base{Eigen::Vector3d::UnitZ()};
+  Eigen::Vector3d outward_normal{Eigen::Vector3d::UnitZ()};
+  Eigen::Vector3d plane_point{Eigen::Vector3d::Zero()};
+  LeftParallelSelection left_parallel;
+  // Planned in-material cut start/end (base_link) from the full-stroke feasibility plan.
+  Eigen::Vector3d planned_cut_start{Eigen::Vector3d::Zero()};
+  Eigen::Vector3d planned_cut_end{Eigen::Vector3d::Zero()};
+  std::string snapshot_path;
+  std::string snapshot_id;
+  rclcpp::Time stamp;
+  // Captured at plan time: a hand-off planned/loaded under debug_allow_stale_snapshot can
+  // never be executed at all, including the retract withdraw-only path.
+  bool stale_override{false};
+};
 // Every executor parameter value. Read-only entries are fixed at startup; planning
 // entries change only through the parameter callback, under plan_mutex_, and clear any
 // retained plan. See kParameterTable in BoxHCutExecutor for scopes and defaults.
@@ -411,9 +484,34 @@ struct PlannerSettings {
   bool allow_tool_carton_contact{false}, camera_pole_required{true};
   std::vector<double> approach_joint_degrees;
   std::int64_t max_solutions{1};
+  // Read-only side-tape hand-off/retract safety gates (numeric bounds, never live-tunable).
+  double side_tape_handoff_retract_max_orientation_deg{0.0},
+    side_tape_handoff_retract_max_line_offset_mm{0.0},
+    side_tape_handoff_servo_quiescence_s{0.0},
+    side_tape_handoff_joint_velocity_threshold{0.0};
+  double side_tape_continue_max_line_offset_mm{0.0}, side_tape_continue_max_along_offset_mm{0.0},
+    side_tape_continue_min_depth_mm{0.0}, side_tape_continue_max_depth_mm{0.0},
+    side_tape_continue_max_orientation_deg{0.0};
+  bool side_tape_continue_check_snapshot_age{true};
+  double side_tape_continue_speed_factor{1.0};
+  double side_tape_continue_end_extension_mm{0.0};
+  double side_tape_continue_end_extra_depth_mm{0.0};
+  bool side_tape_continue_check_end_depth{true};
+  std::string side_tape_handoff_servo_twist_topic, side_tape_handoff_servo_joint_topic;
   // Runtime-settable planning inputs.
   std::string motion_profile, cut_pattern, cut_debug_cut, cut_debug_left_correction_file,
-    cut_debug_middle_correction_file, cut_debug_right_correction_file, cut_debug_output_dir;
+    cut_debug_middle_correction_file, cut_debug_right_correction_file, cut_debug_output_dir,
+    side_tape_handoff_variant, side_tape_handoff_output_file;
+  bool side_tape_handoff_enabled{false};
+  double side_tape_handoff_standoff_mm{0.0};
+  // Right-handed: depth_axis_tool = cut_axis_tool x lateral_axis_tool (validated at startup
+  // and on every change). Defaults per the operator's axis decision (2026-09-29): keep the
+  // existing parallel left-cut pose; side_tape adapts its own RobotCfg to match.
+  std::vector<double> side_tape_handoff_cut_axis_tool{0.0, -1.0, 0.0};
+  std::vector<double> side_tape_handoff_lateral_axis_tool{1.0, 0.0, 0.0};
+  std::vector<double> side_tape_handoff_depth_axis_tool{0.0, 0.0, 1.0};
+  std::vector<double> side_tape_handoff_box_offset_base_mm{0.0, 0.0, 0.0};
+  double side_tape_handoff_max_search_angle_deg{10.0};
   double pre_cut_stabilization_duration_s{0.0}, left_side_cut_tilt_deg{0.0},
     right_side_cut_tilt_deg{0.0}, left_adaptive_orientation_max_deg{0.0},
     left_adaptive_orientation_step_deg{0.0}, t_cut_middle_handoff_fraction{0.0},
@@ -510,6 +608,22 @@ public:
       "/box_motion/cut_target_poses", rclcpp::QoS(1).reliable().transient_local());
     carton_collision_pub_ = create_publisher<moveit_msgs::msg::CollisionObject>(
       "/collision_object", rclcpp::QoS(1).reliable().transient_local());
+    side_tape_handoff_pub_ = create_publisher<std_msgs::msg::String>(
+      "~/side_tape_handoff", rclcpp::QoS(1).reliable().transient_local());
+    // Watched only to refuse side_tape_retract while Servo looks active (never
+    // paused/stopped from here). Topic names are read-only (fixed at startup).
+    servo_twist_sub_ = create_subscription<geometry_msgs::msg::TwistStamped>(
+      settings_.side_tape_handoff_servo_twist_topic, rclcpp::SensorDataQoS(),
+      [this](geometry_msgs::msg::TwistStamped::SharedPtr) {
+        std::lock_guard<std::mutex> lock(servo_activity_mutex_);
+        servo_twist_last_received_ = now();
+      });
+    servo_joint_jog_sub_ = create_subscription<control_msgs::msg::JointJog>(
+      settings_.side_tape_handoff_servo_joint_topic, rclcpp::SensorDataQoS(),
+      [this](control_msgs::msg::JointJog::SharedPtr) {
+        std::lock_guard<std::mutex> lock(servo_activity_mutex_);
+        servo_joint_jog_last_received_ = now();
+      });
 
     plan_service_ = guardedTrigger(
       "~/plan_h_cut",
@@ -521,9 +635,26 @@ public:
             "; call clear_plan before planning a normal H-cut";
           return false;
         }
+        if (side_tape_handoff_info_.inProgress()) {
+          message =
+            "a side-tape hand-off is active or unresolved; call side_tape_retract before planning a normal H-cut";
+          return false;
+        }
         clearRetainedPlan();
         return planExternalSnapshot(message);
       });
+    side_tape_handoff_plan_service_ = guardedTrigger(
+      "~/plan_side_tape_handoff",
+      "cannot plan while another planning or execution operation is active",
+      [this](std::string& message) { return planSideTapeHandoff(message); });
+    side_tape_retract_service_ = guardedTrigger(
+      "~/side_tape_retract", "another H-cut plan operation is active",
+      [this](std::string& message) { return planAndExecuteSideTapeRetract(message); },
+      /*reject_during_execution=*/false);
+    side_tape_continue_service_ = guardedTrigger(
+      "~/continue_side_cut", "another H-cut plan operation is active",
+      [this](std::string& message) { return continueSideCut(message); },
+      /*reject_during_execution=*/false);
     cut_debug_start_service_ = guardedTrigger(
       "~/start_cut_debug_session",
       "cannot start cut debug session while another planning or execution operation is active",
@@ -552,6 +683,24 @@ public:
       "~/clear_plan",
       "cannot clear the plan while planning or an H-cut trajectory execution is active",
       [this](std::string& message) {
+        if (side_tape_handoff_info_.status == SideTapeHandoffStatus::kActive ||
+            side_tape_handoff_info_.status == SideTapeHandoffStatus::kCutting ||
+            side_tape_handoff_info_.status == SideTapeHandoffStatus::kCutFailed) {
+          message =
+            "a side-tape hand-off is active; call side_tape_retract before clearing the plan";
+          return false;
+        }
+        if (side_tape_handoff_info_.status == SideTapeHandoffStatus::kApproachFailed) {
+          std::string verify_error;
+          if (!sideTapeHandoffTipVerifiedOutside(verify_error)) {
+            message = "a side-tape hand-off approach failed and is unresolved; call "
+              "side_tape_retract, or clear_plan is refused until the tip is verified outside "
+              "the carton (" + verify_error + ")";
+            return false;
+          }
+          side_tape_handoff_info_ = SideTapeHandoffInfo{};
+          side_tape_handoff_snapshot_.reset();
+        }
         clearRetainedPlan();
         clearCutDebugSessionState();
         message = "H-cut plan, cut debug session, and RViz outputs cleared";
@@ -680,6 +829,82 @@ private:
         "cut_debug_right_correction_file", kPlan, "", &S::cut_debug_right_correction_file),
       field<str>("cut_debug_output_dir", kPlan, "", &S::cut_debug_output_dir),
       field<std::int64_t>("max_solutions", kRO, 1, &S::max_solutions),
+      // Side-tape hand-off (left face only): plans the full left cut for feasibility,
+      // then retains and executes only the approach to the cut start pose, publishing the
+      // hand-off record for the side_tape_ros knife-camera stack. See CONTEXT.md.
+      field<bool>("side_tape_handoff_enabled", kPlan, false, &S::side_tape_handoff_enabled),
+      field<str>(
+        "side_tape_handoff_variant", kPlan, "in_material", &S::side_tape_handoff_variant),
+      field<double>(
+        "side_tape_handoff_standoff_mm", kPlan, 9.0, &S::side_tape_handoff_standoff_mm),
+      field<str>(
+        "side_tape_handoff_output_file", kPlan, "", &S::side_tape_handoff_output_file),
+      field<double>(
+        "side_tape_handoff_max_search_angle_deg", kPlan, 10.0,
+        &S::side_tape_handoff_max_search_angle_deg),
+      // side_tape's tool-frame convention, in xeg32_tool_tip axes. Right-handed:
+      // depth_axis_tool = cut_axis_tool x lateral_axis_tool (validated). Defaults keep the
+      // existing parallel left-cut pose; side_tape adapts its own RobotCfg to match
+      // (operator decision, 2026-09-29). Editing these requires a restart.
+      field<std::vector<double>>(
+        "side_tape_handoff_cut_axis_tool", kRO, std::vector<double>{0.0, -1.0, 0.0},
+        &S::side_tape_handoff_cut_axis_tool),
+      field<std::vector<double>>(
+        "side_tape_handoff_lateral_axis_tool", kRO, std::vector<double>{1.0, 0.0, 0.0},
+        &S::side_tape_handoff_lateral_axis_tool),
+      field<std::vector<double>>(
+        "side_tape_handoff_depth_axis_tool", kRO, std::vector<double>{0.0, 0.0, 1.0},
+        &S::side_tape_handoff_depth_axis_tool),
+      field<std::vector<double>>(
+        "side_tape_handoff_box_offset_base_mm", kRO, std::vector<double>{0.0, 0.0, 0.0},
+        &S::side_tape_handoff_box_offset_base_mm),
+      // side_tape_retract safety gates (read-only; edit the YAML and restart to change).
+      field<double>(
+        "side_tape_handoff_retract_max_orientation_deg", kRO, 10.0,
+        &S::side_tape_handoff_retract_max_orientation_deg),
+      field<double>(
+        "side_tape_handoff_retract_max_line_offset_mm", kRO, 20.0,
+        &S::side_tape_handoff_retract_max_line_offset_mm),
+      field<str>(
+        "side_tape_handoff_servo_twist_topic", kRO, "/delta_twist_cmds",
+        &S::side_tape_handoff_servo_twist_topic),
+      field<str>(
+        "side_tape_handoff_servo_joint_topic", kRO, "/delta_joint_cmds",
+        &S::side_tape_handoff_servo_joint_topic),
+      field<double>(
+        "side_tape_handoff_servo_quiescence_s", kRO, 0.5,
+        &S::side_tape_handoff_servo_quiescence_s),
+      // continue_side_cut entry gates (read-only).
+      field<double>(
+        "side_tape_continue_max_line_offset_mm", kRO, 20.0,
+        &S::side_tape_continue_max_line_offset_mm),
+      field<double>(
+        "side_tape_continue_max_along_offset_mm", kRO, 20.0,
+        &S::side_tape_continue_max_along_offset_mm),
+      field<double>(
+        "side_tape_continue_min_depth_mm", kRO, 0.5, &S::side_tape_continue_min_depth_mm),
+      field<double>(
+        "side_tape_continue_max_depth_mm", kRO, 20.0, &S::side_tape_continue_max_depth_mm),
+      field<double>(
+        "side_tape_continue_max_orientation_deg", kRO, 20.0,
+        &S::side_tape_continue_max_orientation_deg),
+      field<bool>(
+        "side_tape_continue_check_snapshot_age", kRO, true,
+        &S::side_tape_continue_check_snapshot_age),
+      field<double>(
+        "side_tape_continue_speed_factor", kRO, 0.5, &S::side_tape_continue_speed_factor),
+      field<double>(
+        "side_tape_continue_end_extension_mm", kRO, 0.0,
+        &S::side_tape_continue_end_extension_mm),
+      field<double>(
+        "side_tape_continue_end_extra_depth_mm", kRO, 0.0,
+        &S::side_tape_continue_end_extra_depth_mm),
+      field<bool>(
+        "side_tape_continue_check_end_depth", kRO, true,
+        &S::side_tape_continue_check_end_depth),
+      field<double>(
+        "side_tape_handoff_joint_velocity_threshold", kRO, 0.01,
+        &S::side_tape_handoff_joint_velocity_threshold),
     };
     return table;
   }
@@ -825,6 +1050,105 @@ private:
     if (!s.cut_debug_output_dir.empty() && s.cut_debug_output_dir.front() != '/') {
       return std::string("cut_debug_output_dir must be an absolute path or empty");
     }
+    if (s.side_tape_handoff_variant != "in_material" && s.side_tape_handoff_variant != "standoff") {
+      return std::string("side_tape_handoff_variant must be in_material or standoff");
+    }
+    if (!std::isfinite(s.side_tape_handoff_standoff_mm) || s.side_tape_handoff_standoff_mm <= 0.0 ||
+        s.side_tape_handoff_standoff_mm > 50.0) {
+      return std::string("side_tape_handoff_standoff_mm must be finite and within (0,50] mm");
+    }
+    if (!std::isfinite(s.side_tape_handoff_max_search_angle_deg) ||
+        s.side_tape_handoff_max_search_angle_deg <= 0.0 ||
+        s.side_tape_handoff_max_search_angle_deg > 45.0) {
+      return std::string("side_tape_handoff_max_search_angle_deg must be finite and within (0,45] deg");
+    }
+    if (!isAbsoluteJsonOrEmpty(s.side_tape_handoff_output_file)) {
+      return std::string("side_tape_handoff_output_file must be an absolute .json path or empty");
+    }
+    {
+      const auto to_vector3 = [](const std::vector<double>& values) {
+        return Eigen::Vector3d(values[0], values[1], values[2]);
+      };
+      const std::array<std::pair<const char*, const std::vector<double>*>, 3> axis_params{{
+        {"side_tape_handoff_cut_axis_tool", &s.side_tape_handoff_cut_axis_tool},
+        {"side_tape_handoff_lateral_axis_tool", &s.side_tape_handoff_lateral_axis_tool},
+        {"side_tape_handoff_depth_axis_tool", &s.side_tape_handoff_depth_axis_tool}}};
+      for (const auto& [name, values] : axis_params) {
+        if (values->size() != 3U ||
+            !std::all_of(values->begin(), values->end(),
+                         [](double value) { return std::isfinite(value); })) {
+          return std::string(name) + " must be three finite values";
+        }
+        if (std::abs(to_vector3(*values).norm() - 1.0) > 1e-3) {
+          return std::string(name) + " must be a unit vector";
+        }
+      }
+      const Eigen::Vector3d cut = to_vector3(s.side_tape_handoff_cut_axis_tool);
+      const Eigen::Vector3d lateral = to_vector3(s.side_tape_handoff_lateral_axis_tool);
+      const Eigen::Vector3d depth = to_vector3(s.side_tape_handoff_depth_axis_tool);
+      if (std::abs(cut.dot(lateral)) > 1e-3 || std::abs(cut.dot(depth)) > 1e-3 ||
+          std::abs(lateral.dot(depth)) > 1e-3) {
+        return std::string(
+          "side_tape_handoff_*_axis_tool must be mutually orthogonal unit vectors");
+      }
+      if ((cut.cross(lateral) - depth).norm() > 1e-3) {
+        return std::string(
+          "side_tape_handoff_*_axis_tool must be right-handed: depth_axis_tool must equal "
+          "cut_axis_tool x lateral_axis_tool");
+      }
+    }
+    if (!std::isfinite(s.side_tape_handoff_retract_max_orientation_deg) ||
+        !within(s.side_tape_handoff_retract_max_orientation_deg, 0.0, 90.0)) {
+      return std::string("side_tape_handoff_retract_max_orientation_deg must be within [0,90] deg");
+    }
+    if (!std::isfinite(s.side_tape_handoff_retract_max_line_offset_mm) ||
+        s.side_tape_handoff_retract_max_line_offset_mm <= 0.0 ||
+        s.side_tape_handoff_retract_max_line_offset_mm > 200.0) {
+      return std::string(
+        "side_tape_handoff_retract_max_line_offset_mm must be finite and within (0,200] mm");
+    }
+    if (!std::isfinite(s.side_tape_handoff_servo_quiescence_s) ||
+        s.side_tape_handoff_servo_quiescence_s <= 0.0 ||
+        s.side_tape_handoff_servo_quiescence_s > 10.0) {
+      return std::string("side_tape_handoff_servo_quiescence_s must be finite and within (0,10] s");
+    }
+    if (!std::isfinite(s.side_tape_continue_max_line_offset_mm) ||
+        s.side_tape_continue_max_line_offset_mm <= 0.0 ||
+        s.side_tape_continue_max_line_offset_mm > 100.0 ||
+        !std::isfinite(s.side_tape_continue_max_along_offset_mm) ||
+        s.side_tape_continue_max_along_offset_mm <= 0.0 ||
+        s.side_tape_continue_max_along_offset_mm > 100.0 ||
+        !std::isfinite(s.side_tape_continue_min_depth_mm) ||
+        !std::isfinite(s.side_tape_continue_max_depth_mm) ||
+        s.side_tape_continue_min_depth_mm < 0.0 ||
+        s.side_tape_continue_max_depth_mm <= s.side_tape_continue_min_depth_mm ||
+        s.side_tape_continue_max_depth_mm > 50.0 ||
+        !std::isfinite(s.side_tape_continue_max_orientation_deg) ||
+        s.side_tape_continue_max_orientation_deg <= 0.0 ||
+        s.side_tape_continue_max_orientation_deg > 45.0 ||
+        !std::isfinite(s.side_tape_continue_speed_factor) ||
+        s.side_tape_continue_speed_factor <= 0.0 || s.side_tape_continue_speed_factor > 1.0 ||
+        !std::isfinite(s.side_tape_continue_end_extension_mm) ||
+        s.side_tape_continue_end_extension_mm < -20.0 ||
+        s.side_tape_continue_end_extension_mm > 20.0 ||
+        !std::isfinite(s.side_tape_continue_end_extra_depth_mm) ||
+        s.side_tape_continue_end_extra_depth_mm < 0.0 ||
+        s.side_tape_continue_end_extra_depth_mm > 10.0) {
+      return std::string(
+        "side_tape_continue_* limits must be finite: line/along offsets within (0,100] mm, "
+        "0 <= min_depth < max_depth <= 50 mm, orientation within (0,45] deg");
+    }
+    if (!std::isfinite(s.side_tape_handoff_joint_velocity_threshold) ||
+        s.side_tape_handoff_joint_velocity_threshold <= 0.0 ||
+        s.side_tape_handoff_joint_velocity_threshold > 1.0) {
+      return std::string(
+        "side_tape_handoff_joint_velocity_threshold must be finite and within (0,1] rad/s");
+    }
+    if (s.side_tape_handoff_servo_twist_topic.empty() ||
+        s.side_tape_handoff_servo_joint_topic.empty()) {
+      return std::string(
+        "side_tape_handoff_servo_twist_topic and side_tape_handoff_servo_joint_topic must be non-empty");
+    }
     return std::nullopt;
   }
   void applyRuntimeParameter(const rclcpp::Parameter& parameter)
@@ -888,6 +1212,12 @@ private:
         result.reason = "cannot change H-cut planning or cut-debug correction parameters while a cut debug session is active for cut " +
           cut_debug_session_cut_ + " stage " + cutDebugStageName(cut_debug_stage_) +
           "; call clear_plan first; execution_enabled and debug_motion_execution_enabled remain operable gates";
+        return result;
+      }
+      if (side_tape_handoff_info_.inProgress()) {
+        result.reason =
+          "cannot change H-cut planning parameters while a side-tape hand-off is active or "
+          "unresolved; call side_tape_retract first";
         return result;
       }
       PlannerSettings candidate = settings_;
@@ -1002,10 +1332,13 @@ private:
     execution_in_progress_ = true;
     const CutDebugStage dispatched_stage = cut_debug_stage_;
     const std::string dispatched_cut = cut_debug_session_cut_;
+    const bool dispatched_is_side_tape_handoff = side_tape_handoff_pending_;
+    side_tape_handoff_pending_ = false;
     auto task = std::move(planned_task_);
     planned_snapshot_.reset();
     execution_thread_ = std::thread(
-      [this, task = std::move(task), dispatched_stage, dispatched_cut]() mutable {
+      [this, task = std::move(task), dispatched_stage, dispatched_cut,
+       dispatched_is_side_tape_handoff]() mutable {
         bool succeeded = false;
         std::string failure_detail;
         try {
@@ -1024,6 +1357,26 @@ private:
         }
         std::lock_guard<std::mutex> completion_lock(plan_mutex_);
         execution_in_progress_ = false;
+        if (dispatched_is_side_tape_handoff) {
+          if (succeeded) {
+            side_tape_handoff_info_.status = SideTapeHandoffStatus::kActive;
+            side_tape_handoff_info_.stamp = now();
+            writeSideTapeHandoffOutput();
+          } else {
+            // Do NOT drop the hand-off state: the arm pose is uncertain, but the carton and
+            // recorded geometry must survive so side_tape_retract can still recover from
+            // wherever execution stopped.
+            side_tape_handoff_info_.status = SideTapeHandoffStatus::kApproachFailed;
+            side_tape_handoff_info_.stamp = now();
+            writeSideTapeHandoffOutput();
+            RCLCPP_ERROR(
+              get_logger(),
+              "Side-tape hand-off approach dispatch did NOT complete (%s); hand-off is "
+              "'approach_failed' (uncertain), NOT active for side_tape; detected_carton is "
+              "kept; call side_tape_retract to recover",
+              failure_detail.c_str());
+          }
+        }
         if (dispatched_stage == CutDebugStage::kNone) return;
         if (!succeeded) {
           // Never mark the stage executed: the arm did not reach the stage pose,
@@ -1056,6 +1409,10 @@ private:
     planned_task_.reset();
     planned_snapshot_.reset();
     retained_with_stale_override_ = false;
+    // A retained-but-not-yet-dispatched hand-off plan must never survive into (be mistaken
+    // for) a later, unrelated plan's dispatch: always consumed here, regardless of whether a
+    // hand-off is currently in progress.
+    side_tape_handoff_pending_ = false;
     visualization_msgs::msg::MarkerArray markers;
     visualization_msgs::msg::Marker delete_all;
     delete_all.action = visualization_msgs::msg::Marker::DELETEALL;
@@ -1064,6 +1421,10 @@ private:
     geometry_msgs::msg::PoseArray empty_targets;
     empty_targets.header.frame_id = settings_.planning_frame;
     target_pose_pub_->publish(empty_targets);
+    // A dispatched (or uncertain, approach-failed) side-tape hand-off leaves the arm engaged
+    // with (or standing off from) the carton; the carton collision object must survive any
+    // clear/replan until side_tape_retract (or a verified-outside clear_plan) ends it.
+    if (side_tape_handoff_info_.inProgress()) return;
     moveit_msgs::msg::CollisionObject remove_carton;
     remove_carton.id = settings_.carton_collision_id;
     remove_carton.header.frame_id = settings_.planning_frame;
@@ -1888,9 +2249,10 @@ private:
     const moveit::core::JointModelGroup* joint_group,
     const moveit::core::RobotState& seed_state,
     const std::vector<std::pair<geometry_msgs::msg::PoseStamped*, const char*> >& labeled_poses,
-    const std::string& pose_context, std::string& error)
+    const std::string& pose_context, std::string& error, bool handoff_mode = false)
   {
     constexpr double kDeg = 3.14159265358979323846 / 180.0;
+    last_left_parallel_selection_ = LeftParallelSelection{};
     constexpr double kMaxStrokeJointStepRad = 5.0 * kDeg;
     constexpr int kRandomBranchAttempts = 3;  // fixed-seed restarts
     constexpr double kIkTimeoutS = 0.1;
@@ -1931,7 +2293,7 @@ private:
     reference.col(1) = -basis.along;
     reference.col(2) = reference.col(0).cross(reference.col(1));
     struct Candidate {
-      double tilt, pitch, yaw, theta_p, blade_deviation, total;
+      double tilt, pitch, yaw, theta_p, blade_deviation, total, rotation;
       Eigen::Quaterniond orientation;
     };
     const auto multiples = [&](double max_deg) {
@@ -1952,7 +2314,17 @@ private:
           const double dot_x = rotation.col(0).dot(into_unit);
           const double dot_z = rotation.col(2).dot(into_unit);
           if (dot_x < 0.7 && dot_z < 0.7) continue;  // existing left penetration gate
+          const double rotation_deg = std::acos(std::clamp(
+            (rotation * reference.transpose()).trace() * 0.5 - 0.5, -1.0, 1.0)) / kDeg;
+          if (handoff_mode) {
+            const double limit = settings_.side_tape_handoff_max_search_angle_deg;
+            if (std::abs(tilt) > limit + 1e-9 || std::abs(pitch) > limit + 1e-9 ||
+                std::abs(yaw) > limit + 1e-9 || rotation_deg > limit + 1e-6) {
+              continue;
+            }
+          }
           Candidate candidate;
+          candidate.rotation = rotation_deg;
           candidate.tilt = tilt;
           candidate.pitch = pitch;
           candidate.yaw = yaw;
@@ -1968,6 +2340,16 @@ private:
     }
     const auto rounded = [](double value) { return std::round(value * 1e6); };
     std::sort(candidates.begin(), candidates.end(), [&](const Candidate& a, const Candidate& b) {
+        if (handoff_mode) {
+          // Side-tape hand-off: smallest deviation from F0 first (the side_tape calibration
+          // frame), then the usual parallelism ordering.
+          const auto hkey = [&](const Candidate& c) {
+            return std::make_tuple(
+              rounded(c.rotation), rounded(std::max({std::abs(c.tilt), std::abs(c.pitch),
+                std::abs(c.yaw)})), rounded(c.total), rounded(c.theta_p), c.tilt, c.pitch, c.yaw);
+          };
+          return hkey(a) < hkey(b);
+        }
         const auto key = [&](const Candidate& c) {
           return std::make_tuple(
             rounded(c.theta_p), rounded(c.blade_deviation), rounded(c.total), c.tilt, c.pitch, c.yaw);
@@ -2124,6 +2506,14 @@ private:
       for (const auto& labeled : labeled_poses) {
         labeled.first->pose.orientation = toMsg(candidate.orientation);
       }
+      last_left_parallel_selection_.valid = true;
+      last_left_parallel_selection_.tilt_deg = candidate.tilt;
+      last_left_parallel_selection_.pitch_deg = candidate.pitch;
+      last_left_parallel_selection_.yaw_deg = candidate.yaw;
+      last_left_parallel_selection_.theta_p_deg = candidate.theta_p;
+      last_left_parallel_selection_.rotation_from_f0_deg = candidate.rotation;
+      last_left_parallel_selection_.candidate_index = tried - 1U;
+      last_left_parallel_selection_.candidate_count = candidates.size();
       std::ostringstream start_deg;
       start_deg << std::fixed << std::setprecision(1);
       for (std::size_t j = 0; j < best_start.size(); ++j) {
@@ -2470,6 +2860,11 @@ private:
         "; call clear_plan before starting a new session";
       return false;
     }
+    if (side_tape_handoff_info_.inProgress()) {
+      message = "a side-tape hand-off is active or unresolved; call side_tape_retract before "
+        "starting a cut debug session";
+      return false;
+    }
     if (planned_task_ && planned_snapshot_ && !planned_task_->solutions().empty()) {
       message =
         "a normal H-cut plan is retained; call clear_plan before starting a cut debug session";
@@ -2547,6 +2942,1027 @@ private:
     message = "cut debug session started for cut " + cut_debug_session_cut_ +
       " snapshot " + snapshot->snapshot_id +
       "; configured start target published to RViz and retained; saved deltas use the uncorrected geometry baseline; execute explicitly via execute_planned_h_cut with both execution_enabled and debug_motion_execution_enabled; this service never dispatches motion";
+    return true;
+  }
+  // One face of the `side_tape_seed` block (docs/side_tape_seed_contract.md, v1/v1.1) that
+  // side_face_seed.py adds to the planner snapshot: the outer-wall plane (point+outward unit
+  // normal) and the detected top edge, both in base_link metres. Only what the hand-off needs.
+  struct SideTapeSeedFace {
+    Eigen::Vector3d plane_point{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d plane_normal{Eigen::Vector3d::UnitZ()};  // outward, away from the box centre
+    Eigen::Vector3d top_edge_start{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d top_edge_end{Eigen::Vector3d::Zero()};
+    std::string wall_source;
+  };
+  static Eigen::Vector3d axisParamToEigen(const std::vector<double>& values)
+  {
+    return Eigen::Vector3d(values[0], values[1], values[2]);
+  }
+  // Fail-closed check for clear_plan's escape hatch (kApproachFailed only): the tip must be
+  // in front of (or exactly on) the outer wall plane, i.e. not still penetrating the carton.
+  bool sideTapeHandoffTipVerifiedOutside(std::string& message)
+  {
+    geometry_msgs::msg::PoseStamped current_pose;
+    if (!captureObservedTcpPose(current_pose, message)) return false;
+    const double depth_into_face_m = -side_tape_handoff_info_.outward_normal.dot(
+      toEigen(current_pose.pose.position) - side_tape_handoff_info_.plane_point);
+    if (depth_into_face_m > 0.0) {
+      message = "tip is " + formatDouble(depth_into_face_m * 1000.0, 2) +
+        " mm behind the outer wall plane (not verified outside)";
+      return false;
+    }
+    return true;
+  }
+  // Minimum signed distance (metres; negative = behind/inside the outer wall) of the
+  // tool_link origin to the recorded outer-wall plane, over EVERY waypoint of every
+  // sub-trajectory in the solution. Used to hard-verify a standoff approach never dips
+  // behind the wall, not just at its planned endpoints.
+  double minSignedWallDistanceM(const mtc::SolutionBase& solution, const SideTapeSeedFace& seed_face)
+  {
+    moveit_task_constructor_msgs::msg::Solution solution_message;
+    solution.toMsg(solution_message);
+    double min_distance = std::numeric_limits<double>::infinity();
+    moveit::core::RobotState state(robot_model_);
+    state.setToDefaultValues();
+    Eigen::Vector3d min_tip = Eigen::Vector3d::Zero();
+    std::size_t min_sub = 0U;
+    std::size_t sub_index = 0U;
+    for (const auto& sub : solution_message.sub_trajectory) {
+      ++sub_index;
+      const auto& trajectory = sub.trajectory.joint_trajectory;
+      for (const auto& point : trajectory.points) {
+        for (std::size_t index = 0;
+             index < trajectory.joint_names.size() && index < point.positions.size(); ++index) {
+          state.setVariablePosition(trajectory.joint_names[index], point.positions[index]);
+        }
+        state.update();
+        const Eigen::Vector3d tip = state.getGlobalLinkTransform(settings_.tool_link).translation();
+        const double distance = seed_face.plane_normal.dot(tip - seed_face.plane_point);
+        if (distance < min_distance) {
+          min_distance = distance;
+          min_tip = tip;
+          min_sub = sub_index;
+        }
+      }
+    }
+    RCLCPP_INFO(
+      get_logger(),
+      "side-tape hand-off wall-distance scan: min %.2f mm at sub-trajectory %zu of %zu, "
+      "tip (%.3f, %.3f, %.3f)", min_distance * 1000.0, min_sub,
+      solution_message.sub_trajectory.size(), min_tip.x(), min_tip.y(), min_tip.z());
+    return min_distance;
+  }
+  // Side-tape hand-off (left face only). Plans the full left cut for feasibility (proving
+  // IK/collisions/the full min_fraction=1.0 stroke), then retains and executes only the
+  // approach to the cut start pose: in_material stops at the planned in-material start;
+  // standoff's single Cartesian entry targets the standoff pose directly and NEVER targets
+  // (or passes through) the in-material pose (verified over every trajectory waypoint, not
+  // just the endpoints). Never applies any orientation correction of its own: if the planned
+  // start pose does not satisfy the configured side_tape tool-frame convention
+  // (side_tape_handoff_*_axis_tool), this fails closed and reports the measured axis mapping
+  // instead of rotating anything.
+  bool planSideTapeHandoff(std::string& message)
+  {
+    if (!settings_.side_tape_handoff_enabled) {
+      message = "side_tape_handoff_enabled is false";
+      return false;
+    }
+    if (side_tape_handoff_info_.inProgress()) {
+      message = "a side-tape hand-off is already active or unresolved; call side_tape_retract "
+        "first (or clear_plan, once the tip is verified outside, if approach_failed)";
+      return false;
+    }
+    if (cut_debug_stage_ != CutDebugStage::kNone) {
+      message = "cut debug session active for cut " + cut_debug_session_cut_ +
+        " stage " + cutDebugStageName(cut_debug_stage_) +
+        "; call clear_plan before planning a side-tape hand-off";
+      return false;
+    }
+    const std::string variant = settings_.side_tape_handoff_variant;
+    if (variant != "in_material" && variant != "standoff") {
+      message = "side_tape_handoff_variant must be in_material or standoff";
+      return false;
+    }
+    const Eigen::Vector3d cut_axis_tool = axisParamToEigen(settings_.side_tape_handoff_cut_axis_tool);
+    const Eigen::Vector3d lateral_axis_tool =
+      axisParamToEigen(settings_.side_tape_handoff_lateral_axis_tool);
+    const Eigen::Vector3d depth_axis_tool =
+      axisParamToEigen(settings_.side_tape_handoff_depth_axis_tool);
+    if (!settings_.left_parallel_orientation_enabled) {
+      message = "side-tape hand-off refused: left_parallel_orientation_enabled must be true. "
+        "side_tape is calibrated in the left_parallel tool frame (blade normal = tool X down, "
+        "tool Z into the carton side, tool -Y = travel); the non-parallel left pose does not "
+        "match that calibration";
+      return false;
+    }
+    clearRetainedPlan();
+    const auto source_path = externalSnapshotFile();
+    Snapshot snapshot;
+    SideTapeSeedFace seed_face;
+    if (!loadSnapshotAndSeedFace(source_path, "left", snapshot, seed_face, message)) return false;
+    std::string validation;
+    if (!validateSnapshot(snapshot, validation)) {
+      message = "snapshot rejected: " + validation;
+      return false;
+    }
+    // Operator correction (2026-09-30): the detected box is offset from the real one. Shift
+    // the whole snapshot (carton, cut points, seed wall plane) horizontally by the base_link
+    // (dx, dy); apply dz only to the left cut line (seam height), so the carton top stays at
+    // the detected height.
+    {
+      const auto& off = settings_.side_tape_handoff_box_offset_base_mm;
+      if (off.size() != 3U || !std::isfinite(off[0]) || !std::isfinite(off[1]) ||
+          !std::isfinite(off[2]) || std::abs(off[0]) > 50.0 || std::abs(off[1]) > 50.0 ||
+          std::abs(off[2]) > 50.0) {
+        message = "side_tape_handoff_box_offset_base_mm must be 3 finite values within +/-50 mm";
+        return false;
+      }
+      const Eigen::Vector3d horizontal(off[0] / 1000.0, off[1] / 1000.0, 0.0);
+      const Eigen::Vector3d vertical(0.0, 0.0, off[2] / 1000.0);
+      for (auto* point : {&snapshot.seam_start, &snapshot.seam_end, &snapshot.seam_center,
+          &snapshot.back_left, &snapshot.back_right, &snapshot.front_left, &snapshot.front_right,
+          &snapshot.back_middle_left, &snapshot.front_middle_left, &snapshot.back_middle_right,
+          &snapshot.front_middle_right}) {
+        *point = toPoint(toEigen(*point) + horizontal);
+      }
+      snapshot.back_middle_left = toPoint(toEigen(snapshot.back_middle_left) + vertical);
+      snapshot.front_middle_left = toPoint(toEigen(snapshot.front_middle_left) + vertical);
+      seed_face.plane_point += horizontal;
+      seed_face.top_edge_start += horizontal;
+      seed_face.top_edge_end += horizontal;
+      if (horizontal.norm() > 0.0 || vertical.norm() > 0.0) {
+        RCLCPP_WARN(
+          get_logger(), "side-tape hand-off: applying box offset (%.1f, %.1f, %.1f) mm in %s "
+          "(xy to the whole snapshot, z to the left cut line only)", off[0], off[1], off[2],
+          settings_.planning_frame.c_str());
+      }
+    }
+
+    const CutSegment full_segment = segmentFor(snapshot, CutKind::kLeft);
+    const auto corrections = loadActiveCorrections({"left"}, false);
+    std::unique_ptr<mtc::Task> full_task;
+    std::vector<geometry_msgs::msg::PoseStamped> full_targets;
+    std::string plan_error;
+    bool full_ok = false;
+    // One left_parallel search for the whole hand-off: the full-stroke plan proves the
+    // orientation feasible for the entire cut (all four poses), and the truncated approach
+    // plan reuses exactly that orientation instead of re-searching start-only poses (which
+    // could pick a different, smaller-deviation orientation the full stroke cannot carry).
+    LeftRollCache handoff_roll_cache;
+    try {
+      publishCartonGeometry(snapshot);
+      SegmentPlanOptions full_options;
+      full_options.side_tape_handoff = true;
+      full_options.left_roll_cache = &handoff_roll_cache;
+      last_left_parallel_selection_ = LeftParallelSelection{};
+      full_ok = planCutSegments(
+        snapshot, {full_segment}, corrections, settings_.motion_profile,
+        "side-tape hand-off feasibility (left, full stroke)", full_options, full_task,
+        full_targets, plan_error);
+    } catch (const std::exception& exception) {
+      plan_error = exception.what();
+    }
+    if (!full_ok) {
+      message = "side-tape hand-off feasibility check failed for the full left cut: " + plan_error;
+      return false;
+    }
+    if (full_targets.size() != 2U) {
+      message = "side-tape hand-off: unexpected target count for the full left segment";
+      return false;
+    }
+    const LeftParallelSelection selection = last_left_parallel_selection_;
+    const auto& in_material_start = full_targets[0];
+    const auto& cut_end = full_targets[1];
+    const Eigen::Vector3d start_to_end =
+      toEigen(cut_end.pose.position) - toEigen(in_material_start.pose.position);
+    const Eigen::Quaterniond q_start = toEigen(in_material_start.pose.orientation).normalized();
+    const Eigen::Vector3d cut_axis_base_at_start = (q_start * cut_axis_tool).normalized();
+    const double cut_length_mm = std::abs(start_to_end.dot(cut_axis_base_at_start)) * 1000.0;
+    const double cut_length_euclidean_mm = start_to_end.norm() * 1000.0;
+    if (std::abs(cut_length_mm - cut_length_euclidean_mm) > 0.5) {
+      RCLCPP_WARN(
+        get_logger(),
+        "side-tape hand-off: cut_length projected onto the cut axis (%.3f mm) differs from "
+        "the Euclidean cut length (%.3f mm) by more than 0.5 mm; using the projection",
+        cut_length_mm, cut_length_euclidean_mm);
+    }
+    const double depth_into_face_m = -seed_face.plane_normal.dot(
+      toEigen(in_material_start.pose.position) - seed_face.plane_point);
+    const double penetration_mm = depth_into_face_m * 1000.0;
+
+    CutSegment exec_segment = full_segment;
+    exec_segment.stop_after_start = true;
+    SegmentPlanOptions exec_options;
+    exec_options.cut_debug_start = true;
+    exec_options.side_tape_handoff = true;
+    exec_options.left_roll_cache = &handoff_roll_cache;
+    geometry_msgs::msg::PoseStamped standoff_target;
+    if (variant == "standoff") {
+      const double retreat_m = settings_.side_tape_handoff_standoff_mm / 1000.0 + depth_into_face_m;
+      standoff_target = in_material_start;
+      standoff_target.pose.position = toPoint(
+        toEigen(in_material_start.pose.position) + retreat_m * seed_face.plane_normal);
+      exec_options.stop_pose_override = standoff_target;
+    }
+    std::unique_ptr<mtc::Task> exec_task;
+    std::vector<geometry_msgs::msg::PoseStamped> exec_targets;
+    std::string exec_error;
+    bool exec_ok = false;
+    try {
+      exec_ok = planCutSegments(
+        snapshot, {exec_segment}, corrections, settings_.motion_profile,
+        "side-tape hand-off approach (left, " + variant + ")", exec_options, exec_task,
+        exec_targets, exec_error);
+    } catch (const std::exception& exception) {
+      exec_error = exception.what();
+    }
+    if (!exec_ok) {
+      message = "side-tape hand-off approach planning failed: " + exec_error;
+      return false;
+    }
+    if (exec_targets.size() != 1U) {
+      message = "side-tape hand-off: unexpected target count for the truncated approach";
+      return false;
+    }
+    if (!selection.valid) {
+      message = "side-tape hand-off refused: the left_parallel orientation search did not "
+        "produce a selection for the approach plan";
+      return false;
+    }
+    if (selection.maxAbsAngleDeg() > settings_.side_tape_handoff_max_search_angle_deg + 1e-6 ||
+        selection.rotation_from_f0_deg >
+        settings_.side_tape_handoff_max_search_angle_deg + 1e-6) {
+      message = "side-tape hand-off refused: the selected left_parallel orientation deviates " +
+        formatDouble(selection.maxAbsAngleDeg(), 1) + " deg (rotation " +
+        formatDouble(selection.rotation_from_f0_deg, 1) + " deg) from F0, above "
+        "side_tape_handoff_max_search_angle_deg " +
+        formatDouble(settings_.side_tape_handoff_max_search_angle_deg, 1);
+      return false;
+    }
+    {
+      const double orientation_mismatch_deg = 180.0 / 3.14159265358979323846 *
+        Eigen::AngleAxisd(toEigen(in_material_start.pose.orientation).normalized().conjugate() *
+        toEigen(exec_targets[0].pose.orientation).normalized()).angle();
+      if (orientation_mismatch_deg > 0.5) {
+        message = "side-tape hand-off: orientation mismatch between the full and truncated plans (" +
+          formatDouble(orientation_mismatch_deg, 2) + " deg); refusing";
+        return false;
+      }
+    }
+    if (variant == "in_material") {
+      // Sanity: the truncated plan's in-material start must match the full-plan feasibility
+      // geometry; both come from the same segment and corrections, so a mismatch here is a
+      // planning bug, not normal variance.
+      const double geometry_mismatch_m = (toEigen(in_material_start.pose.position) -
+        toEigen(exec_targets[0].pose.position)).norm();
+      if (geometry_mismatch_m > 0.001) {
+        message = "side-tape hand-off: geometry mismatch between the full and truncated plans (" +
+          formatDouble(geometry_mismatch_m * 1000.0, 3) + " mm); refusing";
+        return false;
+      }
+    }
+
+    // Standoff must NEVER enter material: verify over every trajectory waypoint (not just
+    // the planned endpoints) that the tip stays in front of (or on) the outer wall plane.
+    double min_wall_distance_mm = std::numeric_limits<double>::quiet_NaN();
+    if (variant == "standoff") {
+      const double min_wall_distance_m =
+        minSignedWallDistanceM(*exec_task->solutions().front(), seed_face);
+      min_wall_distance_mm = min_wall_distance_m * 1000.0;
+      constexpr double kWallDistanceToleranceM = -0.0005;  // small numerical/FK slack only
+      if (min_wall_distance_m < kWallDistanceToleranceM) {
+        message = "side-tape hand-off refused: the standoff approach trajectory dips " +
+          formatDouble(-min_wall_distance_mm, 2) +
+          " mm behind the outer wall plane at some waypoint (must stay in front of it); "
+          "refusing to plan a standoff approach that enters material";
+        return false;
+      }
+    }
+
+    const Eigen::Vector3d travel_dir =
+      (toEigen(snapshot.front_middle_left) - toEigen(snapshot.back_middle_left)).normalized();
+    const Eigen::Vector3d inward_normal = -seed_face.plane_normal;
+    const auto orientation_check = checkSideTapeOrientationConvention(
+      exec_targets[0].pose.orientation, travel_dir, inward_normal, cut_axis_tool,
+      lateral_axis_tool, depth_axis_tool,
+      std::max(kSideTapeHandoffMaxAxisAngleDeg, settings_.side_tape_handoff_max_search_angle_deg));
+    if (!orientation_check.ok) {
+      message = "side-tape hand-off refused: the planned start pose does not satisfy the "
+        "configured side_tape tool-frame convention; " + orientation_check.message +
+        "; this looks like a genuine convention mismatch, not a small calibration error -- do "
+        "not force this check open, fix side_tape_handoff_*_axis_tool (or the geometry) and "
+        "re-plan";
+      return false;
+    }
+
+    retainPlan(snapshot, {exec_segment}, exec_targets, std::move(exec_task));
+    side_tape_handoff_snapshot_ = snapshot;
+    side_tape_handoff_info_ = SideTapeHandoffInfo{};
+    side_tape_handoff_info_.face = "left";
+    side_tape_handoff_info_.variant = variant;
+    side_tape_handoff_info_.cut_length_mm = cut_length_mm;
+    side_tape_handoff_info_.cut_length_euclidean_mm = cut_length_euclidean_mm;
+    side_tape_handoff_info_.penetration_mm = penetration_mm;
+    side_tape_handoff_info_.standoff_mm =
+      variant == "standoff" ? settings_.side_tape_handoff_standoff_mm : 0.0;
+    side_tape_handoff_info_.min_wall_distance_mm = min_wall_distance_mm;
+    side_tape_handoff_info_.start_pose = exec_targets[0];
+    side_tape_handoff_info_.cut_axis_tool = cut_axis_tool;
+    side_tape_handoff_info_.lateral_axis_tool = lateral_axis_tool;
+    side_tape_handoff_info_.depth_axis_tool = depth_axis_tool;
+    side_tape_handoff_info_.cut_dir_base = orientation_check.cut_dir_base;
+    side_tape_handoff_info_.lateral_dir_base = orientation_check.lateral_dir_base;
+    side_tape_handoff_info_.depth_dir_base = orientation_check.depth_dir_base;
+    side_tape_handoff_info_.outward_normal = seed_face.plane_normal;
+    side_tape_handoff_info_.plane_point = seed_face.plane_point;
+    side_tape_handoff_info_.left_parallel = selection;
+    side_tape_handoff_info_.planned_cut_start = toEigen(in_material_start.pose.position);
+    side_tape_handoff_info_.planned_cut_end = toEigen(cut_end.pose.position);
+    side_tape_handoff_info_.snapshot_path = source_path;
+    side_tape_handoff_info_.snapshot_id = snapshot.snapshot_id;
+    side_tape_handoff_info_.stale_override = settings_.debug_allow_stale_snapshot;
+    side_tape_handoff_pending_ = true;
+    message = "side-tape hand-off (" + variant + ") planned for the left cut: full-stroke "
+      "feasibility proven (cut_length=" + formatDouble(cut_length_mm, 1) +
+      " mm [euclidean " + formatDouble(cut_length_euclidean_mm, 1) +
+      " mm], in-material penetration=" + formatDouble(penetration_mm, 2) + " mm" +
+      (variant == "standoff" ?
+         "; min_wall_distance=" + formatDouble(min_wall_distance_mm, 2) + " mm (>=0 required)" :
+         "") +
+      "); " + orientation_check.message +
+      "; only the approach to the start pose is retained; execute via execute_planned_h_cut "
+      "with execution_enabled, then call side_tape_retract once side_tape reports done";
+    return true;
+  }
+  // Writes the side-tape hand-off record (JSON file, atomic temp+rename, plus a latched
+  // ~/side_tape_handoff topic) after the truncated approach has actually completed
+  // execution. Called only from the execution-completion path, under plan_mutex_.
+  static const char* sideTapeHandoffStatusName(SideTapeHandoffStatus status)
+  {
+    switch (status) {
+      case SideTapeHandoffStatus::kNone: return "none";
+      case SideTapeHandoffStatus::kActive: return "active";
+      case SideTapeHandoffStatus::kApproachFailed: return "approach_failed";
+      case SideTapeHandoffStatus::kRetracted: return "retracted";
+      case SideTapeHandoffStatus::kCutting: return "cutting";
+      case SideTapeHandoffStatus::kCutFailed: return "cut_failed";
+    }
+    return "unknown";
+  }
+  static std::string vector3Json(const Eigen::Vector3d& v)
+  {
+    return "{\"x\": " + formatDouble(v.x()) + ", \"y\": " + formatDouble(v.y()) + ", \"z\": " +
+      formatDouble(v.z()) + "}";
+  }
+  // Writes the side-tape hand-off record (JSON file, atomic temp+rename, plus the latched
+  // ~/side_tape_handoff topic). Called on every status change: a successful approach
+  // dispatch ("active"), a failed one ("approach_failed"), and a completed retract
+  // ("retracted") -- so the topic always reflects the current status.
+  void writeSideTapeHandoffOutput()
+  {
+    const auto& info = side_tape_handoff_info_;
+    std::ostringstream json;
+    json << "{\n";
+    json << "  \"schema\": \"box_h_cut_side_tape_handoff/v1\",\n";
+    json << "  \"status\": \"" << sideTapeHandoffStatusName(info.status) << "\",\n";
+    json << "  \"face\": \"" << jsonEscape(info.face) << "\",\n";
+    json << "  \"variant\": \"" << jsonEscape(info.variant) << "\",\n";
+    json << "  \"cut_length_mm\": " << formatDouble(info.cut_length_mm, 3) << ",\n";
+    json << "  \"cut_length_euclidean_mm\": " << formatDouble(info.cut_length_euclidean_mm, 3) <<
+      ",\n";
+    json << "  \"penetration_mm\": " << formatDouble(info.penetration_mm, 3) << ",\n";
+    json << "  \"standoff_mm\": " << formatDouble(info.standoff_mm, 3) << ",\n";
+    if (std::isfinite(info.min_wall_distance_mm)) {
+      json << "  \"min_wall_distance_mm\": " << formatDouble(info.min_wall_distance_mm, 3) <<
+        ",\n";
+    }
+    json << "  \"planning_frame\": \"" << jsonEscape(settings_.planning_frame) << "\",\n";
+    json << "  \"tool_link\": \"" << jsonEscape(settings_.tool_link) << "\",\n";
+    json << "  \"start_pose\": {\n";
+    json << "    \"position_m\": {\"x\": " << formatDouble(info.start_pose.pose.position.x) <<
+      ", \"y\": " << formatDouble(info.start_pose.pose.position.y) << ", \"z\": " <<
+      formatDouble(info.start_pose.pose.position.z) << "},\n";
+    json << "    \"orientation_xyzw\": {\"x\": " <<
+      formatDouble(info.start_pose.pose.orientation.x) << ", \"y\": " <<
+      formatDouble(info.start_pose.pose.orientation.y) << ", \"z\": " <<
+      formatDouble(info.start_pose.pose.orientation.z) << ", \"w\": " <<
+      formatDouble(info.start_pose.pose.orientation.w) << "}\n";
+    json << "  },\n";
+    json << "  \"side_tape_convention\": {\n";
+    json << "    \"cut_axis_tool\": " << vector3Json(info.cut_axis_tool) << ",\n";
+    json << "    \"lateral_axis_tool\": " << vector3Json(info.lateral_axis_tool) << ",\n";
+    json << "    \"depth_axis_tool\": " << vector3Json(info.depth_axis_tool) << ",\n";
+    json << "    \"cut_dir_base\": " << vector3Json(info.cut_dir_base) << ",\n";
+    json << "    \"lateral_dir_base\": " << vector3Json(info.lateral_dir_base) << ",\n";
+    json << "    \"depth_dir_base\": " << vector3Json(info.depth_dir_base) << "\n";
+    json << "  },\n";
+    json << "  \"left_parallel_orientation\": {\"tilt_deg\": " <<
+      formatDouble(info.left_parallel.tilt_deg, 3) << ", \"pitch_deg\": " <<
+      formatDouble(info.left_parallel.pitch_deg, 3) << ", \"yaw_deg\": " <<
+      formatDouble(info.left_parallel.yaw_deg, 3) << ", \"theta_p_deg\": " <<
+      formatDouble(info.left_parallel.theta_p_deg, 3) << ", \"candidate_index\": " <<
+      info.left_parallel.candidate_index << ", \"candidate_count\": " <<
+      info.left_parallel.candidate_count << ", \"rotation_from_f0_deg\": " <<
+      formatDouble(info.left_parallel.rotation_from_f0_deg, 3) << ", \"max_abs_angle_deg\": " <<
+      formatDouble(info.left_parallel.maxAbsAngleDeg(), 3) << ", \"max_allowed_deg\": " <<
+      formatDouble(settings_.side_tape_handoff_max_search_angle_deg, 3) << "},\n";
+    json << "  \"planned_cut_start_m\": " << vector3Json(info.planned_cut_start) << ",\n";
+    json << "  \"planned_cut_end_m\": " << vector3Json(info.planned_cut_end) << ",\n";
+    json << "  \"snapshot_path\": \"" << jsonEscape(info.snapshot_path) << "\",\n";
+    json << "  \"snapshot_id\": \"" << jsonEscape(info.snapshot_id) << "\",\n";
+    json << "  \"stamp_ns\": " << info.stamp.nanoseconds() << "\n";
+    json << "}\n";
+    const std::string payload = json.str();
+
+    std::string output_path = settings_.side_tape_handoff_output_file;
+    if (output_path.empty()) {
+      const char* home = std::getenv("HOME");
+      output_path = (home ? std::string(home) : std::string("/tmp")) + "/.ros/side_tape_handoff.json";
+    }
+    std::error_code code;
+    std::filesystem::create_directories(std::filesystem::path(output_path).parent_path(), code);
+    const std::string temporary = output_path + ".tmp";
+    bool wrote = false;
+    {
+      std::ofstream file(temporary);
+      if (file) {
+        file << payload;
+        file.flush();
+        wrote = static_cast<bool>(file);
+      }
+    }
+    if (!wrote) {
+      RCLCPP_ERROR(
+        get_logger(), "Cannot write side-tape hand-off record: %s", temporary.c_str());
+    } else {
+      std::filesystem::rename(temporary, output_path, code);
+      if (code) {
+        RCLCPP_ERROR(
+          get_logger(), "Cannot atomically persist side-tape hand-off record: %s",
+          code.message().c_str());
+      }
+    }
+    std_msgs::msg::String topic_message;
+    topic_message.data = payload;
+    side_tape_handoff_pub_->publish(topic_message);
+    RCLCPP_INFO(
+      get_logger(),
+      "Side-tape hand-off status=%s: face=%s variant=%s cut_length=%.1fmm penetration=%.2fmm "
+      "output=%s",
+      sideTapeHandoffStatusName(info.status), info.face.c_str(), info.variant.c_str(),
+      info.cut_length_mm, info.penetration_mm, output_path.c_str());
+  }
+  // Plans (from the CURRENT robot state, since side_tape moved the arm with Servo) and
+  // executes the retract: withdraw along the face's outward normal to clear the wall, then
+  // the usual free-space transit back to the canonical left approach/parking pose. Refuses
+  // if no hand-off is active. Every existing gate still applies (execution_enabled, the
+  // free-space transit wrist guard); nothing here loosens them.
+  // Refuses if MoveIt Servo appears to be actively commanding the arm: any message on its
+  // twist/joint-jog command topics within the last side_tape_handoff_servo_quiescence_s, or
+  // any joint velocity above side_tape_handoff_joint_velocity_threshold. Never pauses/stops
+  // Servo itself.
+  bool sideTapeServoIsQuiescent(std::string& message)
+  {
+    {
+      std::lock_guard<std::mutex> lock(servo_activity_mutex_);
+      const auto recent = [this](const std::optional<rclcpp::Time>& stamp) {
+        return stamp.has_value() &&
+          (now() - *stamp).seconds() < settings_.side_tape_handoff_servo_quiescence_s;
+      };
+      if (recent(servo_twist_last_received_)) {
+        message = "MoveIt Servo command activity on " +
+          settings_.side_tape_handoff_servo_twist_topic + " within the last " +
+          formatDouble(settings_.side_tape_handoff_servo_quiescence_s, 2) + " s";
+        return false;
+      }
+      if (recent(servo_joint_jog_last_received_)) {
+        message = "MoveIt Servo command activity on " +
+          settings_.side_tape_handoff_servo_joint_topic + " within the last " +
+          formatDouble(settings_.side_tape_handoff_servo_quiescence_s, 2) + " s";
+        return false;
+      }
+    }
+    std::lock_guard<std::mutex> state_lock(state_mutex_);
+    if (current_joint_state_) {
+      for (std::size_t index = 0; index < current_joint_state_->velocity.size(); ++index) {
+        const double velocity = current_joint_state_->velocity[index];
+        if (!std::isfinite(velocity) ||
+            std::abs(velocity) > settings_.side_tape_handoff_joint_velocity_threshold) {
+          const std::string joint_name = index < current_joint_state_->name.size() ?
+            current_joint_state_->name[index] : std::to_string(index);
+          message = "joint '" + joint_name + "' velocity " + formatDouble(velocity, 4) +
+            " rad/s exceeds side_tape_handoff_joint_velocity_threshold " +
+            formatDouble(settings_.side_tape_handoff_joint_velocity_threshold, 4) + " rad/s";
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+  struct CutPlanners {
+    mtc::solvers::PlannerInterfacePtr transit;
+    mtc::solvers::PlannerInterfacePtr stroke;
+    std::shared_ptr<mtc::solvers::CartesianPath> cartesian;
+  };
+  // Adds the detected carton with the scoped tool/carton contact allowance and the camera
+  // pole (shared by side_tape_retract and continue_side_cut).
+  void addSideTapeCartonScene(mtc::Task& task, const Snapshot& snapshot)
+  {
+    auto add_carton = std::make_unique<mtc::stages::ModifyPlanningScene>(
+      "add detected carton collision object");
+    add_carton->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
+    add_carton->addObject(cartonCollisionObject(snapshot));
+    if (settings_.allow_tool_carton_contact) {
+      add_carton->allowCollisions(settings_.tool_link, settings_.carton_collision_id, true);
+    }
+    task.add(std::move(add_carton));
+    addCameraPole(task);
+  }
+  // The side_tape retract stages, from an arm pose `from_pose`: withdraw along the outward
+  // face normal by withdraw_m (contact allowance still active), then -- only if `fresh` --
+  // restore collision checking and free-space transit to the left approach pose.
+  bool addSideTapeRetractStages(
+    mtc::Task& task, const CutPlanners& planners, const Snapshot& snapshot,
+    const geometry_msgs::msg::PoseStamped& from_pose, double withdraw_m, bool fresh,
+    std::vector<const mtc::Stage*>& transit_stages,
+    std::vector<geometry_msgs::msg::PoseStamped>& published_targets, std::string& message)
+  {
+    const CutSegment left_segment = segmentFor(snapshot, CutKind::kLeft);
+    const auto orientation_targets = orientationTargets(
+      snapshot, false, left_segment.start, left_segment.end, left_segment.start,
+      left_segment.end);
+    auto parked_cut_start = targetPose(
+      snapshot, left_segment.start, orientation_targets.first, settings_.cut_clearance_m,
+      settings_.left_side_cut_tilt_deg);
+    auto parked_hover_start = parked_cut_start;
+    if (fresh) {
+      std::string offset_error;
+      if (!offsetLeftPoseOutward(
+            snapshot, parked_hover_start, settings_.left_lateral_standoff_m, offset_error)) {
+        message = "side-tape retract: cannot compute the parking pose: " + offset_error;
+        return false;
+      }
+    }
+    geometry_msgs::msg::PoseStamped withdraw_target = from_pose;
+    withdraw_target.header.frame_id = settings_.planning_frame;
+    withdraw_target.pose.position = toPoint(
+      toEigen(from_pose.pose.position) + withdraw_m * side_tape_handoff_info_.outward_normal);
+    addMoveTo(
+      task, "side-tape retract: withdraw along face normal [" + settings_.motion_profile + "]",
+      planners.stroke, withdraw_target);
+    published_targets.push_back(withdraw_target);
+    if (fresh) {
+      if (settings_.allow_tool_carton_contact) {
+        addCartonContactScope(
+          task, "restore knife-tip collision checking after side-tape retract", false);
+      }
+      transit_stages.push_back(addMoveTo(
+        task, "side-tape retract: transit to left approach pose [" + settings_.motion_profile +
+          "]",
+        planners.transit, parked_hover_start));
+      published_targets.push_back(parked_hover_start);
+    }
+    return true;
+  }
+  // Plans (from the CURRENT robot state, since side_tape moved the arm with Servo) and
+  // executes the retract. Refuses if no hand-off is in progress, if planned/loaded under
+  // debug_allow_stale_snapshot (never executed at all), if Servo appears active, or if the
+  // current pose deviates too far from the recorded hand-off (orientation or off the cut
+  // line) -- side_tape may have misbehaved and the operator should recover manually. The
+  // withdraw (along the outer-wall normal, by the current penetration behind the wall
+  // clamped >=0, plus hover_clearance_m) always runs when everything above passes; the
+  // free-space transit back to the canonical parking pose only runs if the snapshot is still
+  // fresh (a stale snapshot means only the withdraw executes). Every existing gate still
+  // applies (execution_enabled, the free-space transit wrist guard); nothing here loosens
+  // them, and Servo is never paused/stopped.
+  bool planAndExecuteSideTapeRetract(std::string& message)
+  {
+    if (!side_tape_handoff_info_.inProgress()) {
+      message = "no side-tape hand-off is active; nothing to retract";
+      return false;
+    }
+    if (side_tape_handoff_info_.stale_override) {
+      message = "side-tape retract refused: this hand-off was planned under "
+        "debug_allow_stale_snapshot=true (plan-only override); it can never be executed, "
+        "including the retract withdraw; recover the arm manually (teleop)";
+      return false;
+    }
+    if (!execution_enabled_.load()) {
+      message = "execution service is disabled by execution_enabled";
+      return false;
+    }
+    if (execution_in_progress_) {
+      message = "an H-cut trajectory execution is already active";
+      return false;
+    }
+    if (!side_tape_handoff_snapshot_) {
+      message = "side-tape hand-off snapshot is unavailable; internal state error, contact the maintainer";
+      return false;
+    }
+    std::string servo_error;
+    if (!sideTapeServoIsQuiescent(servo_error)) {
+      message = "side-tape retract refused: " + servo_error +
+        "; Servo is left running -- wait for it to go quiet, or stop it yourself, before retracting";
+      return false;
+    }
+    const Snapshot snapshot = *side_tape_handoff_snapshot_;
+    geometry_msgs::msg::PoseStamped current_pose;
+    if (!captureObservedTcpPose(current_pose, message)) return false;
+
+    const Eigen::Quaterniond q_current = toEigen(current_pose.pose.orientation).normalized();
+    const Eigen::Quaterniond q_recorded =
+      toEigen(side_tape_handoff_info_.start_pose.pose.orientation).normalized();
+    const double orientation_deviation_deg =
+      q_current.angularDistance(q_recorded) * 180.0 / 3.14159265358979323846;
+    if (orientation_deviation_deg > settings_.side_tape_handoff_retract_max_orientation_deg) {
+      message = "side-tape retract refused: current tool orientation deviates " +
+        formatDouble(orientation_deviation_deg, 1) +
+        " deg from the recorded hand-off start orientation (max " +
+        formatDouble(settings_.side_tape_handoff_retract_max_orientation_deg, 1) +
+        " deg); side_tape may have misbehaved -- recover the arm manually (teleop) first";
+      return false;
+    }
+    const Eigen::Vector3d current_position = toEigen(current_pose.pose.position);
+    const Eigen::Vector3d recorded_start_position =
+      toEigen(side_tape_handoff_info_.start_pose.pose.position);
+    const Eigen::Vector3d delta = current_position - recorded_start_position;
+    const Eigen::Vector3d cut_dir_base = side_tape_handoff_info_.cut_dir_base.normalized();
+    const double line_offset_mm =
+      (delta - delta.dot(cut_dir_base) * cut_dir_base).norm() * 1000.0;
+    if (line_offset_mm > settings_.side_tape_handoff_retract_max_line_offset_mm) {
+      message = "side-tape retract refused: current tip is " + formatDouble(line_offset_mm, 1) +
+        " mm off the recorded cut line (max " +
+        formatDouble(settings_.side_tape_handoff_retract_max_line_offset_mm, 1) +
+        " mm); side_tape may have misbehaved -- recover the arm manually (teleop) first";
+      return false;
+    }
+
+    // Withdraw distance: current penetration behind the outer wall (clamped >= 0, so an
+    // already-outside tip only gets the plain hover clearance) plus hover_clearance_m.
+    const double current_depth_into_face_m = -side_tape_handoff_info_.outward_normal.dot(
+      current_position - side_tape_handoff_info_.plane_point);
+    const double withdraw_m =
+      std::max(0.0, current_depth_into_face_m) + settings_.hover_clearance_m;
+
+    // Never refuse the withdraw for a stale snapshot (stranding the blade in the box), but
+    // the free-space transit back to the parking pose follows the normal freshness rule.
+    std::string freshness_error;
+    const bool fresh = snapshotIsFresh(snapshot, freshness_error);
+
+    auto task = std::make_unique<mtc::Task>();
+    task->stages()->setName("side-tape hand-off retract (left)");
+    if (robot_model_) {
+      task->setRobotModel(robot_model_);
+    } else {
+      task->loadRobotModel(shared_from_this());
+      robot_model_ = task->getRobotModel();
+    }
+    task->add(std::make_unique<mtc::stages::CurrentState>("current robot state"));
+    addSideTapeCartonScene(*task, snapshot);
+    const CutPlanners planners = makeCutPlanners(settings_.motion_profile);
+    std::vector<const mtc::Stage*> transit_stages;
+    std::vector<geometry_msgs::msg::PoseStamped> published_targets;
+    if (!addSideTapeRetractStages(
+          *task, planners, snapshot, current_pose, withdraw_m, fresh, transit_stages,
+          published_targets, message)) {
+      return false;
+    }
+
+    try {
+      task->init();
+    } catch (const mtc::InitStageException& exception) {
+      std::ostringstream details;
+      details << exception;
+      message = "side-tape retract MTC stage initialization failed: " + details.str();
+      return false;
+    }
+    const auto result = task->plan(static_cast<std::size_t>(settings_.max_solutions));
+    if (result != moveit::core::MoveItErrorCode::SUCCESS || task->solutions().empty()) {
+      task->explainFailure();
+      message = "side-tape retract planning failed";
+      return false;
+    }
+    if (!transit_stages.empty()) {
+      const auto& solution = *task->solutions().front();
+      moveit_task_constructor_msgs::msg::Solution solution_message;
+      solution.toMsg(solution_message);
+      std::string wrist_error;
+      if (!validateFreeSpaceTransitWrist(
+            solution, solution_message, transit_stages, wrist_error)) {
+        message = wrist_error;
+        return false;
+      }
+    }
+    publishTargetPoses(snapshot, published_targets);
+    publishSolution(*task);
+
+    if (execution_thread_.joinable()) execution_thread_.join();
+    execution_in_progress_ = true;
+    execution_thread_ = std::thread(
+      [this, task = std::move(task), fresh, freshness_error]() mutable {
+        bool succeeded = false;
+        std::string failure_detail;
+        try {
+          const auto exec_result = task->execute(*task->solutions().front());
+          succeeded = (exec_result == moveit::core::MoveItErrorCode::SUCCESS);
+          if (succeeded) {
+            RCLCPP_INFO(
+              get_logger(), "Side-tape hand-off retract execution completed (%s)",
+              fresh ? "withdraw + transit" : "withdraw only, stale snapshot");
+          } else {
+            failure_detail = "controller reported failure status " + std::to_string(exec_result.val);
+            RCLCPP_ERROR(
+              get_logger(), "Side-tape hand-off retract execution failed: %s",
+              failure_detail.c_str());
+          }
+        } catch (const std::exception& exception) {
+          failure_detail = std::string("threw exception: ") + exception.what();
+          RCLCPP_ERROR(
+            get_logger(), "Side-tape hand-off retract execution %s", failure_detail.c_str());
+        }
+        std::lock_guard<std::mutex> completion_lock(plan_mutex_);
+        execution_in_progress_ = false;
+        if (succeeded) {
+          side_tape_handoff_info_.status = SideTapeHandoffStatus::kRetracted;
+          side_tape_handoff_info_.stamp = now();
+          writeSideTapeHandoffOutput();
+          side_tape_handoff_info_ = SideTapeHandoffInfo{};
+          side_tape_handoff_snapshot_.reset();
+          if (!fresh) {
+            RCLCPP_WARN(
+              get_logger(),
+              "Side-tape retract withdrew the blade but skipped the return transit (%s); "
+              "move away by teleop or start a fresh plan_h_cut/plan_side_tape_handoff",
+              freshness_error.c_str());
+          }
+        } else {
+          RCLCPP_ERROR(
+            get_logger(),
+            "Side-tape retract did NOT complete (%s); the hand-off is still unresolved; "
+            "call side_tape_retract again once the arm is clear",
+            failure_detail.c_str());
+        }
+      });
+    message = fresh ?
+      "side-tape retract dispatch accepted (withdraw + return transit); monitor controller execution" :
+      "side-tape retract dispatch accepted: withdrawn; transit skipped (stale snapshot: " +
+        freshness_error + "), move away by teleop/replan; monitor controller execution";
+    return true;
+  }
+  // ~/continue_side_cut: after side_tape has aligned the tip into the side seam (Servo), plans
+  // ONE MTC task from the CURRENT robot state -- a straight Cartesian cut stroke (contact
+  // scaling, min_fraction=1.0, scoped tool/carton contact allowance) parallel to the planned
+  // left cut line, keeping the current tool orientation and the alignment's lateral/depth
+  // offset, ending on the plane through the planned cut end perpendicular to that line --
+  // followed by exactly the side_tape_retract stages (withdraw along the outward face normal by
+  // the depth at the stroke end + hover_clearance_m, then the free-space transit). Every
+  // refusal happens before anything moves. Status: cutting while executing, retracted on
+  // success, cut_failed on failure (hand-off state and carton kept; side_tape_retract recovers).
+  bool continueSideCut(std::string& message)
+  {
+    constexpr double kRadToDeg = 180.0 / 3.14159265358979323846;
+    if (side_tape_handoff_info_.status != SideTapeHandoffStatus::kActive) {
+      message = side_tape_handoff_info_.inProgress() ?
+        "continue_side_cut refused: hand-off status is not 'active' (approach_failed/cutting/"
+        "cut_failed cannot continue); recover with side_tape_retract" :
+        "continue_side_cut refused: no active side-tape hand-off";
+      return false;
+    }
+    if (side_tape_handoff_info_.stale_override || settings_.debug_allow_stale_snapshot) {
+      message = "continue_side_cut refused: planned/loaded under debug_allow_stale_snapshot "
+        "(plan-only override); use side_tape_retract / manual recovery";
+      return false;
+    }
+    if (!execution_enabled_.load()) {
+      message = "execution service is disabled by execution_enabled";
+      return false;
+    }
+    if (execution_in_progress_) {
+      message = "an H-cut trajectory execution is already active";
+      return false;
+    }
+    if (!side_tape_handoff_snapshot_) {
+      message = "side-tape hand-off snapshot is unavailable; internal state error";
+      return false;
+    }
+    const Snapshot snapshot = *side_tape_handoff_snapshot_;
+    std::string freshness_error;
+    // The snapshot age check can be turned off for this call only (operator: the box does
+    // not move and alignment takes longer than external_snapshot_max_age_s). The hand-off
+    // itself was planned from a fresh snapshot, and debug_allow_stale plans stay refused above.
+    if (!settings_.side_tape_continue_check_snapshot_age) {
+      if (!snapshotIsFresh(snapshot, freshness_error)) {
+        RCLCPP_WARN(
+          get_logger(), "continue_side_cut: snapshot age not checked (%s); box assumed static",
+          freshness_error.c_str());
+      }
+    } else if (!snapshotIsFresh(snapshot, freshness_error)) {
+      message = "continue_side_cut refused: " + freshness_error +
+        "; the cut is a perception-based contact motion -- use side_tape_retract instead";
+      return false;
+    }
+    std::string servo_error;
+    if (!sideTapeServoIsQuiescent(servo_error)) {
+      message = "continue_side_cut refused: " + servo_error;
+      return false;
+    }
+    geometry_msgs::msg::PoseStamped current_pose;
+    if (!captureObservedTcpPose(current_pose, message)) return false;
+    const auto& info = side_tape_handoff_info_;
+    const Eigen::Vector3d p0 = toEigen(current_pose.pose.position);
+    const Eigen::Vector3d line_vector = info.planned_cut_end - info.planned_cut_start;
+    if (line_vector.norm() < 1e-3) {
+      message = "continue_side_cut refused: recorded planned cut line is degenerate";
+      return false;
+    }
+    const Eigen::Vector3d d = line_vector.normalized();
+    const Eigen::Vector3d offset = p0 - info.planned_cut_start;
+    const double along_mm = offset.dot(d) * 1000.0;
+    const double perpendicular_mm = (offset - offset.dot(d) * d).norm() * 1000.0;
+    const double depth_mm = -info.outward_normal.dot(p0 - info.plane_point) * 1000.0;
+    const double orientation_deg =
+      toEigen(current_pose.pose.orientation).normalized().angularDistance(
+        toEigen(info.start_pose.pose.orientation).normalized()) * kRadToDeg;
+    std::ostringstream measured;
+    measured << std::fixed << std::setprecision(2) << " [measured: perpendicular " <<
+      perpendicular_mm << " mm, along " << along_mm << " mm, depth " << depth_mm <<
+      " mm, orientation " << orientation_deg << " deg]";
+    if (perpendicular_mm > settings_.side_tape_continue_max_line_offset_mm) {
+      message = "continue_side_cut refused: tip is off the planned cut line by more than " +
+        formatDouble(settings_.side_tape_continue_max_line_offset_mm, 1) + " mm" + measured.str();
+      return false;
+    }
+    if (std::abs(along_mm) > settings_.side_tape_continue_max_along_offset_mm) {
+      message = "continue_side_cut refused: tip is more than " +
+        formatDouble(settings_.side_tape_continue_max_along_offset_mm, 1) +
+        " mm from the planned cut start along the line" + measured.str();
+      return false;
+    }
+    if (depth_mm < settings_.side_tape_continue_min_depth_mm) {
+      message = "continue_side_cut refused: tip is not in the material (depth behind the outer "
+        "wall below " + formatDouble(settings_.side_tape_continue_min_depth_mm, 1) + " mm)" +
+        measured.str();
+      return false;
+    }
+    if (depth_mm > settings_.side_tape_continue_max_depth_mm) {
+      message = "continue_side_cut refused: tip is too deep behind the outer wall (above " +
+        formatDouble(settings_.side_tape_continue_max_depth_mm, 1) + " mm)" + measured.str();
+      return false;
+    }
+    if (orientation_deg > settings_.side_tape_continue_max_orientation_deg) {
+      message = "continue_side_cut refused: tool orientation deviates more than " +
+        formatDouble(settings_.side_tape_continue_max_orientation_deg, 1) +
+        " deg from the hand-off start orientation" + measured.str();
+      return false;
+    }
+    // Level stroke (operator 2026-09-30): keep the z the alignment program set at the start
+    // for the whole cut; run along the planned line's horizontal direction. Extend (or
+    // shorten) the stroke past the planned cut end, toward the box edge.
+    Eigen::Vector3d d_level(d.x(), d.y(), 0.0);
+    if (d_level.norm() < 0.5) {
+      message = "continue_side_cut refused: planned cut line is too steep for a level stroke";
+      return false;
+    }
+    d_level.normalize();
+    const double stroke_m = (info.planned_cut_end - p0).dot(d_level) +
+      settings_.side_tape_continue_end_extension_mm / 1000.0;
+    if (stroke_m < 0.005) {
+      message = "continue_side_cut refused: remaining stroke to the planned cut end is only " +
+        formatDouble(stroke_m * 1000.0, 2) + " mm" + measured.str();
+      return false;
+    }
+    // Operator 2026-09-30: end the stroke side_tape_continue_end_extra_depth_mm deeper into
+    // the face (horizontal inward normal, so z stays level); the stroke angles in gradually.
+    Eigen::Vector3d inward_level(-info.outward_normal.x(), -info.outward_normal.y(), 0.0);
+    if (inward_level.norm() < 0.5) {
+      message = "continue_side_cut refused: face normal is not horizontal enough";
+      return false;
+    }
+    inward_level.normalize();
+    const Eigen::Vector3d stroke_end = p0 + d_level * stroke_m +
+      inward_level * (settings_.side_tape_continue_end_extra_depth_mm / 1000.0);
+    const double end_depth_m = -info.outward_normal.dot(stroke_end - info.plane_point);
+    if (!settings_.side_tape_continue_check_end_depth) {
+      RCLCPP_WARN(
+        get_logger(), "continue_side_cut: stroke end %.2f mm behind the outer wall (end-depth "
+        "check disabled)", end_depth_m * 1000.0);
+    } else if (end_depth_m * 1000.0 > settings_.side_tape_continue_max_depth_mm) {
+      message = "continue_side_cut refused: stroke end would be " +
+        formatDouble(end_depth_m * 1000.0, 2) + " mm behind the outer wall (max " +
+        formatDouble(settings_.side_tape_continue_max_depth_mm, 1) + " mm)" + measured.str();
+      return false;
+    }
+    const double withdraw_m = std::max(0.0, end_depth_m) + settings_.hover_clearance_m;
+
+    auto task = std::make_unique<mtc::Task>();
+    task->stages()->setName("side-tape continue cut (left): stroke + retract");
+    if (robot_model_) {
+      task->setRobotModel(robot_model_);
+    } else {
+      task->loadRobotModel(shared_from_this());
+      robot_model_ = task->getRobotModel();
+    }
+    task->add(std::make_unique<mtc::stages::CurrentState>("current robot state"));
+    addSideTapeCartonScene(*task, snapshot);
+    const CutPlanners planners = makeCutPlanners(settings_.motion_profile);
+    // The cut stroke runs at side_tape_continue_speed_factor of the contact scalings (own
+    // planner instance, so the withdraw keeps the normal contact speed).
+    const CutPlanners slow_planners = makeCutPlanners(settings_.motion_profile);
+    slow_planners.stroke->setMaxVelocityScalingFactor(
+      settings_.velocity_scaling * settings_.side_tape_continue_speed_factor);
+    slow_planners.stroke->setMaxAccelerationScalingFactor(
+      settings_.acceleration_scaling * settings_.side_tape_continue_speed_factor);
+    geometry_msgs::msg::PoseStamped stroke_target = current_pose;
+    stroke_target.header.frame_id = settings_.planning_frame;
+    stroke_target.pose.position = toPoint(stroke_end);
+    addMoveTo(
+      *task, "side-tape continue: cut stroke parallel to planned line [" +
+      settings_.motion_profile + "]", slow_planners.stroke, stroke_target);
+    geometry_msgs::msg::PoseStamped end_pose = stroke_target;
+    std::vector<const mtc::Stage*> transit_stages;
+    std::vector<geometry_msgs::msg::PoseStamped> published_targets{stroke_target};
+    if (!addSideTapeRetractStages(
+          // fresh=false: withdraw along the face normal at the cut END and stop there (no
+          // transit back to the left approach pose); the operator moves on from there.
+          *task, planners, snapshot, end_pose, withdraw_m, false, transit_stages,
+          published_targets, message)) {
+      return false;
+    }
+    try {
+      task->init();
+    } catch (const mtc::InitStageException& exception) {
+      std::ostringstream details;
+      details << exception;
+      message = "continue_side_cut MTC stage initialization failed: " + details.str();
+      return false;
+    }
+    const auto result = task->plan(static_cast<std::size_t>(settings_.max_solutions));
+    if (result != moveit::core::MoveItErrorCode::SUCCESS || task->solutions().empty()) {
+      task->explainFailure();
+      message = "continue_side_cut planning failed (stroke + retract); nothing moved";
+      return false;
+    }
+    if (!transit_stages.empty()) {
+      const auto& solution = *task->solutions().front();
+      moveit_task_constructor_msgs::msg::Solution solution_message;
+      solution.toMsg(solution_message);
+      std::string wrist_error;
+      if (!validateFreeSpaceTransitWrist(
+            solution, solution_message, transit_stages, wrist_error)) {
+        message = "continue_side_cut refused: " + wrist_error;
+        return false;
+      }
+    }
+    publishTargetPoses(snapshot, published_targets);
+    publishSolution(*task);
+
+    if (execution_thread_.joinable()) execution_thread_.join();
+    execution_in_progress_ = true;
+    side_tape_handoff_info_.status = SideTapeHandoffStatus::kCutting;
+    side_tape_handoff_info_.stamp = now();
+    writeSideTapeHandoffOutput();
+    execution_thread_ = std::thread(
+      [this, task = std::move(task)]() mutable {
+        bool succeeded = false;
+        std::string failure_detail;
+        try {
+          const auto exec_result = task->execute(*task->solutions().front());
+          succeeded = (exec_result == moveit::core::MoveItErrorCode::SUCCESS);
+          if (succeeded) {
+            RCLCPP_INFO(get_logger(), "Side-tape continue_side_cut execution completed");
+          } else {
+            failure_detail = "controller reported failure status " + std::to_string(exec_result.val);
+            RCLCPP_ERROR(
+              get_logger(), "Side-tape continue_side_cut execution failed: %s",
+              failure_detail.c_str());
+          }
+        } catch (const std::exception& exception) {
+          failure_detail = std::string("threw exception: ") + exception.what();
+          RCLCPP_ERROR(get_logger(), "Side-tape continue_side_cut execution %s",
+            failure_detail.c_str());
+        }
+        std::lock_guard<std::mutex> completion_lock(plan_mutex_);
+        execution_in_progress_ = false;
+        if (succeeded) {
+          side_tape_handoff_info_.status = SideTapeHandoffStatus::kRetracted;
+          side_tape_handoff_info_.stamp = now();
+          writeSideTapeHandoffOutput();
+          side_tape_handoff_info_ = SideTapeHandoffInfo{};
+          side_tape_handoff_snapshot_.reset();
+        } else {
+          side_tape_handoff_info_.status = SideTapeHandoffStatus::kCutFailed;
+          side_tape_handoff_info_.stamp = now();
+          writeSideTapeHandoffOutput();
+          RCLCPP_ERROR(
+            get_logger(),
+            "continue_side_cut did NOT complete (%s); hand-off is 'cut_failed', detected_carton "
+            "kept; call side_tape_retract to recover", failure_detail.c_str());
+        }
+      });
+    message = "continue_side_cut dispatch accepted: stroke " + formatDouble(stroke_m * 1000.0, 1) +
+      " mm parallel to the planned line, then retract (withdraw " +
+      formatDouble(withdraw_m * 1000.0, 1) + " mm + return transit)" + measured.str() +
+      "; monitor controller execution";
     return true;
   }
   bool saveCutDebugPoint(std::string& message)
@@ -2669,49 +4085,57 @@ private:
     return true;
   }
 
-  std::optional<Snapshot> loadExternalSnapshot(
-    const std::string& external_snapshot_file, std::string& message) const
+  // Opens `path`, checks file-level staleness (mtime vs external_snapshot_max_age_s, unless
+  // debug_allow_stale_snapshot), and parses it as JSON into `document`. Shared by every
+  // reader so the snapshot is read exactly once per request (no read/parse split across two
+  // separate file opens, which could otherwise observe two different files).
+  bool readSnapshotDocument(
+    const std::string& path, boost::property_tree::ptree& document, std::string& message) const
   {
     namespace fs = std::filesystem;
-    if (external_snapshot_file.empty()) {
+    if (path.empty()) {
       message = "external_snapshot_file is required";
-      return std::nullopt;
+      return false;
     }
-    const fs::path selected(external_snapshot_file);
+    const fs::path selected(path);
     if (!selected.is_absolute() || selected.extension() != ".json") {
       message = "external_snapshot_file must be an absolute .json path";
-      return std::nullopt;
+      return false;
     }
     std::error_code error;
     if (!fs::is_regular_file(selected, error) || error) {
       message = "external snapshot is unavailable: " + selected.string();
-      return std::nullopt;
+      return false;
     }
     const auto modified = fs::last_write_time(selected, error);
     if (error) {
       message = "cannot read external snapshot modification time: " + selected.string();
-      return std::nullopt;
+      return false;
     }
     const auto age_s = std::chrono::duration<double>(
       fs::file_time_type::clock::now() - modified).count();
     if (!settings_.debug_allow_stale_snapshot && age_s > settings_.external_snapshot_max_age_s) {
       message = "external snapshot is stale (" + formatDouble(age_s, 3) + " s; maximum " +
         formatDouble(settings_.external_snapshot_max_age_s, 3) + " s): " + selected.string();
-      return std::nullopt;
+      return false;
     }
     std::ifstream input(selected);
     if (!input) {
       message = "cannot read external snapshot: " + selected.string();
-      return std::nullopt;
+      return false;
     }
-    using boost::property_tree::ptree;
-    ptree document;
     try {
       boost::property_tree::read_json(input, document);
     } catch (const boost::property_tree::json_parser::json_parser_error& error) {
       message = "external snapshot is not valid JSON: " + std::string(error.what());
-      return std::nullopt;
+      return false;
     }
+    return true;
+  }
+  // Parses the box_h_cut_snapshot/v1 fields from an already-loaded document.
+  bool parseSnapshotFromDocument(
+    const boost::property_tree::ptree& document, Snapshot& snapshot, std::string& message) const
+  {
     const auto required_string = [&document](const std::string& name, std::string& value) {
       const auto parsed = document.get_optional<std::string>(name);
       if (!parsed || parsed->empty()) return false;
@@ -2736,16 +4160,14 @@ private:
     std::string schema;
     std::string source_frame;
     std::string source_file;
-    Snapshot snapshot;
     if (!required_string("schema", schema) || schema != "box_h_cut_snapshot/v1" ||
         !required_string("snapshot_id", snapshot.snapshot_id) ||
         !required_string("capture_id", snapshot.capture_id) ||
         !required_string("frame_id", snapshot.header.frame_id) ||
         !required_string("source_frame", source_frame) ||
         !required_string("source_file", source_file)) {
-      message = "external snapshot schema or required identity fields are invalid: " +
-        selected.string();
-      return std::nullopt;
+      message = "external snapshot schema or required identity fields are invalid";
+      return false;
     }
     const auto acquisition_stamp = document.get_optional<std::int64_t>("acquisition_stamp_ns");
     const auto plane_rms = document.get_optional<double>("plane_rms_m");
@@ -2764,8 +4186,8 @@ private:
         !required_point("back_middle_right", snapshot.back_middle_right) ||
         !required_point("front_middle_right", snapshot.front_middle_right) ||
         !required_point("surface_normal", normal)) {
-      message = "external snapshot required geometry is invalid: " + selected.string();
-      return std::nullopt;
+      message = "external snapshot required geometry is invalid";
+      return false;
     }
     // plane_rms_m is validated for schema integrity only; planning does not use it.
     snapshot.acquisition_stamp_ns = *acquisition_stamp;
@@ -2775,12 +4197,221 @@ private:
     if (!acquisitionIsFresh(
           snapshot.acquisition_stamp_ns, settings_.debug_allow_stale_snapshot)) {
       message = "external snapshot acquisition is stale or invalid; maximum age " +
-        formatDouble(settings_.external_snapshot_max_age_s, 3) + " s: " + selected.string();
-      return std::nullopt;
+        formatDouble(settings_.external_snapshot_max_age_s, 3) + " s";
+      return false;
     }
     snapshot.header.stamp.sec = static_cast<std::int32_t>(snapshot.acquisition_stamp_ns / 1'000'000'000LL);
     snapshot.header.stamp.nanosec = static_cast<std::uint32_t>(snapshot.acquisition_stamp_ns % 1'000'000'000LL);
+    return true;
+  }
+  std::optional<Snapshot> loadExternalSnapshot(
+    const std::string& external_snapshot_file, std::string& message) const
+  {
+    boost::property_tree::ptree document;
+    if (!readSnapshotDocument(external_snapshot_file, document, message)) return std::nullopt;
+    Snapshot snapshot;
+    if (!parseSnapshotFromDocument(document, snapshot, message)) return std::nullopt;
     return snapshot;
+  }
+
+  // Parses side_tape_seed from an already-loaded document (the Snapshot struct does not carry
+  // it). No key means no side cut: this fails closed rather than estimating geometry. Also
+  // cross-checks the seed's own `source.snapshot_id`/`source.acquisition_stamp_ns` against the
+  // snapshot parsed from the SAME document, so a seed block can never be silently paired with
+  // geometry from a different capture (both were read from one file, one parse).
+  bool parseSideTapeSeedFaceFromDocument(
+    const boost::property_tree::ptree& document, const std::string& face,
+    const Snapshot& snapshot, SideTapeSeedFace& out, std::string& message) const
+  {
+    using boost::property_tree::ptree;
+    const auto seed = document.get_child_optional("side_tape_seed");
+    if (!seed) {
+      message =
+        "external snapshot has no side_tape_seed block; run side_face_seed.py on the snapshot "
+        "before enabling side_tape_handoff_enabled";
+      return false;
+    }
+    const auto schema = seed->get_optional<std::string>("schema");
+    if (!schema || (*schema != "side_tape_seed/v1" && *schema != "side_tape_seed/v1.1")) {
+      message = "side_tape_seed schema mismatch: " + (schema ? *schema : std::string("<missing>"));
+      return false;
+    }
+    const auto frame_id = seed->get_optional<std::string>("frame_id");
+    const auto units = seed->get_optional<std::string>("units");
+    if (!frame_id || *frame_id != "base_link" || !units || *units != "m") {
+      message = "side_tape_seed must be in base_link metres";
+      return false;
+    }
+    const auto source = seed->get_child_optional("source");
+    boost::optional<std::string> source_snapshot_id;
+    boost::optional<std::int64_t> source_stamp;
+    if (source) {
+      source_snapshot_id = source->get_optional<std::string>("snapshot_id");
+      source_stamp = source->get_optional<std::int64_t>("acquisition_stamp_ns");
+    }
+    if (!source || !source_snapshot_id || !source_stamp) {
+      message = "side_tape_seed.source is missing snapshot_id/acquisition_stamp_ns; cannot "
+        "verify it matches the snapshot it is paired with";
+      return false;
+    }
+    if (*source_snapshot_id != snapshot.snapshot_id ||
+        *source_stamp != snapshot.acquisition_stamp_ns) {
+      message = "side_tape_seed.source (snapshot_id=" + *source_snapshot_id +
+        ", acquisition_stamp_ns=" + std::to_string(*source_stamp) +
+        ") does not match this snapshot (snapshot_id=" + snapshot.snapshot_id +
+        ", acquisition_stamp_ns=" + std::to_string(snapshot.acquisition_stamp_ns) +
+        "); refusing a seed that may belong to a different capture";
+      return false;
+    }
+    const auto faces = seed->get_child_optional("faces");
+    if (!faces) {
+      message = "side_tape_seed has no faces block";
+      return false;
+    }
+    const auto face_node = faces->get_child_optional(face);
+    if (!face_node) {
+      message = "side_tape_seed has no face '" + face + "'";
+      return false;
+    }
+    const auto point_of = [](const ptree& node, const std::string& key, Eigen::Vector3d& value) {
+      const auto child = node.get_child_optional(key);
+      if (!child) return false;
+      const auto x = child->get_optional<double>("x");
+      const auto y = child->get_optional<double>("y");
+      const auto z = child->get_optional<double>("z");
+      if (!x || !y || !z || !std::isfinite(*x) || !std::isfinite(*y) || !std::isfinite(*z)) {
+        return false;
+      }
+      value = Eigen::Vector3d(*x, *y, *z);
+      return true;
+    };
+    const auto plane = face_node->get_child_optional("plane");
+    Eigen::Vector3d plane_point;
+    Eigen::Vector3d plane_normal;
+    if (!plane || !point_of(*plane, "point", plane_point) || !point_of(*plane, "normal", plane_normal)) {
+      message = "side_tape_seed face '" + face + "' plane is invalid";
+      return false;
+    }
+    const double normal_norm = plane_normal.norm();
+    if (!std::isfinite(normal_norm) || normal_norm < 1e-6) {
+      message = "side_tape_seed face '" + face + "' plane normal has zero length";
+      return false;
+    }
+    plane_normal /= normal_norm;
+    // wall_top_edge (outer wall, v1.1) when present, else top_edge (v1) at the top face plane.
+    auto top_edge = face_node->get_child_optional("wall_top_edge");
+    if (!top_edge) top_edge = face_node->get_child_optional("top_edge");
+    Eigen::Vector3d edge_start;
+    Eigen::Vector3d edge_end;
+    if (!top_edge || !point_of(*top_edge, "start", edge_start) || !point_of(*top_edge, "end", edge_end)) {
+      message = "side_tape_seed face '" + face + "' top edge is invalid";
+      return false;
+    }
+    out.plane_point = plane_point;
+    out.plane_normal = plane_normal;
+    out.top_edge_start = edge_start;
+    out.top_edge_end = edge_end;
+    const auto wall_source = face_node->get_optional<std::string>("wall_source");
+    out.wall_source = wall_source ? *wall_source : std::string();
+    return true;
+  }
+  // Single read of the snapshot file (one ifstream, one JSON parse): both the
+  // box_h_cut_snapshot/v1 geometry and its paired side_tape_seed face come from the exact
+  // same bytes, and the seed's own source identity is cross-checked against it.
+  bool loadSnapshotAndSeedFace(
+    const std::string& path, const std::string& face, Snapshot& snapshot,
+    SideTapeSeedFace& seed_face, std::string& message) const
+  {
+    boost::property_tree::ptree document;
+    if (!readSnapshotDocument(path, document, message)) return false;
+    if (!parseSnapshotFromDocument(document, snapshot, message)) return false;
+    return parseSideTapeSeedFaceFromDocument(document, face, snapshot, seed_face, message);
+  }
+
+  // Tolerance for checkSideTapeOrientationConvention: side_tape's configured tool-frame
+  // convention must hold at the hand-off start pose within this many degrees, or the
+  // hand-off fails closed.
+  static constexpr double kSideTapeHandoffMaxAxisAngleDeg = 5.0;
+  struct SideTapeOrientationCheck {
+    bool ok{false};
+    std::string message;
+    double cut_angle_deg{0.0};
+    double depth_angle_deg{0.0};
+    double lateral_angle_deg{0.0};
+    // Configured tool-frame axes rotated into base_link at the checked pose (unit vectors).
+    Eigen::Vector3d cut_dir_base{Eigen::Vector3d::UnitX()};
+    Eigen::Vector3d lateral_dir_base{Eigen::Vector3d::UnitY()};
+    Eigen::Vector3d depth_dir_base{Eigen::Vector3d::UnitZ()};
+  };
+  // Measures (never silently corrects) whether the tool_link orientation at a pose satisfies
+  // the operator-configured side_tape tool-frame convention (`side_tape_handoff_*_axis_tool`):
+  // cut_axis_tool along the cut direction, depth_axis_tool into the face, lateral_axis_tool
+  // on-face perpendicular to the cut (lateral = depth x cut, validated at startup). Reports
+  // every measured angle plus, for each semantic role, which of the tool's six signed
+  // principal axes is the closest actual match and by how much, so a genuine convention
+  // mismatch is diagnosable by axis and degrees rather than just "failed".
+  SideTapeOrientationCheck checkSideTapeOrientationConvention(
+    const geometry_msgs::msg::Quaternion& orientation, const Eigen::Vector3d& travel_dir_unit,
+    const Eigen::Vector3d& inward_normal_unit, const Eigen::Vector3d& cut_axis_tool,
+    const Eigen::Vector3d& lateral_axis_tool, const Eigen::Vector3d& depth_axis_tool,
+    double max_axis_angle_deg) const
+  {
+    SideTapeOrientationCheck result;
+    const Eigen::Quaterniond q = toEigen(orientation).normalized();
+    const Eigen::Vector3d measured_cut = (q * cut_axis_tool).normalized();
+    const Eigen::Vector3d measured_lateral = (q * lateral_axis_tool).normalized();
+    const Eigen::Vector3d measured_depth = (q * depth_axis_tool).normalized();
+    result.cut_dir_base = measured_cut;
+    result.lateral_dir_base = measured_lateral;
+    result.depth_dir_base = measured_depth;
+    const Eigen::Vector3d lateral_expected =
+      inward_normal_unit.cross(travel_dir_unit).normalized();
+    const auto angle_deg = [](const Eigen::Vector3d& a, const Eigen::Vector3d& b) {
+      const double c = std::clamp(a.normalized().dot(b.normalized()), -1.0, 1.0);
+      return std::acos(c) * 180.0 / 3.14159265358979323846;
+    };
+    result.cut_angle_deg = angle_deg(measured_cut, travel_dir_unit);
+    result.depth_angle_deg = angle_deg(measured_depth, inward_normal_unit);
+    result.lateral_angle_deg = angle_deg(measured_lateral, lateral_expected);
+    // Diagnostics only: which of the tool's raw +/-X/Y/Z axes best matches each semantic
+    // role, independent of the configured mapping (helps spot a mis-configured mapping).
+    const Eigen::Vector3d tool_x = (q * Eigen::Vector3d::UnitX()).normalized();
+    const Eigen::Vector3d tool_y = (q * Eigen::Vector3d::UnitY()).normalized();
+    const Eigen::Vector3d tool_z = (q * Eigen::Vector3d::UnitZ()).normalized();
+    const std::array<std::pair<const char*, Eigen::Vector3d>, 6> axes{{
+      {"+X", tool_x}, {"-X", Eigen::Vector3d(-tool_x)}, {"+Y", tool_y},
+      {"-Y", Eigen::Vector3d(-tool_y)}, {"+Z", tool_z}, {"-Z", Eigen::Vector3d(-tool_z)}}};
+    const auto best_match = [&](const Eigen::Vector3d& target) {
+      std::size_t best_index = 0U;
+      double best_angle = angle_deg(axes.front().second, target);
+      for (std::size_t index = 1U; index < axes.size(); ++index) {
+        const double candidate_angle = angle_deg(axes[index].second, target);
+        if (candidate_angle < best_angle) {
+          best_angle = candidate_angle;
+          best_index = index;
+        }
+      }
+      return std::make_pair(std::string(axes[best_index].first), best_angle);
+    };
+    const auto cut_best = best_match(travel_dir_unit);
+    const auto depth_best = best_match(inward_normal_unit);
+    const auto lateral_best = best_match(lateral_expected);
+    std::ostringstream diagnostic;
+    diagnostic << "side_tape axis check (tool_frame, tolerance " <<
+      formatDouble(max_axis_angle_deg, 1) <<
+      " deg): cut_axis_tool measured angle to travel direction " <<
+      formatDouble(result.cut_angle_deg, 1) << " deg (closest raw tool axis " << cut_best.first <<
+      " at " << formatDouble(cut_best.second, 1) <<
+      " deg); depth_axis_tool measured angle to inward face normal " <<
+      formatDouble(result.depth_angle_deg, 1) << " deg (closest raw tool axis " <<
+      depth_best.first << " at " << formatDouble(depth_best.second, 1) <<
+      " deg); lateral_axis_tool measured angle to depth x cut " <<
+      formatDouble(result.lateral_angle_deg, 1) << " deg (closest raw tool axis " <<
+      lateral_best.first << " at " << formatDouble(lateral_best.second, 1) << " deg)";
+    result.message = diagnostic.str();
+    result.ok = result.cut_angle_deg <= max_axis_angle_deg &&
+      result.depth_angle_deg <= max_axis_angle_deg && result.lateral_angle_deg <= max_axis_angle_deg;
+    return result;
   }
 
   void addCameraPole(mtc::Task& task)
@@ -3234,11 +4865,6 @@ private:
     return true;
   }
 
-  struct CutPlanners {
-    mtc::solvers::PlannerInterfacePtr transit;
-    mtc::solvers::PlannerInterfacePtr stroke;
-    std::shared_ptr<mtc::solvers::CartesianPath> cartesian;
-  };
   // Planner stack for one task. Free-space transits run at their own scaling so transit
   // speed can be tuned without ever raising physical cutting speed, and are wrapped by
   // makeTransitPlanner. Contact strokes use Cartesian (min_fraction=1.0, never partial)
@@ -3486,6 +5112,16 @@ private:
             snapshot, hover_end, settings_.left_lateral_standoff_m, message)) {
           throw std::runtime_error(message);
         }
+        // Side-tape standoff: the entry ends at the standoff pose (further out than the
+        // in-material start), so start it left_lateral_standoff_m beyond that pose; offsetting
+        // from cut_start would put the hover inside the standoff and the entry would back away.
+        if (segment.stop_after_start && options.stop_pose_override) {
+          hover_start.pose.position = options.stop_pose_override->pose.position;
+          if (!offsetLeftPoseOutward(
+              snapshot, hover_start, settings_.left_lateral_standoff_m, message)) {
+            throw std::runtime_error(message);
+          }
+        }
       }
       const bool left_parallel = is_left_side && !segment.force_fixed_orientation &&
         !segment.hover_only && settings_.left_parallel_orientation_enabled;
@@ -3528,7 +5164,8 @@ private:
           }
         } else {
           const bool feasible = searchLeftParallelOrientation(
-            snapshot, joint_group, ik_state, left_poses, pose_context, message);
+            snapshot, joint_group, ik_state, left_poses, pose_context, message,
+            options.side_tape_handoff);
           if (cache != nullptr) {
             cache->computed = true;
             cache->feasible = feasible;
@@ -3655,9 +5292,16 @@ private:
         }
         const std::string entry_label = is_left_side ? "enter laterally into " :
           "descend from aligned ";
+        // Side-tape hand-off standoff variant only: the single Cartesian entry stroke
+        // targets the standoff override pose directly, so it NEVER targets, or interpolates
+        // through, the true in-material cut_start -- the approach/hover geometry above is
+        // still derived from the true cut_start, only this terminal target is substituted.
+        const bool use_override = segment.stop_after_start && options.stop_pose_override;
+        const auto& entry_target = use_override ? *options.stop_pose_override : cut_start;
         addMoveTo(
           *task, entry_label + segment.name + " start [" + motion_profile + "]", stroke_planner,
-          cut_start);
+          entry_target);
+        if (use_override) cut_targets.back() = entry_target;
       }
       if (segment.stop_after_start) {
         continue;
@@ -4173,6 +5817,28 @@ private:
   std::unique_ptr<mtc::Task> planned_task_;
   std::thread execution_thread_;
   bool execution_in_progress_{false};
+  // Side-tape hand-off (left only). side_tape_handoff_pending_ marks a retained plan (in
+  // planned_task_/planned_snapshot_) as a hand-off approach; it is consumed (cleared) the
+  // moment execution is dispatched, and also unconditionally by clearRetainedPlan() so it
+  // can never leak into an unrelated later plan. side_tape_handoff_info_.inProgress()
+  // instead spans dispatch completion (active or approach_failed) -> side_tape_retract
+  // completion, and is what guards the carton object and busy-rejects other
+  // planning/clear operations.
+  LeftParallelSelection last_left_parallel_selection_;
+  bool side_tape_handoff_pending_{false};
+  SideTapeHandoffInfo side_tape_handoff_info_;
+  std::optional<Snapshot> side_tape_handoff_snapshot_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr side_tape_handoff_pub_;
+  TriggerService::SharedPtr side_tape_handoff_plan_service_;
+  TriggerService::SharedPtr side_tape_retract_service_;
+  TriggerService::SharedPtr side_tape_continue_service_;
+  // Servo activity, watched only to refuse side_tape_retract while Servo looks active;
+  // Servo itself is never paused/stopped from here.
+  std::mutex servo_activity_mutex_;
+  std::optional<rclcpp::Time> servo_twist_last_received_;
+  std::optional<rclcpp::Time> servo_joint_jog_last_received_;
+  rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr servo_twist_sub_;
+  rclcpp::Subscription<control_msgs::msg::JointJog>::SharedPtr servo_joint_jog_sub_;
 };
 
 int main(int argc, char** argv)

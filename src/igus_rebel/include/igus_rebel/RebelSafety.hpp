@@ -3,6 +3,7 @@
 
 #include <array>
 #include <chrono>
+#include <cstdint>
 #include <string>
 
 #include "igus_rebel/CriMessages.hpp"
@@ -34,6 +35,21 @@ constexpr std::chrono::milliseconds kCommandWatchdogTimeout{50};
 // read() reports ERROR if no valid STATUS arrived for this long. The robot sends STATUS
 // every 20-30 ms (measured on the real arm), so this is ~8 missed messages.
 constexpr std::chrono::milliseconds kStatusStaleTimeout{200};
+
+// STATUS age tiers after kStatusStaleTimeout. Up to kStatusCoastTimeout the arm "coasts": the
+// last jog sent is frozen and re-sent (new write() commands are ignored, they are computed on
+// frozen state), so a single retransmit on the robot link does not make the arm stop and jerk.
+// Beyond it (up to kStatusLatchTimeout) it is a "hold": jog is forced to zero, read() stays OK, and control resumes when STATUS returns. A longer gap (or a
+// reconnect) latches the hardware error. The robot link showed single lost segments stalling
+// STATUS by one TCP RTO (~200 ms), which must not require an operator reset.
+constexpr std::chrono::milliseconds kStatusCoastTimeout{400};
+constexpr std::chrono::milliseconds kStatusLatchTimeout{1000};
+
+// A STATUS hold may only auto-resume if the arm was idle. write() commands whose largest joint
+// |velocity| exceeds this [rad/s] count as motion (normal idle JTC hold commands are ~P*1e-3).
+constexpr double kHoldIdleVelocityRadS = 0.02;
+// Motion is looked for from this long before the last STATUS preceding the gap until resume.
+constexpr std::chrono::milliseconds kHoldMotionLookback{100};
 
 // on_init fails if no valid STATUS arrives within this time after start-up.
 constexpr std::chrono::milliseconds kFirstStatusTimeout{5000};
@@ -69,6 +85,35 @@ bool IsCommandStale(
 bool IsStatusStale(
   SteadyClock::time_point lastStatus, SteadyClock::time_point now,
   std::chrono::nanoseconds timeout);
+
+enum class StatusHealth
+{
+  Fresh,  // age <= staleTimeout
+  Coast,  // staleTimeout < age <= coastTimeout: re-send the frozen last jog
+  Hold,   // coastTimeout < age <= latchTimeout: zero jog, keep waiting
+  Latch   // no STATUS ever, or age > latchTimeout: fail closed
+};
+
+// Classifies the STATUS age. haveStatus=false (no valid STATUS yet) -> Latch.
+StatusHealth ClassifyStatusAge(
+  bool haveStatus, std::chrono::nanoseconds age, std::chrono::nanoseconds staleTimeout,
+  std::chrono::nanoseconds coastTimeout, std::chrono::nanoseconds latchTimeout);
+
+// May control resume when STATUS returns after a gap that reached `gapTier`? Fresh/Coast: yes
+// (the arm kept moving at the frozen jog, the controller state is close). Hold: only if no motion
+// was commanded during the gap. Latch: never.
+bool GapResumeAllowed(StatusHealth gapTier, bool motionDuringGap);
+
+const char * StatusHealthName(StatusHealth tier);
+
+// True if the largest |commanded joint velocity| [rad/s] exceeds kHoldIdleVelocityRadS
+// (non-finite counts as motion).
+bool IsCommandMoving(double maxAbsVelocityRadS);
+
+// True if a moving command was seen (lastMovingNs != 0) at or after
+// lastStatusBeforeGapNs - lookback (all steady-clock ns). Such a gap must latch, not resume.
+bool MotionDuringGap(
+  std::int64_t lastMovingNs, std::int64_t lastStatusBeforeGapNs, std::chrono::nanoseconds lookback);
 
 // Velocity between two STATUS samples, divided by the actual time between them.
 // Returns false (and leaves velocity untouched) if the interval is shorter than

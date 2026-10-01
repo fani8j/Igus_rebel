@@ -103,6 +103,8 @@ public:
   void SetJointStepDeg(float step) {jointStepDeg_ = step;}
   void SetOverride(float value) {override_ = value;}
   void DropClient() {dropClient_ = true;}
+  // Joints (bit i) reported with ErrorJoint MNE (motor not enabled); cleared by an Enable command.
+  void SetDisabledMask(unsigned mask) {disabledMask_ = mask;}
   std::size_t Connections() const {return connections_.load();}
 
   std::vector<ReceivedFrame> Frames()
@@ -156,7 +158,7 @@ private:
     }
     s << " ERROR 0";
     for (int i = 0; i < 16; ++i) {
-      s << " 0";
+      s << " " << ((i < 6 && ((disabledMask_.load() >> i) & 1u)) ? 4 : 0);
     }
     s << " KINSTATE 0 OPMODE -1 CRIEND\n";
     return s.str();
@@ -199,6 +201,9 @@ private:
               std::lock_guard<std::mutex> lock(mutex_);
               frames_.push_back({connection, stripped, Clock::now()});
             }
+            if (stripped == "CMD Enable") {
+              disabledMask_ = 0;
+            }
             if (stripped.rfind("CMD ", 0) == 0) {
               const std::string counterText = body.substr(0, body.find(' '));
               SendAll(
@@ -227,6 +232,7 @@ private:
   std::atomic<bool> running_{false};
   std::atomic<bool> sendStatus_{true};
   std::atomic<bool> dropClient_{false};
+  std::atomic<unsigned> disabledMask_{0};
   std::atomic<float> jointStepDeg_{0.0f};
   std::atomic<float> override_{40.0f};
   std::atomic<std::size_t> connections_{0};
@@ -269,7 +275,9 @@ protected:
   void StartDriver(FakeCriServer & server)
   {
     rebel = std::make_unique<Igus::Rebel>("127.0.0.1", server.port());
-    ASSERT_EQ(rebel->on_init(hardware_interface::HardwareInfo{}), CallbackReturn::SUCCESS);
+    hardware_interface::HardwareInfo info;
+    info.name = "rebel_arm_controller";  // matches the ros2_control tag name in the URDF
+    ASSERT_EQ(rebel->on_init(info), CallbackReturn::SUCCESS);
     states = rebel->export_state_interfaces();
     commands = rebel->export_command_interfaces();
   }
@@ -430,12 +438,23 @@ TEST_F(RebelDriverTest, ReadReturnsErrorWhenStatusStops)
   server.SetSendStatus(false);
   const auto stopped = Clock::now();
   std::this_thread::sleep_for(100ms);
+  // 100 ms into the gap: still fresh. 300 ms: coast (OK, no latch). 500 ms: hold (OK).
   EXPECT_EQ(rebel->read(now, period), return_type::OK);
+  std::this_thread::sleep_for(200ms);
+  EXPECT_EQ(rebel->read(now, period), return_type::OK);
+  EXPECT_TRUE(rebel->StatusCoastActive());
+  EXPECT_FALSE(rebel->StatusHoldActive());
+  std::this_thread::sleep_for(200ms);
+  EXPECT_EQ(rebel->read(now, period), return_type::OK);
+  EXPECT_TRUE(rebel->StatusHoldActive());
+  EXPECT_FALSE(rebel->StatusCoastActive());
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  // Beyond kStatusLatchTimeout (1 s) read() returns ERROR.
   ASSERT_TRUE(
-    WaitFor([&]() {return rebel->read(now, period) == return_type::ERROR;}, 1000ms));
+    WaitFor([&]() {return rebel->read(now, period) == return_type::ERROR;}, 2500ms));
   const auto elapsed = Clock::now() - stopped;
-  EXPECT_GE(elapsed, 190ms);
-  EXPECT_LT(elapsed, 400ms);
+  EXPECT_GE(elapsed, 990ms);
+  EXPECT_LT(elapsed, 1400ms);
 }
 
 TEST_F(RebelDriverTest, ReconnectResendsStartupSequence)
@@ -462,6 +481,372 @@ TEST_F(RebelDriverTest, ReconnectResendsStartupSequence)
       EXPECT_EQ(value, 0.0);
     }
   }
+}
+
+TEST_F(RebelDriverTest, LatchedErrorRecoversOnlyViaLifecycleResetWithFreshStatus)
+{
+  FakeCriServer server;
+  StartDriver(server);
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 5;}, 2000ms));
+  EXPECT_EQ(server.Commands(1), kStartupSequence);
+
+  // STATUS stops: read() eventually returns ERROR and on_error() (as ros2_control would
+  // call) latches it.
+  server.SetSendStatus(false);
+  const auto stopped = Clock::now();
+  ASSERT_TRUE(
+    WaitFor([&]() {return rebel->read(now, period) == return_type::ERROR;}, 2500ms));
+  EXPECT_EQ(rebel->on_error(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+
+  // STATUS resumes, but the latch is not cleared by fresh STATUS alone.
+  server.SetSendStatus(true);
+  std::this_thread::sleep_for(100ms);
+  EXPECT_EQ(rebel->read(now, period), return_type::ERROR);
+
+  // `ros2 control set_hardware_component_state <component> inactive`: still latched, jog
+  // held at zero, read() still refuses.
+  EXPECT_EQ(rebel->on_configure(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_EQ(rebel->read(now, period), return_type::ERROR);
+
+  // Jog was zero for the entire outage and recovery so far.
+  for (const auto & frame : server.AliveJogs(stopped)) {
+    for (double value : ParseJog(frame.body)) {
+      EXPECT_EQ(value, 0.0);
+    }
+  }
+
+  // `ros2 control set_hardware_component_state <component> active`: STATUS is fresh, so the
+  // latch clears and the connect sequence is re-sent on the same (still-connected) socket.
+  EXPECT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 10;}, 2000ms));
+  const auto allCommandsConn1 = server.Commands(1);
+  const std::vector<std::string> resent(
+    allCommandsConn1.end() - 5, allCommandsConn1.end());
+  EXPECT_EQ(resent, kStartupSequence);
+  EXPECT_EQ(server.Connections(), 1u);  // no socket reconnect happened
+
+  EXPECT_EQ(rebel->read(now, period), return_type::OK);
+}
+
+TEST_F(RebelDriverTest, ActivateRefusesWhileStatusStillStale)
+{
+  FakeCriServer server;
+  StartDriver(server);
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 5;}, 2000ms));
+
+  server.SetSendStatus(false);
+  ASSERT_TRUE(
+    WaitFor([&]() {return rebel->read(now, period) == return_type::ERROR;}, 2500ms));
+  EXPECT_EQ(rebel->on_error(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_EQ(rebel->on_configure(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+
+  // STATUS is still stale (never resumed): activation must be refused, and the latch must
+  // stay set.
+  EXPECT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::FAILURE);
+  EXPECT_EQ(rebel->read(now, period), return_type::ERROR);
+  // No extra commands were sent by the refused activation attempt.
+  EXPECT_EQ(server.Commands(1), kStartupSequence);
+}
+
+TEST_F(RebelDriverTest, ResetAndEnableResendsSequenceWithJogHeldAtZero)
+{
+  FakeCriServer server;
+  StartDriver(server);
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 5;}, 2000ms));
+  ASSERT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+
+  // Robot-side disable while STATUS stays fresh and NoError: read() keeps returning OK.
+  server.SetDisabledMask(0x3f);
+  ASSERT_TRUE(WaitFor([&]() {return rebel->DrivesDisabledMask() == 0x3f;}, 1000ms));
+  EXPECT_EQ(rebel->read(now, period), return_type::OK);
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+
+  // A controller keeps commanding a non-zero velocity the whole time.
+  std::atomic<bool> run{true};
+  std::thread writer([&]() {
+      while (run) {
+        for (auto & command : commands) {
+          command.set_value(0.05);
+        }
+        rebel->write(now, period);
+        std::this_thread::sleep_for(5ms);
+      }
+    });
+  ASSERT_TRUE(
+    WaitFor(
+      [&]() {
+        for (const auto & frame : server.AliveJogs(Clock::now() - 100ms)) {
+          for (double value : ParseJog(frame.body)) {
+            if (value != 0.0) {return true;}
+          }
+        }
+        return false;
+      }, 1000ms));
+
+  std::string message;
+  EXPECT_TRUE(rebel->ResetAndEnable(message)) << message;
+  const auto returned = Clock::now();
+  run = false;
+  writer.join();
+
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 10;}, 2000ms));
+  const auto all = server.Commands(1);
+  const std::vector<std::string> resent(all.end() - 5, all.end());
+  EXPECT_EQ(resent, kStartupSequence);
+  EXPECT_EQ(server.Connections(), 1u);
+  EXPECT_EQ(rebel->DrivesDisabledMask(), 0u);
+
+  // From the moment SetActive went out until ResetAndEnable() returned, every ALIVEJOG was zero.
+  Clock::time_point setActiveStamp{};
+  int index = 0;
+  for (const auto & frame : server.Frames()) {
+    if (frame.body == "CMD SetActive true" && ++index == 2) {
+      setActiveStamp = frame.stamp;
+    }
+  }
+  ASSERT_NE(setActiveStamp, Clock::time_point{});
+  std::size_t checked = 0;
+  for (const auto & frame : server.AliveJogs(setActiveStamp)) {
+    if (frame.stamp > returned) {
+      continue;
+    }
+    ++checked;
+    for (double value : ParseJog(frame.body)) {
+      EXPECT_EQ(value, 0.0);
+    }
+  }
+  EXPECT_GT(checked, 0u);
+}
+
+namespace
+{
+// Emulates the controller manager: read()/write() every 5 ms with a constant velocity command
+// (the command can be changed on the fly). Stops calling both after read() returns ERROR, as
+// ros2_control does.
+struct ControllerLoop
+{
+  ControllerLoop(
+    Igus::Rebel & driver, std::vector<hardware_interface::CommandInterface> & commandInterfaces,
+    double velocity)
+  : rebel(driver), commands(commandInterfaces), velocity_(velocity)
+  {
+    thread = std::thread(
+      [this]() {
+        while (run) {
+          if (rebel.read(rclcpp::Time(0, 0, RCL_STEADY_TIME), rclcpp::Duration(0, 10000000)) ==
+          return_type::ERROR)
+          {
+            ++errors;
+            break;
+          }
+          for (auto & command : commands) {
+            command.set_value(velocity_.load());
+          }
+          rebel.write(rclcpp::Time(0, 0, RCL_STEADY_TIME), rclcpp::Duration(0, 10000000));
+          std::this_thread::sleep_for(5ms);
+        }
+      });
+  }
+  ~ControllerLoop() {Stop();}
+  void Stop()
+  {
+    run = false;
+    if (thread.joinable()) {
+      thread.join();
+    }
+  }
+  void SetVelocity(double velocity) {velocity_ = velocity;}
+
+  Igus::Rebel & rebel;
+  std::vector<hardware_interface::CommandInterface> & commands;
+  std::atomic<double> velocity_;
+  std::atomic<bool> run{true};
+  std::atomic<int> errors{0};
+  std::thread thread;
+};
+
+bool AnyNonZeroJog(FakeCriServer & server, Clock::time_point after)
+{
+  for (const auto & frame : server.AliveJogs(after)) {
+    for (double value : ParseJog(frame.body)) {
+      if (value != 0.0) {return true;}
+    }
+  }
+  return false;
+}
+}  // namespace
+
+TEST_F(RebelDriverTest, CoastKeepsSendingFrozenJogThroughShortGapAndResumes)
+{
+  FakeCriServer server;
+  StartDriver(server);
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 5;}, 2000ms));
+  ASSERT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+
+  ControllerLoop loop(*rebel, commands, 0.1);  // 0.1 rad/s -> ~11.46 % jog
+  ASSERT_TRUE(WaitFor([&]() {return AnyNonZeroJog(server, Clock::now() - 100ms);}, 1000ms));
+  const double moving = ParseJog(server.AliveJogs(Clock::now() - 50ms).back().body)[0];
+  ASSERT_GT(moving, 5.0);
+
+  server.SetSendStatus(false);
+  const auto pauseStart = Clock::now();
+  ASSERT_TRUE(WaitFor([&]() {return rebel->StatusCoastActive();}, 1000ms));
+  const auto coastStart = Clock::now();
+  loop.SetVelocity(0.2);  // new commands during the coast must be ignored (frozen jog)
+  std::this_thread::sleep_for(pauseStart + 300ms - Clock::now());
+  server.SetSendStatus(true);
+  ASSERT_TRUE(WaitFor([&]() {return !rebel->StatusCoastActive();}, 1000ms));
+  const auto resumed = Clock::now();
+
+  EXPECT_FALSE(rebel->StatusHoldActive());
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  EXPECT_EQ(loop.errors.load(), 0);
+  // The robot kept receiving the same non-zero ALIVEJOG for the whole pause.
+  std::size_t checked = 0;
+  for (const auto & frame : server.AliveJogs(pauseStart + 20ms)) {
+    if (frame.stamp > resumed - 20ms) {continue;}
+    ++checked;
+    for (double value : ParseJog(frame.body)) {
+      EXPECT_NEAR(value, moving, 1e-3);
+    }
+  }
+  EXPECT_GT(checked, 15u);
+  (void)coastStart;
+  // After the resume the new command goes out.
+  EXPECT_TRUE(
+    WaitFor(
+      [&]() {
+        for (const auto & frame : server.AliveJogs(resumed + 30ms)) {
+          if (ParseJog(frame.body)[0] > 1.5 * moving) {return true;}
+        }
+        return false;
+      }, 1000ms));
+  loop.Stop();
+  EXPECT_EQ(server.Connections(), 1u);
+}
+
+TEST_F(RebelDriverTest, HoldTierWhileMovingZeroesJogAndLatchesOnResume)
+{
+  FakeCriServer server;
+  StartDriver(server);
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 5;}, 2000ms));
+  ASSERT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+
+  ControllerLoop loop(*rebel, commands, 0.1);
+  ASSERT_TRUE(WaitFor([&]() {return AnyNonZeroJog(server, Clock::now() - 100ms);}, 1000ms));
+
+  server.SetSendStatus(false);
+  const auto pauseStart = Clock::now();
+  ASSERT_TRUE(WaitFor([&]() {return rebel->StatusHoldActive();}, 1000ms));
+  const auto holdStart = Clock::now();
+  EXPECT_GE(holdStart - pauseStart, 380ms);  // coast lasts until ~400 ms
+  std::this_thread::sleep_for(pauseStart + 600ms - Clock::now());
+  server.SetSendStatus(true);
+  ASSERT_TRUE(WaitFor([&]() {return !rebel->StatusHoldActive();}, 1000ms));
+  loop.Stop();
+
+  EXPECT_EQ(loop.errors.load(), 1);
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+  // Jog is zero from the start of the hold onwards (small margin for frames in flight).
+  for (const auto & frame : server.AliveJogs(holdStart + 30ms)) {
+    for (double value : ParseJog(frame.body)) {
+      EXPECT_EQ(value, 0.0);
+    }
+  }
+  EXPECT_EQ(rebel->read(now, period), return_type::ERROR);
+  EXPECT_EQ(rebel->on_configure(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_EQ(rebel->read(now, period), return_type::OK);
+}
+
+TEST_F(RebelDriverTest, HoldTierWhileIdleZeroesJogAndResumes)
+{
+  FakeCriServer server;
+  StartDriver(server);
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 5;}, 2000ms));
+  ASSERT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+
+  ControllerLoop loop(*rebel, commands, 0.005);  // idle JTC hold level (< 0.02 rad/s)
+  ASSERT_TRUE(WaitFor([&]() {return AnyNonZeroJog(server, Clock::now() - 100ms);}, 1000ms));
+
+  server.SetSendStatus(false);
+  const auto pauseStart = Clock::now();
+  ASSERT_TRUE(WaitFor([&]() {return rebel->StatusHoldActive();}, 1000ms));
+  const auto holdStart = Clock::now();
+  std::this_thread::sleep_for(pauseStart + 600ms - Clock::now());
+  server.SetSendStatus(true);
+  ASSERT_TRUE(WaitFor([&]() {return !rebel->StatusHoldActive();}, 1000ms));
+  const auto resumed = Clock::now();
+
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  EXPECT_EQ(loop.errors.load(), 0);
+  for (const auto & frame : server.AliveJogs(holdStart + 30ms)) {
+    if (frame.stamp > resumed - 30ms) {continue;}
+    for (double value : ParseJog(frame.body)) {
+      EXPECT_EQ(value, 0.0);
+    }
+  }
+  EXPECT_TRUE(WaitFor([&]() {return AnyNonZeroJog(server, resumed + 30ms);}, 1000ms));
+  loop.Stop();
+}
+
+TEST_F(RebelDriverTest, LongStatusGapLatches)
+{
+  FakeCriServer server;
+  StartDriver(server);
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 5;}, 2000ms));
+
+  server.SetSendStatus(false);
+  bool sawHold = false;
+  const auto start = Clock::now();
+  while (Clock::now() - start < 1200ms) {
+    const auto result = rebel->read(now, period);
+    sawHold = sawHold || rebel->StatusHoldActive();
+    if (result == return_type::ERROR) {break;}
+    std::this_thread::sleep_for(5ms);
+  }
+  EXPECT_TRUE(sawHold);
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+  EXPECT_GE(Clock::now() - start, 900ms);
+
+  // STATUS resuming does not clear it; only the lifecycle reset does.
+  server.SetSendStatus(true);
+  std::this_thread::sleep_for(100ms);
+  EXPECT_EQ(rebel->read(now, period), return_type::ERROR);
+  EXPECT_EQ(rebel->on_configure(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_EQ(rebel->read(now, period), return_type::OK);
+}
+
+TEST_F(RebelDriverTest, ResetAndEnableRefusesWhenStatusStale)
+{
+  FakeCriServer server;
+  StartDriver(server);
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 5;}, 2000ms));
+
+  server.SetSendStatus(false);
+  std::this_thread::sleep_for(300ms);
+  std::string message;
+  EXPECT_FALSE(rebel->ResetAndEnable(message));
+  EXPECT_NE(message.find("stale"), std::string::npos) << message;
+  EXPECT_EQ(server.Commands(1), kStartupSequence);  // nothing extra was sent
+}
+
+TEST_F(RebelDriverTest, ResetAndEnableRefusesWhenLatched)
+{
+  FakeCriServer server;
+  StartDriver(server);
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 5;}, 2000ms));
+
+  server.SetSendStatus(false);
+  ASSERT_TRUE(
+    WaitFor([&]() {return rebel->read(now, period) == return_type::ERROR;}, 2500ms));
+  server.SetSendStatus(true);  // STATUS fresh again, but the latch stays
+  std::this_thread::sleep_for(100ms);
+  std::string message;
+  EXPECT_FALSE(rebel->ResetAndEnable(message));
+  EXPECT_NE(message.find("latched"), std::string::npos) << message;
+  EXPECT_EQ(server.Commands(1), kStartupSequence);
 }
 
 TEST_F(RebelDriverTest, DigitalOutputReportsConnectionState)
@@ -509,9 +894,17 @@ TEST(RebelDriverInit, FailsWhenNoStatusArrives)
   EXPECT_GE(elapsed, Igus::Safety::kFirstStatusTimeout - 100ms);
   EXPECT_LT(elapsed, Igus::Safety::kFirstStatusTimeout + 2500ms);
   // on_init already stopped the driver: nothing is sent any more.
+  // Stop() legitimately sends Disable and Quit just before on_init returns; the fake server
+  // may only read them from the loopback socket after on_init returned, so let those drain,
+  // then require that nothing more (in particular no ALIVEJOG) arrives.
+  std::this_thread::sleep_for(150ms);
   const auto framesAfterInit = server.Frames().size();
-  std::this_thread::sleep_for(100ms);
+  std::this_thread::sleep_for(150ms);
   EXPECT_EQ(server.Frames().size(), framesAfterInit);
+  const auto frames = server.Frames();
+  ASSERT_GE(frames.size(), 2u);
+  EXPECT_EQ(frames[frames.size() - 2].body, "CMD Disable");
+  EXPECT_EQ(frames[frames.size() - 1].body, "CMD QUIT");
 }
 
 TEST(RebelDriverInit, DefaultTargetIsWiredLanAddress)

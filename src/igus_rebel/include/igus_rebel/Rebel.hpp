@@ -17,6 +17,7 @@
 #include "rclcpp_lifecycle/state.hpp"
 #include "igus_rebel_msgs/msg/digital_output.hpp"
 #include "igus_rebel_msgs/srv/set_digital_output.hpp"
+#include "std_srvs/srv/trigger.hpp"
 #include <hardware_interface/system_interface.hpp>
 
 #include "igus_rebel/RebelSocket.hpp"
@@ -37,6 +38,9 @@ private:
     Safety::SteadyClock::time_point stamp{};
     std::uint64_t sequence = 0;  // 0 = no valid STATUS yet
     float overridePercent = 0.0f;
+    // Cumulative count of CRI message counter values skipped (any message type) up to this
+    // STATUS; a gap that skipped none was a delayed (retransmitted) segment, not lost messages.
+    std::uint64_t counterSkipped = 0;
   };
 
   rclcpp::Node::SharedPtr node_;
@@ -44,6 +48,7 @@ private:
   std::thread executorThread;
 
   std::shared_ptr<RebelSocket> rebelSocket;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reset_enable_srv_;
 
   rclcpp::Logger logger_;
   rclcpp::Clock throttleClock_{RCL_STEADY_TIME};
@@ -59,6 +64,40 @@ private:
   std::atomic<bool> aliveTransmit{false};
   std::atomic<bool> stopping{false};
   std::atomic<bool> stopped{false};
+
+  // Set by read() (stale STATUS or an unacknowledged reconnect) and by on_error(); fail-closed
+  // and never cleared automatically. Only on_activate() clears it, and only after confirming a
+  // fresh STATUS. The component name (from the URDF ros2_control tag) is used in the log/recovery
+  // text so the operator has the exact commands to run.
+  std::atomic<bool> hardwareErrorLatched_{false};
+  std::string componentName_;
+
+  // Serialises the start-up command sequence: OnConnected() runs on the socket thread (reconnect),
+  // in on_activate() and from the reset_and_enable service (executor thread).
+  std::mutex startupLock_;
+  // Set while ResetAndEnable() is re-enabling the drives; write() then forces jog to zero.
+  std::atomic<bool> holdJogZero_{false};
+  // Set by read() while STATUS is late (kStatusStaleTimeout..kStatusLatchTimeout): write() forces
+  // jog to zero. Separate from holdJogZero_ (ResetAndEnable). read() thread owns the transitions.
+  std::atomic<bool> statusHold_{false};
+  // Set by read() while STATUS age is in the coast tier: write() keeps the last jog frozen
+  // (still refreshes the write watchdog) instead of storing new commands.
+  std::atomic<bool> statusCoast_{false};
+  std::uint64_t lastFreshCounterSkipped_ = 0;  // read() thread
+  // Message thread: CRI counter tracking.
+  int lastCriCounter_ = -1;
+  std::uint64_t counterSkipped_ = 0;
+  // write() thread -> read(): steady ns of the last write() whose commanded velocity exceeded
+  // kHoldIdleVelocityRadS (0 = none) and that command's max |velocity| [rad/s].
+  std::atomic<std::int64_t> lastMovingNs_{0};
+  std::atomic<double> lastMovingCmd_{0.0};
+  // read()-thread only: gap bookkeeping.
+  Safety::SteadyClock::time_point lastFreshStamp_{};
+  std::uint64_t gapCount_ = 0;
+  double gapMaxMs_ = 0.0;
+  // Bit i set = STATUS reports "Motor not enabled" (ErrorJoint::MNE) for joint i (0..5).
+  // Written by the message thread.
+  std::atomic<unsigned> drivesDisabledMask_{0};
   std::thread aliveThread;
   std::thread messageThread;
   std::mutex aliveWakeLock;
@@ -129,8 +168,24 @@ public:
 
   bool SetDigitalOut(const int &, const bool &);
 
+  // Operator-driven re-enable for the case where the robot controller disabled the drives on its
+  // own while the driver is healthy. Refuses (returns false, reason in `message`) unless STATUS is
+  // fresh, no hardware error is latched and the connection was not re-established. Otherwise
+  // re-sends SetActive/Reset/Enable/MotionTypeJoint/Override with jog held at zero until the
+  // drives report enabled (max ~3 s). Never called automatically.
+  bool ResetAndEnable(std::string & message);
+  // Bit i set = joint i (0..5) reports "Motor not enabled" in the latest STATUS.
+  unsigned DrivesDisabledMask() const {return drivesDisabledMask_.load();}
+  bool StatusHoldActive() const {return statusHold_.load();}
+  bool StatusCoastActive() const {return statusCoast_.load();}
+  bool HardwareErrorLatched() const {return hardwareErrorLatched_.load();}
+
   // Interaction with hardware for ROS2
   CallbackReturn on_init(const HardwareInfo & hardware_info) override;
+  // Reached from UNCONFIGURED on every startup and, after a latched hardware error, via
+  // `ros2 control set_hardware_component_state <component> inactive`. Does not clear the
+  // latch; on_activate() does that, and only if STATUS is fresh.
+  CallbackReturn on_configure(const rclcpp_lifecycle::State & previous_state) override;
   CallbackReturn on_activate(const rclcpp_lifecycle::State & previous_state) override;
   CallbackReturn on_deactivate(const rclcpp_lifecycle::State & previous_state) override;
   CallbackReturn on_error(const rclcpp_lifecycle::State & previous_state) override;

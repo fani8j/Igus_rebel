@@ -7,15 +7,29 @@
 #   PARALLEL=false tools/mock_hcut_demo.sh         (nominal left cut instead of parallel)
 #   tools/mock_hcut_demo.sh left_start             (stop at the FIRST LEFT CUT POINT: staged
 #                                                   cut-debug start, then hand over to side_tape)
+#   tools/mock_hcut_demo.sh handoff                (side_tape hand-off: plan_side_tape_handoff,
+#                                                   execute the approach, then optionally
+#                                                   side_tape_retract; HANDOFF_VARIANT=
+#                                                   in_material|standoff, default in_material.
+#                                                   Needs a snapshot with side_tape_seed: the
+#                                                   default source is the current canonical
+#                                                   snapshot, re-stamped like every other mode.)
 set -euo pipefail
 
 WS="$(cd "$(dirname "$0")/.." && pwd)"
 PATTERN="${1:-t_cut}"
 MODE=plan
 if [[ "$PATTERN" == left_start ]]; then MODE=left_start; fi
+if [[ "$PATTERN" == handoff ]]; then MODE=handoff; fi
 PARALLEL="${PARALLEL:-true}"
 RECORD="${RECORD:-1}"
-SNAPSHOT_SRC="${SNAPSHOT_SRC:-$WS/scan_results/p0p1_regression_20260927/source_snapshot.json}"
+HANDOFF_VARIANT="${HANDOFF_VARIANT:-in_material}"
+if [[ "$MODE" == handoff ]]; then
+  # The regression replay snapshot predates side_tape_seed; the hand-off needs it.
+  SNAPSHOT_SRC="${SNAPSHOT_SRC:-/home/farhan/Igus_rebel/outputs/seam_3d_base_link.json}"
+else
+  SNAPSHOT_SRC="${SNAPSHOT_SRC:-$WS/scan_results/p0p1_regression_20260927/source_snapshot.json}"
+fi
 export ROS_DOMAIN_ID="${MOCK_DOMAIN_ID:-210}" ROS_LOCALHOST_ONLY=1
 
 set +u
@@ -93,8 +107,13 @@ echo "Hardware: mock_components/GenericSystem (mock)."
 
 if [[ "$MODE" == plan ]]; then
   ros2 param set /box_h_cut_executor cut_pattern "$PATTERN" > /dev/null
-else
+elif [[ "$MODE" == left_start ]]; then
   ros2 param set /box_h_cut_executor cut_debug_cut left > /dev/null
+else
+  ros2 param set /box_h_cut_executor side_tape_handoff_enabled true > /dev/null
+  ros2 param set /box_h_cut_executor side_tape_handoff_variant "$HANDOFF_VARIANT" > /dev/null
+  ros2 param set /box_h_cut_executor side_tape_handoff_output_file \
+    "$OUT/side_tape_handoff.json" > /dev/null
 fi
 ros2 param set /box_h_cut_executor external_snapshot_file "$SNAP" > /dev/null
 ros2 param set /box_h_cut_executor left_parallel_orientation_enabled "$PARALLEL" > /dev/null
@@ -122,7 +141,7 @@ fi
 if [[ "$MODE" == plan ]]; then
   echo "Planning $PATTERN (parallel left pose: $PARALLEL); the parallel search takes about 1 minute..."
   RESULT="$(ros2 service call /box_h_cut_executor/plan_h_cut std_srvs/srv/Trigger '{}' 2>&1 | tee "$OUT/plan_response.txt")"
-else
+elif [[ "$MODE" == left_start ]]; then
   echo "Planning to the FIRST LEFT CUT POINT only (parallel left pose: $PARALLEL)..."
   RESULT="$(ros2 service call /box_h_cut_executor/start_cut_debug_session std_srvs/srv/Trigger '{}' 2>&1 | tee "$OUT/plan_response.txt")"
   # Left cut = back_middle_left -> front_middle_left of the snapshot (for side_tape StartCut).
@@ -134,6 +153,9 @@ length = 1000 * math.dist([a[k] for k in "xyz"], [b[k] for k in "xyz"])
 print(f"{length:.1f}")
 ' "$SNAP")"
   echo "$CUT_LENGTH_MM" > "$OUT/left_cut_length_mm.txt"
+else
+  echo "Planning side-tape hand-off ($HANDOFF_VARIANT, parallel left pose: $PARALLEL); the full-stroke feasibility check takes about 1 minute..."
+  RESULT="$(ros2 service call /box_h_cut_executor/plan_side_tape_handoff std_srvs/srv/Trigger '{}' 2>&1 | tee "$OUT/plan_response.txt")"
 fi
 echo "$RESULT" | grep -E 'success=|message=' | sed 's/^/  /' | cut -c1-400
 grep -q 'success=True' <<< "$RESULT" || { echo "Planning failed; see $OUT"; read -rp "Press Enter to stop..."; exit 1; }
@@ -174,6 +196,23 @@ if [[ "$ans" =~ ^[Yy]$ ]]; then
   if [[ "$RECORD" == 1 ]]; then
     echo "Waiting for motion to finish (up to 3 minutes)..."
     wait "$stationary_pid" || echo "WARNING: mock motion did not settle before timeout"
+  fi
+  if [[ "$MODE" == handoff ]]; then
+    sleep 1
+    if [[ -s "$OUT/side_tape_handoff.json" ]]; then
+      echo "Hand-off record: $OUT/side_tape_handoff.json"
+      cat "$OUT/side_tape_handoff.json"
+    else
+      echo "WARNING: hand-off record was not written (approach dispatch may have failed; see $OUT/execute_response.txt)"
+    fi
+    read -rp "Simulate side_tape finishing the cut and retract now? [y/N] " retract_ans
+    if [[ "$retract_ans" =~ ^[Yy]$ ]]; then
+      ros2 param set /box_h_cut_executor execution_enabled true > /dev/null
+      ros2 service call /box_h_cut_executor/side_tape_retract std_srvs/srv/Trigger '{}' \
+        | tee "$OUT/retract_response.txt" | grep -E 'success=|message=' | sed 's/^/  /' | cut -c1-300
+      ros2 param set /box_h_cut_executor execution_enabled false > /dev/null || true
+      echo "Retract dispatched; watch RViz."
+    fi
   fi
 fi
 if [[ "$RECORD" == 1 ]]; then

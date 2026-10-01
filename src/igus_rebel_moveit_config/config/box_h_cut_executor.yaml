@@ -7,15 +7,19 @@ box_h_cut_executor:
     #   camera_pole_required, camera_pole_topic, hover/cut/middle_cut clearances,
     #   left_lateral_standoff_m, middle_entry_alignment_m, side_cut_orientation_mode,
     #   debug_motion_distance_m, debug_motion_clearance_m, approach_joint_degrees,
-    #   cartesian_step_m, planning_timeout_s, all *_scaling values and max_solutions.
-    #   Edit this file and restart the executor to change them.
+    #   cartesian_step_m, planning_timeout_s, all *_scaling values, max_solutions,
+    #   side_tape_continue_* limits, side_tape_handoff_cut_axis_tool/lateral_axis_tool/depth_axis_tool, and every
+    #   side_tape_handoff_retract_*/servo_* gate. Edit this file and restart to change them.
     # - PLANNING (validated, then applied and any retained plan cleared): motion_profile,
     #   cut_pattern, t_cut_middle_handoff_fraction, debug_fixed_orientation,
     #   debug_allow_stale_snapshot, pre_cut_stabilization_duration_s, side tilts,
     #   left_adaptive_orientation_*, left_parallel_*, cut_debug_cut, cut_debug_correction_enabled,
-    #   cut_debug_*_correction_file and cut_debug_output_dir. Rejected with "busy" while a
-    #   plan/diagnose/cut-debug/execute call is running, during trajectory execution, and
-    #   while a cut debug session is active (call clear_plan first).
+    #   cut_debug_*_correction_file, cut_debug_output_dir, side_tape_handoff_enabled,
+    #   side_tape_handoff_variant, side_tape_handoff_standoff_mm, side_tape_handoff_max_search_angle_deg and
+    #   side_tape_handoff_output_file. Rejected with "busy" while a plan/diagnose/cut-debug/
+    #   execute call is running, during trajectory execution, while a cut debug session is
+    #   active (call clear_plan first), and while a side-tape hand-off is active (call
+    #   side_tape_retract first).
     # - RUNTIME (read when used, never blocked): execution_enabled,
     #   debug_motion_execution_enabled, left_roll_diagnostics_enabled, external_snapshot_file.
     # Every numeric value must be finite; out-of-range values fail closed at startup and
@@ -121,7 +125,7 @@ box_h_cut_executor:
     # penetration at 5 mm, and requires the scoped tool/carton contact policy above.
     hover_clearance_m: 0.01
     # Left enters/retracts 25 mm laterally; its detected cutting start is unchanged.
-    left_lateral_standoff_m: 0.025
+    left_lateral_standoff_m: 0.01
     cut_clearance_m: -0.001
     # Middle seam only: 1 mm deeper than the side cuts.
     middle_cut_clearance_m: -0.002
@@ -251,3 +255,99 @@ box_h_cut_executor:
     left_parallel_step_deg: 5.0
     left_parallel_min_joint_margin_deg: 5.0
     left_parallel_search_timeout_s: 90.0
+    # Side-tape hand-off (left face only for now; see CONTEXT.md and
+    # ~/Downloads/rgbd_captures/docs/side_tape_handoff_request.md). Default off: nothing
+    # else changes. When enabled, ~/plan_side_tape_handoff plans the FULL left cut for
+    # feasibility (same IK/collision/min_fraction=1.0 stroke as every other left plan), then
+    # retains and executes only the approach to the cut start pose, so side_tape_ros
+    # (MoveIt Servo + knife camera) can take over the straight cut. standoff's single
+    # Cartesian entry stroke targets the standoff pose directly (never the in-material pose);
+    # every waypoint is verified to stay in front of the outer wall plane. The planned pose
+    # is checked against the configured side_tape_handoff_*_axis_tool convention within 5
+    # degrees; on a mismatch this fails closed and reports the measured axis mapping instead
+    # of silently rotating the tool. After a successful approach dispatch: no MoveIt goal
+    # remains active, Servo is left running, and detected_carton survives every clear/replan
+    # attempt until ~/side_tape_retract (std_srvs/Trigger) ends the hand-off (or a failed
+    # approach dispatch, "approach_failed", is recovered by ~/side_tape_retract or a
+    # verified-outside clear_plan). Retract plans from the CURRENT robot state (side_tape
+    # moves the arm with Servo), refuses while Servo looks active or the tip has drifted too
+    # far from the recorded start, withdraws along the outer-wall normal by the current
+    # penetration (clamped >=0) plus hover_clearance_m, then -- only if the snapshot is still
+    # fresh -- transits back to the usual left approach pose; a stale snapshot withdraws only
+    # and reports it. The hand-off record (status, face, cut_length_mm, start pose, variant,
+    # penetration/standoff/min_wall_distance, the configured and measured tool axes,
+    # snapshot path/id) is written atomically to side_tape_handoff_output_file (or
+    # $HOME/.ros/side_tape_handoff.json when empty) and published on the latched
+    # ~/side_tape_handoff topic (std_msgs/String, JSON) on every status change (active,
+    # approach_failed, retracted).
+    side_tape_handoff_enabled: false
+    # in_material: the executable approach stops at the planned in-material start (the same
+    # depth the full-stroke plan would cut at). standoff: the same start withdrawn along the
+    # detected side_tape_seed face normal to side_tape_handoff_standoff_mm outside the outer
+    # wall, same height/orientation.
+    side_tape_handoff_variant: in_material
+    side_tape_handoff_standoff_mm: 9.0
+    # Absolute .json path, or empty to use $HOME/.ros/side_tape_handoff.json.
+    side_tape_handoff_output_file: ""
+    # side_tape's tool-frame convention (xeg32_tool_tip axes) = the left_parallel pose
+    # (2026-09-29 follow-up): tool -Y = cut/travel, tool +X = lateral (blade normal, down),
+    # tool +Z = depth (edge/tip into the carton side). The hand-off REQUIRES
+    # left_parallel_orientation_enabled: true (fails closed otherwise) and takes its start
+    # pose from that search, restricted to candidates within
+    # side_tape_handoff_max_search_angle_deg of F0 and ordered smallest-deviation-first.
+    # Must be unit, mutually orthogonal, and right-handed: depth_axis_tool = cut_axis_tool x
+    # lateral_axis_tool (validated at startup). Read-only: edit and restart to change.
+    side_tape_handoff_cut_axis_tool: [0.0, -1.0, 0.0]
+    side_tape_handoff_lateral_axis_tool: [1.0, 0.0, 0.0]
+    side_tape_handoff_depth_axis_tool: [0.0, 0.0, 1.0]
+    # Operator correction (2026-09-30, measured on the real box): shift the detected box for the
+    # side-tape hand-off, base_link mm. x/y move the whole snapshot (carton, cut line, seed wall
+    # plane); z moves only the left cut line (seam height), the carton top stays as detected.
+    # Applies to every later hand-off plan until reset to [0, 0, 0].
+    side_tape_handoff_box_offset_base_mm: [-0.9, -15.1, -12.3]
+    # Max |tilt|,|pitch|,|yaw| (and total rotation) the search may add on top of F0 for the
+    # hand-off; side_tape refuses above ~10 deg. Also floors the axis-convention tolerance.
+    side_tape_handoff_max_search_angle_deg: 10.0
+    # side_tape_retract safety gates (read-only). Orientation/line-offset: how far the
+    # current tool pose may deviate from the recorded hand-off start before retract refuses
+    # (side_tape may have misbehaved; recover manually). Servo quiescence/joint-velocity:
+    # retract refuses while Servo looks active; Servo is never paused/stopped from here.
+    side_tape_handoff_retract_max_orientation_deg: 10.0
+    side_tape_handoff_retract_max_line_offset_mm: 20.0
+    side_tape_handoff_servo_twist_topic: /delta_twist_cmds
+    side_tape_handoff_servo_joint_topic: /delta_joint_cmds
+    side_tape_handoff_servo_quiescence_s: 0.5
+    side_tape_handoff_joint_velocity_threshold: 0.01
+    # ~/continue_side_cut (std_srvs/Trigger) entry gates, read-only. After side_tape has aligned
+    # the tip into the side seam, one MTC task cuts a straight Cartesian stroke parallel to the
+    # planned left cut line (current tool orientation, alignment's lateral/depth offset kept,
+    # ending on the plane through the planned cut end perpendicular to the line) and then runs
+    # the side_tape_retract stages. Refused (nothing moves) unless: hand-off status active;
+    # perpendicular distance of the tip from the planned line <= line_offset; along-line
+    # position within +/-along_offset of the planned start; tip depth behind the outer wall
+    # within [min_depth, max_depth]; orientation within max_orientation of the hand-off start
+    # orientation; Servo quiescent; snapshot fresh (else use side_tape_retract);
+    # execution_enabled; not debug_allow_stale_snapshot; the retract transit passes the wrist gate.
+    side_tape_continue_max_line_offset_mm: 20.0
+    side_tape_continue_max_along_offset_mm: 20.0
+    side_tape_continue_min_depth_mm: 0.5
+    side_tape_continue_max_depth_mm: 20.0
+    side_tape_continue_max_orientation_deg: 20.0
+    # false: continue_side_cut does not check the snapshot age (operator decision 2026-09-30:
+    # the box does not move and alignment can take longer than external_snapshot_max_age_s).
+    # The hand-off plan itself still requires a fresh snapshot.
+    side_tape_continue_check_snapshot_age: false
+    # continue_side_cut cut stroke speed as a fraction of velocity/acceleration_scaling (0,1].
+    # The withdraw keeps the normal contact speed. continue_side_cut ends after the withdraw
+    # at the cut end point (no transit back to the approach pose).
+    side_tape_continue_speed_factor: 0.5
+    # Move the continue_side_cut stroke end this far past the planned cut end along the cut
+    # line, toward the box edge (mm, [-20, 20]; operator 2026-09-30: 5 mm).
+    side_tape_continue_end_extension_mm: 5.0
+    # End the continue_side_cut stroke this much deeper into the face than the start (mm,
+    # [0, 10]; horizontal, z stays level); the stroke angles in gradually. Refused if the end
+    # would exceed side_tape_continue_max_depth_mm.
+    side_tape_continue_end_extra_depth_mm: 5.0
+    # false (operator 2026-09-30): do not refuse when the stroke END is deeper than
+    # side_tape_continue_max_depth_mm (the start-depth check still applies); only logs it.
+    side_tape_continue_check_end_depth: false

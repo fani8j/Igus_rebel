@@ -85,6 +85,57 @@ TEST(Watchdog, StatusStaleness)
   EXPECT_TRUE(Igus::Safety::IsStatusStale(now - milliseconds(201), now, timeout));
 }
 
+TEST(Watchdog, StatusHealthClassification)
+{
+  using Igus::Safety::ClassifyStatusAge;
+  using Igus::Safety::StatusHealth;
+  const auto stale = Igus::Safety::kStatusStaleTimeout;
+  const auto coast = Igus::Safety::kStatusCoastTimeout;
+  const auto latch = Igus::Safety::kStatusLatchTimeout;
+  EXPECT_EQ(coast, milliseconds(400));
+  EXPECT_EQ(latch, milliseconds(1000));
+  const auto classify = [&](bool have, int ms) {
+      return ClassifyStatusAge(have, milliseconds(ms), stale, coast, latch);
+    };
+  EXPECT_EQ(classify(true, 30), StatusHealth::Fresh);
+  EXPECT_EQ(classify(true, 200), StatusHealth::Fresh);
+  EXPECT_EQ(classify(true, 201), StatusHealth::Coast);
+  EXPECT_EQ(classify(true, 400), StatusHealth::Coast);
+  EXPECT_EQ(classify(true, 401), StatusHealth::Hold);
+  EXPECT_EQ(classify(true, 1000), StatusHealth::Hold);
+  EXPECT_EQ(classify(true, 1001), StatusHealth::Latch);
+  EXPECT_EQ(classify(false, 0), StatusHealth::Latch);
+}
+
+TEST(Watchdog, GapResumeDecision)
+{
+  using Igus::Safety::GapResumeAllowed;
+  using Igus::Safety::StatusHealth;
+  // Coast-tier gaps resume regardless of motion; hold-tier only when idle; latch never.
+  EXPECT_TRUE(GapResumeAllowed(StatusHealth::Fresh, true));
+  EXPECT_TRUE(GapResumeAllowed(StatusHealth::Coast, true));
+  EXPECT_TRUE(GapResumeAllowed(StatusHealth::Coast, false));
+  EXPECT_FALSE(GapResumeAllowed(StatusHealth::Hold, true));
+  EXPECT_TRUE(GapResumeAllowed(StatusHealth::Hold, false));
+  EXPECT_FALSE(GapResumeAllowed(StatusHealth::Latch, false));
+}
+
+TEST(Watchdog, HoldMayOnlyResumeWhenIdle)
+{
+  using Igus::Safety::IsCommandMoving;
+  using Igus::Safety::MotionDuringGap;
+  EXPECT_FALSE(IsCommandMoving(0.0));
+  EXPECT_FALSE(IsCommandMoving(0.02));
+  EXPECT_TRUE(IsCommandMoving(0.021));
+  EXPECT_TRUE(IsCommandMoving(std::numeric_limits<double>::quiet_NaN()));
+  const std::chrono::nanoseconds lookback = Igus::Safety::kHoldMotionLookback;
+  const std::int64_t status = 10'000'000'000;
+  EXPECT_FALSE(MotionDuringGap(0, status, lookback));                       // never moved
+  EXPECT_FALSE(MotionDuringGap(status - 101'000'000, status, lookback));    // long before
+  EXPECT_TRUE(MotionDuringGap(status - 99'000'000, status, lookback));      // just before
+  EXPECT_TRUE(MotionDuringGap(status + 500'000'000, status, lookback));     // during the gap
+}
+
 TEST(Velocity, DividesByActualStatusInterval)
 {
   const auto t0 = SteadyClock::now();

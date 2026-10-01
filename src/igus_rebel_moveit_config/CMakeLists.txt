@@ -47,6 +47,7 @@ ament_target_dependencies(box_h_cut_executor
   sensor_msgs
   std_msgs
   std_srvs
+  control_msgs
   geometry_msgs
   moveit_core
   moveit_msgs
