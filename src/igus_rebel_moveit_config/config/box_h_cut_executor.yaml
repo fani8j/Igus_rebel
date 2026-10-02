@@ -1,353 +1,124 @@
+# box_h_cut_executor parameters -- ONLY values that differ from the code defaults, plus a few
+# operator-facing ones kept for visibility. Every parameter NOT listed here uses its code
+# default: see the field<...> table in src/box_h_cut_executor.cpp (lines ~839-1030; name, scope,
+# default). Trimmed 2026-10-02 from a 97-parameter file with no effective change; the effective
+# parameter set is identical (verified by `ros2 param dump` on a mock stack).
+#
+# Change semantics (`ros2 param set /box_h_cut_executor ...`):
+# - READ-ONLY (startup only; `param set` is rejected; edit this file and restart): tool_link,
+#   external_snapshot_max_age_s, allow_tool_carton_contact, approach_joint_degrees, clearances,
+#   middle_blade_reversed, all *_scaling, top_cut_* offsets/lifts, side_tape_continue_* gates,
+#   side_tape_handoff_*_axis_tool and retract/servo gates.
+# - PLANNING (validated, applied, retained plan cleared; "busy" while a plan/execute/cut-debug
+#   session or side-tape hand-off is active): motion_profile, cut_pattern, side tilts,
+#   pre_cut_stabilization_duration_s, left_parallel_*, cut_debug_*_correction_file,
+#   side_tape_handoff_enabled/variant/standoff_mm/box_offset/max_search_angle.
+# - RUNTIME (read when used, never blocked): execution_enabled, debug_motion_execution_enabled,
+#   left_roll_diagnostics_enabled, external_snapshot_file.
+# Numeric values must be finite; out-of-range values fail closed.
 box_h_cut_executor:
   ros__parameters:
-    # Parameter change semantics (`ros2 param set /box_h_cut_executor ...`):
-    # - READ-ONLY (applied at startup only; `param set` is rejected): planning_group,
-    #   planning_frame, tool_link, *_pipeline, external_snapshot_max_age_s,
-    #   carton_collision_id, carton_height_m, allow_tool_carton_contact,
-    #   camera_pole_required, camera_pole_topic, hover/cut/middle_cut clearances,
-    #   left_lateral_standoff_m, middle_entry_alignment_m, side_cut_orientation_mode,
-    #   debug_motion_distance_m, debug_motion_clearance_m, approach_joint_degrees,
-    #   cartesian_step_m, planning_timeout_s, all *_scaling values, max_solutions,
-    #   side_tape_continue_* limits, side_tape_handoff_cut_axis_tool/lateral_axis_tool/depth_axis_tool, and every
-    #   side_tape_handoff_retract_*/servo_* gate. Edit this file and restart to change them.
-    # - PLANNING (validated, then applied and any retained plan cleared): motion_profile,
-    #   cut_pattern, t_cut_middle_handoff_fraction, debug_fixed_orientation,
-    #   debug_allow_stale_snapshot, pre_cut_stabilization_duration_s, side tilts,
-    #   left_adaptive_orientation_*, left_parallel_*, cut_debug_cut, cut_debug_correction_enabled,
-    #   cut_debug_*_correction_file, cut_debug_output_dir, side_tape_handoff_enabled,
-    #   side_tape_handoff_variant, side_tape_handoff_standoff_mm, side_tape_handoff_max_search_angle_deg and
-    #   side_tape_handoff_output_file. Rejected with "busy" while a plan/diagnose/cut-debug/
-    #   execute call is running, during trajectory execution, while a cut debug session is
-    #   active (call clear_plan first), and while a side-tape hand-off is active (call
-    #   side_tape_retract first).
-    # - RUNTIME (read when used, never blocked): execution_enabled,
-    #   debug_motion_execution_enabled, left_roll_diagnostics_enabled, external_snapshot_file.
-    # Every numeric value must be finite; out-of-range values fail closed at startup and
-    # are rejected at runtime.
-    planning_group: igus_rebel_arm
-    # Perception canonicalizes carton geometry into this frame before planning.
-    planning_frame: base_link
+
+    # ---- Snapshot & frames ------------------------------------------------------------
     # Saved approach/combined targets predate the calibrated TCP; revalidate before reuse.
     tool_link: xeg32_tool_tip
-    planning_pipeline: ompl
-    chomp_pipeline: chomp
-    pilz_pipeline: pilz_industrial_motion_planner
-    # ompl_cartesian: free-space transits try the exact-pose IK branch nearest the
-    # current state with joint interpolation first and OMPL as fallback; every contact
-    # stroke is a Cartesian path (min_fraction=1.0). ompl_pilz / pilz_only / chomp_pilz
-    # use Pilz LIN strokes instead (their Cartesian speed also follows cartesian_limits
-    # in joint_limits.yaml).
-    motion_profile: ompl_cartesian
-    # Generated independently by camera_point_to_base_link.py; the planner never runs vision.
+    # Canonical carton snapshot written atomically by the external vision repo.
     external_snapshot_file: /home/farhan/Igus_rebel/outputs/seam_3d_base_link.json
-    # Refuse a previous carton result if planning is not started promptly. (0, 600] s.
+    # Refuse an older snapshot when planning is not started promptly. (0, 600] s.
     external_snapshot_max_age_s: 240.0
-    # Plan-only override for inspecting an old snapshot in RViz. Execution is blocked while
-    # true: execute_planned_h_cut refuses any retained plan or cut debug session whose
-    # snapshot was loaded with the override, before every other execution gate.
-    # ros2 param set /box_h_cut_executor debug_allow_stale_snapshot true
-    debug_allow_stale_snapshot: false
-    # Collision box is derived from detected top-face corners; height extends below that plane.
-    carton_collision_id: detected_carton
-    carton_height_m: 0.20
-    # Allow only the TCP proxy to contact the detected carton, only during canonical
-    # descend, traverse, and retract stages. Every other collision pair stays checked.
-    # The TCP is a 6 mm visual marker with no collision geometry.
+    # Only the TCP proxy may touch the detected carton, only in descend/traverse/retract
+    # stages. The TCP is a 6 mm visual marker with no collision geometry.
     allow_tool_carton_contact: true
-    # The fixed external camera pole (camera_pole_collision.py) must be present before
-    # any H-cut plan; planning fails closed without it.
-    camera_pole_required: true
-    camera_pole_topic: /box_motion/camera_pole_collision
-    # The external converter writes a complete canonical base_link snapshot atomically.
-    # The planner rejects missing or invalid points instead of estimating carton geometry.
-    # Fixed waypoint modes: left_only, middle_only, right_only, h, combined, t_cut,
-    # or t_cut_handoff (plus the plan-only middle_entry_debug/middle_debug_short aids).
-    # t_cut is the full first-arm left cut plus the full middle seam.
-    # middle_entry_debug stops at seam_start before traversal.
-    # middle_debug_short uses fixed XYZW=(0,1,0,0) for a short stroke above seam center.
+
+    # ---- Pattern & motion profile -----------------------------------------------------
+    # ompl_cartesian: free-space transits use the nearest exact-pose IK branch (joint
+    # interpolation, then OMPL); contact strokes are Cartesian paths (min_fraction=1.0).
+    motion_profile: ompl_cartesian
+    # left_only, middle_only, right_only, h, combined, t_cut, t_cut_handoff (+ debug aids).
     cut_pattern: t_cut
-    # t_cut_handoff is first-arm-only: the full left cut plus an executable bounded
-    # middle-seam prefix ending at the declared handoff endpoint
-    # (interpolate(seam_start, seam_end, <resolved fraction>), included in
-    # the published target poses for external second-arm integration). It does
-    # NOT lower any min_fraction acceptance: the planned path is accepted only when
-    # it fully reaches that explicit handoff endpoint under min_fraction=1.0. After
-    # fully reaching that endpoint, the retained first-arm plan ends at the cut-level
-    # handoff pose and deliberately skips the hover retract
-    # (finish pose above middle seam handoff) and its following restore-collision
-    # stage, so the scoped tool/carton contact allowance stays active at the terminal
-    # pose. The retained middle traverse is an executable first-arm prefix, not the
-    # complete seam. Full t_cut/combined continue to retract above the cut and restore
-    # collision checking; no second arm is implemented. Execution still requires
-    # normal gates.
-    # t_cut_handoff applies the same left and middle correction slots as t_cut; a set
-    # right record loads but stays unused because the plan has no right segment.
-    # Middle translation end deltas are fraction-interpolated and the taught middle
-    # end orientation is slerp-interpolated by the resolved fraction for the bounded
-    # prefix; the middle tool-Z penetration gate is revalidated unchanged.
-    # Fraction along the middle seam where t_cut_handoff stops. 0.0 (default)
-    # selects automatic mode: the maximum 0.95 is probed first; if it does not fully
-    # plan, 0.05 must plan and a bounded bisection over [0.05, 0.95) finds the largest
-    # fully reachable declared prefix with <=0.01 fraction tolerance. Every candidate
-    # keeps min_fraction=1.0, and the left roll search runs once per request. A nonzero
-    # value in [0.05, 0.95] is a manual override stop fraction. Out-of-range nonzero
-    # values fail closed. Full t_cut stays the full left cut plus the full middle seam
-    # and is unaffected.
-    t_cut_middle_handoff_fraction: 0.0
-    # Plan-only orientation override; normal cuts remain geometry-derived. Execution is
-    # blocked while true.
-    debug_fixed_orientation: false
-    # middle_debug_short stroke length and surface clearance.
-    debug_motion_distance_m: 0.010
-    debug_motion_clearance_m: 0.030
-    # Supplied joint-space transit used only by cut_pattern h before its first cut.
-    # joint5 was 94.37 before the 2026-09-27 limit fix; MoveIt already clamped it to the
-    # 94 deg bound, so 94.0 keeps the same plan without the clamp warning.
+    # Joint-space transit used only by cut_pattern h. joint5 94.0 = the URDF-limit-clamped 94.37.
     approach_joint_degrees: [51.52, 15.99, 124.79, -65.84, 94.0, 125.94]
-    # Middle seam only: the free-space approach ends this far before seam_start (against
-    # the seam direction), then a short aligned stroke reaches the hover start pose.
-    middle_entry_alignment_m: 0.010
-    # Before each descend/cut stage, settle motion at the final collision-checked
-    # approach pose. The hold is encoded in the trajectory, not as a callback sleep.
-    # Finite, within [0, 10] s.
+    # Hold at the final approach pose before each descend/cut stage, [0, 10] s.
     pre_cut_stabilization_duration_s: 1.0
-    # Every cut orientation is derived from detected cut direction and surface normal.
-    # Roll each side independently about the blade axis. Batch scans over 59 valid
-    # reconstructed boxes selected -10 deg left and -5 deg right for best observed coverage.
-    left_side_cut_tilt_deg: -10.0
-    right_side_cut_tilt_deg: -5.0
-    # Side strokes use the canonical midpoint pairs added by capture_and_query_depth.py.
-    # edge_aligned keeps the side blade along its own cut; middle_aligned orients side
-    # strokes parallel to the middle seam instead. Taught corrections override both.
-    side_cut_orientation_mode: edge_aligned
-    # Signed distance along surface_normal: positive hovers, negative penetrates the
-    # detected top plane. Source validation caps side penetration at 3 mm and middle
-    # penetration at 5 mm, and requires the scoped tool/carton contact policy above.
+
+    # ---- Speeds (fractions of joint_limits.yaml: 0.785 rad/s, 5.24 rad/s^2) -------------
+    # Contact strokes: 0.1376*0.785 = 0.108 rad/s, 0.0954*5.24 = 0.50 rad/s^2 (operator-approved
+    # rescale 2026-09-27). Finite, in (0, 1].
+    velocity_scaling: 0.1376
+    acceleration_scaling: 0.0954
+    # Free-space transit only. Lowered 2026-09-29 after real-robot moves overshot at transit
+    # ends (operator): 0.20*0.785 = 0.157 rad/s (~9 deg/s); 0.10*5.24 = 0.52 rad/s^2.
+    transit_velocity_scaling: 0.20
+    transit_acceleration_scaling: 0.10
+
+    # ---- Clearances & side tilts ------------------------------------------------------
+    # Signed distance along surface_normal: positive hovers, negative penetrates the top plane.
+    # Source validation caps side penetration at 3 mm and middle penetration at 5 mm.
     hover_clearance_m: 0.01
-    # Left enters/retracts 25 mm laterally; its detected cutting start is unchanged.
-    left_lateral_standoff_m: 0.01
     cut_clearance_m: -0.001
     # Middle seam only: 1 mm deeper than the side cuts.
     middle_cut_clearance_m: -0.002
-    # left: lateral approach -> detected start -> end -> lateral finish; a taught
-    # left pose may validly use tool local X or tool local Z, with at least one
-    # of the two pointing into the carton.
-    # middle: approach -> seam_start -> seam_end -> finish.
-    # right: approach -> back_middle_right -> front_middle_right -> finish; knife faces
-    # 180 degrees opposite travel while local Z remains directed into the carton.
-    # combined executes those plans in order with collision-aware transition stages
-    # from each finish pose to the next approach pose. The left-to-middle transition
-    # (combined, t_cut, t_cut_handoff) is: left lateral withdrawal to the finish pose
-    # outside the left cut, then a surface-normal lift that holds the left orientation,
-    # then restore of knife-tip collision checking, then free-space transit/rotation
-    # to the middle approach. No current-plan serialization is implemented: the retained
-    # plan lives only in the running executor until restart. No second-arm behavior changes.
-    # Planning time bound: each pipeline (OMPL/Pilz/CHOMP) call is capped at this value,
-    # and each free-space transit shares one budget of this value across all of its IK
-    # branch attempts and the final original-pose retry. It is not a whole-task timeout.
-    planning_timeout_s: 15.0
-    # Cartesian contact-stroke interpolation step.
-    cartesian_step_m: 0.003
-    # Scalings are fractions of joint_limits.yaml (0.785 rad/s, 5.24 rad/s^2 per joint).
-    # Contact descend/traverse/retract strokes: 0.1376 * 0.785 = 0.108 rad/s and
-    # 0.0954 * 5.24 = 0.50 rad/s^2, the same physical limits as the former 0.05 at
-    # 2.16 rad/s / 10 rad/s^2 (operator-approved rescale, 2026-09-27). Finite, in (0, 1].
-    velocity_scaling: 0.1376
-    acceleration_scaling: 0.0954
-    # Free-space transit speed only: 0.4127 * 0.785 = 0.324 rad/s and
-    # 0.2863 * 5.24 = 1.50 rad/s^2, i.e. the operator-approved 0.15 transit scaling
-    # (2026-09-26) at the former limits. Contact strokes keep the scaling above and
-    # pre_cut_stabilization_duration_s stays 1.0 s. Finite values in (0, 1] only.
-    # 2026-09-29: lowered after the first real-robot moves overshot at transit ends
-    # (operator). 0.20 * 0.785 = 0.157 rad/s (~9 deg/s); 0.10 * 5.24 = 0.52 rad/s^2.
-    transit_velocity_scaling: 0.20
-    transit_acceleration_scaling: 0.10
-    max_solutions: 1
-    # Physical trajectory dispatch stays disabled until an operator deliberately enables it.
-    execution_enabled: false
-    # A retained middle_debug_short plan requires this second gate before manual dispatch.
-    # Staged cut-debug sessions (start_cut_debug_session/save_cut_debug_point) require
-    # BOTH gates for every explicit execute_planned_h_cut dispatch. No stage auto-executes.
-    debug_motion_execution_enabled: false
-    # Staged per-cut correction workflow: left (back_middle_left->front_middle_left),
-    # middle (seam_start->seam_end), or right (back_middle_right->front_middle_right).
-    # start_cut_debug_session plans the configured start target for this cut and retains
-    # it for explicit execution. Existing corrections seed repeat teaching, but saved
-    # deltas always reference the uncorrected geometry so each completed record remains
-    # standalone. Execute, teleop correct, then save_cut_debug_point captures the full
-    # observed TCP pose from live joint-state FK and persists it immediately without
-    # requiring any endpoint or lift plan. A save retains no plan (any retained plan is
-    # cleared) and never dispatches motion. Teleoperate the endpoint separately and call
-    # the same save service; start and end observations are persisted independently and
-    # the final record is complete after the endpoint save. Only complete records load
-    # as corrections; start_saved is an intermediate.
-    cut_debug_cut: middle
-    # Opt-in learned records remain disabled for live hardware: the 2026-09-14/16
-    # observations predate the 2026-09-24 TCP change. A mock-only replay can opt in
-    # to test collision-aware left roll selection, but it cannot re-teach the blade.
-    cut_debug_correction_enabled: false
-    # Absolute .json correction records from completed staged sessions, one slot per
-    # cut. Combined plans apply each set slot to its segment; t_cut/t_cut_handoff
-    # contain only left and middle segments, so a set right record loads but stays unused.
-    # Individual plans apply only their cut's slot. Empty means no correction for that cut.
-    # Every nonempty record is validated for schema box_h_cut_correction/v1, matching cut
-    # slot, REQUIRED planning_frame and tool_link equal to the active values, finite
-    # translation values and unit orientation quaternions.
-    # Orientation has no fixed angular cap. Application still requires the mapped
-    # penetration axis (left: tool X or tool Z, at least one into the carton;
-    # middle/right: tool Z) to point into the carton.
-    # Mismatches and malformed records fail closed. Deltas are cut-local
-    # (along/across/normal) and rotated onto the newly detected cut.
+    # Roll about the blade axis per side (batch scan over 59 boxes: -10 left, -5 right).
+    left_side_cut_tilt_deg: -10.0
+    right_side_cut_tilt_deg: -5.0
+
+    # ---- Left side cut (taught correction + hand-off to side_tape) --------------------
+    # Learned per-cut records (schema box_h_cut_correction/v1). Only applied when
+    # cut_debug_correction_enabled is true (default false); empty = none.
     cut_debug_left_correction_file: "/home/farhan/cut_debug_corrections/left_capture_frame_000001_20260916_235239_389784_orient_only_tcp20260924.json"
     cut_debug_middle_correction_file: "/home/farhan/cut_debug_corrections/middle_capture_frame_000001_20260914_200444_020309.json"
-    cut_debug_right_correction_file: ""
-    # Directory for staged-session records (<cut>_<snapshot_id>.json, atomic temp+rename).
-    # Empty selects $HOME/cut_debug_corrections. Changing the cut or directory while a
-    # session is active is rejected; call clear_plan first.
-    cut_debug_output_dir: ""
-    # Adaptive learned-orientation search for LEFT corrections only.
-    # Each mapped learned LEFT quaternion is tested as q_candidate = q_mapped *
-    # Qy(theta): a TCP-local Y (blade-length/seam axis) roll. TCP position and
-    # blade Y direction are preserved; only the X/Z penetration roll varies.
-    # Candidates run in deterministic smallest-magnitude order 0, +5, -5, ...
-    # through +/- left_adaptive_orientation_max_deg using
-    # left_adaptive_orientation_step_deg steps. Every candidate must pass the
-    # existing left X-or-Z penetration gate plus IK and collision feasibility
-    # at the final target poses; the probe is a bounded prefilter that only
-    # screens out unreachable or colliding mapped poses under the current
-    # carton/pole scene constraints and does not guarantee a full plan.
-    # Hover/approach candidates must be fully collision-free; cut-target
-    # candidates honor the scoped tool/carton contact allowance while every
-    # other contact still fails. MTC, Cartesian, and collision checking remain
-    # final authority and may still reject the selected orientation; both
-    # execution gates stay mandatory. If no candidate passes, planning fails
-    # closed with candidate diagnostics. Middle/right corrections keep their
-    # rigid mapped orientation.
-    left_adaptive_orientation_enabled: true
-    left_adaptive_orientation_max_deg: 45.0
-    left_adaptive_orientation_step_deg: 5.0
-    # Each roll candidate always logs a one-line "Left roll diag" result. true adds
-    # expensive per-pose IK/collision probing (kinematic restarts, contact pairs) to
-    # explain every rejected candidate; it never changes candidate selection.
-    left_roll_diagnostics_enabled: false
-    # Opt-in geometry-derived LEFT side-cut orientation with the blade as parallel to
-    # the detected top face as reachability allows (plan-only mock evidence:
-    # scan_results/parallel_left_20260927). Blade model: tool Y = blade length, tool X =
-    # blade-plane normal, tool Z = edge. theta_p = acos(|tool X . surface_normal|) is the
-    # blade-plane angle to the top face (nominal perpendicular knife: 80 deg with the -10
-    # deg tilt; taught 2026-09-16 record: 27 deg). Candidates rotate the flat reference
-    # (X = -normal, Y = -along, Z toward the carton side) by tilt (about the cut line) and
-    # pitch (about 'across') within +/-max_tilt and yaw (about the normal) within
-    # +/-max_yaw on a step grid, ordered by theta_p. The first one whose left chain
-    # (hover start -> entry -> cut -> exit -> lift) passes the left X-or-Z penetration
-    # gate, collision-aware IK and a collision-checked Cartesian path with no joint jump
-    # from EVERY collision-free hover-start wrist branch, with every joint at least
-    # min_joint_margin inside its URDF bound, is used for all left poses. TCP positions
-    # and the cut line are unchanged. Fails closed when nothing passes within
-    # search_timeout_s, and when a left correction record is active (clear the left slot
-    # to combine with a middle record). While enabled, a plan is also refused if any left
-    # contact stroke moves a joint more than 1 rad. MTC, min_fraction=1.0, the dwell
-    # check, the wrist guard and both execution gates are unchanged. Not verified on the
-    # robot or with a physical cut.
+    # Geometry-derived LEFT orientation, blade as parallel to the top face as reachable.
+    # The side-tape hand-off REQUIRES it (fails closed otherwise).
     left_parallel_orientation_enabled: false
-    left_parallel_max_tilt_deg: 45.0
-    left_parallel_max_yaw_deg: 30.0
-    left_parallel_step_deg: 5.0
-    left_parallel_min_joint_margin_deg: 5.0
-    left_parallel_search_timeout_s: 90.0
-    # Side-tape hand-off (left face only for now; see CONTEXT.md and
-    # ~/Downloads/rgbd_captures/docs/side_tape_handoff_request.md). Default off: nothing
-    # else changes. When enabled, ~/plan_side_tape_handoff plans the FULL left cut for
-    # feasibility (same IK/collision/min_fraction=1.0 stroke as every other left plan), then
-    # retains and executes only the approach to the cut start pose, so side_tape_ros
-    # (MoveIt Servo + knife camera) can take over the straight cut. standoff's single
-    # Cartesian entry stroke targets the standoff pose directly (never the in-material pose);
-    # every waypoint is verified to stay in front of the outer wall plane. The planned pose
-    # is checked against the configured side_tape_handoff_*_axis_tool convention within 5
-    # degrees; on a mismatch this fails closed and reports the measured axis mapping instead
-    # of silently rotating the tool. After a successful approach dispatch: no MoveIt goal
-    # remains active, Servo is left running, and detected_carton survives every clear/replan
-    # attempt until ~/side_tape_retract (std_srvs/Trigger) ends the hand-off (or a failed
-    # approach dispatch, "approach_failed", is recovered by ~/side_tape_retract or a
-    # verified-outside clear_plan). Retract plans from the CURRENT robot state (side_tape
-    # moves the arm with Servo), refuses while Servo looks active or the tip has drifted too
-    # far from the recorded start, withdraws along the outer-wall normal by the current
-    # penetration (clamped >=0) plus hover_clearance_m, then -- only if the snapshot is still
-    # fresh -- transits back to the usual left approach pose; a stale snapshot withdraws only
-    # and reports it. The hand-off record (status, face, cut_length_mm, start pose, variant,
-    # penetration/standoff/min_wall_distance, the configured and measured tool axes,
-    # snapshot path/id) is written atomically to side_tape_handoff_output_file (or
-    # $HOME/.ros/side_tape_handoff.json when empty) and published on the latched
-    # ~/side_tape_handoff topic (std_msgs/String, JSON) on every status change (active,
-    # approach_failed, retracted).
+    # Side-tape hand-off (left face): ~/plan_side_tape_handoff plans the full left cut for
+    # feasibility, executes only the approach to the cut start; side_tape_ros (Servo + knife
+    # camera) then cuts. ~/side_tape_retract ends it. Off by default.
     side_tape_handoff_enabled: false
-    # in_material: the executable approach stops at the planned in-material start (the same
-    # depth the full-stroke plan would cut at). standoff: the same start withdrawn along the
-    # detected side_tape_seed face normal to side_tape_handoff_standoff_mm outside the outer
-    # wall, same height/orientation.
+    # in_material: stop at the planned in-material start. standoff: withdrawn along the face
+    # normal to side_tape_handoff_standoff_mm outside the outer wall.
     side_tape_handoff_variant: in_material
     side_tape_handoff_standoff_mm: 9.0
-    # Absolute .json path, or empty to use $HOME/.ros/side_tape_handoff.json.
-    side_tape_handoff_output_file: ""
-    # side_tape's tool-frame convention (xeg32_tool_tip axes) = the left_parallel pose
-    # (2026-09-29 follow-up): tool -Y = cut/travel, tool +X = lateral (blade normal, down),
-    # tool +Z = depth (edge/tip into the carton side). The hand-off REQUIRES
-    # left_parallel_orientation_enabled: true (fails closed otherwise) and takes its start
-    # pose from that search, restricted to candidates within
-    # side_tape_handoff_max_search_angle_deg of F0 and ordered smallest-deviation-first.
-    # Must be unit, mutually orthogonal, and right-handed: depth_axis_tool = cut_axis_tool x
-    # lateral_axis_tool (validated at startup). Read-only: edit and restart to change.
-    side_tape_handoff_cut_axis_tool: [0.0, -1.0, 0.0]
-    side_tape_handoff_lateral_axis_tool: [1.0, 0.0, 0.0]
-    side_tape_handoff_depth_axis_tool: [0.0, 0.0, 1.0]
-    # Operator correction (2026-09-30, measured on the real box): shift the detected box for the
-    # side-tape hand-off, base_link mm. x/y move the whole snapshot (carton, cut line, seed wall
-    # plane); z moves only the left cut line (seam height), the carton top stays as detected.
-    # Applies to every later hand-off plan until reset to [0, 0, 0].
-    side_tape_handoff_box_offset_base_mm: [-0.9, -15.1, -12.3]
-    # Max |tilt|,|pitch|,|yaw| (and total rotation) the search may add on top of F0 for the
-    # hand-off; side_tape refuses above ~10 deg. Also floors the axis-convention tolerance.
-    side_tape_handoff_max_search_angle_deg: 10.0
-    # side_tape_retract safety gates (read-only). Orientation/line-offset: how far the
-    # current tool pose may deviate from the recorded hand-off start before retract refuses
-    # (side_tape may have misbehaved; recover manually). Servo quiescence/joint-velocity:
-    # retract refuses while Servo looks active; Servo is never paused/stopped from here.
-    side_tape_handoff_retract_max_orientation_deg: 10.0
-    side_tape_handoff_retract_max_line_offset_mm: 20.0
-    side_tape_handoff_servo_twist_topic: /delta_twist_cmds
-    side_tape_handoff_servo_joint_topic: /delta_joint_cmds
-    side_tape_handoff_servo_quiescence_s: 0.5
-    side_tape_handoff_joint_velocity_threshold: 0.01
-    # ~/continue_side_cut (std_srvs/Trigger) entry gates, read-only. After side_tape has aligned
-    # the tip into the side seam, one MTC task cuts a straight Cartesian stroke parallel to the
-    # planned left cut line (current tool orientation, alignment's lateral/depth offset kept,
-    # ending on the plane through the planned cut end perpendicular to the line) and then runs
-    # the side_tape_retract stages. Refused (nothing moves) unless: hand-off status active;
-    # perpendicular distance of the tip from the planned line <= line_offset; along-line
-    # position within +/-along_offset of the planned start; tip depth behind the outer wall
-    # within [min_depth, max_depth]; orientation within max_orientation of the hand-off start
-    # orientation; Servo quiescent; snapshot fresh (else use side_tape_retract);
-    # execution_enabled; not debug_allow_stale_snapshot; the retract transit passes the wrist gate.
-    side_tape_continue_max_line_offset_mm: 20.0
-    side_tape_continue_max_along_offset_mm: 20.0
-    side_tape_continue_min_depth_mm: 0.5
-    side_tape_continue_max_depth_mm: 20.0
-    side_tape_continue_max_orientation_deg: 20.0
-    # false: continue_side_cut does not check the snapshot age (operator decision 2026-09-30:
-    # the box does not move and alignment can take longer than external_snapshot_max_age_s).
-    # The hand-off plan itself still requires a fresh snapshot.
+    # Operator correction (2026-09-30, measured on the real box), base_link mm: x/y shift the
+    # whole snapshot (carton, cut line, seed wall plane); z shifts only the left cut line
+    # (seam height). Applies to every later hand-off plan until reset to [0, 0, 0].
+    side_tape_handoff_box_offset_base_mm: [0.6, -12.3, -8.4]
+    # Max |tilt|,|pitch|,|yaw| the search may add on top of the base pose; side_tape refuses
+    # above ~10 deg. Also floors the axis-convention tolerance.
+    side_tape_handoff_max_search_angle_deg: 20.0
+    # Left-cut orientation search IK: "analytic" (closed-form, all branches, ~1 s answers;
+    # falls back to kdl if its startup self-check fails) or "kdl" (old behaviour). Restart to change.
+    left_search_ik_backend: analytic
+    # continue_side_cut (all operator decisions 2026-09-30): skip the snapshot-age check (box
+    # does not move; alignment can outlast external_snapshot_max_age_s); stroke speed is a
+    # fraction of velocity/acceleration_scaling (0,1]; stroke ends 5 mm past the planned cut
+    # end toward the box edge ([-20, 20] mm); extra end depth [0, 10] mm; do not refuse when
+    # the stroke end is deeper than side_tape_continue_max_depth_mm (only logged).
     side_tape_continue_check_snapshot_age: false
-    # continue_side_cut cut stroke speed as a fraction of velocity/acceleration_scaling (0,1].
-    # The withdraw keeps the normal contact speed. continue_side_cut ends after the withdraw
-    # at the cut end point (no transit back to the approach pose).
     side_tape_continue_speed_factor: 0.5
-    # Move the continue_side_cut stroke end this far past the planned cut end along the cut
-    # line, toward the box edge (mm, [-20, 20]; operator 2026-09-30: 5 mm).
     side_tape_continue_end_extension_mm: 5.0
-    # End the continue_side_cut stroke this much deeper into the face than the start (mm,
-    # [0, 10]; horizontal, z stays level); the stroke angles in gradually. Refused if the end
-    # would exceed side_tape_continue_max_depth_mm.
-    side_tape_continue_end_extra_depth_mm: 5.0
-    # false (operator 2026-09-30): do not refuse when the stroke END is deeper than
-    # side_tape_continue_max_depth_mm (the start-depth check still applies); only logs it.
+    side_tape_continue_end_extra_depth_mm: 0.0
     side_tape_continue_check_end_depth: false
+
+    # ---- Top (middle seam) cut --------------------------------------------------------
+    # Blade faces opposite travel (rotated 180 deg about the surface normal), operator
+    # 2026-10-01; applies to every middle cut (staged top cut and t_cut/h/combined).
+    middle_blade_reversed: true
+    # Staged top cut, taught by teleop 2026-10-01 (snapshot capture_frame_000001_20261001_025532_980481,
+    # flipped blade): cut-local [along seam start->end, across, depth (+ = deeper)] mm vs the
+    # planned start/end. along/across move the seam points (hover follows); depth applies to
+    # the cut targets only. Poses in scan_results/top_cut_teach_20261001/.
+    top_cut_start_offset_mm: [-11.1, -3.8, 11.8]
+    top_cut_end_offset_mm: [-6.3, -3.3, 12.1]
+    # Hold at the penetration pose before the cut stroke (every middle-seam plan).
+    top_cut_post_penetration_dwell_s: 1.0
+    # Tip height above the top after the top-cut lift (staged/continue only), [0.001, 0.05] m.
+    top_cut_lift_clearance_m: 0.010
+    # continue_top_cut skips the snapshot-age check (operator 2026-10-01; box must not move).
+    top_cut_continue_check_snapshot_age: false
+    # continue_top_cut: straight base +Z lift from the current pose before the transit to the
+    # top hover, so the arm does not swing low over the table (table not in the scene).
+    top_cut_pre_transit_lift_m: 0.05
+
+    # ---- Safety / execution gates (both default false; keep false in the file) ---------
+    # Physical trajectory dispatch stays disabled until an operator deliberately enables it.
+    execution_enabled: false

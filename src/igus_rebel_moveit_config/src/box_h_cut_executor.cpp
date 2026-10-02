@@ -4,10 +4,12 @@
 #include <std_msgs/msg/header.hpp>
 #include <geometry_msgs/msg/pose_array.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/vector3_stamped.hpp>
 #include <moveit/planning_scene/planning_scene.h>
 #include <moveit/robot_state/cartesian_interpolator.h>
 #include <moveit/robot_state/robot_state.h>
 #include <moveit/robot_trajectory/robot_trajectory.h>
+#include <moveit/task_constructor/container.h>
 #include <moveit/task_constructor/solvers/cartesian_path.h>
 #include <moveit/task_constructor/solvers/joint_interpolation.h>
 #include <moveit/task_constructor/solvers/multi_planner.h>
@@ -16,6 +18,7 @@
 #include <moveit/task_constructor/stages/current_state.h>
 #include <moveit/task_constructor/stages/modify_planning_scene.h>
 #include <moveit/task_constructor/stages/move_to.h>
+#include <moveit/task_constructor/stages/move_relative.h>
 #include <moveit/task_constructor/task.h>
 #include <moveit_task_constructor_msgs/msg/solution.hpp>
 #include <moveit_msgs/msg/collision_object.hpp>
@@ -26,6 +29,7 @@
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
+#include "igus_rebel_moveit_config/rebel_analytic_ik.hpp"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -362,6 +366,24 @@ struct SegmentPlanOptions {
   // Side-tape hand-off planning: the left_parallel search is restricted to candidates within
   // side_tape_handoff_max_search_angle_deg of F0 and ordered smallest-deviation-first.
   bool side_tape_handoff{false};
+  // Staged top cut approach: stop after the aligned hover above the segment start (and the
+  // pre-cut dwell); the hover pose is returned through hover_start_out.
+  bool stop_at_hover_start{false};
+  geometry_msgs::msg::PoseStamped* hover_start_out{nullptr};
+  // Taught top-cut depth (metres, + = deeper along -surface_normal): added to the MIDDLE seam
+  // cut start/end targets only (hover poses unchanged). The lift/finish hover stays at
+  // hover_clearance above the top, i.e. straight up along the normal from the deeper cut end.
+  double middle_start_extra_depth_m{0.0};
+  double middle_end_extra_depth_m{0.0};
+  // Fraction of the contact scalings for the cut stroke stage only (1.0 = unchanged).
+  double cut_stroke_speed_factor{1.0};
+  // Top-cut only: height above the top surface of the MIDDLE seam finish/lift pose (replaces
+  // hover_clearance_m for that stage; the start hover is unchanged). Unset = hover_clearance_m.
+  std::optional<double> middle_finish_clearance_m;
+  // continue_top_cut only: straight Cartesian lift along +Z of the planning frame (orientation
+  // kept) right after the current state, BEFORE any free-space transit, so the arm leaves the
+  // left-cut withdraw pose upward instead of swinging low over the table (not in the scene).
+  double pre_transit_lift_m{0.0};
 };
 // The candidate the left_parallel search last selected (angles relative to F0).
 struct LeftParallelSelection {
@@ -469,6 +491,20 @@ struct SideTapeHandoffInfo {
   // never be executed at all, including the retract withdraw-only path.
   bool stale_override{false};
 };
+// Staged top (middle seam) cut. kPlanned: approach retained/dispatching; kApproached: tip at the
+// aligned hover; kPenetrated: tip at the planned cut start in material; kDone: stroke + lift
+// finished; kFailed: a dispatch did not complete (arm pose uncertain; top_cut_retract recovers).
+enum class TopCutStagedStatus : std::uint8_t {
+  kNone, kPlanned, kApproached, kPenetrated, kDone, kFailed, kCutting};
+struct TopCutStagedInfo {
+  TopCutStagedStatus status{TopCutStagedStatus::kNone};
+  geometry_msgs::msg::PoseStamped hover_pose, cut_start_pose, cut_end_pose;
+  Eigen::Vector3d normal{Eigen::Vector3d::UnitZ()};
+  Eigen::Vector3d plane_point{Eigen::Vector3d::Zero()};  // on the top surface, under cut start
+  std::string snapshot_path, snapshot_id;
+  rclcpp::Time stamp;
+  bool stale_override{false};
+};
 // Every executor parameter value. Read-only entries are fixed at startup; planning
 // entries change only through the parameter callback, under plan_mutex_, and clear any
 // retained plan. See kParameterTable in BoxHCutExecutor for scopes and defaults.
@@ -494,10 +530,35 @@ struct PlannerSettings {
     side_tape_continue_max_orientation_deg{0.0};
   bool side_tape_continue_check_snapshot_age{true};
   double side_tape_continue_speed_factor{1.0};
+  bool middle_blade_reversed{false};
   double side_tape_continue_end_extension_mm{0.0};
   double side_tape_continue_end_extra_depth_mm{0.0};
   bool side_tape_continue_check_end_depth{true};
   std::string side_tape_handoff_servo_twist_topic, side_tape_handoff_servo_joint_topic;
+  std::vector<double> top_cut_start_offset_mm{0.0, 0.0, 0.0};
+  std::vector<double> top_cut_end_offset_mm{0.0, 0.0, 0.0};
+  double top_cut_staged_max_position_mm{10.0}, top_cut_staged_max_orientation_deg{10.0},
+    top_cut_staged_speed_factor{1.0};
+  // Max blade tilt (rotation about the tool X axis, pivot at the tip) the top-cut lift may use
+  // when the straight lift is not reachable; 0 disables tilting.
+  double top_cut_lift_max_tilt_deg{10.0};
+  // Tip height above the top surface after the top-cut lift (staged / continue top cut only).
+  double top_cut_lift_clearance_m{0.003};
+  bool top_cut_continue_check_snapshot_age{true};
+  double top_cut_pre_transit_lift_m{0.10};
+  double top_cut_post_penetration_dwell_s{1.0};
+  bool top_cut_allow_shortened_cut{true};
+  double top_cut_lift_min_clearance_m{0.001};
+  double side_tape_withdraw_min_clearance_m{0.001};
+  double top_cut_pre_transit_lift_min_fraction{0.5};
+  double top_cut_min_cut_fraction{0.5};
+  std::string top_cut_staged_output_file;
+  // Phase 1 speed-up (see rebel_analytic_ik.hpp): "analytic" replaces the left parallel
+  // search's per-candidate KDL seed/wristVariants/random-restart IK with a closed-form
+  // branch enumeration (falls back to "kdl" automatically, with a warning, if the analytic
+  // solver's own startup self-check against MoveIt FK does not pass). "kdl" keeps the
+  // original behaviour byte-for-byte and is the documented fallback.
+  std::string left_search_ik_backend{"analytic"};
   // Runtime-settable planning inputs.
   std::string motion_profile, cut_pattern, cut_debug_cut, cut_debug_left_correction_file,
     cut_debug_middle_correction_file, cut_debug_right_correction_file, cut_debug_output_dir,
@@ -610,6 +671,8 @@ public:
       "/collision_object", rclcpp::QoS(1).reliable().transient_local());
     side_tape_handoff_pub_ = create_publisher<std_msgs::msg::String>(
       "~/side_tape_handoff", rclcpp::QoS(1).reliable().transient_local());
+    top_cut_pub_ = create_publisher<std_msgs::msg::String>(
+      "~/top_cut_staged", rclcpp::QoS(1).reliable().transient_local());
     // Watched only to refuse side_tape_retract while Servo looks active (never
     // paused/stopped from here). Topic names are read-only (fixed at startup).
     servo_twist_sub_ = create_subscription<geometry_msgs::msg::TwistStamped>(
@@ -640,6 +703,10 @@ public:
             "a side-tape hand-off is active or unresolved; call side_tape_retract before planning a normal H-cut";
           return false;
         }
+        if (topCutStagedInProgress()) {
+          message = "a staged top cut is active; call top_cut_retract before planning a normal H-cut";
+          return false;
+        }
         clearRetainedPlan();
         return planExternalSnapshot(message);
       });
@@ -654,6 +721,30 @@ public:
     side_tape_continue_service_ = guardedTrigger(
       "~/continue_side_cut", "another H-cut plan operation is active",
       [this](std::string& message) { return continueSideCut(message); },
+      /*reject_during_execution=*/false);
+    side_cut_penetrate_service_ = guardedTrigger(
+      "~/side_cut_penetrate", "another H-cut plan operation is active",
+      [this](std::string& message) { return sideCutPenetrate(message); },
+      /*reject_during_execution=*/false);
+    top_cut_plan_service_ = guardedTrigger(
+      "~/plan_top_cut_staged",
+      "cannot plan while another planning or execution operation is active",
+      [this](std::string& message) { return planTopCutStaged(message); });
+    top_cut_penetrate_service_ = guardedTrigger(
+      "~/top_cut_penetrate", "another H-cut plan operation is active",
+      [this](std::string& message) { return topCutPenetrate(message); },
+      /*reject_during_execution=*/false);
+    top_cut_cut_service_ = guardedTrigger(
+      "~/top_cut_cut_and_lift", "another H-cut plan operation is active",
+      [this](std::string& message) { return topCutCutAndLift(message); },
+      /*reject_during_execution=*/false);
+    top_cut_continue_service_ = guardedTrigger(
+      "~/continue_top_cut", "another H-cut plan operation is active",
+      [this](std::string& message) { return continueTopCut(message); },
+      /*reject_during_execution=*/false);
+    top_cut_retract_service_ = guardedTrigger(
+      "~/top_cut_retract", "another H-cut plan operation is active",
+      [this](std::string& message) { return topCutRetract(message); },
       /*reject_during_execution=*/false);
     cut_debug_start_service_ = guardedTrigger(
       "~/start_cut_debug_session",
@@ -683,6 +774,12 @@ public:
       "~/clear_plan",
       "cannot clear the plan while planning or an H-cut trajectory execution is active",
       [this](std::string& message) {
+        if (topCutStagedInProgress()) {
+          message = "a staged top cut is active (" +
+            std::string(topCutStatusName(top_cut_info_.status)) +
+            "); call top_cut_retract before clearing the plan";
+          return false;
+        }
         if (side_tape_handoff_info_.status == SideTapeHandoffStatus::kActive ||
             side_tape_handoff_info_.status == SideTapeHandoffStatus::kCutting ||
             side_tape_handoff_info_.status == SideTapeHandoffStatus::kCutFailed) {
@@ -797,6 +894,10 @@ private:
         "left_parallel_min_joint_margin_deg", kPlan, 5.0, &S::left_parallel_min_joint_margin_deg),
       field<double>(
         "left_parallel_search_timeout_s", kPlan, 90.0, &S::left_parallel_search_timeout_s),
+      // Phase 1 speed-up: see PlannerSettings::left_search_ik_backend above. Read-only
+      // (restart to change) because it selects which IK code path runs, not a planning
+      // input.
+      field<str>("left_search_ik_backend", kRO, "analytic", &S::left_search_ik_backend),
       // Expensive per-pose IK/collision probing that explains each rejected left roll
       // candidate. Read at use time; the roll search itself is unaffected.
       runtime("left_roll_diagnostics_enabled", rclcpp::ParameterValue(false)),
@@ -893,6 +994,7 @@ private:
         &S::side_tape_continue_check_snapshot_age),
       field<double>(
         "side_tape_continue_speed_factor", kRO, 0.5, &S::side_tape_continue_speed_factor),
+      field<bool>("middle_blade_reversed", kRO, false, &S::middle_blade_reversed),
       field<double>(
         "side_tape_continue_end_extension_mm", kRO, 0.0,
         &S::side_tape_continue_end_extension_mm),
@@ -905,6 +1007,37 @@ private:
       field<double>(
         "side_tape_handoff_joint_velocity_threshold", kRO, 0.01,
         &S::side_tape_handoff_joint_velocity_threshold),
+      // Staged top cut (~/plan_top_cut_staged, ~/top_cut_penetrate, ~/top_cut_cut_and_lift).
+      field<double>(
+        "top_cut_staged_max_position_mm", kRO, 10.0, &S::top_cut_staged_max_position_mm),
+      field<double>(
+        "top_cut_staged_max_orientation_deg", kRO, 10.0, &S::top_cut_staged_max_orientation_deg),
+      field<std::vector<double>>(
+        "top_cut_start_offset_mm", kRO, std::vector<double>{0.0, 0.0, 0.0},
+        &S::top_cut_start_offset_mm),
+      field<std::vector<double>>(
+        "top_cut_end_offset_mm", kRO, std::vector<double>{0.0, 0.0, 0.0},
+        &S::top_cut_end_offset_mm),
+      field<double>("top_cut_staged_speed_factor", kRO, 1.0, &S::top_cut_staged_speed_factor),
+      field<double>("top_cut_lift_max_tilt_deg", kRO, 10.0, &S::top_cut_lift_max_tilt_deg),
+      field<double>("top_cut_lift_clearance_m", kRO, 0.003, &S::top_cut_lift_clearance_m),
+      field<double>("top_cut_pre_transit_lift_m", kRO, 0.10, &S::top_cut_pre_transit_lift_m),
+      field<double>(
+        "top_cut_post_penetration_dwell_s", kRO, 1.0, &S::top_cut_post_penetration_dwell_s),
+      field<bool>("top_cut_allow_shortened_cut", kRO, true, &S::top_cut_allow_shortened_cut),
+      field<double>(
+        "top_cut_lift_min_clearance_m", kRO, 0.001, &S::top_cut_lift_min_clearance_m),
+      field<double>(
+        "side_tape_withdraw_min_clearance_m", kRO, 0.001,
+        &S::side_tape_withdraw_min_clearance_m),
+      field<double>(
+        "top_cut_pre_transit_lift_min_fraction", kRO, 0.5,
+        &S::top_cut_pre_transit_lift_min_fraction),
+      field<double>("top_cut_min_cut_fraction", kRO, 0.5, &S::top_cut_min_cut_fraction),
+      field<bool>(
+        "top_cut_continue_check_snapshot_age", kRO, true,
+        &S::top_cut_continue_check_snapshot_age),
+      field<str>("top_cut_staged_output_file", kRO, "", &S::top_cut_staged_output_file),
     };
     return table;
   }
@@ -1017,6 +1150,9 @@ private:
       }
     }
     if (s.max_solutions < 1) return std::string("max_solutions must be at least 1");
+    if (s.left_search_ik_backend != "analytic" && s.left_search_ik_backend != "kdl") {
+      return std::string("left_search_ik_backend must be analytic or kdl");
+    }
     if (!isValidHandoffFraction(s.t_cut_middle_handoff_fraction)) {
       return std::string(kHandoffFractionRule);
     }
@@ -1144,6 +1280,24 @@ private:
       return std::string(
         "side_tape_handoff_joint_velocity_threshold must be finite and within (0,1] rad/s");
     }
+    if (!std::isfinite(s.top_cut_staged_max_position_mm) || s.top_cut_staged_max_position_mm <= 0.0 ||
+        s.top_cut_staged_max_position_mm > 50.0 ||
+        !std::isfinite(s.top_cut_staged_max_orientation_deg) ||
+        s.top_cut_staged_max_orientation_deg <= 0.0 || s.top_cut_staged_max_orientation_deg > 45.0 ||
+        !std::isfinite(s.top_cut_staged_speed_factor) || s.top_cut_staged_speed_factor <= 0.0 ||
+        s.top_cut_staged_speed_factor > 1.0 || !isAbsoluteJsonOrEmpty(s.top_cut_staged_output_file)) {
+      return std::string(
+        "top_cut_staged_* must be finite: position within (0,50] mm, orientation within (0,45] deg, "
+        "speed factor within (0,1], output file an absolute .json path or empty");
+    }
+    if (!std::isfinite(s.top_cut_lift_clearance_m) || s.top_cut_lift_clearance_m < 0.001 ||
+        s.top_cut_lift_clearance_m > 0.05) {
+      return std::string("top_cut_lift_clearance_m must be finite and within [0.001, 0.05] m");
+    }
+    if (!std::isfinite(s.top_cut_lift_max_tilt_deg) || s.top_cut_lift_max_tilt_deg < 0.0 ||
+        s.top_cut_lift_max_tilt_deg > 30.0) {
+      return std::string("top_cut_lift_max_tilt_deg must be finite and within [0,30] degrees");
+    }
     if (s.side_tape_handoff_servo_twist_topic.empty() ||
         s.side_tape_handoff_servo_joint_topic.empty()) {
       return std::string(
@@ -1218,6 +1372,12 @@ private:
         result.reason =
           "cannot change H-cut planning parameters while a side-tape hand-off is active or "
           "unresolved; call side_tape_retract first";
+        return result;
+      }
+      if (topCutStagedInProgress()) {
+        result.reason =
+          "cannot change H-cut planning parameters while a staged top cut is active; call "
+          "top_cut_retract first";
         return result;
       }
       PlannerSettings candidate = settings_;
@@ -1334,11 +1494,13 @@ private:
     const std::string dispatched_cut = cut_debug_session_cut_;
     const bool dispatched_is_side_tape_handoff = side_tape_handoff_pending_;
     side_tape_handoff_pending_ = false;
+    const bool dispatched_is_top_cut = top_cut_pending_;
+    top_cut_pending_ = false;
     auto task = std::move(planned_task_);
     planned_snapshot_.reset();
     execution_thread_ = std::thread(
       [this, task = std::move(task), dispatched_stage, dispatched_cut,
-       dispatched_is_side_tape_handoff]() mutable {
+       dispatched_is_side_tape_handoff, dispatched_is_top_cut]() mutable {
         bool succeeded = false;
         std::string failure_detail;
         try {
@@ -1357,6 +1519,17 @@ private:
         }
         std::lock_guard<std::mutex> completion_lock(plan_mutex_);
         execution_in_progress_ = false;
+        if (dispatched_is_top_cut) {
+          top_cut_info_.status =
+            succeeded ? TopCutStagedStatus::kApproached : TopCutStagedStatus::kFailed;
+          top_cut_info_.stamp = now();
+          writeTopCutStagedOutput();
+          if (!succeeded) {
+            RCLCPP_ERROR(
+              get_logger(), "Staged top cut approach did NOT complete (%s); status 'failed'; "
+              "call top_cut_retract to recover", failure_detail.c_str());
+          }
+        }
         if (dispatched_is_side_tape_handoff) {
           if (succeeded) {
             side_tape_handoff_info_.status = SideTapeHandoffStatus::kActive;
@@ -1413,6 +1586,11 @@ private:
     // for) a later, unrelated plan's dispatch: always consumed here, regardless of whether a
     // hand-off is currently in progress.
     side_tape_handoff_pending_ = false;
+    top_cut_pending_ = false;
+    if (!topCutStagedInProgress()) {
+      top_cut_info_ = TopCutStagedInfo{};
+      top_cut_snapshot_.reset();
+    }
     visualization_msgs::msg::MarkerArray markers;
     visualization_msgs::msg::Marker delete_all;
     delete_all.action = visualization_msgs::msg::Marker::DELETEALL;
@@ -1424,7 +1602,7 @@ private:
     // A dispatched (or uncertain, approach-failed) side-tape hand-off leaves the arm engaged
     // with (or standing off from) the carton; the carton collision object must survive any
     // clear/replan until side_tape_retract (or a verified-outside clear_plan) ends it.
-    if (side_tape_handoff_info_.inProgress()) return;
+    if (side_tape_handoff_info_.inProgress() || topCutStagedInProgress()) return;
     moveit_msgs::msg::CollisionObject remove_carton;
     remove_carton.id = settings_.carton_collision_id;
     remove_carton.header.frame_id = settings_.planning_frame;
@@ -1860,7 +2038,9 @@ private:
     const geometry_msgs::msg::Point& segment_end, const geometry_msgs::msg::Point& start,
     const geometry_msgs::msg::Point& end) const
   {
-    const double facing_sign = is_middle ? 1.0 : -1.0;
+    // Middle (top) seam: the knife faces along travel unless middle_blade_reversed (operator
+    // 2026-10-01: the top-cut blade must be rotated 180 deg about the tool Z / surface normal).
+    const double facing_sign = is_middle ? (settings_.middle_blade_reversed ? -1.0 : 1.0) : -1.0;
     const bool use_seam = !is_middle && settings_.side_cut_orientation_mode == "middle_aligned";
     const auto& from = use_seam ? snapshot.seam_start : segment_start;
     const auto& to = use_seam ? snapshot.seam_end : segment_end;
@@ -2244,6 +2424,203 @@ private:
     }
     return variants;
   }
+  // Phase 1 speed-up (rebel_analytic_ik.hpp): joint1..joint6 bounds from the live
+  // RobotModel, in the URDF's own joint order (not necessarily the JointModelGroup's
+  // variable order, which analyticIkBranches maps back separately). Returns false if the
+  // group's variable set is not exactly {joint1..joint6} with bounded positions, in which
+  // case the analytic backend cannot be used at all (caller must fall back to kdl).
+  static bool analyticJointLimitsFor(
+    const moveit::core::JointModelGroup* group, std::array<rebel_analytic_ik::JointLimits, 6>& out)
+  {
+    static const std::array<const char*, 6> kNames{
+      "joint1", "joint2", "joint3", "joint4", "joint5", "joint6"};
+    if (group->getVariableNames().size() != 6U) return false;
+    const auto& model = group->getParentModel();
+    for (std::size_t j = 0; j < 6U; ++j) {
+      if (std::find(
+            group->getVariableNames().begin(), group->getVariableNames().end(),
+            kNames[j]) == group->getVariableNames().end()) {
+        return false;
+      }
+      const auto& bounds = model.getVariableBounds(kNames[j]);
+      if (!bounds.position_bounded_) return false;
+      out[j] = {bounds.min_position_, bounds.max_position_};
+    }
+    return true;
+  }
+  // Maps rebel_analytic_ik's fixed joint1..joint6 order onto `group`'s own variable order.
+  // Only meaningful once analyticJointLimitsFor(group, ...) has confirmed the group is
+  // exactly {joint1..joint6}.
+  static std::array<std::size_t, 6> analyticVariableIndex(const moveit::core::JointModelGroup* group)
+  {
+    static const std::array<const char*, 6> kNames{
+      "joint1", "joint2", "joint3", "joint4", "joint5", "joint6"};
+    const auto& names = group->getVariableNames();
+    std::array<std::size_t, 6> index{};
+    for (std::size_t j = 0; j < 6U; ++j) {
+      index[j] = static_cast<std::size_t>(
+        std::distance(names.begin(), std::find(names.begin(), names.end(), kNames[j])));
+    }
+    return index;
+  }
+  // Runs two independent checks once (lazily, the first time a JointModelGroup is available:
+  // robot_model_ is only set once a task has been built, not at node construction). If either
+  // fails, analytic_ik_available_ stays false for the rest of the process and every
+  // analytic-backend call below falls back to kdl with a one-time error, per
+  // left_search_ik_backend's documented fallback behaviour:
+  //   1. rebel_analytic_ik::selfCheck(): the library's own FK against its own solve(), to
+  //      1e-6 m / 1e-6 rad. This only proves internal self-consistency -- it shares the
+  //      library's hardcoded constants on both sides, so it cannot detect a wrong constant
+  //      (see the 2026-09-28 kJ4Z transcription bug: forwardKinematics and solve() both used
+  //      the same wrong value and stayed mutually consistent; this check alone would not
+  //      have caught it).
+  //   2. A ground-truth check against the live MoveIt RobotModel/URDF FK for
+  //      settings_.tool_link, which is what actually catches a stale or wrong hardcoded
+  //      constant (including a TCP recalibration or a changed xeg32 mount offset the library
+  //      does not know about), because it does not go through rebel_analytic_ik at all on the
+  //      "expected" side. Also fails closed immediately, before either numeric check, if
+  //      tool_link is not exactly "xeg32_tool_tip" (the only TCP the library's hardcoded tool
+  //      offset models) or if the robot model's root link / planning_frame is not base_link
+  //      (which every rebel_analytic_ik constant is expressed relative to).
+  void ensureAnalyticIkSelfCheck(const moveit::core::JointModelGroup* joint_group)
+  {
+    std::call_once(analytic_self_check_once_, [this, joint_group]() {
+        if (settings_.tool_link != "xeg32_tool_tip") {
+          RCLCPP_ERROR(
+            get_logger(),
+            "Analytic IK self-check refused: tool_link is '%s', not 'xeg32_tool_tip' (the "
+            "only TCP rebel_analytic_ik's hardcoded link6->igus_tool0->xeg32_tool_tip offset "
+            "models); disabling the analytic left-search backend for this process and "
+            "falling back to kdl regardless of left_search_ik_backend",
+            settings_.tool_link.c_str());
+          analytic_ik_available_.store(false);
+          return;
+        }
+        std::array<rebel_analytic_ik::JointLimits, 6> limits;
+        if (!analyticJointLimitsFor(joint_group, limits)) {
+          RCLCPP_WARN(
+            get_logger(),
+            "Analytic IK self-check skipped: planning group '%s' is not exactly "
+            "{joint1..joint6} with bounded positions; left_search_ik_backend=analytic will "
+            "fall back to kdl",
+            settings_.planning_group.c_str());
+          analytic_ik_available_.store(false);
+          return;
+        }
+        // rebel_analytic_ik's constants are all expressed relative to a link named
+        // "base_link"; that link need not be the RobotModel's actual kinematic root (SRDF
+        // setups commonly add a "world" virtual-joint parent above it, which is the case
+        // here -- getRootLinkName() is "world", not "base_link"). FK below is therefore taken
+        // relative to the named "base_link" link explicitly, not assumed to be the model
+        // frame; this only requires that link to exist and that planning_frame agrees.
+        const moveit::core::LinkModel* base_link_model =
+          robot_model_ ? robot_model_->getLinkModel("base_link") : nullptr;
+        if (base_link_model == nullptr || settings_.planning_frame != "base_link") {
+          RCLCPP_ERROR(
+            get_logger(),
+            "Analytic IK self-check refused: robot model has %sa link named 'base_link' and "
+            "planning_frame is '%s'; rebel_analytic_ik's constants require both a 'base_link' "
+            "link and planning_frame=base_link; disabling the analytic left-search backend "
+            "for this process and falling back to kdl regardless of left_search_ik_backend",
+            base_link_model == nullptr ? "no " : "", settings_.planning_frame.c_str());
+          analytic_ik_available_.store(false);
+          return;
+        }
+        const auto library_result =
+          rebel_analytic_ik::selfCheck(2000, 1e-6, 1e-6, 20260928U, limits);
+        if (!library_result.ok) {
+          RCLCPP_ERROR(
+            get_logger(),
+            "Analytic IK library self-check FAILED (%s); disabling the analytic left-search "
+            "backend for this process and falling back to kdl regardless of "
+            "left_search_ik_backend",
+            library_result.failure_detail.c_str());
+          analytic_ik_available_.store(false);
+          return;
+        }
+        RCLCPP_INFO(
+          get_logger(),
+          "Analytic IK library self-check passed: %zu/%zu samples recovered, max residual "
+          "%.3e m / %.3e rad",
+          library_result.samples_with_original_recovered, library_result.samples,
+          library_result.max_position_residual_m, library_result.max_orientation_residual_rad);
+
+        // Ground-truth gate: compare against the live MoveIt RobotModel/URDF FK directly, not
+        // against this library's own forward kinematics (see the function comment above).
+        // Tolerance 1e-6 m / 1e-6 rad. An earlier ~7e-6 residual was a real mismatch (URDF
+        // J_motor1 yaw is 3.1416, not pi), not rounding; keep this tight so small geometry
+        // drift is caught.
+        constexpr double kGroundTruthPositionTolM = 1e-6;
+        constexpr double kGroundTruthOrientationTolRad = 1e-6;
+        const auto index = analyticVariableIndex(joint_group);
+        const auto& names = joint_group->getVariableNames();
+        moveit::core::RobotState state(robot_model_);
+        random_numbers::RandomNumberGenerator rng(20260929U);
+        constexpr int kGroundTruthSamples = 2000;
+        double max_pos_err = 0.0;
+        double max_ang_err = 0.0;
+        for (int sample = 0; sample < kGroundTruthSamples; ++sample) {
+          rebel_analytic_ik::JointVector q{};
+          std::vector<double> values(names.size(), 0.0);
+          for (std::size_t j = 0; j < 6U; ++j) {
+            q[j] = rng.uniformReal(limits[j].lower, limits[j].upper);
+            values[index[j]] = q[j];
+          }
+          state.setJointGroupPositions(joint_group, values);
+          state.update();
+          // tool_link's pose relative to base_link, not to whatever the model's actual root
+          // is (see base_link_model's comment above).
+          const Eigen::Isometry3d moveit_fk =
+            state.getGlobalLinkTransform(base_link_model).inverse() *
+            state.getGlobalLinkTransform(settings_.tool_link);
+          const Eigen::Isometry3d analytic_fk = rebel_analytic_ik::forwardKinematics(q);
+          const double pos_err = (moveit_fk.translation() - analytic_fk.translation()).norm();
+          const double ang_err =
+            Eigen::AngleAxisd(moveit_fk.linear().transpose() * analytic_fk.linear()).angle();
+          max_pos_err = std::max(max_pos_err, pos_err);
+          max_ang_err = std::max(max_ang_err, ang_err);
+          if (pos_err > kGroundTruthPositionTolM || ang_err > kGroundTruthOrientationTolRad) {
+            RCLCPP_ERROR(
+              get_logger(),
+              "Analytic IK ground-truth self-check FAILED at sample %d/%d: live MoveIt "
+              "RobotModel FK for tool_link '%s' disagrees with rebel_analytic_ik::"
+              "forwardKinematics by %.3e m / %.3e rad (the URDF's arm chain, tool offset or "
+              "mount may have changed since the library's constants were derived); disabling "
+              "the analytic left-search backend for this process and falling back to kdl "
+              "regardless of left_search_ik_backend",
+              sample, kGroundTruthSamples, settings_.tool_link.c_str(), pos_err, ang_err);
+            analytic_ik_available_.store(false);
+            return;
+          }
+        }
+        RCLCPP_INFO(
+          get_logger(),
+          "Analytic IK ground-truth self-check passed: %d/%d samples matched live MoveIt "
+          "RobotModel FK for tool_link '%s', max residual %.3e m / %.3e rad",
+          kGroundTruthSamples, kGroundTruthSamples, settings_.tool_link.c_str(), max_pos_err,
+          max_ang_err);
+        analytic_ik_available_.store(true);
+      });
+  }
+  // Every closed-form branch for `target` (base_link frame), filtered to the group's live
+  // joint limits, mapped into the group's variable order. Empty (not an error) for an
+  // unreachable target; check analytic_ik_available_ / analyticJointLimitsFor separately to
+  // distinguish "unreachable" from "analytic backend unusable for this group".
+  static std::vector<std::vector<double> > analyticIkBranches(
+    const moveit::core::JointModelGroup* group, const Eigen::Isometry3d& target)
+  {
+    std::array<rebel_analytic_ik::JointLimits, 6> limits;
+    std::vector<std::vector<double> > branches;
+    if (!analyticJointLimitsFor(group, limits)) return branches;
+    const auto index = analyticVariableIndex(group);
+    const auto& names = group->getVariableNames();
+    for (const auto& solution : rebel_analytic_ik::solve(target, limits)) {
+      std::vector<double> values(names.size());
+      for (std::size_t j = 0; j < 6U; ++j) values[index[j]] = solution[j];
+      branches.push_back(std::move(values));
+    }
+    return branches;
+  }
   bool searchLeftParallelOrientation(
     const Snapshot& snapshot,
     const moveit::core::JointModelGroup* joint_group,
@@ -2275,18 +2652,17 @@ private:
         return false;
       }
     }
-    const moveit::core::GroupStateValidityCallbackFn valid_state =
-      [this, &scene](moveit::core::RobotState* state,
-                     const moveit::core::JointModelGroup* group, const double* values) {
-        state->setJointGroupPositions(group, values);
-        state->update();
-        return !scene.isStateColliding(*state, settings_.planning_group);
-      };
+    // valid_state is defined per-scene inside evaluate_candidate below (each worker thread
+    // gets its own PlanningScene, so it cannot be built once here against the shared
+    // top-level `scene`).
     const auto* tool = seed_state.getRobotModel()->getLinkModel(settings_.tool_link);
     if (tool == nullptr || labeled_poses.empty()) {
       error = "left parallel orientation probe has no tool link or poses";
       return false;
     }
+    ensureAnalyticIkSelfCheck(joint_group);
+    const bool use_analytic_backend =
+      settings_.left_search_ik_backend == "analytic" && analytic_ik_available_.load();
     const Eigen::Vector3d into_unit = -basis.normal;
     Eigen::Matrix3d reference;
     reference.col(0) = -basis.normal;
@@ -2372,137 +2748,240 @@ private:
         }
         return worst >= margin;
       };
-    std::vector<Eigen::Isometry3d> targets;
+    std::vector<double> seed_positions;
+    seed_state.copyJointGroupPositions(joint_group, seed_positions);
+    std::vector<Eigen::Vector3d> target_positions;
     for (const auto& labeled : labeled_poses) {
-      Eigen::Isometry3d target = Eigen::Isometry3d::Identity();
-      target.translation() = toEigen(labeled.first->pose.position);
-      targets.push_back(target);
+      target_positions.push_back(toEigen(labeled.first->pose.position));
     }
+    struct LeftCandidateEval {
+      bool any_ik{false};
+      bool feasible{false};
+      bool chain_failed{false};
+      bool margin_failed{false};
+      double best_worst{std::numeric_limits<double>::infinity()};
+      std::vector<double> best_start;
+      std::size_t branch_count{0};
+    };
+    // Evaluates one orientation candidate against the caller's `scene`. Every gate is
+    // identical to the pre-Phase-1 search (penetration was already checked by the caller when
+    // building `candidates`; IK/collision, the Cartesian chain, jump/bounds and the joint
+    // margin below); only the branch-generation source (kdl vs analytic,
+    // use_analytic_backend) differs. See the comment at the analytic branch below for exactly
+    // how that can change a candidate's feasibility in either direction relative to kdl.
+    const auto evaluate_candidate =
+      [&](const Candidate& candidate, planning_scene::PlanningScene& scene) -> LeftCandidateEval {
+        LeftCandidateEval result;
+        std::vector<Eigen::Isometry3d> targets;
+        for (const auto& position : target_positions) {
+          Eigen::Isometry3d target = Eigen::Isometry3d::Identity();
+          target.translation() = position;
+          target.linear() = candidate.orientation.toRotationMatrix();
+          targets.push_back(target);
+        }
+        const moveit::core::GroupStateValidityCallbackFn valid_state =
+          [this, &scene](moveit::core::RobotState* state,
+                         const moveit::core::JointModelGroup* group, const double* values) {
+            state->setJointGroupPositions(group, values);
+            state->update();
+            return !scene.isStateColliding(*state, settings_.planning_group);
+          };
+        random_numbers::RandomNumberGenerator rng(1234U);
+        // Every collision-free first-pose branch the free-space transit could select. Every
+        // such branch must carry the whole left chain, because the transit picks the branch
+        // and the contact strokes run with jump detection off.
+        std::vector<std::vector<double> > branches;
+        const auto add_branch = [&](const std::vector<double>& values) {
+            for (const auto& other : branches) {
+              double diff = 0.0;
+              for (std::size_t j = 0; j < values.size(); ++j) {
+                diff = std::max(diff, std::abs(values[j] - other[j]));
+              }
+              if (diff < 1e-3) return;
+            }
+            moveit::core::RobotState probe(seed_state);
+            probe.setJointGroupPositions(joint_group, values);
+            probe.update();
+            if (!probe.satisfiesBounds(joint_group) ||
+                scene.isStateColliding(probe, settings_.planning_group)) {
+              return;
+            }
+            const Eigen::Isometry3d& reached = probe.getGlobalLinkTransform(tool);
+            if ((reached.translation() - targets.front().translation()).norm() > 1e-5 ||
+                Eigen::AngleAxisd(reached.linear().transpose() * targets.front().linear()).angle() >
+                1e-4) {
+              return;
+            }
+            branches.push_back(values);
+          };
+        scene.getAllowedCollisionMatrixNonConst().setEntry(
+          settings_.tool_link, settings_.carton_collision_id, false);
+        if (use_analytic_backend) {
+          // Closed-form branch enumeration (rebel_analytic_ik): every algebraic IK branch
+          // within the live joint limits, computed directly from targets.front() with no
+          // iterative search and no per-iteration collision checking. add_branch() above
+          // still runs the same bounds/collision/reached-pose check as the kdl path, once per
+          // branch. Any branch the kdl path reaches is itself a valid IK solution and so must
+          // be among the analytic solver's algebraically-complete set (verified by
+          // ensureAnalyticIkSelfCheck's startup gate and the package's gtest): analytic's
+          // branch set for a given candidate is always a superset of (or equal to) whatever
+          // kdl's finite seed search (seed + wristVariants + kRandomBranchAttempts restarts,
+          // each a 0.1 s IK timeout) found for that same candidate.
+          //
+          // Feasibility below requires EVERY branch of a candidate to pass bounds, collision,
+          // the whole Cartesian chain and the joint margin (not just one) -- because the
+          // free-space transit can land on any collision-free hover-start branch, and every
+          // one of them must be able to carry the left chain. A strictly larger branch set
+          // therefore does NOT only make a candidate more likely to pass; it can move
+          // feasibility in either direction relative to kdl, for two distinct reasons:
+          //   - kdl fails closed immediately when it finds zero branches (any_ik false).
+          //     If analytic finds at least one branch there that passes every check, the
+          //     candidate flips infeasible -> feasible: analytic rescues a candidate kdl's
+          //     finite search missed entirely.
+          //   - If kdl found some (but not all) branches and every one of them happened to
+          //     pass, kdl accepts the candidate on that incomplete set. If analytic's
+          //     complete set includes an additional branch that fails the chain or margin
+          //     check, the candidate flips feasible -> infeasible: analytic is stricter
+          //     because it verifies every branch the transit could actually select, not just
+          //     the ones kdl's finite/random search happened to land on.
+          // Both directions are a correctness improvement over kdl (rescuing a real, fully
+          // verified branch, or rejecting a candidate kdl only partially verified), never a
+          // weakening of any individual check.
+          for (const auto& branch : analyticIkBranches(joint_group, targets.front())) {
+            add_branch(branch);
+          }
+        } else {
+          std::vector<std::vector<double> > seeds{seed_positions};
+          for (const auto& variant : wristVariants(joint_group, seed_positions)) {
+            seeds.push_back(variant);
+          }
+          for (int attempt = 0; attempt < kRandomBranchAttempts; ++attempt) {
+            moveit::core::RobotState random_state(seed_state);
+            random_state.setToRandomPositions(joint_group, rng);
+            std::vector<double> values;
+            random_state.copyJointGroupPositions(joint_group, values);
+            seeds.push_back(values);
+          }
+          for (const auto& seed : seeds) {
+            moveit::core::RobotState state(seed_state);
+            state.setJointGroupPositions(joint_group, seed);
+            state.update();
+            if (!state.setFromIK(joint_group, targets.front(), settings_.tool_link, kIkTimeoutS,
+                                 valid_state)) {
+              continue;
+            }
+            std::vector<double> solution;
+            state.copyJointGroupPositions(joint_group, solution);
+            add_branch(solution);
+            for (const auto& variant : wristVariants(joint_group, solution)) add_branch(variant);
+          }
+        }
+        result.branch_count = branches.size();
+        result.any_ik = !branches.empty();
+        bool feasible = result.any_ik;
+        double best_worst = std::numeric_limits<double>::infinity();
+        std::vector<double> best_start;
+        double best_distance = std::numeric_limits<double>::infinity();
+        for (const auto& start : branches) {
+          if (!feasible) break;
+          moveit::core::RobotState state(seed_state);
+          state.setJointGroupPositions(joint_group, start);
+          state.update();
+          double worst = std::numeric_limits<double>::infinity();
+          bool ok = inside_margin(start, worst);
+          std::vector<double> previous = start;
+          // Entry/cut/exit/lift strokes all run under the scoped tool/carton allowance.
+          scene.getAllowedCollisionMatrixNonConst().setEntry(
+            settings_.tool_link, settings_.carton_collision_id, settings_.allow_tool_carton_contact);
+          bool chain_ok = true;
+          for (std::size_t leg = 1; leg < targets.size() && chain_ok; ++leg) {
+            std::vector<moveit::core::RobotStatePtr> waypoints;
+            const double fraction = moveit::core::CartesianInterpolator::computeCartesianPath(
+              &state, joint_group, waypoints, tool, targets[leg], true,
+              moveit::core::MaxEEFStep(settings_.cartesian_step_m, 0.0),
+              moveit::core::JumpThreshold(0.0), valid_state);
+            if (fraction < 1.0 - 1e-9) {
+              chain_ok = false;
+              break;
+            }
+            for (const auto& waypoint : waypoints) {
+              std::vector<double> q;
+              waypoint->copyJointGroupPositions(joint_group, q);
+              for (std::size_t j = 0; j < q.size(); ++j) {
+                if (std::abs(q[j] - previous[j]) > kMaxStrokeJointStepRad) chain_ok = false;
+              }
+              if (!waypoint->satisfiesBounds(joint_group)) chain_ok = false;
+              ok = inside_margin(q, worst) && ok;
+              previous = q;
+            }
+          }
+          if (!chain_ok) {
+            result.chain_failed = true;
+            feasible = false;
+            break;
+          }
+          if (!ok) {
+            result.margin_failed = true;
+            feasible = false;
+            break;
+          }
+          best_worst = std::min(best_worst, worst);
+          double distance = 0.0;
+          for (std::size_t j = 0; j < start.size(); ++j) {
+            distance += std::abs(start[j] - seed_positions[j]);
+          }
+          if (distance < best_distance) {
+            best_distance = distance;
+            best_start = start;
+          }
+        }
+        result.feasible = feasible;
+        result.best_worst = best_worst;
+        result.best_start = std::move(best_start);
+        return result;
+      };
+
+    // Serial evaluation, stopping at the first feasible candidate: identical control flow to
+    // the pre-Phase-1 search (evaluate_candidate above is a refactor for readability and for
+    // the analytic/kdl backend switch, not a behaviour change). An earlier version of this
+    // function also had an ordered-parallel (thread-pool) path with a per-thread
+    // PlanningScene/RobotState; it was removed after mock testing showed it was NOT
+    // deterministic (repeated identical requests sometimes selected a worse candidate than
+    // the serial search). The confirmed root cause: MoveIt's JointModelGroup owns a single
+    // shared kinematics solver plugin instance per group
+    // (JointModelGroup::solver_instance_, moveit/robot_model/joint_model_group.h), reused by
+    // every RobotState built from that group regardless of which PlanningScene it belongs to.
+    // CartesianInterpolator::computeCartesianPath calls RobotState::setFromIK once per
+    // waypoint (moveit/robot_state/cartesian_interpolator.h), which by default resolves to
+    // that one shared solver instance (e.g. KDLKinematicsPlugin, whose KDL FK/IK solvers hold
+    // mutable per-call working state as plain member fields, not thread-local or locked --
+    // see moveit/kdl_kinematics_plugin/kdl_kinematics_plugin.h). Per-thread PlanningScene and
+    // RobotState clones do not isolate that shared solver, so concurrent
+    // computeCartesianPath/setFromIK calls across threads race on it. See the removed code's
+    // history (this branch, prior commit) for the parallel implementation if this is revisited
+    // with a per-thread kinematics solver or a lock around solver use.
     const auto started = std::chrono::steady_clock::now();
-    std::size_t tried = 0;
-    std::size_t ik_failures = 0;
-    std::size_t chain_failures = 0;
-    std::size_t margin_failures = 0;
-    for (const auto& candidate : candidates) {
+    std::size_t tried = 0, ik_failures = 0, chain_failures = 0, margin_failures = 0;
+    std::size_t winning_index = candidates.size();
+    LeftCandidateEval winning_eval;
+    for (std::size_t index = 0; index < candidates.size(); ++index) {
       const double elapsed = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - started).count();
       if (elapsed > settings_.left_parallel_search_timeout_s) break;
       ++tried;
-      for (auto& target : targets) target.linear() = candidate.orientation.toRotationMatrix();
-      random_numbers::RandomNumberGenerator rng(1234U);
-      std::vector<double> seed_positions;
-      seed_state.copyJointGroupPositions(joint_group, seed_positions);
-      // Every collision-free first-pose branch the free-space transit could select: IK
-      // from the current state, its spherical-wrist flip and fixed-seed random restarts,
-      // each expanded with its in-bounds wrist flip (the NearestBranchTransitPlanner
-      // candidate set). Every such branch must carry the whole left chain, because the
-      // transit picks the branch and the contact strokes run with jump detection off.
-      std::vector<std::vector<double> > branches;
-      const auto add_branch = [&](const std::vector<double>& values) {
-          for (const auto& other : branches) {
-            double diff = 0.0;
-            for (std::size_t j = 0; j < values.size(); ++j) {
-              diff = std::max(diff, std::abs(values[j] - other[j]));
-            }
-            if (diff < 1e-3) return;
-          }
-          moveit::core::RobotState probe(seed_state);
-          probe.setJointGroupPositions(joint_group, values);
-          probe.update();
-          if (!probe.satisfiesBounds(joint_group) ||
-              scene.isStateColliding(probe, settings_.planning_group)) {
-            return;
-          }
-          const Eigen::Isometry3d& reached = probe.getGlobalLinkTransform(tool);
-          if ((reached.translation() - targets.front().translation()).norm() > 1e-5 ||
-              Eigen::AngleAxisd(reached.linear().transpose() * targets.front().linear()).angle() >
-              1e-4) {
-            return;
-          }
-          branches.push_back(values);
-        };
-      scene.getAllowedCollisionMatrixNonConst().setEntry(
-        settings_.tool_link, settings_.carton_collision_id, false);
-      std::vector<std::vector<double> > seeds{seed_positions};
-      for (const auto& variant : wristVariants(joint_group, seed_positions)) seeds.push_back(variant);
-      for (int attempt = 0; attempt < kRandomBranchAttempts; ++attempt) {
-        moveit::core::RobotState random_state(seed_state);
-        random_state.setToRandomPositions(joint_group, rng);
-        std::vector<double> values;
-        random_state.copyJointGroupPositions(joint_group, values);
-        seeds.push_back(values);
+      LeftCandidateEval eval = evaluate_candidate(candidates[index], scene);
+      if (!eval.any_ik) ++ik_failures;
+      if (eval.chain_failed) ++chain_failures;
+      if (eval.margin_failed) ++margin_failures;
+      if (eval.feasible) {
+        winning_index = index;
+        winning_eval = std::move(eval);
+        break;
       }
-      for (const auto& seed : seeds) {
-        moveit::core::RobotState state(seed_state);
-        state.setJointGroupPositions(joint_group, seed);
-        state.update();
-        if (!state.setFromIK(joint_group, targets.front(), settings_.tool_link, kIkTimeoutS,
-                             valid_state)) {
-          continue;
-        }
-        std::vector<double> solution;
-        state.copyJointGroupPositions(joint_group, solution);
-        add_branch(solution);
-        for (const auto& variant : wristVariants(joint_group, solution)) add_branch(variant);
-      }
-      const bool any_ik = !branches.empty();
-      bool feasible = any_ik;
-      double best_worst = std::numeric_limits<double>::infinity();
-      std::vector<double> best_start;
-      double best_distance = std::numeric_limits<double>::infinity();
-      for (const auto& start : branches) {
-        if (!feasible) break;
-        moveit::core::RobotState state(seed_state);
-        state.setJointGroupPositions(joint_group, start);
-        state.update();
-        double worst = std::numeric_limits<double>::infinity();
-        bool ok = inside_margin(start, worst);
-        std::vector<double> previous = start;
-        // Entry/cut/exit/lift strokes all run under the scoped tool/carton allowance.
-        scene.getAllowedCollisionMatrixNonConst().setEntry(
-          settings_.tool_link, settings_.carton_collision_id, settings_.allow_tool_carton_contact);
-        bool chain_ok = true;
-        for (std::size_t leg = 1; leg < targets.size() && chain_ok; ++leg) {
-          std::vector<moveit::core::RobotStatePtr> waypoints;
-          const double fraction = moveit::core::CartesianInterpolator::computeCartesianPath(
-            &state, joint_group, waypoints, tool, targets[leg], true,
-            moveit::core::MaxEEFStep(settings_.cartesian_step_m, 0.0),
-            moveit::core::JumpThreshold(0.0), valid_state);
-          if (fraction < 1.0 - 1e-9) {
-            chain_ok = false;
-            break;
-          }
-          for (const auto& waypoint : waypoints) {
-            std::vector<double> q;
-            waypoint->copyJointGroupPositions(joint_group, q);
-            for (std::size_t j = 0; j < q.size(); ++j) {
-              if (std::abs(q[j] - previous[j]) > kMaxStrokeJointStepRad) chain_ok = false;
-            }
-            if (!waypoint->satisfiesBounds(joint_group)) chain_ok = false;
-            ok = inside_margin(q, worst) && ok;
-            previous = q;
-          }
-        }
-        if (!chain_ok) {
-          ++chain_failures;
-          feasible = false;
-          break;
-        }
-        if (!ok) {
-          ++margin_failures;
-          feasible = false;
-          break;
-        }
-        best_worst = std::min(best_worst, worst);
-        double distance = 0.0;
-        for (std::size_t j = 0; j < start.size(); ++j) distance += std::abs(start[j] - seed_positions[j]);
-        if (distance < best_distance) {
-          best_distance = distance;
-          best_start = start;
-        }
-      }
-      if (!any_ik) ++ik_failures;
-      if (!feasible) continue;
+    }
+    if (winning_index < candidates.size()) {
+      const auto& candidate = candidates[winning_index];
+      const auto& eval = winning_eval;
       for (const auto& labeled : labeled_poses) {
         labeled.first->pose.orientation = toMsg(candidate.orientation);
       }
@@ -2516,21 +2995,22 @@ private:
       last_left_parallel_selection_.candidate_count = candidates.size();
       std::ostringstream start_deg;
       start_deg << std::fixed << std::setprecision(1);
-      for (std::size_t j = 0; j < best_start.size(); ++j) {
-        start_deg << (j ? "," : "") << best_start[j] / kDeg;
+      for (std::size_t j = 0; j < eval.best_start.size(); ++j) {
+        start_deg << (j ? "," : "") << eval.best_start[j] / kDeg;
       }
       RCLCPP_INFO(
         get_logger(),
         "Left parallel orientation selected for %s: tilt %+.1f pitch %+.1f yaw %+.1f deg, "
         "blade-plane angle to top face theta_p %.2f deg, blade %.2f deg off the cut line, "
         "gate x=%.4f z=%.4f, min joint margin %.2f deg over all %zu hover-start branches "
-        "(nearest [%s] deg) (candidate %zu of %zu, %.1f s)",
+        "(nearest [%s] deg) (candidate %zu of %zu, %.1f s, backend=%s)",
         pose_context.c_str(), candidate.tilt, candidate.pitch, candidate.yaw, candidate.theta_p,
         candidate.blade_deviation,
         (candidate.orientation * Eigen::Vector3d::UnitX()).dot(into_unit),
-        (candidate.orientation * Eigen::Vector3d::UnitZ()).dot(into_unit), best_worst / kDeg,
-        branches.size(), start_deg.str().c_str(), tried, candidates.size(),
-        std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count());
+        (candidate.orientation * Eigen::Vector3d::UnitZ()).dot(into_unit), eval.best_worst / kDeg,
+        eval.branch_count, start_deg.str().c_str(), winning_index + 1, candidates.size(),
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count(),
+        use_analytic_backend ? "analytic" : "kdl");
       return true;
     }
     std::ostringstream detail;
@@ -2539,7 +3019,8 @@ private:
       tried << " of " << candidates.size() << " gate-passing candidates (max_tilt=" <<
       settings_.left_parallel_max_tilt_deg << " max_yaw=" << settings_.left_parallel_max_yaw_deg <<
       " step=" << settings_.left_parallel_step_deg << " deg, timeout " <<
-      settings_.left_parallel_search_timeout_s << " s); no collision-aware IK: " << ik_failures <<
+      settings_.left_parallel_search_timeout_s << " s); no collision-aware IK: " <<
+      ik_failures <<
       ", Cartesian chain/jump/bounds failures: " << chain_failures <<
       ", joint margin < " << settings_.left_parallel_min_joint_margin_deg << " deg: " <<
       margin_failures;
@@ -2865,6 +3346,10 @@ private:
         "starting a cut debug session";
       return false;
     }
+    if (topCutStagedInProgress()) {
+      message = "a staged top cut is active; call top_cut_retract before starting a cut debug session";
+      return false;
+    }
     if (planned_task_ && planned_snapshot_ && !planned_task_->solutions().empty()) {
       message =
         "a normal H-cut plan is retained; call clear_plan before starting a cut debug session";
@@ -3030,6 +3515,10 @@ private:
     if (side_tape_handoff_info_.inProgress()) {
       message = "a side-tape hand-off is already active or unresolved; call side_tape_retract "
         "first (or clear_plan, once the tip is verified outside, if approach_failed)";
+      return false;
+    }
+    if (topCutStagedInProgress()) {
+      message = "a staged top cut is active; call top_cut_retract before planning a side-tape hand-off";
       return false;
     }
     if (cut_debug_stage_ != CutDebugStage::kNone) {
@@ -3507,9 +3996,28 @@ private:
     withdraw_target.header.frame_id = settings_.planning_frame;
     withdraw_target.pose.position = toPoint(
       toEigen(from_pose.pose.position) + withdraw_m * side_tape_handoff_info_.outward_normal);
+    // Operator 2026-10-01: accept a partial withdraw as long as the tip ends at least
+    // side_tape_withdraw_min_clearance_m outside the outer wall (withdraw_m = depth +
+    // hover_clearance_m); never one that leaves the blade in the wall.
+    mtc::solvers::PlannerInterfacePtr withdraw_planner = planners.stroke;
+    if (withdraw_m > 1e-6 && std::dynamic_pointer_cast<mtc::solvers::CartesianPath>(planners.stroke)) {
+      const double needed_m = std::max(
+        0.0, withdraw_m - settings_.hover_clearance_m + settings_.side_tape_withdraw_min_clearance_m);
+      const double min_fraction = std::clamp(needed_m / withdraw_m, 0.0, 1.0);
+      if (min_fraction < 1.0 - 1e-9) {
+        auto partial = std::make_shared<mtc::solvers::CartesianPath>();
+        partial->setIKFrame(settings_.tool_link);
+        partial->setStepSize(settings_.cartesian_step_m);
+        partial->setJumpThreshold(0.0);
+        partial->setMinFraction(min_fraction);
+        partial->setMaxVelocityScalingFactor(settings_.velocity_scaling);
+        partial->setMaxAccelerationScalingFactor(settings_.acceleration_scaling);
+        withdraw_planner = partial;
+      }
+    }
     addMoveTo(
       task, "side-tape retract: withdraw along face normal [" + settings_.motion_profile + "]",
-      planners.stroke, withdraw_target);
+      withdraw_planner, withdraw_target);
     published_targets.push_back(withdraw_target);
     if (fresh) {
       if (settings_.allow_tool_carton_contact) {
@@ -3718,6 +4226,113 @@ private:
   // the depth at the stroke end + hover_clearance_m, then the free-space transit). Every
   // refusal happens before anything moves. Status: cutting while executing, retracted on
   // success, cut_failed on failure (hand-off state and carton kept; side_tape_retract recovers).
+  // ~/side_cut_penetrate (operator 2026-10-01): staged side cut like the top cut. After the
+  // standoff approach (hand-off status 'active', variant standoff), move straight from the
+  // CURRENT pose into the face to the planned in-material cut start (box offset applied at
+  // plan time), keeping the current orientation, and stop there so the operator can check /
+  // teleop-correct the start. continue_side_cut then cuts from wherever the tip is.
+  bool sideCutPenetrate(std::string& message)
+  {
+    const auto& info = side_tape_handoff_info_;
+    if (info.status != SideTapeHandoffStatus::kActive || info.variant != "standoff") {
+      message = "side_cut_penetrate refused: needs an active side-tape hand-off with variant "
+        "'standoff' (plan_side_tape_handoff + execute_planned_h_cut first)";
+      return false;
+    }
+    if (info.stale_override || settings_.debug_allow_stale_snapshot) {
+      message = "side_cut_penetrate refused: planned/loaded under debug_allow_stale_snapshot";
+      return false;
+    }
+    if (!execution_enabled_.load()) {
+      message = "execution service is disabled by execution_enabled";
+      return false;
+    }
+    if (execution_in_progress_) {
+      message = "an H-cut trajectory execution is already active";
+      return false;
+    }
+    if (!side_tape_handoff_snapshot_) {
+      message = "side-tape hand-off snapshot is unavailable; internal state error";
+      return false;
+    }
+    std::string servo_error;
+    if (!sideTapeServoIsQuiescent(servo_error)) {
+      message = "side_cut_penetrate refused: " + servo_error;
+      return false;
+    }
+    geometry_msgs::msg::PoseStamped current;
+    if (!captureObservedTcpPose(current, message)) return false;
+    const double offset_mm =
+      (toEigen(current.pose.position) - toEigen(info.start_pose.pose.position)).norm() * 1000.0;
+    const double orient_deg = angleBetweenDeg(current.pose.orientation, info.start_pose.pose.orientation);
+    if (offset_mm > 10.0 || orient_deg > 10.0) {
+      message = "side_cut_penetrate refused: tip is " + formatDouble(offset_mm, 1) + " mm / " +
+        formatDouble(orient_deg, 1) + " deg from the standoff pose (max 10 mm / 10 deg)";
+      return false;
+    }
+    const Snapshot snapshot = *side_tape_handoff_snapshot_;
+    auto task = std::make_unique<mtc::Task>();
+    task->stages()->setName("side cut penetrate (left)");
+    if (robot_model_) {
+      task->setRobotModel(robot_model_);
+    } else {
+      task->loadRobotModel(shared_from_this());
+      robot_model_ = task->getRobotModel();
+    }
+    task->add(std::make_unique<mtc::stages::CurrentState>("current robot state"));
+    addSideTapeCartonScene(*task, snapshot);
+    const CutPlanners planners = makeCutPlanners(settings_.motion_profile);
+    geometry_msgs::msg::PoseStamped target = current;
+    target.header.frame_id = settings_.planning_frame;
+    target.pose.position = toPoint(info.planned_cut_start);
+    addMoveTo(
+      *task, "side cut: penetrate to planned start [" + settings_.motion_profile + "]",
+      planners.stroke, target);
+    try {
+      task->init();
+    } catch (const mtc::InitStageException& exception) {
+      std::ostringstream details;
+      details << exception;
+      message = "side_cut_penetrate MTC stage initialization failed: " + details.str();
+      return false;
+    }
+    if (task->plan(static_cast<std::size_t>(settings_.max_solutions)) !=
+          moveit::core::MoveItErrorCode::SUCCESS || task->solutions().empty()) {
+      task->explainFailure();
+      message = "side_cut_penetrate planning failed; nothing moved";
+      return false;
+    }
+    publishTargetPoses(snapshot, {target});
+    publishSolution(*task);
+    if (execution_thread_.joinable()) execution_thread_.join();
+    execution_in_progress_ = true;
+    const double depth_mm =
+      -info.outward_normal.dot(info.planned_cut_start - info.plane_point) * 1000.0;
+    execution_thread_ = std::thread([this, task = std::move(task)]() mutable {
+      bool ok = false;
+      try {
+        ok = task->execute(*task->solutions().front()) == moveit::core::MoveItErrorCode::SUCCESS;
+      } catch (const std::exception& exception) {
+        RCLCPP_ERROR(get_logger(), "side_cut_penetrate execution threw: %s", exception.what());
+      }
+      std::lock_guard<std::mutex> completion_lock(plan_mutex_);
+      execution_in_progress_ = false;
+      if (ok) {
+        RCLCPP_INFO(get_logger(), "side_cut_penetrate completed: tip at the planned in-material "
+          "start; check/teleop, then continue_side_cut");
+      } else {
+        side_tape_handoff_info_.status = SideTapeHandoffStatus::kCutFailed;
+        side_tape_handoff_info_.stamp = now();
+        writeSideTapeHandoffOutput();
+        RCLCPP_ERROR(get_logger(), "side_cut_penetrate did NOT complete; status cut_failed; "
+          "recover with side_tape_retract");
+      }
+    });
+    message = "side_cut_penetrate dispatch accepted: " + formatDouble(offset_mm, 1) +
+      " mm from standoff, into the face to the planned start (" + formatDouble(depth_mm, 1) +
+      " mm behind the outer wall); then check/teleop and call continue_side_cut";
+    return true;
+  }
   bool continueSideCut(std::string& message)
   {
     constexpr double kRadToDeg = 180.0 / 3.14159265358979323846;
@@ -3944,10 +4559,12 @@ private:
         std::lock_guard<std::mutex> completion_lock(plan_mutex_);
         execution_in_progress_ = false;
         if (succeeded) {
+          // Keep the finished record (status 'retracted', snapshot path/id) so
+          // continue_top_cut can reload the UNSHIFTED capture; the shifted copy is dropped.
+          // continue_top_cut (or the next plan_side_tape_handoff) clears the record.
           side_tape_handoff_info_.status = SideTapeHandoffStatus::kRetracted;
           side_tape_handoff_info_.stamp = now();
           writeSideTapeHandoffOutput();
-          side_tape_handoff_info_ = SideTapeHandoffInfo{};
           side_tape_handoff_snapshot_.reset();
         } else {
           side_tape_handoff_info_.status = SideTapeHandoffStatus::kCutFailed;
@@ -3963,6 +4580,743 @@ private:
       " mm parallel to the planned line, then retract (withdraw " +
       formatDouble(withdraw_m * 1000.0, 1) + " mm + return transit)" + measured.str() +
       "; monitor controller execution";
+    return true;
+  }
+  // ---- Staged top (middle seam) cut: approach -> penetrate -> cut_and_lift (see CONTEXT.md).
+  static const char* topCutStatusName(TopCutStagedStatus status)
+  {
+    switch (status) {
+      case TopCutStagedStatus::kNone: return "none";
+      case TopCutStagedStatus::kPlanned: return "planned";
+      case TopCutStagedStatus::kApproached: return "approached";
+      case TopCutStagedStatus::kPenetrated: return "penetrated";
+      case TopCutStagedStatus::kDone: return "done";
+      case TopCutStagedStatus::kFailed: return "failed";
+      case TopCutStagedStatus::kCutting: return "cutting";
+    }
+    return "unknown";
+  }
+  // approached/penetrated/failed: the arm is at or in the carton; the carton collision object
+  // and the record must survive clear/replan until top_cut_retract.
+  bool topCutStagedInProgress() const
+  {
+    return top_cut_info_.status == TopCutStagedStatus::kApproached ||
+      top_cut_info_.status == TopCutStagedStatus::kPenetrated ||
+      top_cut_info_.status == TopCutStagedStatus::kFailed ||
+      top_cut_info_.status == TopCutStagedStatus::kCutting;
+  }
+  void writeTopCutStagedOutput()
+  {
+    const auto& info = top_cut_info_;
+    const auto pose_json = [](const geometry_msgs::msg::PoseStamped& pose) {
+      std::ostringstream out;
+      out << "{\"position_m\": {\"x\": " << formatDouble(pose.pose.position.x) << ", \"y\": " <<
+        formatDouble(pose.pose.position.y) << ", \"z\": " << formatDouble(pose.pose.position.z) <<
+        "}, \"orientation_xyzw\": {\"x\": " << formatDouble(pose.pose.orientation.x) <<
+        ", \"y\": " << formatDouble(pose.pose.orientation.y) << ", \"z\": " <<
+        formatDouble(pose.pose.orientation.z) << ", \"w\": " <<
+        formatDouble(pose.pose.orientation.w) << "}}";
+      return out.str();
+    };
+    std::ostringstream json;
+    json << "{\n  \"schema\": \"box_h_cut_top_cut_staged/v1\",\n";
+    json << "  \"status\": \"" << topCutStatusName(info.status) << "\",\n";
+    json << "  \"planning_frame\": \"" << jsonEscape(settings_.planning_frame) << "\",\n";
+    json << "  \"tool_link\": \"" << jsonEscape(settings_.tool_link) << "\",\n";
+    json << "  \"planned_hover\": " << pose_json(info.hover_pose) << ",\n";
+    json << "  \"planned_cut_start\": " << pose_json(info.cut_start_pose) << ",\n";
+    json << "  \"planned_cut_end\": " << pose_json(info.cut_end_pose) << ",\n";
+    json << "  \"top_surface_point_m\": " << vector3Json(info.plane_point) << ",\n";
+    json << "  \"surface_normal\": " << vector3Json(info.normal) << ",\n";
+    json << "  \"hover_clearance_m\": " << formatDouble(settings_.hover_clearance_m) << ",\n";
+    json << "  \"middle_cut_clearance_m\": " << formatDouble(settings_.middle_cut_clearance_m) <<
+      ",\n";
+    json << "  \"snapshot_path\": \"" << jsonEscape(info.snapshot_path) << "\",\n";
+    json << "  \"snapshot_id\": \"" << jsonEscape(info.snapshot_id) << "\",\n";
+    json << "  \"stamp_ns\": " << info.stamp.nanoseconds() << "\n}\n";
+    const std::string payload = json.str();
+    const std::string output_path = settings_.top_cut_staged_output_file;
+    if (!output_path.empty()) {
+      std::error_code code;
+      std::filesystem::create_directories(std::filesystem::path(output_path).parent_path(), code);
+      const std::string temporary = output_path + ".tmp";
+      bool wrote = false;
+      {
+        std::ofstream file(temporary);
+        if (file) {
+          file << payload;
+          file.flush();
+          wrote = static_cast<bool>(file);
+        }
+      }
+      if (wrote) {
+        std::filesystem::rename(temporary, output_path, code);
+        if (code) {
+          RCLCPP_ERROR(
+            get_logger(), "Cannot persist top-cut staged record: %s", code.message().c_str());
+        }
+      } else {
+        RCLCPP_ERROR(get_logger(), "Cannot write top-cut staged record: %s", temporary.c_str());
+      }
+    }
+    std_msgs::msg::String topic_message;
+    topic_message.data = payload;
+    top_cut_pub_->publish(topic_message);
+    RCLCPP_INFO(get_logger(), "Top-cut staged status=%s", topCutStatusName(info.status));
+  }
+  static double angleBetweenDeg(
+    const geometry_msgs::msg::Quaternion& a, const geometry_msgs::msg::Quaternion& b)
+  {
+    return toEigen(a).normalized().angularDistance(toEigen(b).normalized()) * 180.0 /
+      3.14159265358979323846;
+  }
+  // Common refusals for the three post-approach services (never moves anything).
+  bool topCutCommonGates(const char* who, bool check_stale_setting, std::string& message)
+  {
+    if (top_cut_info_.stale_override || (check_stale_setting && settings_.debug_allow_stale_snapshot)) {
+      message = std::string(who) + " refused: planned/loaded under debug_allow_stale_snapshot "
+        "(plan-only override); recover manually (teleop)";
+      return false;
+    }
+    if (!execution_enabled_.load()) {
+      message = "execution service is disabled by execution_enabled";
+      return false;
+    }
+    if (settings_.debug_fixed_orientation) {
+      message = "execution is blocked while debug_fixed_orientation is enabled";
+      return false;
+    }
+    if (execution_in_progress_) {
+      message = "an H-cut trajectory execution is already active";
+      return false;
+    }
+    if (!top_cut_snapshot_) {
+      message = "top-cut staged snapshot is unavailable; internal state error";
+      return false;
+    }
+    std::string servo_error;
+    if (!sideTapeServoIsQuiescent(servo_error)) {
+      message = std::string(who) + " refused: " + servo_error;
+      return false;
+    }
+    return true;
+  }
+  // Builds (CurrentState, carton + scoped contact allowance, camera pole, caller stages,
+  // contact restore), plans and wrist-checks nothing (no free-space transit is used).
+  std::unique_ptr<mtc::Task> buildTopCutTask(
+    const std::string& name, const Snapshot& snapshot,
+    const std::function<void(mtc::Task&, const CutPlanners&)>& add_stages, std::string& message)
+  {
+    auto task = std::make_unique<mtc::Task>();
+    task->stages()->setName(name);
+    if (robot_model_) {
+      task->setRobotModel(robot_model_);
+    } else {
+      task->loadRobotModel(shared_from_this());
+      robot_model_ = task->getRobotModel();
+    }
+    task->add(std::make_unique<mtc::stages::CurrentState>("current robot state"));
+    addSideTapeCartonScene(*task, snapshot);
+    const CutPlanners planners = makeCutPlanners(settings_.motion_profile);
+    add_stages(*task, planners);
+    if (settings_.allow_tool_carton_contact) {
+      addCartonContactScope(*task, "restore knife-tip collision checking after " + name, false);
+    }
+    try {
+      task->init();
+    } catch (const mtc::InitStageException& exception) {
+      std::ostringstream details;
+      details << exception;
+      message = name + " MTC stage initialization failed: " + details.str();
+      return nullptr;
+    }
+    const auto result = task->plan(static_cast<std::size_t>(settings_.max_solutions));
+    if (result != moveit::core::MoveItErrorCode::SUCCESS || task->solutions().empty()) {
+      task->explainFailure();
+      message = name + " planning failed; nothing moved";
+      return nullptr;
+    }
+    logChosenLiftTilt(*task->solutions().front(), name);
+    publishSolution(*task);
+    return task;
+  }
+  // Executes `task` on the execution thread; on_done(succeeded) runs under plan_mutex_ with
+  // execution_in_progress_ already cleared.
+  void dispatchTopCutTask(
+    std::unique_ptr<mtc::Task> task, const std::string& label,
+    std::function<void(bool)> on_done)
+  {
+    if (execution_thread_.joinable()) execution_thread_.join();
+    execution_in_progress_ = true;
+    execution_thread_ = std::thread(
+      [this, task = std::move(task), label, on_done = std::move(on_done)]() mutable {
+        bool succeeded = false;
+        try {
+          const auto result = task->execute(*task->solutions().front());
+          succeeded = (result == moveit::core::MoveItErrorCode::SUCCESS);
+          if (!succeeded) {
+            RCLCPP_ERROR(
+              get_logger(), "%s execution failed: controller status %d", label.c_str(),
+              result.val);
+          }
+        } catch (const std::exception& exception) {
+          RCLCPP_ERROR(get_logger(), "%s execution threw: %s", label.c_str(), exception.what());
+        }
+        std::lock_guard<std::mutex> completion_lock(plan_mutex_);
+        execution_in_progress_ = false;
+        on_done(succeeded);
+      });
+  }
+  // Operator-taught top-cut correction (2026-10-01), cut-local: [along seam start->end, across
+  // (normal x along), depth (+ = deeper)] mm for the start and end. along/across shift the
+  // snapshot's seam points (the hover follows); depth goes into `options` and is added to the
+  // cut targets only. Shared by plan_top_cut_staged and continue_top_cut so both compute
+  // identical poses.
+  bool applyTopCutTaughtOffsets(
+    Snapshot& snapshot, SegmentPlanOptions& options, std::string& message)
+  {
+    const auto& so = settings_.top_cut_start_offset_mm;
+    const auto& eo = settings_.top_cut_end_offset_mm;
+    for (const auto* o : {&so, &eo}) {
+      if (o->size() != 3U || !std::isfinite((*o)[0]) || !std::isfinite((*o)[1]) ||
+          !std::isfinite((*o)[2]) || std::abs((*o)[0]) > 30.0 || std::abs((*o)[1]) > 30.0 ||
+          (*o)[2] < -5.0 || (*o)[2] > 25.0) {
+        message = "top_cut_start/end_offset_mm must be [along, across, depth] with |along|,"
+          "|across| <= 30 mm and depth in [-5, 25] mm";
+        return false;
+      }
+    }
+    const Eigen::Vector3d top_normal = toEigen(snapshot.surface_normal).normalized();
+    Eigen::Vector3d along = toEigen(snapshot.seam_end) - toEigen(snapshot.seam_start);
+    along -= along.dot(top_normal) * top_normal;
+    along.normalize();
+    const Eigen::Vector3d across = top_normal.cross(along).normalized();
+    snapshot.seam_start = toPoint(
+      toEigen(snapshot.seam_start) + (so[0] * along + so[1] * across) / 1000.0);
+    snapshot.seam_end = toPoint(
+      toEigen(snapshot.seam_end) + (eo[0] * along + eo[1] * across) / 1000.0);
+    options.middle_start_extra_depth_m = so[2] / 1000.0;
+    options.middle_end_extra_depth_m = eo[2] / 1000.0;
+    if (so[0] != 0.0 || so[1] != 0.0 || so[2] != 0.0 || eo[0] != 0.0 || eo[1] != 0.0 ||
+        eo[2] != 0.0) {
+      RCLCPP_WARN(
+        get_logger(), "top cut: taught offsets applied: start [%.1f, %.1f, %.1f] end "
+        "[%.1f, %.1f, %.1f] mm (along, across, depth)", so[0], so[1], so[2], eo[0], eo[1], eo[2]);
+    }
+    return true;
+  }
+  // Point on the top surface under the (depth-offset) cut start target.
+  Eigen::Vector3d topCutPlanePoint(
+    const geometry_msgs::msg::PoseStamped& cut_start_target, const Eigen::Vector3d& normal,
+    const SegmentPlanOptions& options)
+  {
+    return toEigen(cut_start_target.pose.position) +
+      (options.middle_start_extra_depth_m - settings_.middle_cut_clearance_m) * normal;
+  }
+  // ~/continue_top_cut: ONE call for the whole top (middle seam) cut from the CURRENT robot
+  // state: free-space transit to the taught-offset hover, stabilization dwell, scoped
+  // tool/carton contact allowance, Cartesian descend to the offset cut start, cut stroke to the
+  // offset cut end (contact scalings x top_cut_staged_speed_factor), Cartesian lift straight up
+  // along the top normal to hover_clearance above the top, contact restore, STOP. The poses and
+  // stages come from planCutSegments with the same inputs as plan_top_cut_staged.
+  // Snapshot: after a finished side-tape hand-off (status retracted) the UNSHIFTED snapshot of
+  // the same capture is reloaded from the recorded file (snapshot_id must match; the box is
+  // static so no age check); without a hand-off the external snapshot must be fresh.
+  bool continueTopCut(std::string& message)
+  {
+    struct SkipAgeGuard {
+      bool& flag;
+      ~SkipAgeGuard() { flag = false; }
+    } skip_age_guard{skip_snapshot_age_};
+    skip_snapshot_age_ = !settings_.top_cut_continue_check_snapshot_age;
+    if (skip_snapshot_age_) {
+      RCLCPP_WARN(get_logger(), "continue_top_cut: snapshot age not checked (box assumed static)");
+    }
+    if (settings_.debug_allow_stale_snapshot) {
+      message = "continue_top_cut refused: debug_allow_stale_snapshot is plan-only; it can never "
+        "be executed";
+      return false;
+    }
+    if (!execution_enabled_.load()) {
+      message = "execution service is disabled by execution_enabled";
+      return false;
+    }
+    if (settings_.debug_fixed_orientation) {
+      message = "execution is blocked while debug_fixed_orientation is enabled";
+      return false;
+    }
+    if (execution_in_progress_) {
+      message = "an H-cut trajectory execution is already active";
+      return false;
+    }
+    if (side_tape_handoff_info_.inProgress()) {
+      message = "continue_top_cut refused: a side-tape hand-off is active or unresolved; finish "
+        "it with continue_side_cut or recover with side_tape_retract";
+      return false;
+    }
+    if (cut_debug_stage_ != CutDebugStage::kNone) {
+      message = "continue_top_cut refused: cut debug session active; call clear_plan first";
+      return false;
+    }
+    if (top_cut_info_.status == TopCutStagedStatus::kPlanned || topCutStagedInProgress()) {
+      message = "continue_top_cut refused: a staged top cut is active (" +
+        std::string(topCutStatusName(top_cut_info_.status)) +
+        "); finish it, or call top_cut_retract / clear_plan";
+      return false;
+    }
+    if (!isSupportedMotionProfile(settings_.motion_profile)) {
+      message = "unsupported H-cut motion_profile: " + settings_.motion_profile;
+      return false;
+    }
+    std::string servo_error;
+    if (!sideTapeServoIsQuiescent(servo_error)) {
+      message = "continue_top_cut refused: " + servo_error;
+      return false;
+    }
+    try {
+      std::string source_path;
+      Snapshot snapshot;
+      std::string snapshot_origin;
+      if (side_tape_handoff_info_.status == SideTapeHandoffStatus::kRetracted &&
+          !side_tape_handoff_info_.snapshot_path.empty()) {
+        if (side_tape_handoff_info_.stale_override) {
+          message = "continue_top_cut refused: the side-tape hand-off was planned under "
+            "debug_allow_stale_snapshot";
+          return false;
+        }
+        source_path = side_tape_handoff_info_.snapshot_path;
+        const auto loaded = loadExternalSnapshot(source_path, message);
+        if (!loaded) return false;
+        snapshot = *loaded;
+        if (snapshot.snapshot_id != side_tape_handoff_info_.snapshot_id) {
+          message = "continue_top_cut refused: snapshot file " + source_path + " now has "
+            "snapshot_id '" + snapshot.snapshot_id + "' but the side-tape hand-off used '" +
+            side_tape_handoff_info_.snapshot_id + "'; the capture changed";
+          return false;
+        }
+        snapshot_origin = "unshifted hand-off capture (age not checked, box assumed static)";
+      } else {
+        source_path = externalSnapshotFile();
+        const auto loaded = loadExternalSnapshot(source_path, message);
+        if (!loaded) return false;
+        snapshot = *loaded;
+        std::string freshness_error;
+        if (settings_.top_cut_continue_check_snapshot_age &&
+            !snapshotIsFresh(snapshot, freshness_error)) {
+          message = "continue_top_cut refused: " + freshness_error;
+          return false;
+        }
+        snapshot_origin = "fresh external snapshot";
+      }
+      std::string validation;
+      if (!validateSnapshot(snapshot, validation)) {
+        message = "snapshot rejected: " + validation;
+        return false;
+      }
+      clearRetainedPlan();
+      top_cut_info_ = TopCutStagedInfo{};
+      top_cut_snapshot_.reset();
+      SegmentPlanOptions options;
+      if (!applyTopCutTaughtOffsets(snapshot, options, message)) return false;
+      options.cut_stroke_speed_factor = settings_.top_cut_staged_speed_factor;
+      options.middle_finish_clearance_m = settings_.top_cut_lift_clearance_m;
+      options.pre_transit_lift_m = settings_.top_cut_pre_transit_lift_m;
+      geometry_msgs::msg::PoseStamped hover_pose;
+      options.hover_start_out = &hover_pose;
+      publishCartonGeometry(snapshot);
+      const auto corrections = loadAllActiveCorrections();
+      const CutSegment segment = segmentFor(snapshot, CutKind::kMiddle);
+      std::unique_ptr<mtc::Task> task;
+      std::vector<geometry_msgs::msg::PoseStamped> targets;
+      std::string plan_error;
+      // Operator 2026-10-01 (like t_cut_handoff): if the full top cut cannot be planned
+      // (e.g. the wrist runs out of range near the seam end), retry with the cut END pulled
+      // back along the seam in 5 % steps down to top_cut_min_cut_fraction, then lift there.
+      // Every stroke is still planned complete (min_fraction 1.0) to its shortened end; a
+      // partial Cartesian path is never accepted.
+      const Snapshot full_snapshot = snapshot;
+      const SegmentPlanOptions full_options = options;
+      double cut_fraction = 1.0;
+      bool planned = false;
+      std::string first_error;
+      for (int step = 0; ; ++step) {
+        cut_fraction = 1.0 - 0.05 * step;
+        if (cut_fraction < settings_.top_cut_min_cut_fraction - 1e-9) break;
+        if (step > 0 && !settings_.top_cut_allow_shortened_cut) break;
+        snapshot = full_snapshot;
+        options = full_options;
+        snapshot.seam_end = toPoint(
+          toEigen(full_snapshot.seam_start) +
+          cut_fraction * (toEigen(full_snapshot.seam_end) - toEigen(full_snapshot.seam_start)));
+        options.middle_end_extra_depth_m = full_options.middle_start_extra_depth_m +
+          cut_fraction * (full_options.middle_end_extra_depth_m -
+          full_options.middle_start_extra_depth_m);
+        const CutSegment try_segment = segmentFor(snapshot, CutKind::kMiddle);
+        task.reset();
+        targets.clear();
+        plan_error.clear();
+        if (planCutSegments(
+              snapshot, {try_segment}, corrections, settings_.motion_profile,
+              "continue top cut (middle: transit, hover, descend, cut, lift)", options, task,
+              targets, plan_error)) {
+          planned = true;
+          break;
+        }
+        if (first_error.empty()) first_error = plan_error;
+        RCLCPP_WARN(
+          get_logger(), "continue_top_cut: %.0f %% cut did not plan (%s); trying shorter",
+          cut_fraction * 100.0, plan_error.c_str());
+      }
+      if (!planned) {
+        message = "continue_top_cut planning failed; nothing moved (tried down to " +
+          formatDouble(settings_.top_cut_min_cut_fraction * 100.0, 0) + " % of the cut): " +
+          first_error;
+        return false;
+      }
+      if (cut_fraction < 1.0) {
+        RCLCPP_WARN(
+          get_logger(), "continue_top_cut: SHORTENED cut, %.0f %% of the seam (the rest is not "
+          "cut)", cut_fraction * 100.0);
+      }
+      (void)segment;
+      if (targets.size() != 2U) {
+        message = "continue_top_cut: unexpected target count for the middle segment";
+        return false;
+      }
+      top_cut_snapshot_ = snapshot;
+      top_cut_info_.status = TopCutStagedStatus::kCutting;
+      top_cut_info_.hover_pose = hover_pose;
+      top_cut_info_.cut_start_pose = targets[0];
+      top_cut_info_.cut_end_pose = targets[1];
+      top_cut_info_.normal = toEigen(snapshot.surface_normal).normalized();
+      top_cut_info_.plane_point = topCutPlanePoint(targets[0], top_cut_info_.normal, options);
+      top_cut_info_.snapshot_path = source_path;
+      top_cut_info_.snapshot_id = snapshot.snapshot_id;
+      top_cut_info_.stamp = now();
+      top_cut_info_.stale_override = false;
+      const double end_depth_m = -top_cut_info_.normal.dot(
+        toEigen(targets[1].pose.position) - top_cut_info_.plane_point);
+      const double lift_m = std::max(0.0, end_depth_m) + settings_.top_cut_lift_clearance_m;
+      geometry_msgs::msg::PoseStamped lift_pose = targets[1];
+      lift_pose.pose.position = toPoint(
+        toEigen(targets[1].pose.position) + lift_m * top_cut_info_.normal);
+      RCLCPP_INFO(
+        get_logger(),
+        "continue_top_cut targets (%s): hover [%.4f %.4f %.4f] cut_start [%.4f %.4f %.4f] "
+        "cut_end [%.4f %.4f %.4f] lift [%.4f %.4f %.4f] (m, %s)", snapshot_origin.c_str(),
+        hover_pose.pose.position.x, hover_pose.pose.position.y, hover_pose.pose.position.z,
+        targets[0].pose.position.x, targets[0].pose.position.y, targets[0].pose.position.z,
+        targets[1].pose.position.x, targets[1].pose.position.y, targets[1].pose.position.z,
+        lift_pose.pose.position.x, lift_pose.pose.position.y, lift_pose.pose.position.z,
+        settings_.planning_frame.c_str());
+      publishTargetPoses(snapshot, {hover_pose, targets[0], targets[1], lift_pose});
+      publishSolution(*task);
+      writeTopCutStagedOutput();
+      dispatchTopCutTask(std::move(task), "Top-cut continue", [this](bool ok) {
+        top_cut_info_.status = ok ? TopCutStagedStatus::kDone : TopCutStagedStatus::kFailed;
+        top_cut_info_.stamp = now();
+        writeTopCutStagedOutput();
+        if (ok) {
+          // Top cut finished: a new cycle (plan_side_tape_handoff) may start.
+          side_tape_handoff_info_ = SideTapeHandoffInfo{};
+          side_tape_handoff_snapshot_.reset();
+          RCLCPP_INFO(get_logger(), "continue_top_cut execution completed (status done)");
+        } else {
+          RCLCPP_ERROR(
+            get_logger(), "continue_top_cut did NOT complete; status 'failed', detected_carton "
+            "kept; call top_cut_retract to lift straight up from the current pose");
+        }
+      });
+      message = "continue_top_cut dispatch accepted (" + snapshot_origin + ", " +
+        formatDouble(cut_fraction * 100.0, 0) + " % of the seam): transit to hover, "
+        "dwell, descend, cut " +
+        formatDouble((toEigen(targets[1].pose.position) - toEigen(targets[0].pose.position)).norm() *
+          1000.0, 1) + " mm, lift " + formatDouble(lift_m * 1000.0, 1) +
+        " mm along the top normal, then stop; monitor controller execution";
+      return true;
+    } catch (const std::exception& exception) {
+      message = std::string("continue_top_cut planning failed: ") + exception.what();
+      return false;
+    }
+  }
+  // ~/plan_top_cut_staged: plans the FULL middle cut for feasibility (exactly as the normal
+  // middle cut), then retains only the approach that ends at the aligned hover above the
+  // seam start. Executed through execute_planned_h_cut and its gates.
+  bool planTopCutStaged(std::string& message)
+  {
+    if (side_tape_handoff_info_.inProgress()) {
+      message = "a side-tape hand-off is active or unresolved; call side_tape_retract first";
+      return false;
+    }
+    if (cut_debug_stage_ != CutDebugStage::kNone) {
+      message = "cut debug session active; call clear_plan before planning a staged top cut";
+      return false;
+    }
+    if (topCutStagedInProgress()) {
+      message = "a staged top cut is active (" + std::string(topCutStatusName(top_cut_info_.status)) +
+        "); call top_cut_retract first";
+      return false;
+    }
+    clearRetainedPlan();
+    top_cut_info_ = TopCutStagedInfo{};
+    top_cut_snapshot_.reset();
+    try {
+      const auto source_path = externalSnapshotFile();
+      const auto loaded = loadExternalSnapshot(source_path, message);
+      if (!loaded) return false;
+      Snapshot snapshot = *loaded;
+      std::string validation;
+      if (!validateSnapshot(snapshot, validation)) {
+        message = "snapshot rejected: " + validation;
+        return false;
+      }
+      SegmentPlanOptions full_options;
+      if (!applyTopCutTaughtOffsets(snapshot, full_options, message)) return false;
+      full_options.middle_finish_clearance_m = settings_.top_cut_lift_clearance_m;
+      if (!isSupportedMotionProfile(settings_.motion_profile)) {
+        message = "unsupported H-cut motion_profile: " + settings_.motion_profile;
+        return false;
+      }
+      publishCartonGeometry(snapshot);
+      const auto corrections = loadAllActiveCorrections();
+      const CutSegment segment = segmentFor(snapshot, CutKind::kMiddle);
+      std::unique_ptr<mtc::Task> full_task;
+      std::vector<geometry_msgs::msg::PoseStamped> full_targets;
+      std::string plan_error;
+      if (!planCutSegments(
+            snapshot, {segment}, corrections, settings_.motion_profile,
+            "staged top cut feasibility (middle, full stroke)", full_options, full_task,
+            full_targets, plan_error)) {
+        message = "staged top cut feasibility check failed for the full middle cut: " + plan_error;
+        return false;
+      }
+      if (full_targets.size() != 2U) {
+        message = "staged top cut: unexpected target count for the full middle segment";
+        return false;
+      }
+      SegmentPlanOptions approach_options = full_options;
+      approach_options.stop_at_hover_start = true;
+      geometry_msgs::msg::PoseStamped hover_pose;
+      approach_options.hover_start_out = &hover_pose;
+      std::unique_ptr<mtc::Task> approach_task;
+      std::vector<geometry_msgs::msg::PoseStamped> approach_targets;
+      if (!planCutSegments(
+            snapshot, {segment}, corrections, settings_.motion_profile,
+            "staged top cut approach (middle, stops at aligned hover)", approach_options,
+            approach_task, approach_targets, plan_error)) {
+        message = "staged top cut approach planning failed: " + plan_error;
+        return false;
+      }
+      if (approach_targets.size() != 2U ||
+          (toEigen(approach_targets[0].pose.position) - toEigen(full_targets[0].pose.position))
+          .norm() > 1e-6) {
+        message = "staged top cut: approach and full plans disagree on the cut start; refusing";
+        return false;
+      }
+      auto marker_segment = segment;
+      marker_segment.stop_after_start = true;
+      retainPlan(snapshot, {marker_segment}, {hover_pose}, std::move(approach_task));
+      top_cut_snapshot_ = snapshot;
+      top_cut_info_ = TopCutStagedInfo{};
+      top_cut_info_.status = TopCutStagedStatus::kPlanned;
+      top_cut_info_.hover_pose = hover_pose;
+      top_cut_info_.cut_start_pose = full_targets[0];
+      top_cut_info_.cut_end_pose = full_targets[1];
+      top_cut_info_.normal = toEigen(snapshot.surface_normal).normalized();
+      top_cut_info_.plane_point = topCutPlanePoint(full_targets[0], top_cut_info_.normal, full_options);
+      top_cut_info_.snapshot_path = source_path;
+      top_cut_info_.snapshot_id = snapshot.snapshot_id;
+      top_cut_info_.stamp = now();
+      top_cut_info_.stale_override = settings_.debug_allow_stale_snapshot;
+      top_cut_pending_ = true;
+      writeTopCutStagedOutput();
+      const double cut_length_mm =
+        (toEigen(full_targets[1].pose.position) - toEigen(full_targets[0].pose.position)).norm() *
+        1000.0;
+      message = "staged top cut planned: full middle cut feasible (cut_length=" +
+        formatDouble(cut_length_mm, 1) + " mm, cut depth " +
+        formatDouble(-settings_.middle_cut_clearance_m * 1000.0, 1) +
+        " mm below the top); only the approach to the aligned hover (" +
+        formatDouble(settings_.hover_clearance_m * 1000.0, 1) +
+        " mm above the top) is retained; execute via execute_planned_h_cut, then "
+        "top_cut_penetrate, then top_cut_cut_and_lift (top_cut_retract aborts)";
+      return true;
+    } catch (const std::exception& exception) {
+      message = std::string("staged top cut planning failed: ") + exception.what();
+      return false;
+    }
+  }
+  bool topCutPenetrate(std::string& message)
+  {
+    if (top_cut_info_.status != TopCutStagedStatus::kApproached) {
+      message = "top_cut_penetrate refused: status is '" +
+        std::string(topCutStatusName(top_cut_info_.status)) + "', must be 'approached'";
+      return false;
+    }
+    if (!topCutCommonGates("top_cut_penetrate", true, message)) return false;
+    geometry_msgs::msg::PoseStamped current;
+    if (!captureObservedTcpPose(current, message)) return false;
+    const auto& info = top_cut_info_;
+    const double position_mm =
+      (toEigen(current.pose.position) - toEigen(info.hover_pose.pose.position)).norm() * 1000.0;
+    const double orientation_deg =
+      angleBetweenDeg(current.pose.orientation, info.hover_pose.pose.orientation);
+    if (position_mm > settings_.top_cut_staged_max_position_mm ||
+        orientation_deg > settings_.top_cut_staged_max_orientation_deg) {
+      message = "top_cut_penetrate refused: tip is " + formatDouble(position_mm, 1) + " mm / " +
+        formatDouble(orientation_deg, 1) + " deg from the recorded hover (max " +
+        formatDouble(settings_.top_cut_staged_max_position_mm, 1) + " mm / " +
+        formatDouble(settings_.top_cut_staged_max_orientation_deg, 1) + " deg)";
+      return false;
+    }
+    const Snapshot snapshot = *top_cut_snapshot_;
+    geometry_msgs::msg::PoseStamped target = current;
+    target.header.frame_id = settings_.planning_frame;
+    target.pose.position = info.cut_start_pose.pose.position;
+    const double move_mm =
+      (toEigen(target.pose.position) - toEigen(current.pose.position)).norm() * 1000.0;
+    auto task = buildTopCutTask(
+      "staged top cut penetrate", snapshot,
+      [&](mtc::Task& t, const CutPlanners& planners) {
+        addMoveTo(
+          t, "top cut: penetrate to planned cut start [" + settings_.motion_profile + "]",
+          planners.stroke, target);
+      },
+      message);
+    if (!task) return false;
+    publishTargetPoses(snapshot, {target});
+    dispatchTopCutTask(std::move(task), "Top-cut penetrate", [this](bool ok) {
+      top_cut_info_.status = ok ? TopCutStagedStatus::kPenetrated : TopCutStagedStatus::kFailed;
+      top_cut_info_.stamp = now();
+      writeTopCutStagedOutput();
+      if (!ok) {
+        RCLCPP_ERROR(get_logger(), "top_cut_penetrate did NOT complete; status 'failed'; call top_cut_retract");
+      }
+    });
+    message = "top_cut_penetrate dispatch accepted: straight move " + formatDouble(move_mm, 1) +
+      " mm to the planned cut start (hover offset " + formatDouble(position_mm, 1) + " mm / " +
+      formatDouble(orientation_deg, 1) + " deg); monitor controller execution";
+    return true;
+  }
+  bool topCutCutAndLift(std::string& message)
+  {
+    constexpr double kMinStrokeM = 0.005;
+    if (top_cut_info_.status != TopCutStagedStatus::kPenetrated) {
+      message = "top_cut_cut_and_lift refused: status is '" +
+        std::string(topCutStatusName(top_cut_info_.status)) + "', must be 'penetrated'";
+      return false;
+    }
+    if (!topCutCommonGates("top_cut_cut_and_lift", true, message)) return false;
+    geometry_msgs::msg::PoseStamped current;
+    if (!captureObservedTcpPose(current, message)) return false;
+    const auto& info = top_cut_info_;
+    const Eigen::Vector3d p0 = toEigen(current.pose.position);
+    const Eigen::Vector3d planned_start = toEigen(info.cut_start_pose.pose.position);
+    const Eigen::Vector3d planned_end = toEigen(info.cut_end_pose.pose.position);
+    const double position_mm = (p0 - planned_start).norm() * 1000.0;
+    const double orientation_deg =
+      angleBetweenDeg(current.pose.orientation, info.hover_pose.pose.orientation);
+    if (position_mm > settings_.top_cut_staged_max_position_mm ||
+        orientation_deg > settings_.top_cut_staged_max_orientation_deg) {
+      message = "top_cut_cut_and_lift refused: tip is " + formatDouble(position_mm, 1) + " mm / " +
+        formatDouble(orientation_deg, 1) + " deg from the planned cut start (max " +
+        formatDouble(settings_.top_cut_staged_max_position_mm, 1) + " mm / " +
+        formatDouble(settings_.top_cut_staged_max_orientation_deg, 1) + " deg)";
+      return false;
+    }
+    const Eigen::Vector3d line = planned_end - planned_start;
+    if (line.norm() < 1e-3) {
+      message = "top_cut_cut_and_lift refused: planned cut line is degenerate";
+      return false;
+    }
+    const Eigen::Vector3d d = line.normalized();
+    const double stroke_m = (planned_end - p0).dot(d);
+    if (stroke_m < kMinStrokeM) {
+      message = "top_cut_cut_and_lift refused: remaining stroke to the planned cut end is only " +
+        formatDouble(stroke_m * 1000.0, 2) + " mm";
+      return false;
+    }
+    const Eigen::Vector3d stroke_end = p0 + stroke_m * d;
+    const double end_depth_m = -info.normal.dot(stroke_end - info.plane_point);
+    const double lift_m = std::max(0.0, end_depth_m) + settings_.top_cut_lift_clearance_m;
+    const Snapshot snapshot = *top_cut_snapshot_;
+    geometry_msgs::msg::PoseStamped stroke_target = current;
+    stroke_target.header.frame_id = settings_.planning_frame;
+    stroke_target.pose.position = toPoint(stroke_end);
+    geometry_msgs::msg::PoseStamped lift_target = stroke_target;
+    lift_target.pose.position = toPoint(stroke_end + lift_m * info.normal);
+    auto task = buildTopCutTask(
+      "staged top cut stroke and lift", snapshot,
+      [&](mtc::Task& t, const CutPlanners& planners) {
+        const CutPlanners slow = makeCutPlanners(settings_.motion_profile);
+        slow.stroke->setMaxVelocityScalingFactor(
+          settings_.velocity_scaling * settings_.top_cut_staged_speed_factor);
+        slow.stroke->setMaxAccelerationScalingFactor(
+          settings_.acceleration_scaling * settings_.top_cut_staged_speed_factor);
+        addMoveTo(
+          t, "top cut: cut stroke to planned end plane [" + settings_.motion_profile + "]",
+          slow.stroke, stroke_target);
+        addTiltableLift(
+          t, "top cut: lift along surface normal [" + settings_.motion_profile + "]",
+          planners.stroke, lift_target, topCutLiftMinFraction(end_depth_m, lift_m));
+      },
+      message);
+    if (!task) return false;
+    publishTargetPoses(snapshot, {stroke_target, lift_target});
+    dispatchTopCutTask(std::move(task), "Top-cut cut_and_lift", [this](bool ok) {
+      top_cut_info_.status = ok ? TopCutStagedStatus::kDone : TopCutStagedStatus::kFailed;
+      top_cut_info_.stamp = now();
+      writeTopCutStagedOutput();
+      if (!ok) {
+        RCLCPP_ERROR(get_logger(), "top_cut_cut_and_lift did NOT complete; status 'failed'; call top_cut_retract");
+      }
+    });
+    message = "top_cut_cut_and_lift dispatch accepted: stroke " + formatDouble(stroke_m * 1000.0, 1) +
+      " mm parallel to the planned line, then lift " + formatDouble(lift_m * 1000.0, 1) +
+      " mm along the surface normal and stop; monitor controller execution";
+    return true;
+  }
+  bool topCutRetract(std::string& message)
+  {
+    if (top_cut_info_.status == TopCutStagedStatus::kNone ||
+        top_cut_info_.status == TopCutStagedStatus::kPlanned) {
+      message = "top_cut_retract refused: the staged top cut has not been approached";
+      return false;
+    }
+    if (!topCutCommonGates("top_cut_retract", false, message)) return false;
+    geometry_msgs::msg::PoseStamped current;
+    if (!captureObservedTcpPose(current, message)) return false;
+    const Eigen::Vector3d p0 = toEigen(current.pose.position);
+    const double depth_m = -top_cut_info_.normal.dot(p0 - top_cut_info_.plane_point);
+    const double lift_m = std::max(0.0, depth_m) + settings_.top_cut_lift_clearance_m;
+    const Snapshot snapshot = *top_cut_snapshot_;
+    geometry_msgs::msg::PoseStamped lift_target = current;
+    lift_target.header.frame_id = settings_.planning_frame;
+    lift_target.pose.position = toPoint(p0 + lift_m * top_cut_info_.normal);
+    auto task = buildTopCutTask(
+      "staged top cut retract", snapshot,
+      [&](mtc::Task& t, const CutPlanners& planners) {
+        addTiltableLift(
+          t, "top cut: retract along surface normal [" + settings_.motion_profile + "]",
+          planners.stroke, lift_target, topCutLiftMinFraction(depth_m, lift_m));
+      },
+      message);
+    if (!task) return false;
+    publishTargetPoses(snapshot, {lift_target});
+    dispatchTopCutTask(std::move(task), "Top-cut retract", [this](bool ok) {
+      if (ok) {
+        top_cut_info_.status = TopCutStagedStatus::kNone;
+        top_cut_info_.stamp = now();
+        writeTopCutStagedOutput();
+        top_cut_info_ = TopCutStagedInfo{};
+        top_cut_snapshot_.reset();
+      } else {
+        RCLCPP_ERROR(get_logger(), "top_cut_retract did NOT complete; call top_cut_retract again once the arm is clear");
+      }
+    });
+    message = "top_cut_retract dispatch accepted: lift " + formatDouble(lift_m * 1000.0, 1) +
+      " mm along the surface normal (depth below top " + formatDouble(depth_m * 1000.0, 1) +
+      " mm), then stop; monitor controller execution";
     return true;
   }
   bool saveCutDebugPoint(std::string& message)
@@ -4114,7 +5468,8 @@ private:
     }
     const auto age_s = std::chrono::duration<double>(
       fs::file_time_type::clock::now() - modified).count();
-    if (!settings_.debug_allow_stale_snapshot && age_s > settings_.external_snapshot_max_age_s) {
+    if (!settings_.debug_allow_stale_snapshot && !skip_snapshot_age_ &&
+        age_s > settings_.external_snapshot_max_age_s) {
       message = "external snapshot is stale (" + formatDouble(age_s, 3) + " s; maximum " +
         formatDouble(settings_.external_snapshot_max_age_s, 3) + " s): " + selected.string();
       return false;
@@ -4194,7 +5549,7 @@ private:
     snapshot.surface_normal.x = normal.x;
     snapshot.surface_normal.y = normal.y;
     snapshot.surface_normal.z = normal.z;
-    if (!acquisitionIsFresh(
+    if (!skip_snapshot_age_ && !acquisitionIsFresh(
           snapshot.acquisition_stamp_ns, settings_.debug_allow_stale_snapshot)) {
       message = "external snapshot acquisition is stale or invalid; maximum age " +
         formatDouble(settings_.external_snapshot_max_age_s, 3) + " s";
@@ -4927,6 +6282,101 @@ private:
     task.add(std::move(stage));
     return raw;
   }
+  // Top-cut lift candidates, in order: 0 deg, then +/-step, +/-2*step ... up to
+  // top_cut_lift_max_tilt_deg (step 2 deg, smallest |angle| first). Each tilts about the TOOL X
+  // axis (the blade's flat-face normal, so the blade stays in its slit plane) pivoting at the
+  // tip, which is raised exactly as in the straight lift.
+  std::vector<double> liftTiltCandidatesDeg() const
+  {
+    constexpr double kStepDeg = 2.0;
+    std::vector<double> angles{0.0};
+    for (double a = kStepDeg; a <= settings_.top_cut_lift_max_tilt_deg + 1e-9; a += kStepDeg) {
+      angles.push_back(a);
+      angles.push_back(-a);
+    }
+    return angles;
+  }
+  static geometry_msgs::msg::PoseStamped tiltedAboutToolX(
+    const geometry_msgs::msg::PoseStamped& pose, double angle_deg)
+  {
+    auto tilted = pose;
+    const Eigen::Quaterniond q = toEigen(pose.pose.orientation).normalized();
+    const Eigen::Vector3d tool_x_base = q * Eigen::Vector3d::UnitX();
+    const Eigen::Quaterniond rotated =
+      Eigen::Quaterniond(Eigen::AngleAxisd(angle_deg * 3.14159265358979323846 / 180.0, tool_x_base)) * q;
+    tilted.pose.orientation = toMsg(rotated.normalized());
+    return tilted;
+  }
+  // Adds the lift to `lift_target` (orientation = the cut-end orientation). The straight lift is
+  // tried first; if its Cartesian path (min_fraction 1.0) fails, the tilted candidates follow
+  // inside an MTC Fallbacks container (first one that plans wins). Stage names carry
+  // "[lift tilt X deg]" so the chosen tilt can be read back from the solution.
+  // Fraction of a top-cut lift that must be achieved so the tip ends at least
+  // top_cut_lift_min_clearance_m above the top surface (operator 2026-10-01: accept a partial
+  // lift, but never one that leaves the blade in the slit). depth_m = tip depth below the top
+  // at the lift start, lift_m = planned lift distance.
+  double topCutLiftMinFraction(double depth_m, double lift_m) const
+  {
+    if (lift_m <= 1e-6) return 1.0;
+    const double needed = std::max(0.0, depth_m) + settings_.top_cut_lift_min_clearance_m;
+    return std::clamp(needed / lift_m, 0.0, 1.0);
+  }
+  void addTiltableLift(
+    mtc::Task& task, const std::string& name, mtc::solvers::PlannerInterfacePtr planner,
+    const geometry_msgs::msg::PoseStamped& lift_target, double min_fraction = 1.0)
+  {
+    if (min_fraction < 1.0 - 1e-9 &&
+        std::dynamic_pointer_cast<mtc::solvers::CartesianPath>(planner)) {
+      auto partial = std::make_shared<mtc::solvers::CartesianPath>();
+      partial->setIKFrame(settings_.tool_link);
+      partial->setStepSize(settings_.cartesian_step_m);
+      partial->setJumpThreshold(0.0);
+      partial->setMinFraction(min_fraction);
+      partial->setMaxVelocityScalingFactor(settings_.velocity_scaling);
+      partial->setMaxAccelerationScalingFactor(settings_.acceleration_scaling);
+      planner = partial;
+    }
+    const auto angles = liftTiltCandidatesDeg();
+    if (angles.size() == 1U) {
+      addMoveTo(task, name + " [lift tilt 0.0 deg]", planner, lift_target);
+      return;
+    }
+    auto fallbacks = std::make_unique<mtc::Fallbacks>(name + " (straight, then tilted)");
+    for (const double angle : angles) {
+      auto stage = std::make_unique<mtc::stages::MoveTo>(
+        name + " [lift tilt " + formatDouble(angle, 1) + " deg]", planner);
+      stage->restrictDirection(mtc::PropagatingEitherWay::FORWARD);
+      stage->setGroup(settings_.planning_group);
+      stage->setIKFrame(settings_.tool_link);
+      stage->setGoal(tiltedAboutToolX(lift_target, angle));
+      fallbacks->add(std::move(stage));
+    }
+    task.add(std::move(fallbacks));
+  }
+  // Logs the lift tilt(s) the planned solution actually uses.
+  void logChosenLiftTilt(const mtc::SolutionBase& solution, const std::string& who) const
+  {
+    std::function<void(const mtc::SolutionBase*)> collect = [&](const mtc::SolutionBase* node) {
+      if (node == nullptr) return;
+      if (const auto* wrapped = dynamic_cast<const mtc::WrappedSolution*>(node)) {
+        collect(wrapped->wrapped());
+        return;
+      }
+      if (const auto* nested = dynamic_cast<const mtc::SolutionSequence*>(node)) {
+        for (const auto* child : nested->solutions()) collect(child);
+        return;
+      }
+      if (const auto* sub = dynamic_cast<const mtc::SubTrajectory*>(node)) {
+        const auto* creator = sub->creator();
+        const std::string name = creator != nullptr ? creator->name() : std::string();
+        const auto pos = name.find("[lift tilt ");
+        if (pos != std::string::npos) {
+          RCLCPP_INFO(get_logger(), "%s: lift stage '%s' (chosen tilt)", who.c_str(), name.c_str());
+        }
+      }
+    };
+    collect(&solution);
+  }
   // Scoped tool/carton contact allowance (true) or its restore (false).
   void addCartonContactScope(mtc::Task& task, const std::string& name, bool allow)
   {
@@ -4967,6 +6417,24 @@ private:
     }
     task->add(std::move(add_carton));
     addCameraPole(*task);
+    if (options.pre_transit_lift_m > 0.0) {
+      auto lift_planner = std::make_shared<mtc::solvers::CartesianPath>();
+      lift_planner->setIKFrame(settings_.tool_link);
+      lift_planner->setStepSize(settings_.cartesian_step_m);
+      lift_planner->setJumpThreshold(0.0);
+      lift_planner->setMinFraction(settings_.top_cut_pre_transit_lift_min_fraction);
+      lift_planner->setMaxVelocityScalingFactor(settings_.velocity_scaling);
+      lift_planner->setMaxAccelerationScalingFactor(settings_.acceleration_scaling);
+      auto lift = std::make_unique<mtc::stages::MoveRelative>(
+        "lift straight up before transit (table clearance)", lift_planner);
+      lift->setGroup(settings_.planning_group);
+      lift->setIKFrame(settings_.tool_link);
+      geometry_msgs::msg::Vector3Stamped up;
+      up.header.frame_id = settings_.planning_frame;
+      up.vector.z = options.pre_transit_lift_m;
+      lift->setDirection(up);
+      task->add(std::move(lift));
+    }
     moveit::core::RobotState ik_state(robot_model_);
     ik_state.setToDefaultValues();
     const auto& model_variables = robot_model_->getVariableNames();
@@ -5066,6 +6534,14 @@ private:
       auto cut_end = targetPose(
         snapshot, corrected_end_point, orientation_targets.second, target_clearance_m,
         tilt_deg);
+      if (is_middle_seam &&
+          (options.middle_start_extra_depth_m != 0.0 || options.middle_end_extra_depth_m != 0.0)) {
+        const Eigen::Vector3d deeper = -toEigen(snapshot.surface_normal).normalized();
+        cut_start.pose.position = toPoint(
+          toEigen(cut_start.pose.position) + options.middle_start_extra_depth_m * deeper);
+        cut_end.pose.position = toPoint(
+          toEigen(cut_end.pose.position) + options.middle_end_extra_depth_m * deeper);
+      }
       geometry_msgs::msg::PoseStamped hover_start;
       geometry_msgs::msg::PoseStamped hover_end;
       if (!left_lateral_hover) {
@@ -5261,6 +6737,7 @@ private:
       }
       cut_targets.push_back(cut_start);
       if (!segment.stop_after_start) cut_targets.push_back(cut_end);
+      if (options.hover_start_out != nullptr) *options.hover_start_out = hover_start;
       {
         const std::string first_approach = is_left_side ?
           "approach pose outside " + segment.name : "approach pose above " + segment.name;
@@ -5285,6 +6762,7 @@ private:
           "stabilize blade before " + segment.name, settings_.planning_group,
           settings_.pre_cut_stabilization_duration_s));
       }
+      if (options.stop_at_hover_start) continue;
       if (!segment.hover_only) {
         if (settings_.allow_tool_carton_contact && !contact_allowed_from_start) {
           addCartonContactScope(
@@ -5302,22 +6780,58 @@ private:
           *task, entry_label + segment.name + " start [" + motion_profile + "]", stroke_planner,
           entry_target);
         if (use_override) cut_targets.back() = entry_target;
+        // Operator 2026-10-01: hold at the top-cut penetration pose before the cut stroke.
+        if (is_middle_seam && settings_.top_cut_post_penetration_dwell_s > 0.0) {
+          task->add(std::make_unique<StationaryDwell>(
+            "hold at penetration before " + segment.name, settings_.planning_group,
+            settings_.top_cut_post_penetration_dwell_s));
+        }
       }
       if (segment.stop_after_start) {
         continue;
       }
 
+      auto cut_stroke_planner = stroke_planner;
+      CutPlanners slow_cut_planners;
+      if (options.cut_stroke_speed_factor != 1.0) {
+        slow_cut_planners = makeCutPlanners(motion_profile);
+        slow_cut_planners.stroke->setMaxVelocityScalingFactor(
+          settings_.velocity_scaling * options.cut_stroke_speed_factor);
+        slow_cut_planners.stroke->setMaxAccelerationScalingFactor(
+          settings_.acceleration_scaling * options.cut_stroke_speed_factor);
+        cut_stroke_planner = slow_cut_planners.stroke;
+      }
       addMoveTo(
-        *task, "cut " + segment.name + " [" + motion_profile + "]", stroke_planner, cut_end);
+        *task, "cut " + segment.name + " [" + motion_profile + "]", cut_stroke_planner, cut_end);
       // Terminal handoff: the left arm stops at the cut-level handoff endpoint after the
       // traverse above. Skip the Cartesian hover retract and leave the planned tool/carton
       // contact allowance active; a second arm (not modeled here) resumes from this pose.
       if (!segment.hover_only && !segment.terminal_after_cut) {
         const std::string finish_label = is_left_side ? "finish pose outside " :
           "finish pose above ";
-        addMoveTo(
-          *task, finish_label + segment.name + " [" + motion_profile + "]", stroke_planner,
-          hover_end);
+        if (is_middle_seam) {
+          // Top cut only: finish at top_cut_lift_clearance_m above the top, not the hover height.
+          auto finish_pose = hover_end;
+          if (options.middle_finish_clearance_m) {
+            const Eigen::Vector3d up = toEigen(snapshot.surface_normal).normalized();
+            finish_pose.pose.position = toPoint(
+              toEigen(finish_pose.pose.position) +
+              (*options.middle_finish_clearance_m - approach_clearance_m) * up);
+          }
+          // Straight lift first; if it fails the blade may tilt about tool X (see addTiltableLift).
+          const double finish_clear_m = options.middle_finish_clearance_m ?
+            *options.middle_finish_clearance_m : approach_clearance_m;
+          const double end_depth_m = -settings_.middle_cut_clearance_m +
+            options.middle_end_extra_depth_m;
+          addTiltableLift(
+            *task, finish_label + segment.name + " [" + motion_profile + "]", stroke_planner,
+            finish_pose, options.middle_finish_clearance_m ?
+            topCutLiftMinFraction(end_depth_m, end_depth_m + finish_clear_m) : 1.0);
+        } else {
+          addMoveTo(
+            *task, finish_label + segment.name + " [" + motion_profile + "]", stroke_planner,
+            hover_end);
+        }
         const bool lift_before_middle = is_left_side &&
           (segment_index + 1U) < segments.size() &&
           segments[segment_index + 1U].cut == CutKind::kMiddle &&
@@ -5360,10 +6874,19 @@ private:
     // Serialized once and shared by both fail-closed solution validators. Publication
     // happens only for the retained plan (retainPlan / cut-debug start).
     const auto& solution = *task->solutions().front();
+    logChosenLiftTilt(solution, "planCutSegments(" + task_name + ")");
     moveit_task_constructor_msgs::msg::Solution solution_message;
     solution.toMsg(solution_message);
-    const std::size_t expected_dwell_count =
+    std::size_t expected_dwell_count =
       settings_.pre_cut_stabilization_duration_s > 0.0 ? segments.size() : 0U;
+    // Plus one top-cut penetration hold per middle segment that descends (see planCutSegments).
+    if (settings_.top_cut_post_penetration_dwell_s > 0.0 && !options.stop_at_hover_start) {
+      for (const auto& planned_segment : segments) {
+        if (planned_segment.cut == CutKind::kMiddle && !planned_segment.hover_only) {
+          ++expected_dwell_count;
+        }
+      }
+    }
     std::string dwell_error;
     if (!validateStationaryDwells(solution_message, expected_dwell_count, dwell_error)) {
       message = "planned trajectory has invalid pre-cut stabilization: " + dwell_error;
@@ -5484,9 +7007,10 @@ private:
         error = "dwell velocities and accelerations must be explicit zeros";
         return false;
       }
+      const double dwell_end_s = seconds(points.back().time_from_start);
       if (std::abs(seconds(points.front().time_from_start)) > 1e-9 ||
-          std::abs(seconds(points.back().time_from_start) -
-            settings_.pre_cut_stabilization_duration_s) > 1e-6) {
+          (std::abs(dwell_end_s - settings_.pre_cut_stabilization_duration_s) > 1e-6 &&
+           std::abs(dwell_end_s - settings_.top_cut_post_penetration_dwell_s) > 1e-6)) {
         error = "dwell waypoint timing does not match requested duration";
         return false;
       }
@@ -5778,6 +7302,13 @@ private:
   std::atomic<bool> execution_enabled_{false};
   std::atomic<bool> debug_motion_execution_enabled_{false};
   std::atomic<bool> left_roll_diagnostics_enabled_{false};
+  // Phase 1 analytic-IK startup gate (see ensureAnalyticIkSelfCheck): run once, lazily, the
+  // first time a joint model group is available, against the live RobotModel's own joint
+  // limits. If the self-check fails, the analytic backend is disabled for the rest of the
+  // process (falls back to "kdl") regardless of left_search_ik_backend, and a warning is
+  // logged once.
+  std::once_flag analytic_self_check_once_;
+  std::atomic<bool> analytic_ik_available_{false};
   std::string external_snapshot_file_;
   std::optional<sensor_msgs::msg::JointState> current_joint_state_;
   std::optional<moveit_msgs::msg::CollisionObject> camera_pole_;
@@ -5800,6 +7331,9 @@ private:
   std::optional<Snapshot> planned_snapshot_;
   // True when the retained plan's snapshot was loaded under debug_allow_stale_snapshot.
   bool retained_with_stale_override_{false};
+  // Set only while continue_top_cut loads its snapshot with
+  // top_cut_continue_check_snapshot_age=false (operator: box static, alignment is slow).
+  mutable bool skip_snapshot_age_{false};
   CutDebugStage cut_debug_stage_{CutDebugStage::kNone};
   std::string cut_debug_session_cut_;
   std::optional<Snapshot> cut_debug_snapshot_;
@@ -5832,6 +7366,13 @@ private:
   TriggerService::SharedPtr side_tape_handoff_plan_service_;
   TriggerService::SharedPtr side_tape_retract_service_;
   TriggerService::SharedPtr side_tape_continue_service_;
+  TriggerService::SharedPtr side_cut_penetrate_service_;
+  TopCutStagedInfo top_cut_info_;
+  std::optional<Snapshot> top_cut_snapshot_;
+  bool top_cut_pending_{false};
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr top_cut_pub_;
+  TriggerService::SharedPtr top_cut_plan_service_, top_cut_penetrate_service_, top_cut_cut_service_,
+    top_cut_retract_service_, top_cut_continue_service_;
   // Servo activity, watched only to refuse side_tape_retract while Servo looks active;
   // Servo itself is never paused/stopped from here.
   std::mutex servo_activity_mutex_;
