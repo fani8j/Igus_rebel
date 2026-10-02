@@ -58,6 +58,12 @@
 	<exec_depend>ament_index_python</exec_depend>
 	<exec_depend>igus_rebel</exec_depend>
 	<exec_depend>compal_box_perception</exec_depend>
+  <depend>eigen</depend>
+
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>ament_index_cpp</test_depend>
+  <test_depend>kdl_parser</test_depend>
+  <test_depend>urdf</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>
