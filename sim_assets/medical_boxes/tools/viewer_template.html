@@ -271,8 +271,9 @@ function renderPhysics() {
   const p = DATA.physicsMaterial;
   $("physics").innerHTML = [
     "Rigid body with mass and solid-cuboid inertia on the root prim",
-    "Convex-hull collider on the box mesh",
-    `Cardboard material: static friction ${p.static_friction}, dynamic ${p.dynamic_friction}, restitution ${p.restitution}`,
+    "Box collider (exact), 2 mm contact offset, 0 rest offset",
+    `Carton board: static friction ${p.static_friction}, dynamic ${p.dynamic_friction}, restitution ${p.restitution} (interim, see CALIBRATION.md)`,
+    "Shelf steel 0.30 / 0.25 (min combine) · TGS solver at 240 Hz",
     "Z-up, metres, kilograms; origin at the carton centre",
   ].map((t) => `<li>${t}</li>`).join("");
 }

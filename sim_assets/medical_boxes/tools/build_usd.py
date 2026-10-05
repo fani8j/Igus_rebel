@@ -13,6 +13,9 @@ import sys
 import yaml
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade, Vt
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import physx_util as px  # noqa: E402
+
 GENERATOR_VERSION = "1.0.0"
 MM = 1e-3
 
@@ -79,7 +82,8 @@ def make_preview_material(stage, path, tex_rel):
     return mat
 
 
-def build_box(name, spec, phys, out_dir, textures_root):
+def build_box(name, spec, cfg, out_dir, textures_root):
+    phys = cfg["physics_material"]
     path = os.path.join(out_dir, name + ".usda")
     stage = Usd.Stage.CreateNew(path)
     UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
@@ -158,6 +162,7 @@ def build_box(name, spec, phys, out_dir, textures_root):
 
     # --- physics ------------------------------------------------------------
     UsdPhysics.RigidBodyAPI.Apply(rp)
+    px.author_rigid_body(rp, cfg["rigid_body"])
     m = UsdPhysics.MassAPI.Apply(rp)
     m.CreateMassAttr(mass)
     m.CreateCenterOfMassAttr(Gf.Vec3f(0, 0, 0))
@@ -171,14 +176,12 @@ def build_box(name, spec, phys, out_dir, textures_root):
     gp = mesh.GetPrim()
     UsdPhysics.CollisionAPI.Apply(gp)
     mc = UsdPhysics.MeshCollisionAPI.Apply(gp)
-    mc.CreateApproximationAttr("convexHull")
+    mc.CreateApproximationAttr(cfg["collision"]["approximation"])
+    px.author_collision(gp, cfg["collision"])
 
     UsdGeom.Scope.Define(stage, f"/{name}/Physics")
     pm = UsdShade.Material.Define(stage, f"/{name}/Physics/cardboard")
-    pma = UsdPhysics.MaterialAPI.Apply(pm.GetPrim())
-    pma.CreateStaticFrictionAttr(float(phys["static_friction"]))
-    pma.CreateDynamicFrictionAttr(float(phys["dynamic_friction"]))
-    pma.CreateRestitutionAttr(float(phys["restitution"]))
+    px.author_material(pm.GetPrim(), phys)
     UsdShade.MaterialBindingAPI.Apply(gp).Bind(
         pm, UsdShade.Tokens.weakerThanDescendants, "physics")
 
@@ -186,7 +189,7 @@ def build_box(name, spec, phys, out_dir, textures_root):
     return path
 
 
-def build_scene(boxes, specs, out_dir):
+def build_scene(boxes, specs, out_dir, cfg):
     path = os.path.join(out_dir, "medical_boxes_scene.usda")
     stage = Usd.Stage.CreateNew(path)
     UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
@@ -198,6 +201,7 @@ def build_scene(boxes, specs, out_dir):
     ps = UsdPhysics.Scene.Define(stage, "/World/PhysicsScene")
     ps.CreateGravityDirectionAttr(Gf.Vec3f(0, 0, -1))
     ps.CreateGravityMagnitudeAttr(9.81)
+    px.author_scene(ps.GetPrim(), cfg["physics_scene"])
 
     g = UsdGeom.Mesh.Define(stage, "/World/Ground")
     s = 2.0
@@ -212,6 +216,11 @@ def build_scene(boxes, specs, out_dir):
     g.CreateDisplayColorAttr(Vt.Vec3fArray([Gf.Vec3f(0.55, 0.55, 0.58)]))
     UsdPhysics.CollisionAPI.Apply(g.GetPrim())
     UsdPhysics.MeshCollisionAPI.Apply(g.GetPrim()).CreateApproximationAttr("none")
+    UsdGeom.Scope.Define(stage, "/World/Physics")
+    fm = UsdShade.Material.Define(stage, "/World/Physics/floor")
+    px.author_material(fm.GetPrim(), cfg["floor_material"])
+    UsdShade.MaterialBindingAPI.Apply(g.GetPrim()).Bind(
+        fm, UsdShade.Tokens.weakerThanDescendants, "physics")
 
     spacing = 0.35
     n = len(boxes)
@@ -239,12 +248,12 @@ def main():
     os.makedirs(out_dir, exist_ok=True)
     tex_root = os.path.abspath(a.textures_root)
     for name in cfg["boxes"]:
-        p = build_box(name, cfg["boxes"][name], cfg["physics_material"], out_dir, tex_root)
+        p = build_box(name, cfg["boxes"][name], cfg, out_dir, tex_root)
         print("wrote", p)
         for face in FACE_ORDER:
             if not os.path.isfile(os.path.join(tex_root, name, face + ".png")):
                 print(f"  warning: missing texture {name}/{face}.png under {tex_root}")
-    print("wrote", build_scene(list(cfg["boxes"]), cfg["boxes"], out_dir))
+    print("wrote", build_scene(list(cfg["boxes"]), cfg["boxes"], out_dir, cfg))
 
 
 if __name__ == "__main__":

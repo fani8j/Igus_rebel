@@ -17,6 +17,19 @@
 cabinet: ../../medicine_cabinet/MedicineCabinet.usd   # relative to usd/
 cabinet_prim: /MedicineCabinet_V6
 
+# Cabinet (painted steel) physics material. friction_combine_mode "min": PhysX picks the
+# higher-priority mode of the two materials (average < min < multiply < max), so the
+# carton (average) on shelf (min) pair resolves to min(carton, shelf) = exactly the
+# shelf values: static 0.30 / dynamic 0.25 while the carton material is >= those values.
+# PhysicsScene settings and the ground "floor" material live in boxes.yaml
+# (physics_scene, floor_material) so both generated scenes share them.
+shelf_material:
+  static_friction: 0.30
+  dynamic_friction: 0.25
+  restitution: 0.05
+  friction_combine_mode: min
+  restitution_combine_mode: average
+
 placement:
   spine_setback_m: 0.010      # spine face this far behind the shelf's front edge
   gap_between_m: 0.001        # between neighbouring cartons (keeps PhysX contacts stable)

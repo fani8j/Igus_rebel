@@ -48,10 +48,24 @@ six `materialBind` GeomSubsets (one UsdPreviewSurface + texture per face, relati
 
 ## Physics
 
-RigidBodyAPI + MassAPI on the root Xform, CollisionAPI + MeshCollisionAPI (convexHull) on `geom`,
-and a `PhysicsMaterialAPI` material (friction 0.5/0.4, restitution 0.1 from `boxes.yaml`) bound with
-the `physics` purpose. Centre of mass is (0,0,0); `diagonalInertia` is set explicitly for a solid
-cuboid of uniform density (m/12 * (b^2 + c^2) per axis) rather than left to PhysX.
+RigidBodyAPI + MassAPI (+ PhysxRigidBodyAPI, 16/2 solver iterations) on the root Xform; on `geom`
+CollisionAPI + MeshCollisionAPI `boundingCube` (exact for the box mesh) with PhysX contactOffset
+2 mm and restOffset 0, so the 1 mm gaps between stocked cartons stay real. Centre of mass is (0,0,0);
+`diagonalInertia` is a solid uniform cuboid, which both advisor reviews found adequate for these
+board boxes with flat contents.
+
+Materials (bound with the `physics` purpose; values in `boxes.yaml` / `shelf_layout.yaml`):
+
+| material | static / dynamic | restitution | combine | note |
+|---|---|---|---|---|
+| carton board | 0.35 / 0.30 | 0.05 | average | interim for glossy coated board; replace with the tilt test |
+| cabinet (painted steel) | 0.30 / 0.25 | 0.05 | min | `min` outranks `average`, so board-on-shelf is exactly 0.30/0.25 |
+| floor | 0.5 / 0.4 | 0.05 | average | ground plane |
+
+Scenes use TGS at 240 Hz with stabilization off. A suction pad or gripper-finger material added
+later should use `frictionCombineMode = max` (rubber ~0.8/0.7) so it wins the pair. See
+`CALIBRATION.md` for the measurements that replace these values, and for why the stocked scene
+does not yet model the squeeze of a packed row.
 
 ## Where the numbers come from
 

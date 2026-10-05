@@ -140,8 +140,41 @@ boxes:
       left: plain colour
       right: plain colour
 
-# Physics material for folding carton (typical cardboard values).
+# Physics material for the folding carton.
+# INTERIM value for glossy coated folding board (static 0.35 / dynamic 0.30); to be replaced
+# by the tilt-test measurement. Advisors gave a plausible range of 0.30-0.50.
+# Combine modes are PhysX defaults (average); the cabinet shelf material uses "min" (higher
+# priority: average < min < multiply < max), so the carton-on-shelf pair resolves to the
+# shelf values (see shelf_layout.yaml shelf_material).
 physics_material:
+  static_friction: 0.35
+  dynamic_friction: 0.30
+  restitution: 0.05
+  friction_combine_mode: average
+  restitution_combine_mode: average
+
+# Carton collider. The carton mesh is an exact axis-aligned box, so boundingCube is exact.
+collision:
+  approximation: boundingCube
+  contact_offset_m: 0.002
+  rest_offset_m: 0.0
+
+# Carton rigid body (root prim). Damping stays at schema defaults, no sleep thresholds authored.
+rigid_body:
+  solver_position_iterations: 16
+  solver_velocity_iterations: 2
+
+# PhysicsScene PhysX settings. Single source of truth: used by build_usd.py (medical_boxes_scene)
+# AND build_shelf.py (medicine_cabinet_filled); both verifiers check against this block.
+physics_scene:
+  solver_type: TGS
+  time_steps_per_second: 240
+  enable_stabilization: false
+
+# Ground plane in both scenes (simple "floor": between carton and steel; combine average).
+floor_material:
   static_friction: 0.5
   dynamic_friction: 0.4
-  restitution: 0.1
+  restitution: 0.05
+  friction_combine_mode: average
+  restitution_combine_mode: average

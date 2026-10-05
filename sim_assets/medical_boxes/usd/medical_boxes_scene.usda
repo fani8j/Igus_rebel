@@ -8,19 +8,27 @@
 
 def Xform "World"
 {
-    def PhysicsScene "PhysicsScene"
+    def PhysicsScene "PhysicsScene" (
+        prepend apiSchemas = ["PhysxSceneAPI"]
+    )
     {
         vector3f physics:gravityDirection = (0, 0, -1)
         float physics:gravityMagnitude = 9.81
+        bool physxScene:enableStabilization = 0
+        uniform token physxScene:solverType = "TGS"
+        uint physxScene:timeStepsPerSecond = 240
     }
 
     def Mesh "Ground" (
-        prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
+        prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "MaterialBindingAPI"]
     )
     {
         float3[] extent = [(-2, -2, 0), (2, 2, 0)]
         int[] faceVertexCounts = [4]
         int[] faceVertexIndices = [0, 1, 2, 3]
+        rel material:binding:physics = </World/Physics/floor> (
+            bindMaterialAs = "weakerThanDescendants"
+        )
         normal3f[] normals = [(0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, 1)] (
             interpolation = "faceVarying"
         )
@@ -28,6 +36,20 @@ def Xform "World"
         point3f[] points = [(-2, -2, 0), (2, -2, 0), (2, 2, 0), (-2, 2, 0)]
         color3f[] primvars:displayColor = [(0.55, 0.55, 0.58)]
         uniform token subdivisionScheme = "none"
+    }
+
+    def Scope "Physics"
+    {
+        def Material "floor" (
+            prepend apiSchemas = ["PhysicsMaterialAPI", "PhysxMaterialAPI"]
+        )
+        {
+            float physics:dynamicFriction = 0.4
+            float physics:restitution = 0.05
+            float physics:staticFriction = 0.5
+            uniform token physxMaterial:frictionCombineMode = "average"
+            uniform token physxMaterial:restitutionCombineMode = "average"
+        }
     }
 
     def Xform "agent_monorail" (

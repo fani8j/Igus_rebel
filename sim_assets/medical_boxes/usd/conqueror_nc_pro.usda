@@ -7,7 +7,7 @@
 )
 
 def Xform "conqueror_nc_pro" (
-    prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+    prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsMassAPI"]
     assetInfo = {
         asset identifier = @conqueror_nc_pro.usda@
         string name = "conqueror_nc_pro"
@@ -34,9 +34,11 @@ def Xform "conqueror_nc_pro" (
     float3 physics:diagonalInertia = (0.000407186, 0.000344786, 0.0007501)
     float physics:mass = 0.078
     quatf physics:principalAxes = (1, 0, 0, 0)
+    int physxRigidBody:solverPositionIterationCount = 16
+    int physxRigidBody:solverVelocityIterationCount = 2
 
     def Mesh "geom" (
-        prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "MaterialBindingAPI"]
+        prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "PhysxCollisionAPI", "MaterialBindingAPI"]
     )
     {
         uniform bool doubleSided = 0
@@ -50,7 +52,9 @@ def Xform "conqueror_nc_pro" (
             interpolation = "faceVarying"
         )
         uniform token orientation = "rightHanded"
-        uniform token physics:approximation = "convexHull"
+        uniform token physics:approximation = "boundingCube"
+        float physxCollision:contactOffset = 0.002
+        float physxCollision:restOffset = 0
         point3f[] points = [(-0.115, -0.125, 0.006), (0.115, -0.125, 0.006), (0.115, 0.125, 0.006), (-0.115, 0.125, 0.006), (0.115, -0.125, -0.006), (-0.115, -0.125, -0.006), (-0.115, 0.125, -0.006), (0.115, 0.125, -0.006), (0.115, 0.125, -0.006), (-0.115, 0.125, -0.006), (-0.115, 0.125, 0.006), (0.115, 0.125, 0.006), (-0.115, -0.125, -0.006), (0.115, -0.125, -0.006), (0.115, -0.125, 0.006), (-0.115, -0.125, 0.006), (-0.115, 0.125, -0.006), (-0.115, -0.125, -0.006), (-0.115, -0.125, 0.006), (-0.115, 0.125, 0.006), (0.115, -0.125, -0.006), (0.115, 0.125, -0.006), (0.115, 0.125, 0.006), (0.115, -0.125, 0.006)]
         texCoord2f[] primvars:st = [(0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1)] (
             interpolation = "faceVarying"
@@ -323,12 +327,14 @@ def Xform "conqueror_nc_pro" (
     def Scope "Physics"
     {
         def Material "cardboard" (
-            prepend apiSchemas = ["PhysicsMaterialAPI"]
+            prepend apiSchemas = ["PhysicsMaterialAPI", "PhysxMaterialAPI"]
         )
         {
-            float physics:dynamicFriction = 0.4
-            float physics:restitution = 0.1
-            float physics:staticFriction = 0.5
+            float physics:dynamicFriction = 0.3
+            float physics:restitution = 0.05
+            float physics:staticFriction = 0.35
+            uniform token physxMaterial:frictionCombineMode = "average"
+            uniform token physxMaterial:restitutionCombineMode = "average"
         }
     }
 }

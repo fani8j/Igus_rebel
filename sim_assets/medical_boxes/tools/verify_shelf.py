@@ -18,6 +18,9 @@ import numpy as np
 import yaml
 from pxr import Usd, UsdGeom, UsdPhysics, UsdShade, UsdUtils
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import physx_util as px  # noqa: E402
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCENE = os.path.join(ROOT, "usd", "medicine_cabinet_filled.usda")
 PREVIEW = os.path.join(ROOT, "usd", "previews", "cabinet_front.png")
@@ -106,7 +109,8 @@ def main():
     a = ap.parse_args()
     res = Results()
     layout = yaml.safe_load(open(os.path.join(ROOT, "shelf_layout.yaml")))
-    boxes = yaml.safe_load(open(os.path.join(ROOT, "boxes.yaml")))["boxes"]
+    bcfg = yaml.safe_load(open(os.path.join(ROOT, "boxes.yaml")))
+    boxes = bcfg["boxes"]
     pl = layout["placement"]
 
     # ---- stage / dependencies
@@ -125,7 +129,12 @@ def main():
     g = UsdPhysics.Scene(scn[0]).GetGravityDirectionAttr().Get() if scn else None
     res.add("stage", "physics scene gravity -Z 9.81",
             bool(scn) and abs(g[2] + 1) < 1e-6 and abs(UsdPhysics.Scene(scn[0]).GetGravityMagnitudeAttr().Get() - 9.81) < 1e-6)
+    ok, det = px.check_scene(scn[0], bcfg["physics_scene"]) if scn else (False, "no PhysicsScene")
+    res.add("stage", "PhysxSceneAPI settings", ok, det)
     gp = stage.GetPrimAtPath("/World/GroundPlane")
+    fm, _ = UsdShade.MaterialBindingAPI(gp).ComputeBoundMaterial("physics")
+    ok, det = px.check_material(fm.GetPrim() if fm else None, bcfg["floor_material"])
+    res.add("stage", "ground floor material", ok, det)
     res.add("stage", "ground collider at z=0",
             bool(gp) and gp.HasAPI(UsdPhysics.CollisionAPI)
             and abs(UsdGeom.BBoxCache(0, ["default"]).ComputeWorldBound(gp).ComputeAlignedRange().GetMax()[2]) < 1e-9)
@@ -158,6 +167,19 @@ def main():
             ", ".join(r.assetPath for r in ref))
     mb = UsdShade.MaterialBindingAPI(cab).GetDirectBindingRel("physics").GetTargets()
     res.add("cabinet", "physics material bound", len(mb) == 1, str(mb))
+    cm, _ = UsdShade.MaterialBindingAPI(cab).ComputeBoundMaterial("physics")
+    ok, det = px.check_material(cm.GetPrim() if cm else None, layout["shelf_material"])
+    res.add("cabinet", "shelf material values + combine mode", ok, det)
+    # the pair resolves to exactly the shelf values: shelf combine mode must outrank carton's
+    prio = {"average": 0, "min": 1, "multiply": 2, "max": 3}
+    sm, cmat = layout["shelf_material"], bcfg["physics_material"]
+    res.add("cabinet", "carton/shelf pair resolves to shelf friction",
+            prio[sm["friction_combine_mode"]] > prio[cmat["friction_combine_mode"]]
+            and sm["friction_combine_mode"] == "min"
+            and sm["static_friction"] <= cmat["static_friction"]
+            and sm["dynamic_friction"] <= cmat["dynamic_friction"],
+            f"shelf {sm['friction_combine_mode']} {sm['static_friction']}/{sm['dynamic_friction']} "
+            f"vs carton {cmat['friction_combine_mode']} {cmat['static_friction']}/{cmat['dynamic_friction']}")
 
     x_lo = cubes["Body_Left"][1][0] + pl["side_margin_m"]
     x_hi = cubes["Body_Right"][0][0] - pl["side_margin_m"]
@@ -193,9 +215,13 @@ def main():
             res.add(where, "RigidBodyAPI+MassAPI on root",
                     c.HasAPI(UsdPhysics.RigidBodyAPI) and c.HasAPI(UsdPhysics.MassAPI))
             mesh = c.GetChild("geom")
-            res.add(where, "mesh collider reachable",
-                    bool(mesh) and mesh.HasAPI(UsdPhysics.CollisionAPI)
-                    and UsdPhysics.MeshCollisionAPI(mesh).GetApproximationAttr().Get() == "convexHull")
+            ok, det = px.check_collision(mesh, bcfg["collision"]) if mesh else (False, "no geom")
+            res.add(where, "mesh collider reachable", ok, det)
+            ok, det = px.check_rigid_body(c, bcfg["rigid_body"])
+            res.add(where, "PhysxRigidBodyAPI via prototype", ok, det)
+            cmm, _ = UsdShade.MaterialBindingAPI(mesh).ComputeBoundMaterial("physics") if mesh else (None, None)
+            ok, det = px.check_material(cmm.GetPrim() if cmm else None, bcfg["physics_material"])
+            res.add(where, "carton material via prototype", ok, det)
             mn, mx = rng(cache, c)
             d = boxes[bname]["dims_mm"]
             h, ln, t = d["height"] / 1000, d["length"] / 1000, d["thickness"] / 1000

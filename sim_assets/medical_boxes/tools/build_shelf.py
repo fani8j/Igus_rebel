@@ -23,6 +23,9 @@ import numpy as np
 import yaml
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux, UsdPhysics, UsdShade
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import physx_util as px  # noqa: E402
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "usd", "medicine_cabinet_filled.usda")
 EPS = 1e-9
@@ -146,6 +149,7 @@ def main():
     scene = UsdPhysics.Scene.Define(st, "/World/PhysicsScene")
     scene.CreateGravityDirectionAttr(Gf.Vec3f(0, 0, -1))
     scene.CreateGravityMagnitudeAttr(9.81)
+    px.author_scene(scene.GetPrim(), boxes["physics_scene"])
 
     ground = UsdGeom.Cube.Define(st, "/World/GroundPlane")
     ground.CreateSizeAttr(1.0)
@@ -160,10 +164,11 @@ def main():
     # painted-steel physics material for the cabinet
     UsdGeom.Scope.Define(st, "/World/Physics")
     mat = UsdShade.Material.Define(st, "/World/Physics/painted_steel")
-    mapi = UsdPhysics.MaterialAPI.Apply(mat.GetPrim())
-    mapi.CreateStaticFrictionAttr(0.4)
-    mapi.CreateDynamicFrictionAttr(0.3)
-    mapi.CreateRestitutionAttr(0.05)
+    px.author_material(mat.GetPrim(), spec["shelf_material"])
+    floor = UsdShade.Material.Define(st, "/World/Physics/floor")
+    px.author_material(floor.GetPrim(), boxes["floor_material"])
+    UsdShade.MaterialBindingAPI.Apply(ground.GetPrim()).Bind(
+        floor, UsdShade.Tokens.weakerThanDescendants, "physics")
 
     cab = UsdGeom.Xform.Define(st, "/World/Cabinet")
     cab.GetPrim().GetReferences().AddReference(Sdf.Reference(cab_rel, Sdf.Path(cab_prim)))

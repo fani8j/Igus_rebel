@@ -8,16 +8,24 @@
 
 def Xform "World"
 {
-    def PhysicsScene "PhysicsScene"
+    def PhysicsScene "PhysicsScene" (
+        prepend apiSchemas = ["PhysxSceneAPI"]
+    )
     {
         vector3f physics:gravityDirection = (0, 0, -1)
         float physics:gravityMagnitude = 9.81
+        bool physxScene:enableStabilization = 0
+        uniform token physxScene:solverType = "TGS"
+        uint physxScene:timeStepsPerSecond = 240
     }
 
     def Cube "GroundPlane" (
-        prepend apiSchemas = ["PhysicsCollisionAPI"]
+        prepend apiSchemas = ["PhysicsCollisionAPI", "MaterialBindingAPI"]
     )
     {
+        rel material:binding:physics = </World/Physics/floor> (
+            bindMaterialAs = "weakerThanDescendants"
+        )
         color3f[] primvars:displayColor = [(0.35, 0.35, 0.35)]
         double size = 1
         float3 xformOp:scale = (10, 10, 0.1)
@@ -33,12 +41,25 @@ def Xform "World"
     def Scope "Physics"
     {
         def Material "painted_steel" (
-            prepend apiSchemas = ["PhysicsMaterialAPI"]
+            prepend apiSchemas = ["PhysicsMaterialAPI", "PhysxMaterialAPI"]
         )
         {
-            float physics:dynamicFriction = 0.3
+            float physics:dynamicFriction = 0.25
             float physics:restitution = 0.05
-            float physics:staticFriction = 0.4
+            float physics:staticFriction = 0.3
+            uniform token physxMaterial:frictionCombineMode = "min"
+            uniform token physxMaterial:restitutionCombineMode = "average"
+        }
+
+        def Material "floor" (
+            prepend apiSchemas = ["PhysicsMaterialAPI", "PhysxMaterialAPI"]
+        )
+        {
+            float physics:dynamicFriction = 0.4
+            float physics:restitution = 0.05
+            float physics:staticFriction = 0.5
+            uniform token physxMaterial:frictionCombineMode = "average"
+            uniform token physxMaterial:restitutionCombineMode = "average"
         }
     }
 

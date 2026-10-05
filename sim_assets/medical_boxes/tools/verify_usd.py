@@ -19,6 +19,9 @@ import numpy as np
 import yaml
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade, UsdUtils
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import physx_util as px  # noqa: E402
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FACE_ORDER = ["front", "back", "top", "bottom", "left", "right"]
 AX = {"x": np.array([1.0, 0, 0]), "y": np.array([0, 1.0, 0]), "z": np.array([0, 0, 1.0])}
@@ -272,21 +275,13 @@ def verify_box(name, spec, usd_dir, res, preview_dir):
     R("centerOfMass (0,0,0)", com is not None and Gf.Vec3f(com).GetLength() < 1e-9, str(com))
     mesh_prim = stage.GetPrimAtPath(f"/{name}/geom")
     mesh = UsdGeom.Mesh(mesh_prim)
-    R("CollisionAPI + convexHull", mesh_prim.HasAPI(UsdPhysics.CollisionAPI)
-      and mesh_prim.HasAPI(UsdPhysics.MeshCollisionAPI)
-      and UsdPhysics.MeshCollisionAPI(mesh_prim).GetApproximationAttr().Get() == "convexHull")
+    ok, det = px.check_collision(mesh_prim, spec["_collision"])
+    R("collider approx + offsets", ok, det)
+    ok, det = px.check_rigid_body(root, spec["_rigid_body"])
+    R("PhysxRigidBodyAPI iterations", ok, det)
     pm, _ = UsdShade.MaterialBindingAPI(mesh_prim).ComputeBoundMaterial("physics")
-    pok = False
-    detail = "no physics material bound"
-    if pm:
-        api = UsdPhysics.MaterialAPI(pm.GetPrim())
-        vals = (api.GetStaticFrictionAttr().Get(), api.GetDynamicFrictionAttr().Get(), api.GetRestitutionAttr().Get())
-        # compare to yaml
-        ypm = spec["_physics_material"]
-        pok = pm.GetPrim().HasAPI(UsdPhysics.MaterialAPI) and np.allclose(
-            vals, [ypm["static_friction"], ypm["dynamic_friction"], ypm["restitution"]], atol=1e-6)
-        detail = f"{pm.GetPath()} sf/df/e={tuple(round(v, 4) for v in vals)}"
-    R("physics material bound", pok, detail)
+    ok, det = px.check_material(pm.GetPrim() if pm else None, spec["_physics_material"])
+    R("physics material bound + values", ok, det if pm else "no physics material bound")
     ci = root.GetCustomData()
     need = {"product", "dims_mm", "mass_source", "generator_version"}
     R("customData", need <= set(ci) and ci.get("mass_source") == "estimate"
@@ -360,7 +355,7 @@ def verify_box(name, spec, usd_dir, res, preview_dir):
         R("previews written", False, "textures missing/unreadable")
 
 
-def verify_scene(names, specs, usd_dir, res):
+def verify_scene(names, specs, usd_dir, res, cfg):
     path = os.path.join(usd_dir, "medical_boxes_scene.usda")
     R = lambda check, ok, detail="": res.add("scene", check, ok, detail)
     if not os.path.isfile(path):
@@ -378,8 +373,13 @@ def verify_scene(names, specs, usd_dir, res):
     g = UsdPhysics.Scene(ps[0]) if ps else None
     R("PhysicsScene gravity -Z 9.81", bool(g) and abs(g.GetGravityMagnitudeAttr().Get() - 9.81) < 1e-6
       and Gf.Vec3f(g.GetGravityDirectionAttr().Get()) == Gf.Vec3f(0, 0, -1))
+    ok, det = px.check_scene(ps[0], cfg["physics_scene"]) if ps else (False, "no PhysicsScene")
+    R("PhysxSceneAPI settings", ok, det)
     gr = stage.GetPrimAtPath("/World/Ground")
     R("ground collider", gr and gr.HasAPI(UsdPhysics.CollisionAPI))
+    fm, _ = UsdShade.MaterialBindingAPI(gr).ComputeBoundMaterial("physics")
+    ok, det = px.check_material(fm.GetPrim() if fm else None, cfg["floor_material"])
+    R("ground floor material", ok, det)
     cache = UsdGeom.BBoxCache(Usd.TimeCode.Default(), [UsdGeom.Tokens.default_])
     xs = []
     for n in names:
@@ -448,6 +448,8 @@ def main():
     for n in names:
         spec = dict(cfg["boxes"][n])
         spec["_physics_material"] = cfg["physics_material"]
+        spec["_collision"] = cfg["collision"]
+        spec["_rigid_body"] = cfg["rigid_body"]
         verify_box(n, spec, usd_dir, res, os.path.join(usd_dir, "previews"))
         if a.textures_root:
             tr = os.path.abspath(a.textures_root)
@@ -455,7 +457,7 @@ def main():
             lay, assets, _ = UsdUtils.ComputeAllDependencies(Sdf.AssetPath(os.path.join(usd_dir, n + ".usda")))
             bad = [x for x in assets if not os.path.abspath(x).startswith(tr + os.sep)]
             res.add(n, "textures come from --textures-root", not bad, str(bad[:2]))
-    verify_scene(names, cfg["boxes"], usd_dir, res)
+    verify_scene(names, cfg["boxes"], usd_dir, res, cfg)
     print(res.table())
     compliance(usd_dir, names)
     nfail = sum(1 for r in res.rows if not r[2])
