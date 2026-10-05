@@ -19,6 +19,7 @@ rotate the asset so +Y points out of the shelf and X (height) is vertical.
     usd/previews/                PNG previews written by verify_usd.py (3D views + unfolded net)
     textures/<box>/<face>.png    face textures (produced by tools/extract_textures.py)
     boxes.yaml                   the spec: dims, mass, physics material, face orientation
+    usd/medicine_cabinet_filled.usda  the operator's MedicineCabinet.usd stocked with 360 cartons (shelf_layout.yaml)
     viewer.html                  self-contained 3D viewer + spec/verification page (tools/make_viewer.py)
 
 ## Frame convention
@@ -84,3 +85,19 @@ usd-core wheel; it runs only if a `usdchecker` binary is on PATH.
 File > Open `usd/medical_boxes_scene.usda`, then press Play: the boxes settle on the ground
 (they start resting at z = thickness/2). To use a single carton elsewhere, add a Reference to
 `usd/<box>.usda` on any prim; keep the `textures/` folder next to `usd/`.
+
+## Stocked medicine cabinet
+
+`usd/medicine_cabinet_filled.usda` references `sim_assets/medicine_cabinet/MedicineCabinet.usd`
+(unchanged) and stocks it per `shelf_layout.yaml`: cartons stand upright like books, spine out of
+the cabinet front (-Y), brand end of the spine at the top, length into the shelf, grouped by
+product, 1 mm apart and 1 mm above the shelf (as in `source/setup_photos/`). Each carton is an
+instanceable reference to `usd/<box>.usda` (dynamic rigid body); the cabinet gets static colliders
+and a painted-steel physics material through overrides in the scene layer. Shelf heights and
+extents are read from the cabinet USD; the build fails if a carton does not clear the shelf above.
+
+    "$PY" tools/build_shelf.py                          # usd/medicine_cabinet_filled.usda
+    "$PY" tools/verify_shelf.py --json /tmp/shelf.json  # bounds, overlaps, clearance, spine orientation, preview
+    "$PY" tools/make_viewer.py --verify-json /tmp/verify.json --shelf-json /tmp/shelf.json
+
+Change the stocking by editing `shelf_layout.yaml` (box type and width fraction per shelf).

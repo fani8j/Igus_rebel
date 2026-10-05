@@ -1,0 +1,43 @@
+# How the cartons are stocked in the medicine cabinet (sim_assets/medicine_cabinet).
+#
+# Stocking rule, from the hospital shelf photos (source/setup_photos/): cartons stand
+# upright like books, labelled spine facing out of the cabinet front, the spine's long
+# side vertical with the brand end (texture left end) at the top, carton length going
+# into the shelf, packed tight in groups of one product.
+#
+# Carton -> world rotation (cabinet frame: X across, Y into the cabinet, front at y=0,
+# Z up):  carton +X (height) -> world +Z,  carton +Y (spine) -> world -Y,
+#         carton +Z (front face) -> world +X.
+#
+# Shelf geometry (top surface, x/y extent, clearance to the next shelf) is read from the
+# cabinet USD, not repeated here. Groups fill a shelf left (-X) to right (+X); `fill`
+# is the fraction of the shelf width a group gets, and as many cartons as fit go in it.
+
+cabinet: ../../medicine_cabinet/MedicineCabinet.usd   # relative to usd/
+cabinet_prim: /MedicineCabinet_V6
+
+placement:
+  spine_setback_m: 0.010      # spine face this far behind the shelf's front edge
+  gap_between_m: 0.001        # between neighbouring cartons (keeps PhysX contacts stable)
+  drop_height_m: 0.001        # cartons start this far above the shelf surface
+  side_margin_m: 0.002        # free space at each cabinet side wall
+  min_top_clearance_m: 0.008  # a carton must clear the shelf above by at least this
+
+# Shelf_07 (top compartment) and the bottom compartment have closed front panels and
+# stay empty. Clear heights: 01 300 mm, 02 230, 03 260, 04 310, 05 290, 06 280.
+shelves:
+  Shelf_01:
+    - {box: ultimaster_nagomi, fill: 1.0}
+  Shelf_02:                                   # 230 mm clear: only the 220 mm Accuforce fits
+    - {box: accuforce, fill: 1.0}
+  Shelf_03:
+    - {box: agent_monorail, fill: 0.5}
+    - {box: conqueror_nc_pro, fill: 0.5}
+  Shelf_04:
+    - {box: angiolite, fill: 1.0}
+  Shelf_05:
+    - {box: agent_monorail, fill: 1.0}
+  Shelf_06:
+    - {box: angiolite, fill: 0.34}
+    - {box: accuforce, fill: 0.33}
+    - {box: conqueror_nc_pro, fill: 0.33}

@@ -110,11 +110,41 @@ def read_box(name, spec, usd_dir):
     }, textures
 
 
+def read_cabinet(path):
+    """Cabinet cubes (world AABB + display colour) and carton instances (box name + world
+    matrix) from the filled-cabinet scene, if it has been built."""
+    if not os.path.exists(path):
+        return None
+    stage = Usd.Stage.Open(path)
+    cache = UsdGeom.XformCache()
+    bbox = UsdGeom.BBoxCache(Usd.TimeCode.Default(), [UsdGeom.Tokens.default_])
+    cubes, cartons = [], []
+    for prim in stage.Traverse():
+        if prim.IsA(UsdGeom.Cube) and str(prim.GetPath()).startswith("/World/Cabinet/"):
+            r = bbox.ComputeWorldBound(prim).ComputeAlignedRange()
+            mat, _ = UsdShade.MaterialBindingAPI(prim).ComputeBoundMaterial()
+            col = (0.7, 0.7, 0.7)
+            if mat:
+                for sp in Usd.PrimRange(mat.GetPrim()):
+                    sh = UsdShade.Shader(sp)
+                    if sh and sh.GetInput("diffuseColor"):
+                        col = tuple(sh.GetInput("diffuseColor").Get())
+            cubes.append({"min": list(r.GetMin()), "max": list(r.GetMax()), "color": list(col)})
+        elif prim.IsInstance():
+            refs = [spec.assetPath for spec in prim.GetPrimStack()[0].referenceList.GetAddedOrExplicitItems()] \
+                if prim.GetPrimStack() else []
+            box = os.path.splitext(os.path.basename(refs[0]))[0] if refs else prim.GetName().rsplit("_", 1)[0]
+            m = cache.GetLocalToWorldTransform(prim)
+            cartons.append({"box": box, "m": [round(m[i][j], 6) for i in range(4) for j in range(4)]})
+    return {"cubes": cubes, "cartons": cartons, "file": os.path.relpath(path, ROOT)}
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--boxes-yaml", default=os.path.join(ROOT, "boxes.yaml"))
     ap.add_argument("--usd-dir", default=os.path.join(ROOT, "usd"))
     ap.add_argument("--verify-json", required=True)
+    ap.add_argument("--shelf-json", default=None, help="verify_shelf.py --json output, shown with the cabinet")
     ap.add_argument("--template", default=os.path.join(HERE, "viewer_template.html"))
     ap.add_argument("--out", default=os.path.join(ROOT, "viewer.html"))
     a = ap.parse_args()
@@ -126,7 +156,9 @@ def main():
         textures.update(t)
     checks = json.load(open(a.verify_json))
     data = {"boxes": boxes, "textures": textures, "checks": checks,
-            "physicsMaterial": cfg["physics_material"]}
+            "physicsMaterial": cfg["physics_material"],
+            "cabinet": read_cabinet(os.path.join(os.path.abspath(a.usd_dir), "medicine_cabinet_filled.usda"))}
+    data["shelfChecks"] = json.load(open(a.shelf_json)) if a.shelf_json and os.path.exists(a.shelf_json) else []
     html = open(a.template).read().replace("/*__DATA__*/null", json.dumps(data, separators=(",", ":")))
     with open(a.out, "w") as f:
         f.write(html)

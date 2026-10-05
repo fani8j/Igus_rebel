@@ -138,6 +138,7 @@ code { font-family: var(--font-mono); font-size: 0.82em; background: var(--canva
         <span class="lbl">Show</span>
         <button class="tbtn" id="m-one" aria-pressed="true">This carton</button>
         <button class="tbtn" id="m-all" aria-pressed="false">All side by side</button>
+        <button class="tbtn" id="m-cab" aria-pressed="false">Stocked cabinet</button>
         <span class="sep"></span>
         <span class="lbl">Look at</span>
         <button class="tbtn" data-view="iso">3/4</button>
@@ -145,7 +146,7 @@ code { font-family: var(--font-mono); font-size: 0.82em; background: var(--canva
         <button class="tbtn" data-view="back">Back</button>
         <button class="tbtn" data-view="top">Spine</button>
       </div>
-      <div class="hint">Drag to orbit, scroll or pinch to zoom. Floor grid is 10 mm. The model is Z-up, lying front-up as in the Isaac Sim scene.</div>
+      <div class="hint">Drag to orbit, scroll or pinch to zoom. Floor grid is 10 mm. Single cartons lie front-up; in the cabinet they stand spine-out.</div>
     </div>
     <div class="sheet" id="sheet"></div>
   </div>
@@ -184,10 +185,11 @@ let current = 0, mode = "one";
 function checksFor(name) { return DATA.checks.filter((c) => c.box === name); }
 
 function renderTally() {
-  const fails = DATA.checks.filter((c) => !c.ok).length;
-  const n = DATA.checks.length;
+  const all = DATA.checks.concat(DATA.shelfChecks || []);
+  const fails = all.filter((c) => !c.ok).length;
+  const n = all.length;
   $("tally").innerHTML =
-    `<span class="pill info">${DATA.boxes.length} cartons</span>` +
+    `<span class="pill info">${DATA.boxes.length} carton types${DATA.cabinet ? ` · ${DATA.cabinet.cartons.length} stocked` : ""}</span>` +
     (fails ? `<span class="pill fail"><span class="dot"></span>${fails} of ${n} checks failed</span>`
            : `<span class="pill pass"><span class="dot"></span>${n} of ${n} checks passed</span>`) +
     `<span class="pill warn">Masses estimated</span>`;
@@ -234,6 +236,26 @@ function renderSheet(b) {
     </details>`;
 }
 
+function renderCabinetSheet() {
+  const cab = DATA.cabinet, cs = DATA.shelfChecks || [], bad = cs.filter((c) => !c.ok);
+  const counts = {};
+  cab.cartons.forEach((c) => { counts[c.box] = (counts[c.box] || 0) + 1; });
+  const byName = Object.fromEntries(DATA.boxes.map((b) => [b.name, b]));
+  $("sheet").innerHTML = `
+    <div><h2>Stocked medicine cabinet</h2><div class="prod">${cab.cartons.length} cartons standing spine-out, grouped by product</div></div>
+    <dl class="kv"><dt>Scene</dt><dd><code>${esc(cab.file)}</code></dd>
+      <dt>Layout</dt><dd><code>shelf_layout.yaml</code></dd></dl>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Carton</th><th class="num">Count</th><th class="num">Mass each</th></tr></thead>
+      <tbody>${Object.entries(counts).map(([k, n]) => `<tr><td>${esc(byName[k] ? byName[k].label : k)}</td><td class="num">${n}</td><td class="num">${byName[k] ? fmt(byName[k].mass_kg * 1000, 0) + " g" : ""}</td></tr>`).join("")}</tbody>
+    </table></div>
+    <p class="evidence">Cartons are instanced references to the single-carton assets, each a dynamic rigid body. The cabinet is a static collider added in the scene layer; its own file is unchanged.</p>
+    ${cs.length ? `<details ${bad.length ? "open" : ""}>
+      <summary>Shelf verifier ${bad.length ? `<span class="pill fail">${bad.length} of ${cs.length} failed</span>` : `<span class="pill pass">${cs.length} of ${cs.length} passed</span>`}</summary>
+      <ul class="checks">${cs.map((c) => `<li><span class="${c.ok ? "ok" : "bad"}">${c.ok ? "✓" : "✕"}</span><span>${esc([c.box, c.check].filter(Boolean).join(" · "))}${c.detail ? `<div class="d">${esc(c.detail)}</div>` : ""}</span></li>`).join("")}</ul>
+    </details>` : ""}`;
+}
+
 function renderCompare(b) {
   const spine = b.faces.find((f) => f.name === "top");
   $("compare").innerHTML = `
@@ -269,7 +291,7 @@ function tex(key) {
   return texCache[key];
 }
 
-function boxMesh(b) {
+function boxParts(b) {
   const pos = [], uv = [], idx = [], g = new THREE.BufferGeometry(), mats = [];
   b.faces.forEach((f, i) => {
     f.points.forEach((p) => pos.push(...p));
@@ -283,6 +305,11 @@ function boxMesh(b) {
   g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
   g.setIndex(idx);
   g.computeVertexNormals();
+  return { g, mats };
+}
+
+function boxMesh(b) {
+  const { g, mats } = boxParts(b);
   const mesh = new THREE.Mesh(g, mats);
   const edges = new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineBasicMaterial({ color: 0x0b1a1f, transparent: true, opacity: 0.35 }));
   mesh.add(edges);
@@ -297,7 +324,7 @@ function initThree() {
   renderer.outputEncoding = THREE.sRGBEncoding;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(32, 4 / 3, 0.005, 20);
+  camera = new THREE.PerspectiveCamera(32, 4 / 3, 0.005, 60);
   camera.up.set(0, 0, 1);
   controls = new THREE.OrbitControls(camera, canvas);
   controls.enableDamping = true;
@@ -343,8 +370,34 @@ function resize() {
 
 function draw() { if (renderer) renderer.render(scene, camera); }
 
+function buildCabinet() {
+  const cab = DATA.cabinet, byName = Object.fromEntries(DATA.boxes.map((b) => [b.name, b]));
+  cab.cubes.forEach((c) => {
+    const sx = c.max[0] - c.min[0], sy = c.max[1] - c.min[1], sz = c.max[2] - c.min[2];
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz),
+      new THREE.MeshStandardMaterial({ color: new THREE.Color(...c.color), roughness: 0.6, metalness: 0.1 }));
+    m.position.set((c.max[0] + c.min[0]) / 2, (c.max[1] + c.min[1]) / 2, (c.max[2] + c.min[2]) / 2);
+    group.add(m);
+  });
+  const per = {};
+  cab.cartons.forEach((c) => (per[c.box] = per[c.box] || []).push(c.m));
+  Object.entries(per).forEach(([name, mats]) => {
+    if (!byName[name]) return;
+    const { g, mats: materials } = boxParts(byName[name]);
+    const im = new THREE.InstancedMesh(g, materials, mats.length);
+    const M = new THREE.Matrix4();
+    // USD matrices are row-major for row vectors; read as column-major they are three.js matrices.
+    mats.forEach((a, i) => { M.fromArray(a); im.setMatrixAt(i, M); });
+    im.instanceMatrix.needsUpdate = true;
+    group.add(im);
+  });
+  buildGrid(1.4, 0);
+  frame("cab");
+}
+
 function buildScene() {
   while (group.children.length) group.remove(group.children[0]);
+  if (mode === "cab") return buildCabinet();
   const list = mode === "one" ? [DATA.boxes[current]] : DATA.boxes;
   const gap = 0.04;
   let x = 0;
@@ -365,11 +418,13 @@ function buildScene() {
 
 function frame(view) {
   const bb = new THREE.Box3().setFromObject(group), c = bb.getCenter(new THREE.Vector3()), s = bb.getSize(new THREE.Vector3());
-  const r = Math.max(s.x, s.y, s.z * 4) * 0.5;
+  const r = mode === "cab" ? Math.max(s.x, s.y, s.z) * 0.4 : Math.max(s.x, s.y, s.z * 4) * 0.5;
   const d = r / Math.sin((camera.fov * Math.PI) / 360) * (camera.aspect < 1 ? 1.8 : 1.35);
-  const dirs = { iso: [0.55, -0.85, 0.9], front: [0, -0.0001, 1], back: [0, 0.0001, -1], top: [0.15, 1, 0.55] };
+  const dirs = mode === "cab"
+    ? { cab: [-0.35, -1, 0.25], iso: [-0.35, -1, 0.25], front: [0, -1, 0.0001], back: [0, 1, 0.2], top: [0.6, -0.8, 0.1] }
+    : { iso: [0.55, -0.85, 0.9], front: [0, -0.0001, 1], back: [0, 0.0001, -1], top: [0.15, 1, 0.55] };
   const v = new THREE.Vector3(...dirs[view]).normalize().multiplyScalar(d);
-  if (view === "back") { camera.up.set(0, 0, 1); v.set(0, -0.25 * d, -d); }
+  if (view === "back" && mode !== "cab") { v.set(0, -0.25 * d, -d); }
   camera.position.copy(c).add(v);
   controls.target.copy(c);
   controls.update();
@@ -382,13 +437,15 @@ function select(i) {
   const b = DATA.boxes[i];
   renderSheet(b);
   renderCompare(b);
-  if (mode === "all") setMode("one"); else if (group) buildScene();
+  if (mode !== "one") setMode("one"); else if (group) buildScene();
 }
 
 function setMode(m) {
   mode = m;
   $("m-one").setAttribute("aria-pressed", String(m === "one"));
   $("m-all").setAttribute("aria-pressed", String(m === "all"));
+  $("m-cab").setAttribute("aria-pressed", String(m === "cab"));
+  if (m === "cab") renderCabinetSheet(); else renderSheet(DATA.boxes[current]);
   if (group) buildScene();
 }
 
@@ -399,10 +456,11 @@ renderSheet(DATA.boxes[0]);
 renderCompare(DATA.boxes[0]);
 $("m-one").addEventListener("click", () => setMode("one"));
 $("m-all").addEventListener("click", () => setMode("all"));
+if (DATA.cabinet) $("m-cab").addEventListener("click", () => setMode("cab")); else $("m-cab").hidden = true;
 document.querySelectorAll("[data-view]").forEach((el) => el.addEventListener("click", () => frame(el.dataset.view)));
 try {
   initThree();
-  buildScene();
+  setMode(DATA.cabinet ? "cab" : "one");
 } catch (e) {
   $("view").replaceWith(Object.assign(document.createElement("div"), { className: "err", textContent: "The 3D view could not start (" + e.message + "). The spec and checks below are still accurate." }));
 }

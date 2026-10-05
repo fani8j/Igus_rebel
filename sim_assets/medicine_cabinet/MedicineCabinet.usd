@@ -1,0 +1,258 @@
+#usda 1.0
+(
+    defaultPrim = "MedicineCabinet_V6"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "MedicineCabinet_V6"
+{
+    def Scope "Looks"
+    {
+
+    def Material "CabinetLightGray"
+    {
+        token outputs:surface.connect = </MedicineCabinet_V6/Looks/CabinetLightGray/PreviewSurface.outputs:surface>
+        def Shader "PreviewSurface"
+        {
+            uniform token info:id = "UsdPreviewSurface"
+            color3f inputs:diffuseColor = (0.72, 0.73, 0.72)
+            float inputs:roughness = 0.55
+            float inputs:metallic = 0.18
+            token outputs:surface
+        }
+    }
+
+    def Material "CabinetMidGray"
+    {
+        token outputs:surface.connect = </MedicineCabinet_V6/Looks/CabinetMidGray/PreviewSurface.outputs:surface>
+        def Shader "PreviewSurface"
+        {
+            uniform token info:id = "UsdPreviewSurface"
+            color3f inputs:diffuseColor = (0.6, 0.61, 0.6)
+            float inputs:roughness = 0.62
+            float inputs:metallic = 0.16
+            token outputs:surface
+        }
+    }
+
+    def Material "TrimDark"
+    {
+        token outputs:surface.connect = </MedicineCabinet_V6/Looks/TrimDark/PreviewSurface.outputs:surface>
+        def Shader "PreviewSurface"
+        {
+            uniform token info:id = "UsdPreviewSurface"
+            color3f inputs:diffuseColor = (0.12, 0.12, 0.12)
+            float inputs:roughness = 0.45
+            float inputs:metallic = 0.25
+            token outputs:surface
+        }
+    }
+
+    def Material "ShelfGray"
+    {
+        token outputs:surface.connect = </MedicineCabinet_V6/Looks/ShelfGray/PreviewSurface.outputs:surface>
+        def Shader "PreviewSurface"
+        {
+            uniform token info:id = "UsdPreviewSurface"
+            color3f inputs:diffuseColor = (0.75, 0.76, 0.75)
+            float inputs:roughness = 0.58
+            float inputs:metallic = 0.16
+            token outputs:surface
+        }
+    }
+
+    def Material "ClosedPanelGray"
+    {
+        token outputs:surface.connect = </MedicineCabinet_V6/Looks/ClosedPanelGray/PreviewSurface.outputs:surface>
+        def Shader "PreviewSurface"
+        {
+            uniform token info:id = "UsdPreviewSurface"
+            color3f inputs:diffuseColor = (0.7, 0.71, 0.7)
+            float inputs:roughness = 0.52
+            float inputs:metallic = 0.18
+            token outputs:surface
+        }
+    }
+    }
+
+    def Xform "Cabinet"
+    {
+        def Cube "Body_Left"
+        {
+            double size = 1
+            double3 xformOp:translate = (-0.5, 0.22, 1.08)
+            double3 xformOp:scale = (0.02, 0.44, 2.16)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            rel material:binding = </MedicineCabinet_V6/Looks/CabinetLightGray>
+        }
+        def Cube "Body_Right"
+        {
+            double size = 1
+            double3 xformOp:translate = (0.5, 0.22, 1.08)
+            double3 xformOp:scale = (0.02, 0.44, 2.16)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            rel material:binding = </MedicineCabinet_V6/Looks/CabinetLightGray>
+        }
+        def Cube "Body_Bottom"
+        {
+            double size = 1
+            double3 xformOp:translate = (0, 0.22, 0.01)
+            double3 xformOp:scale = (0.98, 0.44, 0.02)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            rel material:binding = </MedicineCabinet_V6/Looks/CabinetLightGray>
+        }
+        def Cube "Body_Back"
+        {
+            double size = 1
+            double3 xformOp:translate = (0, 0.42, 1.09)
+            double3 xformOp:scale = (0.98, 0.04, 2.14)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            rel material:binding = </MedicineCabinet_V6/Looks/CabinetMidGray>
+        }
+        def Cube "FrontTrim_Left"
+        {
+            double size = 1
+            double3 xformOp:translate = (-0.481, 0.006, 1.08)
+            double3 xformOp:scale = (0.018, 0.012, 2.16)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            rel material:binding = </MedicineCabinet_V6/Looks/TrimDark>
+        }
+        def Cube "FrontTrim_Right"
+        {
+            double size = 1
+            double3 xformOp:translate = (0.481, 0.006, 1.08)
+            double3 xformOp:scale = (0.018, 0.012, 2.16)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            rel material:binding = </MedicineCabinet_V6/Looks/TrimDark>
+        }
+        def Cube "Shelf_01"
+        {
+            double size = 1
+            double3 xformOp:translate = (0, 0.23, 0.16)
+            double3 xformOp:scale = (0.98, 0.34, 0.02)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            rel material:binding = </MedicineCabinet_V6/Looks/ShelfGray>
+        }
+        def Cube "ShelfLip_01"
+        {
+            double size = 1
+            double3 xformOp:translate = (0, 0.055, 0.163)
+            double3 xformOp:scale = (0.98, 0.01, 0.014)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            rel material:binding = </MedicineCabinet_V6/Looks/TrimDark>
+        }
+        def Cube "Shelf_02"
+        {
+            double size = 1
+            double3 xformOp:translate = (0, 0.23, 0.48)
+            double3 xformOp:scale = (0.98, 0.34, 0.02)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            rel material:binding = </MedicineCabinet_V6/Looks/ShelfGray>
+        }
+        def Cube "ShelfLip_02"
+        {
+            double size = 1
+            double3 xformOp:translate = (0, 0.055, 0.483)
+            double3 xformOp:scale = (0.98, 0.01, 0.014)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            rel material:binding = </MedicineCabinet_V6/Looks/TrimDark>
+        }
+        def Cube "Shelf_03"
+        {
+            double size = 1
+            double3 xformOp:translate = (0, 0.23, 0.73)
+            double3 xformOp:scale = (0.98, 0.34, 0.02)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            rel material:binding = </MedicineCabinet_V6/Looks/ShelfGray>
+        }
+        def Cube "ShelfLip_03"
+        {
+            double size = 1
+            double3 xformOp:translate = (0, 0.055, 0.733)
+            double3 xformOp:scale = (0.98, 0.01, 0.014)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            rel material:binding = </MedicineCabinet_V6/Looks/TrimDark>
+        }
+        def Cube "Shelf_04"
+        {
+            double size = 1
+            double3 xformOp:translate = (0, 0.23, 1.01)
+            double3 xformOp:scale = (0.98, 0.34, 0.02)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            rel material:binding = </MedicineCabinet_V6/Looks/ShelfGray>
+        }
+        def Cube "ShelfLip_04"
+        {
+            double size = 1
+            double3 xformOp:translate = (0, 0.055, 1.013)
+            double3 xformOp:scale = (0.98, 0.01, 0.014)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            rel material:binding = </MedicineCabinet_V6/Looks/TrimDark>
+        }
+        def Cube "Shelf_05"
+        {
+            double size = 1
+            double3 xformOp:translate = (0, 0.23, 1.34)
+            double3 xformOp:scale = (0.98, 0.34, 0.02)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            rel material:binding = </MedicineCabinet_V6/Looks/ShelfGray>
+        }
+        def Cube "ShelfLip_05"
+        {
+            double size = 1
+            double3 xformOp:translate = (0, 0.055, 1.343)
+            double3 xformOp:scale = (0.98, 0.01, 0.014)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            rel material:binding = </MedicineCabinet_V6/Looks/TrimDark>
+        }
+        def Cube "Shelf_06"
+        {
+            double size = 1
+            double3 xformOp:translate = (0, 0.23, 1.65)
+            double3 xformOp:scale = (0.98, 0.34, 0.02)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            rel material:binding = </MedicineCabinet_V6/Looks/ShelfGray>
+        }
+        def Cube "ShelfLip_06"
+        {
+            double size = 1
+            double3 xformOp:translate = (0, 0.055, 1.653)
+            double3 xformOp:scale = (0.98, 0.01, 0.014)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            rel material:binding = </MedicineCabinet_V6/Looks/TrimDark>
+        }
+        def Cube "Shelf_07"
+        {
+            double size = 1
+            double3 xformOp:translate = (0, 0.23, 1.95)
+            double3 xformOp:scale = (0.98, 0.34, 0.02)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            rel material:binding = </MedicineCabinet_V6/Looks/ShelfGray>
+        }
+        def Cube "ShelfLip_07"
+        {
+            double size = 1
+            double3 xformOp:translate = (0, 0.055, 1.953)
+            double3 xformOp:scale = (0.98, 0.01, 0.014)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            rel material:binding = </MedicineCabinet_V6/Looks/TrimDark>
+        }
+        def Cube "TopClosedPanel"
+        {
+            double size = 1
+            double3 xformOp:translate = (0, 0.01, 2.06)
+            double3 xformOp:scale = (0.98, 0.02, 0.2)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            rel material:binding = </MedicineCabinet_V6/Looks/ClosedPanelGray>
+        }
+        def Cube "BottomClosedPanel"
+        {
+            double size = 1
+            double3 xformOp:translate = (0, 0.01, 0.075)
+            double3 xformOp:scale = (0.98, 0.02, 0.15)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            rel material:binding = </MedicineCabinet_V6/Looks/ClosedPanelGray>
+        }
+    }
+}
