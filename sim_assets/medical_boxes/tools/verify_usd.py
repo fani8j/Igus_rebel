@@ -9,6 +9,7 @@ and writes <usd-dir>/previews/<box>.png (3D views) and <box>_net.png (unfolded n
 Exit code is non-zero when any check FAILs.
 """
 import argparse
+import json
 import io
 import os
 import sys
@@ -289,7 +290,9 @@ def verify_box(name, spec, usd_dir, res, preview_dir):
     ci = root.GetCustomData()
     need = {"product", "dims_mm", "mass_source", "generator_version"}
     R("customData", need <= set(ci) and ci.get("mass_source") == "estimate"
-      and ("ref" in ci or "gtin" in ci), f"keys={sorted(ci)}")
+      and ("ref" in ci or "gtin" in ci or not (spec.get("ref") or spec.get("gtin")
+                                                  or spec.get("catalog_candidates"))),
+      f"keys={sorted(ci)}")
 
     # geometry
     pts = mesh.GetPointsAttr().Get()
@@ -436,6 +439,7 @@ def main():
     ap.add_argument("--textures-root", default=None,
                     help="informational: expected textures dir. Textures themselves are resolved "
                          "from the USD; a mismatch with the files the USD points at is reported.")
+    ap.add_argument("--json", default=None, help="also write the results as JSON to this path")
     a = ap.parse_args()
     cfg = yaml.safe_load(open(a.boxes_yaml))
     usd_dir = os.path.abspath(a.usd_dir)
@@ -456,6 +460,10 @@ def main():
     compliance(usd_dir, names)
     nfail = sum(1 for r in res.rows if not r[2])
     print(f"\n{len(res.rows) - nfail} PASS, {nfail} FAIL")
+    if a.json:
+        with open(a.json, "w") as f:
+            json.dump([{"box": b, "check": c, "ok": ok, "detail": d} for b, c, ok, d in res.rows],
+                      f, indent=1)
     return 1 if nfail else 0
 
 

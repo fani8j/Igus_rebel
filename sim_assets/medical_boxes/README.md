@@ -1,6 +1,6 @@
 # Medical device cartons for Isaac Sim
 
-Three single-unit catheter/stent cartons as USD assets with textured faces and rigid-body physics,
+Five single-unit catheter/stent cartons as USD assets with textured faces and rigid-body physics,
 plus a scene that rests them on a ground plane:
 
 | asset | product | size (h x l x t mm) | textures |
@@ -8,15 +8,18 @@ plus a scene that rests them on a ground plane:
 | `agent_monorail` | Boston Scientific Agent Monorail DCB 2.75 x 30 | 230 x 250 x 15 | spine photo, front from a reseller photo, rest plain |
 | `angiolite` | iVascular Angiolite DES 4.0 x 19 | 240 x 250 x 16 | spine photo, rest plain (no carton image found) |
 | `accuforce` | Terumo Accuforce NC balloon 2.5 x 12 | 220 x 250 x 16 | spine photo, front/back from a reseller photo (2.0 x 20 carton), rest plain |
+| `ultimaster_nagomi` | Terumo Ultimaster Nagomi DES 3.0 x 24 | 250 x 295 x 16 | spine photo, rest plain (only a cropped, off-axis front photo exists) |
+| `conqueror_nc_pro` | APT Medical Conqueror NC Pro balloon 4.00 x 8 | 230 x 250 x 12 | spine photo, rest plain (no carton image found) |
 
 The labelled spine is the top (+Y) face. For a shelf with boxes standing like books, spine out,
 rotate the asset so +Y points out of the shelf and X (height) is vertical.
 
     usd/<box>.usda               one carton (defaultPrim /<box>, Xform, kind=component)
-    usd/medical_boxes_scene.usda ground, PhysicsScene (gravity -Z 9.81), 3 boxes flat, front up, 0.35 m apart
+    usd/medical_boxes_scene.usda ground, PhysicsScene (gravity -Z 9.81), all boxes flat, front up, 0.35 m apart
     usd/previews/                PNG previews written by verify_usd.py (3D views + unfolded net)
     textures/<box>/<face>.png    face textures (produced by tools/extract_textures.py)
     boxes.yaml                   the spec: dims, mass, physics material, face orientation
+    viewer.html                  self-contained 3D viewer + spec/verification page (tools/make_viewer.py)
 
 ## Frame convention
 
@@ -66,7 +69,8 @@ From this directory (`PY="/media/farhan/My Passport/igus_nvidia/venvs/usd/bin/py
 
     "$PY" tools/extract_textures.py          # (system python3 also works) textures/<box>/<face>.png
     "$PY" tools/build_usd.py                 # usd/*.usda
-    "$PY" tools/verify_usd.py                # PASS/FAIL table, previews; exit code 1 on any FAIL
+    "$PY" tools/verify_usd.py --json /tmp/verify.json   # PASS/FAIL table, previews; exit 1 on any FAIL
+    "$PY" tools/make_viewer.py --verify-json /tmp/verify.json   # viewer.html
 
 Both build and verify accept `--textures-root DIR` (default `textures/`) and build also `--out-dir`
 (verify: `--usd-dir`), for testing with placeholder textures outside the repo.

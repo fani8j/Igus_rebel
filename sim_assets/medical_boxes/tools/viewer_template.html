@@ -1,0 +1,409 @@
+<title>Medical Carton Models</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: label-sheet header, box strip of spine swatches, then a 3D bench (left) beside a spec sheet (right); stacks on phones. */
+:root {
+  --bg: #f3f6f6;
+  --surface: #ffffff;
+  --ink: #15252b;
+  --muted: #5b6d73;
+  --line: #d5dfe0;
+  --accent: #0d7480;
+  --accent-soft: #dcefF0;
+  --pass: #1d7a45;
+  --pass-soft: #e0f2e7;
+  --warn: #8a5a00;
+  --warn-soft: #fbefd6;
+  --fail: #b3261e;
+  --fail-soft: #f9e0de;
+  --canvas: #e7eded;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1517; --surface: #152024; --ink: #dfe9ea; --muted: #93a6ab; --line: #26363b;
+    --accent: #52c2cb; --accent-soft: #163a3e; --pass: #6fd49a; --pass-soft: #183427;
+    --warn: #f0c065; --warn-soft: #3a2f16; --fail: #ff8a80; --fail-soft: #3d1d1b; --canvas: #1b282c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1517; --surface: #152024; --ink: #dfe9ea; --muted: #93a6ab; --line: #26363b;
+  --accent: #52c2cb; --accent-soft: #163a3e; --pass: #6fd49a; --pass-soft: #183427;
+  --warn: #f0c065; --warn-soft: #3a2f16; --fail: #ff8a80; --fail-soft: #3d1d1b; --canvas: #1b282c;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font-body); margin: 0; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 24px 48px; display: grid; gap: 22px; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: 0.01em; }
+h1 { font-size: 1.9rem; line-height: 1.15; }
+h2 { font-size: 1.25rem; }
+h3 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); font-weight: 600; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+header { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: end; justify-content: space-between; border-bottom: 2px solid var(--ink); padding-bottom: 14px; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 62ch; }
+.tally { display: flex; gap: 10px; flex-wrap: wrap; }
+.pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 11px; font-size: 0.8rem; font-weight: 500; white-space: nowrap; }
+.pill.pass { background: var(--pass-soft); color: var(--pass); }
+.pill.fail { background: var(--fail-soft); color: var(--fail); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.info { background: var(--accent-soft); color: var(--accent); }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+/* box strip: each button carries the box's own rectified spine as its swatch */
+.strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.boxbtn { display: grid; gap: 7px; text-align: left; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px 11px; cursor: pointer; font: inherit; min-width: 0; }
+.boxbtn:hover { border-color: var(--accent); }
+.boxbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.boxbtn[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.boxbtn img { width: 100%; height: 22px; object-fit: fill; border-radius: 2px; display: block; }
+.boxbtn .nm { font-family: var(--font-display); font-weight: 600; font-size: 1rem; line-height: 1.2; }
+.boxbtn .sub { font-size: 0.78rem; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+
+.bench { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+@media (max-width: 860px) { .bench { grid-template-columns: minmax(0, 1fr); } }
+.stage { background: var(--canvas); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: grid; }
+.stage canvas { width: 100%; aspect-ratio: 4 / 3; display: block; touch-action: none; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; border-top: 1px solid var(--line); background: var(--surface); align-items: center; }
+.toolbar .lbl { font-size: 0.75rem; color: var(--muted); margin-right: 4px; text-transform: uppercase; letter-spacing: 0.08em; }
+.tbtn { font: 500 0.82rem var(--font-body); border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+.tbtn:hover { border-color: var(--accent); }
+.tbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tbtn[aria-pressed="true"] { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+.sep { width: 1px; align-self: stretch; background: var(--line); margin-inline: 4px; }
+.hint { font-size: 0.75rem; color: var(--muted); padding: 0 10px 10px; background: var(--surface); }
+
+.sheet { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 18px; min-width: 0; }
+.sheet .prod { color: var(--muted); margin-top: 2px; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 0.88rem; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; overflow-wrap: anywhere; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.86rem; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; color: var(--muted); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.07em; }
+td.num, th.num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.chip { display: inline-block; border-radius: 4px; padding: 1px 7px; font-size: 0.75rem; font-weight: 500; white-space: nowrap; }
+.chip.photo { background: var(--pass-soft); color: var(--pass); }
+.chip.internet { background: var(--accent-soft); color: var(--accent); }
+.chip.plain { background: var(--warn-soft); color: var(--warn); }
+.src { font-size: 0.76rem; color: var(--muted); overflow-wrap: anywhere; }
+.evidence { font-size: 0.86rem; margin: 0; }
+
+details { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+summary { cursor: pointer; font-weight: 500; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.checks { list-style: none; padding: 0; margin: 10px 0 2px; display: grid; gap: 3px; font-size: 0.8rem; }
+.checks li { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 8px; }
+.checks .ok { color: var(--pass); } .checks .bad { color: var(--fail); }
+.checks .d { color: var(--muted); font-family: var(--font-mono); font-size: 0.72rem; overflow-wrap: anywhere; }
+
+.compare { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: 22px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
+@media (max-width: 640px) { .compare { grid-template-columns: minmax(0, 1fr); } }
+.compare img.photo { width: 100%; border-radius: 6px; display: block; }
+.compare .spine { display: grid; gap: 10px; min-width: 0; }
+.compare .spine img { width: 100%; display: block; border: 1px solid var(--line); image-rendering: auto; }
+.compare p { margin: 0; font-size: 0.88rem; color: var(--muted); max-width: 65ch; }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 22px; }
+.notes section { display: grid; gap: 8px; align-content: start; }
+.notes p, .notes li { font-size: 0.88rem; margin: 0; max-width: 65ch; }
+.notes ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+code { font-family: var(--font-mono); font-size: 0.82em; background: var(--canvas); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+.err { padding: 16px; color: var(--fail); }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Medical Carton Models</h1>
+      <p>Single-unit catheter and stent cartons, built as USD assets for Isaac Sim. Everything on this page is read back from the generated <code>.usda</code> files: geometry, face textures, mass and verifier results.</p>
+    </div>
+    <div class="tally" id="tally"></div>
+  </header>
+
+  <nav class="strip" id="strip" aria-label="Choose a carton"></nav>
+
+  <div class="bench">
+    <div class="stage">
+      <canvas id="view" aria-label="3D view of the selected carton"></canvas>
+      <div class="toolbar" role="group" aria-label="View controls">
+        <span class="lbl">Show</span>
+        <button class="tbtn" id="m-one" aria-pressed="true">This carton</button>
+        <button class="tbtn" id="m-all" aria-pressed="false">All side by side</button>
+        <span class="sep"></span>
+        <span class="lbl">Look at</span>
+        <button class="tbtn" data-view="iso">3/4</button>
+        <button class="tbtn" data-view="front">Front</button>
+        <button class="tbtn" data-view="back">Back</button>
+        <button class="tbtn" data-view="top">Spine</button>
+      </div>
+      <div class="hint">Drag to orbit, scroll or pinch to zoom. Floor grid is 10 mm. The model is Z-up, lying front-up as in the Isaac Sim scene.</div>
+    </div>
+    <div class="sheet" id="sheet"></div>
+  </div>
+
+  <div class="compare" id="compare"></div>
+
+  <div class="notes">
+    <section>
+      <h3>Where the numbers come from</h3>
+      <p>Dimensions are the caliper measurements (thickness × height × length). No manufacturer, regulator database (AccessGUDID, EUDAMED, TFDA, NHS Supply Chain) or distributor we could reach publishes unit-carton dimensions or weights. Straight-on reseller photos were used as an independent check of each face's proportions where one exists.</p>
+      <p>Mass is an estimate: 350 g/m² folding board × 1.25 for flaps × outer area, plus 50 g of contents. Replace it in <code>boxes.yaml</code> with a scale reading.</p>
+    </section>
+    <section>
+      <h3>Physics in each asset</h3>
+      <ul id="physics"></ul>
+    </section>
+    <section>
+      <h3>Open in Isaac Sim</h3>
+      <p>File › Open <code>sim_assets/medical_boxes/usd/medical_boxes_scene.usda</code> and press Play. To use a single carton, add a reference to <code>usd/&lt;box&gt;.usda</code>; keep <code>textures/</code> next to <code>usd/</code>.</p>
+      <p>The labelled spine is the +Y face. For a shelf with cartons standing like books, rotate so +Y points out of the shelf and X is vertical.</p>
+    </section>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+const DATA = /*__DATA__*/null;
+const KIND_LABEL = { photo: "Your photo", internet: "Internet photo", plain: "Plain colour" };
+const FACE_LABEL = { front: "Front (+Z)", back: "Back (−Z)", top: "Spine (+Y)", bottom: "Bottom (−Y)", left: "Left (−X)", right: "Right (+X)" };
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fmt = (v, d = 1) => Number(v).toFixed(d);
+let current = 0, mode = "one";
+
+function checksFor(name) { return DATA.checks.filter((c) => c.box === name); }
+
+function renderTally() {
+  const fails = DATA.checks.filter((c) => !c.ok).length;
+  const n = DATA.checks.length;
+  $("tally").innerHTML =
+    `<span class="pill info">${DATA.boxes.length} cartons</span>` +
+    (fails ? `<span class="pill fail"><span class="dot"></span>${fails} of ${n} checks failed</span>`
+           : `<span class="pill pass"><span class="dot"></span>${n} of ${n} checks passed</span>`) +
+    `<span class="pill warn">Masses estimated</span>`;
+}
+
+function renderStrip() {
+  $("strip").innerHTML = DATA.boxes.map((b, i) => {
+    const m = b.measured_mm, spine = b.faces.find((f) => f.name === "top");
+    const bad = checksFor(b.name).filter((c) => !c.ok).length;
+    return `<button class="boxbtn" data-i="${i}" aria-pressed="${i === current}">
+      <img src="${DATA.textures[spine.tex]}" alt="">
+      <span class="nm">${esc(b.label)} <span style="color:var(--muted);font-weight:500">${esc(b.brand)}</span></span>
+      <span class="sub"><span class="mono">${fmt(m.thickness / 10)} × ${fmt(m.height / 10)} × ${fmt(m.length / 10)} cm</span>
+      <span>${bad ? `<span class="pill fail" style="padding:0 7px">${bad} fail</span>` : "✓"}</span></span>
+    </button>`;
+  }).join("");
+  document.querySelectorAll(".boxbtn").forEach((el) => el.addEventListener("click", () => select(+el.dataset.i)));
+}
+
+function renderSheet(b) {
+  const m = b.measured_mm, u = b.usd_size_mm;
+  const rows = [["Height (X)", m.height, u[0]], ["Length (Y)", m.length, u[1]], ["Thickness (Z)", m.thickness, u[2]]];
+  const cs = checksFor(b.name), bad = cs.filter((c) => !c.ok);
+  $("sheet").innerHTML = `
+    <div><h2>${esc(b.product)}</h2><div class="prod">${esc(b.size)}</div></div>
+    <dl class="kv">
+      ${b.ref ? `<dt>REF</dt><dd class="mono">${esc(b.ref)}</dd>` : ""}
+      ${b.gtin ? `<dt>GTIN</dt><dd class="mono">${esc(b.gtin)}</dd>` : ""}
+      <dt>Mass</dt><dd><span class="mono">${fmt(b.mass_kg * 1000, 0)} g</span> ${b.mass_source === "estimate" ? '<span class="pill warn" style="padding:0 8px">estimate</span>' : ""}</dd>
+      <dt>Asset</dt><dd><code>usd/${esc(b.name)}.usda</code></dd>
+    </dl>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Dimension</th><th class="num">Calipers mm</th><th class="num">USD mm</th><th class="num">Δ mm</th></tr></thead>
+      <tbody>${rows.map(([k, a, c]) => `<tr><td>${k}</td><td class="num">${fmt(a)}</td><td class="num">${fmt(c, 2)}</td><td class="num">${fmt(c - a, 2)}</td></tr>`).join("")}</tbody>
+    </table></div>
+    ${b.evidence ? `<div><h3>Cross-check</h3><p class="evidence">${esc(b.evidence)}</p></div>` : ""}
+    <div><h3>Face textures</h3><div class="tablewrap"><table>
+      <tbody>${b.faces.map((f) => `<tr><td>${FACE_LABEL[f.name]}</td><td><span class="chip ${f.kind}">${KIND_LABEL[f.kind]}</span>
+        ${f.kind === "internet" ? `<div class="src">${esc(f.source)}</div>` : ""}</td></tr>`).join("")}</tbody>
+    </table></div></div>
+    <details ${bad.length ? "open" : ""}>
+      <summary>Verifier ${bad.length ? `<span class="pill fail">${bad.length} of ${cs.length} failed</span>` : `<span class="pill pass">${cs.length} of ${cs.length} passed</span>`}</summary>
+      <ul class="checks">${cs.map((c) => `<li><span class="${c.ok ? "ok" : "bad"}">${c.ok ? "✓" : "✕"}</span><span>${esc(c.check)}${c.detail ? `<div class="d">${esc(c.detail)}</div>` : ""}</span></li>`).join("")}</ul>
+    </details>`;
+}
+
+function renderCompare(b) {
+  const spine = b.faces.find((f) => f.name === "top");
+  $("compare").innerHTML = `
+    <img class="photo" src="${b.photo}" alt="Your photo of the ${esc(b.product)} spine">
+    <div class="spine">
+      <h3>Spine: your photo → rectified texture</h3>
+      <img src="${DATA.textures[spine.tex]}" alt="Rectified spine texture">
+      <p>The spine is cut out of <code>${esc(b.photoFile)}</code> with a four-corner perspective warp and scaled to the measured ${fmt(b.measured_mm.height, 0)} × ${fmt(b.measured_mm.thickness, 0)} mm. It is mapped on the +Y face of the model.</p>
+    </div>`;
+}
+
+function renderPhysics() {
+  const p = DATA.physicsMaterial;
+  $("physics").innerHTML = [
+    "Rigid body with mass and solid-cuboid inertia on the root prim",
+    "Convex-hull collider on the box mesh",
+    `Cardboard material: static friction ${p.static_friction}, dynamic ${p.dynamic_friction}, restitution ${p.restitution}`,
+    "Z-up, metres, kilograms; origin at the carton centre",
+  ].map((t) => `<li>${t}</li>`).join("");
+}
+
+// ---------- 3D ----------
+let renderer, scene, camera, controls, group, grid;
+const loader = THREE ? new THREE.TextureLoader() : null;
+const texCache = {};
+function tex(key) {
+  if (!texCache[key]) {
+    const t = loader.load(DATA.textures[key], () => draw());
+    t.encoding = THREE.sRGBEncoding;
+    t.anisotropy = 8;
+    texCache[key] = t;
+  }
+  return texCache[key];
+}
+
+function boxMesh(b) {
+  const pos = [], uv = [], idx = [], g = new THREE.BufferGeometry(), mats = [];
+  b.faces.forEach((f, i) => {
+    f.points.forEach((p) => pos.push(...p));
+    f.uvs.forEach((t) => uv.push(...t));
+    const o = i * 4;
+    idx.push(o, o + 1, o + 2, o, o + 2, o + 3);
+    g.addGroup(i * 6, 6, i);
+    mats.push(new THREE.MeshStandardMaterial({ map: tex(f.tex), roughness: 0.75, metalness: 0 }));
+  });
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  const mesh = new THREE.Mesh(g, mats);
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineBasicMaterial({ color: 0x0b1a1f, transparent: true, opacity: 0.35 }));
+  mesh.add(edges);
+  return mesh;
+}
+
+function cssColor(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+function initThree() {
+  const canvas = $("view");
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(32, 4 / 3, 0.005, 20);
+  camera.up.set(0, 0, 1);
+  controls = new THREE.OrbitControls(camera, canvas);
+  controls.enableDamping = true;
+  controls.addEventListener("change", draw);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a9aa0, 0.85));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.75);
+  sun.position.set(0.6, -0.8, 1.4);
+  scene.add(sun);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.35);
+  fill.position.set(-0.8, 0.9, 0.4);
+  scene.add(fill);
+  group = new THREE.Group();
+  scene.add(group);
+  new ResizeObserver(resize).observe(canvas);
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { setBackground(); draw(); });
+  new MutationObserver(() => { setBackground(); draw(); }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  setBackground();
+  let raf = 0;
+  const loop = () => { if (controls.update()) draw(); raf = requestAnimationFrame(loop); };
+  loop();
+}
+
+function setBackground() { scene.background = new THREE.Color(cssColor("--canvas") || "#e7eded"); if (grid) buildGrid(grid.userData.size, grid.userData.z); }
+
+function buildGrid(size, z) {
+  if (grid) group.parent.remove(grid);
+  const n = Math.round(size / 0.01);
+  grid = new THREE.GridHelper(size, n, new THREE.Color(cssColor("--muted")), new THREE.Color(cssColor("--line")));
+  grid.rotation.x = Math.PI / 2;
+  grid.position.z = z;
+  grid.userData = { size, z };
+  scene.add(grid);
+}
+
+function resize() {
+  const c = $("view"), w = c.clientWidth, h = c.clientHeight;
+  if (!w || !h) return;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  draw();
+}
+
+function draw() { if (renderer) renderer.render(scene, camera); }
+
+function buildScene() {
+  while (group.children.length) group.remove(group.children[0]);
+  const list = mode === "one" ? [DATA.boxes[current]] : DATA.boxes;
+  const gap = 0.04;
+  let x = 0;
+  const widths = list.map((b) => b.usd_size_mm[0] / 1000);
+  const total = widths.reduce((a, w) => a + w, 0) + gap * (list.length - 1);
+  x = -total / 2;
+  let maxT = 0;
+  list.forEach((b, i) => {
+    const m = boxMesh(b), w = widths[i], t = b.usd_size_mm[2] / 1000;
+    m.position.set(x + w / 2, 0, t / 2);
+    maxT = Math.max(maxT, t);
+    group.add(m);
+    x += w + gap;
+  });
+  buildGrid(Math.ceil((total + 0.12) / 0.1) * 0.1, 0);
+  frame("iso");
+}
+
+function frame(view) {
+  const bb = new THREE.Box3().setFromObject(group), c = bb.getCenter(new THREE.Vector3()), s = bb.getSize(new THREE.Vector3());
+  const r = Math.max(s.x, s.y, s.z * 4) * 0.5;
+  const d = r / Math.sin((camera.fov * Math.PI) / 360) * (camera.aspect < 1 ? 1.8 : 1.35);
+  const dirs = { iso: [0.55, -0.85, 0.9], front: [0, -0.0001, 1], back: [0, 0.0001, -1], top: [0.15, 1, 0.55] };
+  const v = new THREE.Vector3(...dirs[view]).normalize().multiplyScalar(d);
+  if (view === "back") { camera.up.set(0, 0, 1); v.set(0, -0.25 * d, -d); }
+  camera.position.copy(c).add(v);
+  controls.target.copy(c);
+  controls.update();
+  draw();
+}
+
+function select(i) {
+  current = i;
+  document.querySelectorAll(".boxbtn").forEach((el) => el.setAttribute("aria-pressed", String(+el.dataset.i === i)));
+  const b = DATA.boxes[i];
+  renderSheet(b);
+  renderCompare(b);
+  if (mode === "all") setMode("one"); else if (group) buildScene();
+}
+
+function setMode(m) {
+  mode = m;
+  $("m-one").setAttribute("aria-pressed", String(m === "one"));
+  $("m-all").setAttribute("aria-pressed", String(m === "all"));
+  if (group) buildScene();
+}
+
+renderTally();
+renderStrip();
+renderPhysics();
+renderSheet(DATA.boxes[0]);
+renderCompare(DATA.boxes[0]);
+$("m-one").addEventListener("click", () => setMode("one"));
+$("m-all").addEventListener("click", () => setMode("all"));
+document.querySelectorAll("[data-view]").forEach((el) => el.addEventListener("click", () => frame(el.dataset.view)));
+try {
+  initThree();
+  buildScene();
+} catch (e) {
+  $("view").replaceWith(Object.assign(document.createElement("div"), { className: "err", textContent: "The 3D view could not start (" + e.message + "). The spec and checks below are still accurate." }));
+}
+</script>

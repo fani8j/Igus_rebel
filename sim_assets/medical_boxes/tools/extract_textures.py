@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate the face textures of the three medical cartons (deterministic).
+"""Regenerate the face textures of the five medical cartons (deterministic).
 
 Run from anywhere:  python3 sim_assets/medical_boxes/tools/extract_textures.py
 Writes textures/<box>/{front,back,top,bottom,left,right}.png.  Orientation and
@@ -11,7 +11,8 @@ Spine ("top") and front/back images are 4 px/mm; plain-colour faces are 1 px/mm.
 SPINE CORNERS (hand-picked on the 1200x1600 phone photos, zoomed 5x crops, +-2 px).
 Photo coordinates (x, y), in the order top-left, top-right, bottom-right,
 bottom-left *of the photo*, i.e. the printed text runs bottom -> top in all three
-photos, so the photo is rotated 90 deg clockwise: photo-left edge becomes the
+photos (SPINE_ROTATION overrides this per box: 4.jpeg reads top -> bottom and is
+rotated 90 deg CCW), so the photo is rotated 90 deg clockwise: photo-left edge becomes the
 output top, photo-bottom becomes the output left.  Corners are the outermost
 extents of the printed spine panel (end band to end band), excluding the
 background, the hand and the adjacent faces; OUTPUT_INSET_PX trims a further sliver.
@@ -23,6 +24,8 @@ and printed on each run, the SAMPLE_* boxes below are (x0, y0, x1, y1)):
   angiolite       magenta band of the spine in photos/2.jpeg (front face in
                   photos/1.jpeg, bottom right, is the same pink)
   accuforce       navy from the background of internet/accuforce_back_face.jpg
+  ultimaster_nagomi  front/back: white label of photos/4.jpeg; edges/bottom: green top band
+  conqueror_nc_pro   light-aqua top band of photos/5.jpeg
 """
 import os
 import sys
@@ -45,8 +48,19 @@ SPINE_CORNERS = {
     "agent_monorail": ((477, 331), (564, 331), (567, 1541), (482, 1541)),
     "angiolite":      ((420, 159), (524, 159), (547, 1438), (462, 1438)),
     "accuforce":      ((593, 284), (669, 284), (645, 1522), (557, 1522)),
+    # 4.jpeg: green end band top edge y~160-164, TERUMO band bottom edge y~1553-1556;
+    # the spine leans slightly (left edge 579 -> 567, right edge 659 -> 654).
+    "ultimaster_nagomi": ((579, 160), (659, 164), (654, 1553), (567, 1556)),
+    # 5.jpeg: panel edges (excluding the dark grazing side face and the fingers
+    # behind it): left 555 -> 497, right 629 -> 578; ends y 111 / 1518.
+    "conqueror_nc_pro": ((555, 111), (629, 111), (578, 1518), (497, 1518)),
 }
-PHOTO = {"agent_monorail": "1.jpeg", "angiolite": "2.jpeg", "accuforce": "3.jpeg"}
+PHOTO = {"agent_monorail": "1.jpeg", "angiolite": "2.jpeg", "accuforce": "3.jpeg",
+         "ultimaster_nagomi": "4.jpeg", "conqueror_nc_pro": "5.jpeg"}
+# Photo rotation that makes the printed text read upright left -> right.
+#   "cw"  text runs bottom -> top in the photo (default; boxes 1-3, 5)
+#   "ccw" text runs top -> bottom in the photo (box 4)
+SPINE_ROTATION = {"ultimaster_nagomi": "ccw"}
 
 # Colour sample patches (photo file, x0, y0, x1, y1)
 SAMPLES = {
@@ -61,6 +75,14 @@ SAMPLES = {
     "accuforce": {
         "face": ("internet/accuforce_back_face.jpg", 20, 120, 840, 300),
         "edge": ("internet/accuforce_back_face.jpg", 20, 120, 840, 300),
+    },
+    "ultimaster_nagomi": {
+        "face": ("photos/4.jpeg", 605, 815, 655, 838),      # white label area, clear of text
+        "edge": ("photos/4.jpeg", 588, 230, 606, 330),      # green top band, left of the text
+    },
+    "conqueror_nc_pro": {
+        "face": ("photos/5.jpeg", 565, 125, 615, 290),      # light-aqua top band
+        "edge": ("photos/5.jpeg", 565, 125, 615, 290),
     },
 }
 # Accuforce front/back crop (non-box border), (top, bottom, left, right) px
@@ -101,7 +123,10 @@ def rectify_spine(box, dims):
     # BR <- photo TR, BL <- photo BR.  The quad is mapped onto a canvas of
     # (w+2m, h+2m) whose outer ring of m px is then cut off (the inset) and the
     # rest resized to exactly w x h (forces the measured mm aspect).
-    src = np.float32([bl, tl, tr, br])
+    if SPINE_ROTATION.get(box, "cw") == "cw":
+        src = np.float32([bl, tl, tr, br])
+    else:   # photo rotated 90 deg CCW: output TL <- photo TR, TR <- BR, BR <- BL, BL <- TL
+        src = np.float32([tr, br, bl, tl])
     cw, ch = w + 2 * m, h + 2 * m
     dst = np.float32([[0, 0], [cw, 0], [cw, ch], [0, ch]])
     big = cv2.warpPerspective(img, cv2.getPerspectiveTransform(src, dst), (cw, ch),
@@ -158,6 +183,14 @@ def agent_front(dims):
                       interpolation=cv2.INTER_AREA)
 
 
+# Per-box front/back image providers: name -> (front(d), back(d)); a callable of
+# (dims, face_rgb) -> BGR image.  Boxes not listed use the plain face colour;
+# to plug in a photo for any box, add an entry here.
+FRONT = {"accuforce": lambda d, c: accuforce_front(d),
+         "agent_monorail": lambda d, c: agent_front(d)}
+BACK = {"accuforce": lambda d, c: accuforce_back(d)}
+
+
 def main():
     with open(os.path.join(ROOT, "boxes.yaml")) as f:
         boxes = yaml.safe_load(f)["boxes"]
@@ -173,15 +206,10 @@ def main():
         save(os.path.join(o, "bottom.png"), flat(edge, hgt, th))
         save(os.path.join(o, "left.png"), flat(edge, ln, th))
         save(os.path.join(o, "right.png"), flat(edge, ln, th))
-        if name == "accuforce":
-            save(os.path.join(o, "front.png"), accuforce_front(d))
-            save(os.path.join(o, "back.png"), accuforce_back(d))
-        elif name == "agent_monorail":
-            save(os.path.join(o, "front.png"), agent_front(d))
-            save(os.path.join(o, "back.png"), flat(face, hgt, ln))
-        else:
-            save(os.path.join(o, "front.png"), flat(face, hgt, ln))
-            save(os.path.join(o, "back.png"), flat(face, hgt, ln))
+        save(os.path.join(o, "front.png"),
+             FRONT.get(name, lambda d_, c: flat(c, hgt, ln))(d, face))
+        save(os.path.join(o, "back.png"),
+             BACK.get(name, lambda d_, c: flat(c, hgt, ln))(d, face))
 
 
 if __name__ == "__main__":

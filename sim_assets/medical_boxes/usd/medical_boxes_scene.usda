@@ -34,7 +34,7 @@ def Xform "World"
         prepend references = @./agent_monorail.usda@
     )
     {
-        double3 xformOp:translate = (-0.35, 0, 0.0075)
+        double3 xformOp:translate = (-0.7, 0, 0.0075)
         uniform token[] xformOpOrder = ["xformOp:translate"]
     }
 
@@ -42,7 +42,7 @@ def Xform "World"
         prepend references = @./angiolite.usda@
     )
     {
-        double3 xformOp:translate = (0, 0, 0.008)
+        double3 xformOp:translate = (-0.35, 0, 0.008)
         uniform token[] xformOpOrder = ["xformOp:translate"]
     }
 
@@ -50,7 +50,23 @@ def Xform "World"
         prepend references = @./accuforce.usda@
     )
     {
+        double3 xformOp:translate = (0, 0, 0.008)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "ultimaster_nagomi" (
+        prepend references = @./ultimaster_nagomi.usda@
+    )
+    {
         double3 xformOp:translate = (0.35, 0, 0.008)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "conqueror_nc_pro" (
+        prepend references = @./conqueror_nc_pro.usda@
+    )
+    {
+        double3 xformOp:translate = (0.7, 0, 0.006)
         uniform token[] xformOpOrder = ["xformOp:translate"]
     }
 }

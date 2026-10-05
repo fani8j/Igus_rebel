@@ -30,6 +30,9 @@
 
 boxes:
   agent_monorail:
+    evidence: "Reseller front photo face aspect 0.925 (836x904 px) vs measured 230/250 = 0.920. Spine photo identifies the EU 'MR' variant; catalog/GTIN are the EU and US candidates for 2.75 x 30 mm."
+    label: "Agent Monorail"
+    brand: "Boston Scientific"
     product: "Boston Scientific Agent Monorail paclitaxel-coated PTCA balloon catheter"
     size: "2.75 x 30 mm"
     catalog_candidates:
@@ -48,6 +51,9 @@ boxes:
       right: plain colour
 
   angiolite:
+    evidence: "REF on the spine matches NHS Supply Chain entry (GTIN 08435387305004). No carton photo or dimension published."
+    label: "Angiolite"
+    brand: "iVascular"
     product: "iVascular Angiolite sirolimus eluting coronary stent system"
     size: "4.0 x 19 mm"
     ref: SCCDSR14150400019
@@ -65,6 +71,9 @@ boxes:
       right: plain colour
 
   accuforce:
+    evidence: "Reseller back photo face aspect 0.866 vs measured 220/250 = 0.880. REF DC-RM2512HHW confirmed as 2.5 x 12 mm in Terumo's catalogue and the ANSM recall notice."
+    label: "Accuforce"
+    brand: "Terumo"
     product: "Terumo Accuforce NC PTCA balloon catheter"
     size: "2.5 x 12 mm"
     ref: DC-RM2512HHW
@@ -76,6 +85,43 @@ boxes:
       top: spine photo (source/photos/3.jpeg)
       front: "internet photo of the same carton design (REF DC-RM2020HHW, India market): https://5.imimg.com/data5/SELLER/Default/2023/8/333172497/CJ/NZ/ZX/20510505/accuforce-terumo-balloon-catheter-1000x1000.jpg"
       back: "internet photo (same listing): https://5.imimg.com/data5/SELLER/Default/2023/8/333172498/WX/XW/TG/20510505/accuforce-terumo-balloon-catheter-1000x1000.jpg"
+      bottom: plain colour
+      left: plain colour
+      right: plain colour
+
+  ultimaster_nagomi:
+    evidence: "REF DE-RS3024ASM confirmed as 3.0 x 24 mm (Terumo item table, nda.ru). The only front photo found (3.0 x 33 mm carton, India) is cropped and off-axis, so it was not used."
+    label: "Ultimaster Nagomi"
+    brand: "Terumo"
+    product: "Terumo Ultimaster Nagomi sirolimus eluting coronary stent system"
+    size: "3.0 x 24 mm"
+    ref: DE-RS3024ASM
+    dims_mm: {height: 250.0, length: 295.0, thickness: 16.0}
+    mass_kg: 0.120
+    mass_source: estimate
+    photo: source/photos/4.jpeg
+    textures:
+      top: spine photo (source/photos/4.jpeg)
+      front: plain colour (pending research)
+      back: plain colour
+      bottom: plain colour
+      left: plain colour
+      right: plain colour
+
+  conqueror_nc_pro:
+    evidence: "REF is not legible in the spine photo and NC Pro is missing from APT's CE catalogue; the Lollipop NC scheme would give 41400081 for 4.00 x 8 mm, unconfirmed. No carton photo found."
+    label: "Conqueror NC Pro"
+    brand: "APT Medical"
+    product: "APT Medical Conqueror NC Pro PTCA balloon catheter"
+    size: "4.00 x 8 mm"
+    dims_mm: {height: 230.0, length: 250.0, thickness: 12.0}
+    mass_kg: 0.105
+    mass_source: estimate
+    photo: source/photos/5.jpeg
+    textures:
+      top: spine photo (source/photos/5.jpeg)
+      front: plain colour (pending research)
+      back: plain colour
       bottom: plain colour
       left: plain colour
       right: plain colour
