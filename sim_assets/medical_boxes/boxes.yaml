@@ -25,8 +25,12 @@
 #   (coiled catheter in hoop dispenser, foil pouch, IFU booklet).
 # Replace with a scale reading when available.
 #
-# Spine assumption: the labelled spine is the +Y (top) face, and its text
-# reads upright with the text's "up" towards the front (+Z).
+# Spine: the labelled spine is the +Y (top) face, the edge opposite the "Open here" tuck
+# tab, and its text reads upright with the text's "up" towards the front (+Z). The
+# operator's face photos confirm this clearly for Agent (the green MR band continues into
+# green corners on both faces); for the other four tools/match_net.py could not separate it
+# from the 180-degree alternative, so the same convention is used (see the
+# usd/previews/<box>_net_match.png nets).
 
 boxes:
   agent_monorail:
@@ -44,8 +48,8 @@ boxes:
     photo: source/photos/1.jpeg
     textures:
       top: spine photo (source/photos/1.jpeg)
-      front: "reseller photo of the US carton (catalog 39608-3027), faint MMI watermarks: https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/34451/17191/Agent_39608-3027__01363.1784315828.png?c=3"
-      back: plain colour (no image found)
+      front: operator photo (source/face_photos/agent_monorail_front.jpeg)
+      back: operator photo (source/face_photos/agent_monorail_back.jpeg)
       bottom: plain colour
       left: plain colour
       right: plain colour
@@ -64,8 +68,8 @@ boxes:
     photo: source/photos/2.jpeg
     textures:
       top: spine photo (source/photos/2.jpeg)
-      front: plain colour (no internet image found)
-      back: plain colour
+      front: operator photo (source/face_photos/angiolite_front.jpeg)
+      back: operator photo (source/face_photos/angiolite_back.jpeg)
       bottom: plain colour
       left: plain colour
       right: plain colour
@@ -83,8 +87,8 @@ boxes:
     photo: source/photos/3.jpeg
     textures:
       top: spine photo (source/photos/3.jpeg)
-      front: "internet photo of the same carton design (REF DC-RM2020HHW, India market): https://5.imimg.com/data5/SELLER/Default/2023/8/333172497/CJ/NZ/ZX/20510505/accuforce-terumo-balloon-catheter-1000x1000.jpg"
-      back: "internet photo (same listing): https://5.imimg.com/data5/SELLER/Default/2023/8/333172498/WX/XW/TG/20510505/accuforce-terumo-balloon-catheter-1000x1000.jpg"
+      front: operator photo (source/face_photos/accuforce_front.jpeg)
+      back: operator photo (source/face_photos/accuforce_back.jpeg)
       bottom: plain colour
       left: plain colour
       right: plain colour
@@ -102,26 +106,27 @@ boxes:
     photo: source/photos/4.jpeg
     textures:
       top: spine photo (source/photos/4.jpeg)
-      front: plain colour (pending research)
-      back: plain colour
+      front: operator photo (source/face_photos/ultimaster_nagomi_front.jpeg)
+      back: operator photo (source/face_photos/ultimaster_nagomi_back.jpeg)
       bottom: plain colour
       left: plain colour
       right: plain colour
 
   conqueror_nc_pro:
-    evidence: "REF is not legible in the spine photo and NC Pro is missing from APT's CE catalogue; the Lollipop NC scheme would give 41400081 for 4.00 x 8 mm, unconfirmed. No carton photo found."
+    evidence: "REF 134400080 and LOT RESP13425112003 read from the operator's back-face photo (the spine print is not legible). No carton photo or dimension is published."
     label: "Conqueror NC Pro"
     brand: "APT Medical"
     product: "APT Medical Conqueror NC Pro PTCA balloon catheter"
     size: "4.00 x 8 mm"
+    ref: "134400080"
     dims_mm: {height: 230.0, length: 250.0, thickness: 12.0}
     mass_kg: 0.105
     mass_source: estimate
     photo: source/photos/5.jpeg
     textures:
       top: spine photo (source/photos/5.jpeg)
-      front: plain colour (pending research)
-      back: plain colour
+      front: operator photo (source/face_photos/conqueror_nc_pro_front.jpeg)
+      back: operator photo (source/face_photos/conqueror_nc_pro_back.jpeg)
       bottom: plain colour
       left: plain colour
       right: plain colour

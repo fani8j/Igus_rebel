@@ -134,6 +134,71 @@ def rectify_spine(box, dims):
     return cv2.resize(big[m:ch - m, m:cw - m], (w, h), interpolation=cv2.INTER_CUBIC)
 
 
+# ---------------------------------------------------------------------------
+# FACE PHOTOS (source/face_photos/<box>_{front,back}.jpeg): the big faces held in a hand,
+# mild perspective.  Corners are the outer edge of the printed face (TL, TR, BR, BL of
+# the *upright photo*), hand-picked on zoomed 5x crops with a 10 px grid, +-3 px.  Side
+# walls (the thin lit rim on the tab edge) and loose tabs are excluded.  The Nagomi
+# photos are cropped by the photo border on the left (and the back also on the right):
+# those corners are EXTRAPOLATED outside the image (negative x / x > 1200) along the
+# visible edge, so a wedge of the face is missing there.  The warp replicates the border
+# pixels into that wedge and FACE_VALID_MASK tells match_net.py where data is real.
+# In the photos the vertical edges are the box HEIGHT edges and the horizontal edges the
+# LENGTH edges (measured aspects: Agent 0.89-0.91, Angiolite 0.94, Accuforce 0.80-0.86,
+# Nagomi 0.89-0.90, Conqueror 0.93 vs height/length 0.92 / 0.96 / 0.88 / 0.85 / 0.92);
+# only the nearly square Agent is also tried the other way round (ASPECT_CANDIDATES).
+FACE_CORNERS = {
+    "agent_monorail": {
+        "front": ((10, 520), (795, 479), (826, 1198), (12, 1242)),
+        "back":  ((16, 520), (837, 510), (884, 1254), (29, 1317)),
+    },
+    "angiolite": {
+        "front": ((9, 330), (1168, 280), (1157, 1338), (94, 1374)),
+        "back":  ((115, 474), (1081, 476), (1071, 1341), (140, 1384)),
+    },
+    "accuforce": {
+        "front": ((26, 525), (1193, 500), (1185, 1426), (119, 1489)),
+        "back":  ((40, 464), (1171, 401), (1170, 1298), (152, 1393)),
+    },
+    "ultimaster_nagomi": {
+        "front": ((-48, 321), (1196, 288), (1148, 1367), (55, 1344)),
+        "back":  ((-58, 201), (1245, 179), (1181, 1265), (55, 1294)),
+    },
+    "conqueror_nc_pro": {
+        "front": ((19, 371), (1165, 332), (1160, 1383), (76, 1376)),
+        "back":  ((38, 373), (1153, 371), (1160, 1411), (38, 1408)),
+    },
+}
+ASPECT_CANDIDATES = {"agent_monorail": ("L", "H")}   # default ("L",): photo horizontal = length
+
+
+def photo_face(box, side, aspect="L", dims=None):
+    """Rectify one face photo.  Returns (bgr, valid) in the PHOTO frame (upright photo
+    orientation): aspect "L" -> W = length, H = height; "H" -> W = height, H = length;
+    4 px/mm, OUTPUT_INSET_PX trimmed.  valid is a bool mask (False where the quad lies
+    outside the photo; those pixels hold replicated border colour)."""
+    img = load("face_photos/%s_%s.jpeg" % (box, side))
+    if dims is None:
+        with open(os.path.join(ROOT, "boxes.yaml")) as f:
+            dims = yaml.safe_load(f)["boxes"][box]["dims_mm"]
+    a, b = ((dims["length"], dims["height"]) if aspect == "L"
+            else (dims["height"], dims["length"]))
+    w, h = int(a * PX_MM), int(b * PX_MM)
+    m = OUTPUT_INSET_PX
+    cw, ch = w + 2 * m, h + 2 * m
+    src = np.float32(FACE_CORNERS[box][side])
+    dst = np.float32([[0, 0], [cw, 0], [cw, ch], [0, ch]])
+    M = cv2.getPerspectiveTransform(src, dst)
+    big = cv2.warpPerspective(img, M, (cw, ch), flags=cv2.INTER_CUBIC,
+                              borderMode=cv2.BORDER_REPLICATE)
+    ones = np.full(img.shape[:2], 255, np.uint8)
+    vm = cv2.warpPerspective(ones, M, (cw, ch), flags=cv2.INTER_LINEAR,
+                             borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+    out = cv2.resize(big[m:ch - m, m:cw - m], (w, h), interpolation=cv2.INTER_CUBIC)
+    vm = cv2.resize(vm[m:ch - m, m:cw - m], (w, h), interpolation=cv2.INTER_LINEAR)
+    return out, vm > 250
+
+
 def flat(rgb, w_mm, h_mm):
     img = np.empty((int(h_mm * FLAT_PX_MM), int(w_mm * FLAT_PX_MM), 3), np.uint8)
     img[:] = rgb[::-1]
@@ -183,12 +248,38 @@ def agent_front(dims):
                       interpolation=cv2.INTER_AREA)
 
 
-# Per-box front/back image providers: name -> (front(d), back(d)); a callable of
-# (dims, face_rgb) -> BGR image.  Boxes not listed use the plain face colour;
-# to plug in a photo for any box, add an entry here.
-FRONT = {"accuforce": lambda d, c: accuforce_front(d),
-         "agent_monorail": lambda d, c: agent_front(d)}
-BACK = {"accuforce": lambda d, c: accuforce_back(d)}
+# Old front/back providers (internet photos / plain colour).  UNUSED now that the face
+# photos below are used; kept so they can be switched back by adding them to these dicts.
+FRONT = {}
+BACK = {}
+
+# Orientation of the face photos, from tools/match_net.py (spine-fold artwork continuity
+# + tuck-tab constraint).  (aspect, k): photo rectified with aspect "L" (photo horizontal =
+# length) then rotated k quarter turns CCW (np.rot90).  k=1: the photo's RIGHT edge becomes
+# the top (spine) edge; k=3: the photo's LEFT edge does.  Confidence per box:
+#   agent_monorail     clear      (dE 8.9 vs next 12.9; green MR corner wrap; tab opposite)
+#   accuforce          weak       (spine as-is beats rot180 by 2 dE, corr 0.76 vs 0.56)
+#   angiolite          undecided  (as-is vs rot180 differ by 0.35 dE; faces are firm: 20 vs 25+)
+#   ultimaster_nagomi  undecided  (front/back k=3,3 chosen by tab edges; photos are cut by the
+#                                  photo border so the fold strips are only ~60 % valid)
+#   conqueror_nc_pro   undecided  (as-is vs rot180 differ by 0.6 dE; faces firm: 14.8 vs 32)
+FACE_ORIENT = {
+    "agent_monorail":    {"front": ("L", 1), "back": ("L", 3)},
+    "angiolite":         {"front": ("L", 1), "back": ("L", 3)},
+    "accuforce":         {"front": ("L", 1), "back": ("L", 3)},
+    "ultimaster_nagomi": {"front": ("L", 3), "back": ("L", 3)},
+    "conqueror_nc_pro":  {"front": ("L", 1), "back": ("L", 3)},
+}
+# True -> top.png is written rotated 180 deg (text upside down, ends swapped).  Only set
+# where match_net.py gives a non-"undecided" verdict for it; none of the five qualifies:
+# agent (clear) and accuforce (weak) both prefer the spine exactly as photographed.
+SPINE_FLIP = {name: False for name in FACE_ORIENT}
+
+
+def face_texture(box, side):
+    asp, k = FACE_ORIENT[box][side]
+    img, _ = photo_face(box, side, asp)
+    return np.ascontiguousarray(np.rot90(img, k))
 
 
 def main():
@@ -202,14 +293,15 @@ def main():
         edge = median_rgb(*sm["edge"])
         print("%-15s face sRGB %s  edge/bottom sRGB %s" % (name, face, edge))
         o = os.path.join(OUT, name)
-        save(os.path.join(o, "top.png"), rectify_spine(name, d))
+        spine = rectify_spine(name, d)
+        if SPINE_FLIP[name]:
+            spine = np.ascontiguousarray(np.rot90(spine, 2))
+        save(os.path.join(o, "top.png"), spine)
         save(os.path.join(o, "bottom.png"), flat(edge, hgt, th))
         save(os.path.join(o, "left.png"), flat(edge, ln, th))
         save(os.path.join(o, "right.png"), flat(edge, ln, th))
-        save(os.path.join(o, "front.png"),
-             FRONT.get(name, lambda d_, c: flat(c, hgt, ln))(d, face))
-        save(os.path.join(o, "back.png"),
-             BACK.get(name, lambda d_, c: flat(c, hgt, ln))(d, face))
+        save(os.path.join(o, "front.png"), face_texture(name, "front"))
+        save(os.path.join(o, "back.png"), face_texture(name, "back"))
 
 
 if __name__ == "__main__":

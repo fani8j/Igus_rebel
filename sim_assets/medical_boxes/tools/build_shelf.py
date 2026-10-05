@@ -33,6 +33,18 @@ R_CARTON_TO_WORLD = np.array([[0.0, 0.0, 1.0],
                               [1.0, 0.0, 0.0]])  # columns = images of carton x, y, z
 
 
+# 180 deg about world Y: the other end of the spine goes up and the front faces -X
+R_FLIP_Y = np.diag([-1.0, 1.0, -1.0])
+
+
+def carton_rotation(up_end):
+    """Carton -> world rotation for a spine-out carton whose spine end `up_end` is on top:
+    "+X" = the end at the left of textures/<box>/top.png, "-X" = its right end."""
+    if up_end not in ("+X", "-X"):
+        raise ValueError(f"up_end must be '+X' or '-X', got {up_end!r}")
+    return R_CARTON_TO_WORLD if up_end == "+X" else R_FLIP_Y @ R_CARTON_TO_WORLD
+
+
 class FitError(Exception):
     pass
 
@@ -166,7 +178,9 @@ def main():
 
     # ---- cartons
     UsdGeom.Scope.Define(st, "/World/Cartons")
-    quat = Gf.Matrix3d(*R_CARTON_TO_WORLD.T.flatten()).ExtractRotation().GetQuat()  # row-vector convention
+    up_ends = spec.get("up_end", {}) or {}
+    quats = {b: Gf.Matrix3d(*carton_rotation(up_ends.get(b, "+X")).T.flatten()).ExtractRotation().GetQuat()
+             for b in bx}  # row-vector convention
     total = 0
     lines = []
     for sh, (info, placed, stats) in plans.items():
@@ -185,7 +199,7 @@ def main():
                            info["front_y"] + pl["spine_setback_m"] + ln / 2,
                            info["top"] + pl["drop_height_m"] + h / 2)
             m = Gf.Matrix4d(1.0)
-            m.SetRotateOnly(Gf.Rotation(quat))
+            m.SetRotateOnly(Gf.Rotation(quats[box]))
             m.SetTranslateOnly(ctr)
             UsdGeom.Xformable(p).AddTransformOp().Set(m)
         n = len(placed)

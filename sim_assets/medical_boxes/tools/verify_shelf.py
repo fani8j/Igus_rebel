@@ -222,9 +222,15 @@ def main():
             u, v = uv_dirs(top_pts, top_uv)
             front_pts, _ = face_of(mesh, "front")
             n_front = normal_of(front_pts)
-            ok_o = (np.allclose(n_top, [0, -1, 0], atol=1e-6) and np.allclose(u, [0, 0, -1], atol=1e-6)
-                    and np.allclose(v, [1, 0, 0], atol=1e-6) and np.allclose(n_front, [1, 0, 0], atol=1e-6))
-            res.add(where, "orientation: spine n=-Y, u=-Z, v=+X, front n=+X", ok_o,
+            # expected world directions: spine out of the cabinet (-Y); the spine end named by
+            # up_end on top ("+X" = left end of top.png, so image right u points down)
+            up = (layout.get("up_end", {}) or {}).get(bname, "+X")
+            sgn = 1.0 if up == "+X" else -1.0
+            exp_u, exp_v = np.array([0, 0, -sgn]), np.array([sgn, 0, 0])
+            ok_o = (np.allclose(n_top, [0, -1, 0], atol=1e-6) and np.allclose(u, exp_u, atol=1e-6)
+                    and np.allclose(v, exp_v, atol=1e-6) and np.allclose(n_front, exp_v, atol=1e-6))
+            res.add(where, f"orientation ({up} end up): spine n=-Y, u={'-' if sgn > 0 else '+'}Z, "
+                    f"v=front n={'+' if sgn > 0 else '-'}X", ok_o,
                     f"n={np.round(n_top,3)} u={np.round(u,3)} v={np.round(v,3)} front={np.round(n_front,3)}")
             boxes_ab.append((name, mn, mx))
             all_cartons.append((c, bname, top_pts, top_uv))

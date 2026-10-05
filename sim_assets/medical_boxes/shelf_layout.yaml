@@ -1,13 +1,14 @@
 # How the cartons are stocked in the medicine cabinet (sim_assets/medicine_cabinet).
 #
-# Stocking rule, from the hospital shelf photos (source/setup_photos/): cartons stand
-# upright like books, labelled spine facing out of the cabinet front, the spine's long
-# side vertical with the brand end (texture left end) at the top, carton length going
-# into the shelf, packed tight in groups of one product.
+# Stocking rule, from the shelf photos (source/setup_photos/): cartons stand upright like
+# books, labelled spine facing out of the cabinet front, the spine's long side vertical,
+# carton length going into the shelf, packed tight in groups of one product. Which spine
+# end is on top follows the operator's own shelf (own_shelf_spines.jpeg); see up_end.
 #
 # Carton -> world rotation (cabinet frame: X across, Y into the cabinet, front at y=0,
-# Z up):  carton +X (height) -> world +Z,  carton +Y (spine) -> world -Y,
-#         carton +Z (front face) -> world +X.
+# Z up), for up_end "+X":  carton +X (height) -> world +Z,  carton +Y (spine) -> world -Y,
+#         carton +Z (front face) -> world +X.  For "-X" the carton is turned 180 deg about
+# world Y: the other spine end is on top and the front faces world -X.
 #
 # Shelf geometry (top surface, x/y extent, clearance to the next shelf) is read from the
 # cabinet USD, not repeated here. Groups fill a shelf left (-X) to right (+X); `fill`
@@ -22,6 +23,18 @@ placement:
   drop_height_m: 0.001        # cartons start this far above the shelf surface
   side_margin_m: 0.002        # free space at each cabinet side wall
   min_top_clearance_m: 0.008  # a carton must clear the shelf above by at least this
+
+# Which end of each spine is on top: "+X" = the end at the LEFT of textures/<box>/top.png,
+# "-X" = the right end. Set from the operator's shelf (source/setup_photos/own_shelf_spines.jpeg):
+# MR, iVascular and Lollipop (right ends) on top; Accuforce and Ultimaster Nagomi (left ends).
+# With the spine-to-face connection from tools/match_net.py, the front then faces world -X
+# for "-X" boxes and +X for "+X" boxes.
+up_end:
+  agent_monorail: "-X"
+  angiolite: "-X"
+  accuforce: "+X"
+  ultimaster_nagomi: "+X"
+  conqueror_nc_pro: "-X"
 
 # Shelf_07 (top compartment) and the bottom compartment have closed front panels and
 # stay empty. Clear heights: 01 300 mm, 02 230, 03 260, 04 310, 05 290, 06 280.

@@ -24,6 +24,7 @@ def Xform "conqueror_nc_pro" (
         double mass_kg = 0.105
         string mass_source = "estimate"
         string product = "APT Medical Conqueror NC Pro PTCA balloon catheter"
+        string ref = "134400080"
     }
     doc = "APT Medical Conqueror NC Pro PTCA balloon catheter carton, box frame: origin at centre, Z up, X=height, Y=length, Z=thickness (+Z = front)."
     kind = "component"

@@ -5,14 +5,18 @@ plus a scene that rests them on a ground plane:
 
 | asset | product | size (h x l x t mm) | textures |
 |---|---|---|---|
-| `agent_monorail` | Boston Scientific Agent Monorail DCB 2.75 x 30 | 230 x 250 x 15 | spine photo, front from a reseller photo, rest plain |
-| `angiolite` | iVascular Angiolite DES 4.0 x 19 | 240 x 250 x 16 | spine photo, rest plain (no carton image found) |
-| `accuforce` | Terumo Accuforce NC balloon 2.5 x 12 | 220 x 250 x 16 | spine photo, front/back from a reseller photo (2.0 x 20 carton), rest plain |
-| `ultimaster_nagomi` | Terumo Ultimaster Nagomi DES 3.0 x 24 | 250 x 295 x 16 | spine photo, rest plain (only a cropped, off-axis front photo exists) |
-| `conqueror_nc_pro` | APT Medical Conqueror NC Pro balloon 4.00 x 8 | 230 x 250 x 12 | spine photo, rest plain (no carton image found) |
+| `agent_monorail` | Boston Scientific Agent Monorail DCB 2.75 x 30 | 230 x 250 x 15 | spine photo, front/back from the operator's photos, edges plain |
+| `angiolite` | iVascular Angiolite DES 4.0 x 19 | 240 x 250 x 16 | spine photo, front/back from the operator's photos, edges plain |
+| `accuforce` | Terumo Accuforce NC balloon 2.5 x 12 | 220 x 250 x 16 | spine photo, front/back from the operator's photos, edges plain |
+| `ultimaster_nagomi` | Terumo Ultimaster Nagomi DES 3.0 x 24 | 250 x 295 x 16 | spine photo, front/back from the operator's photos, edges plain |
+| `conqueror_nc_pro` | APT Medical Conqueror NC Pro balloon 4.00 x 8 | 230 x 250 x 12 | spine photo, front/back from the operator's photos, edges plain |
 
-The labelled spine is the top (+Y) face. For a shelf with boxes standing like books, spine out,
-rotate the asset so +Y points out of the shelf and X (height) is vertical.
+The labelled spine is the top (+Y) face, the edge opposite the "Open here" tuck tab. How it joins
+the front and back was checked against the operator's face photos with `tools/match_net.py`
+(nets in `usd/previews/<box>_net_match.png`): clear for Agent, too weak to decide for the others,
+which use the same convention (spine text "up" towards the front). For a shelf with boxes standing
+like books, spine out, rotate the asset so +Y points out of the shelf and X (height) is vertical;
+`shelf_layout.yaml` `up_end` says which spine end is on top.
 
     usd/<box>.usda               one carton (defaultPrim /<box>, Xform, kind=component)
     usd/medical_boxes_scene.usda ground, PhysicsScene (gravity -Z 9.81), all boxes flat, front up, 0.35 m apart
