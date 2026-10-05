@@ -323,10 +323,15 @@ BANDS = {
     ("agent_monorail", "front"): (0, 0, 0, 10),       # right: box-edge shading falloff 77 -> 136
     ("agent_monorail", "back"): (12, 0, 0, 2),         # top: dark background sliver
     ("angiolite", "front"): (6, 0, 0, 0),             # top: darker warp-edge rows
-    ("accuforce", "front"): (12, 4, 13, 13),          # edge falloff on three sides + dark bottom row
+    ("accuforce", "front"): (12, 4, 0, 13),           # edge falloff on top / right + dark bottom row;
+                                                      # the left columns are column-replicated (LEFT_REPLICATE)
     ("accuforce", "back"): (7, 8, 0, 5),              # top/bottom/right: white background sliver
     ("conqueror_nc_pro", "back"): (0, 0, 0, 5),       # right: bright warp-edge columns
 }
+
+# Left-edge columns replaced by column replication of the first clean columns (the swirl
+# artwork runs off the edge; mirroring it made a bright bow-tie cusp along the edge).
+LEFT_REPLICATE = {("accuforce", "front"): 5}
 
 # 2. Fills.  (what it covers, method, polygon(s), params)
 #   inpaint    : cv2.inpaint (Navier-Stokes) on a 1/4-scale copy, upsampled, feathered
@@ -336,6 +341,10 @@ BANDS = {
 #                clean stock patch the colour is taken from
 #   rows       : per-row median colour of the clean columns (xa, xb); for vertical
 #                gradients that are constant across the width
+def rect_poly(x0, y0, x1, y1):
+    return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+
+
 def ellipse(cx, cy, rx, ry, n=48):
     t = np.linspace(0, 2 * np.pi, n, endpoint=False)
     return [(int(round(cx + rx * np.cos(a))), int(round(cy + ry * np.sin(a)))) for a in t]
@@ -348,9 +357,15 @@ FILLS = {
         ("hand below the bottom edge, left of the silver band's shadow (sharp columns)",
          "smear_down", [(0, 976), (300, 973), (400, 969), (548, 966), (548, 1000), (0, 1000)],
          (6, 2.0)),
-        ("hand below the bottom edge, right part (columns heavily blurred in x)",
-         "smear_down", [(548, 966), (680, 960), (760, 955), (920, 955), (920, 1000), (548, 1000)],
-         (8, 25.0, 26)),
+        # the first photo-edge replacements below supersede the former right-part smear: the
+        # hand shadow darkens the whole silver band right of the tab, so it is rebuilt
+        ("blue tab continued straight down to the edge (columns of the clean rows above; "
+         "the old smear left a seam and a lighter lower part)", "col_fill",
+         rect_poly(405, 957, 546, 1000), dict(rect=(405, 957, 546, 1000), ref=(935, 956), fy=1.0)),
+        ("silver band right of the tab: hand shadow / grey fill rebuilt from the clean silver "
+         "left of the tab (per-row colour, slight horizontal fall-off)", "silver",
+         rect_poly(542, 860, 920, 1000), dict(x0=542, x1=920, y_search=840, xa=250, xb=330,
+                                              ramp=-8.0)),
     ],
     ("agent_monorail", "back"): [
         # torn, delaminated label stock (white fibres over the blue box + printed label);
@@ -369,13 +384,13 @@ FILLS = {
         # text there): per-row print gradient from the clean left margin (x 30-130), scaled
         # to the clean right margin above the glare (x 830-950, y 300-440)
         ("specular glare, right", "rows",
-         [(808, 455), (960, 455), (960, 800), (808, 802)],
-         dict(xa=30, xb=130, smooth=4.0, feather=14.0, match=(830, 300, 950, 440),
-              taper_y=840)),
+         [(806, 400), (960, 400), (960, 800), (806, 800)],
+         dict(xa=30, xb=130, smooth=4.0, feather=2.5, match=(830, 300, 950, 440),
+              taper_y=840, grow=0, ramp_y=(405, 70))),
         ("specular glare, lower right (stops short of the iVascular logo, x < 640)", "rows",
-         [(809, 790), (960, 790), (960, 986), (670, 986), (670, 872), (640, 850),
-          (625, 826), (700, 812), (760, 806)],
-         dict(xa=30, xb=130, smooth=4.0, feather=10.0)),
+         [(806, 800), (960, 800), (960, 986), (670, 986), (670, 872), (640, 850),
+          (625, 826), (700, 812), (760, 806), (760, 800)],
+         dict(xa=30, xb=130, smooth=4.0, feather=2.5, grow=0)),
     ],
     ("ultimaster_nagomi", "front"): [
         ("grey photo background in the top-left corner", "inpaint",
@@ -396,6 +411,75 @@ FILLS = {
          [[(395, 945), (405, 945), (405, 956), (395, 956)],
           [(439, 943), (449, 943), (449, 954), (439, 954)]],
          dict(scale=1, radius=3, method=cv2.INPAINT_TELEA, grow=1)),
+    ],
+}
+
+
+# 5. POST-MATCH REPAIRS (applied to the finished textures, after colour matching and after the
+# edge colours are sampled, so nothing upstream - colour matrices, flatten fits, plain edge
+# colours - changes): fold-edge glare on the spines, the angiolite back border, glare veil.
+#   col_fill : rows/columns replaced by the nearest clean rows of the same columns
+#   unveil   : additive glare veil removed from white label stock, printing kept
+#   rows     : per-row colour of a clean column range (flat colour bands)
+POST_BANDS = {
+    ("angiolite", "back"): (3, 0, 0, 5),              # top: white specks; right: pale edge columns
+}
+
+POST_FILLS = {
+    ("angiolite", "back"): [
+        ("table / background strip photographed below the box edge (grey band with glare "
+         "scribbles, rows 981-999): the pale print gradient continues straight down", "col_fill",
+         rect_poly(0, 980, 960, 1000), dict(rect=(0, 980, 960, 1000), ref=(973, 979), sigma_x=1.0, fy=2.0)),
+    ],
+    ("agent_monorail", "top"): [
+        # fold rows (bottom 7 px): glare streak on the green / blue end bands, replaced by the
+        # nearest clean rows of the same columns (white label stock is left as printed)
+        ("glare line and fold highlight on the Boston blue band, bottom", "col_fill",
+         rect_poly(0, 53, 144, 60), dict(rect=(0, 53, 144, 60), ref=(47, 52), fy=1.0, fx=1.0)),
+        ("glare line on the blue / green end bands, bottom", "col_fill",
+         rect_poly(766, 52, 920, 60), dict(rect=(766, 52, 920, 60), ref=(44, 51), fy=1.0, fx=1.0)),
+        ("grey fold rows at the top edge", "col_fill",
+         rect_poly(0, 0, 920, 3), dict(rect=(0, 0, 920, 3), ref=(3, 6), fy=1.0)),
+    ],
+    ("accuforce", "top"): [
+        ("white glare line + fold shadow over the navy, bottom left", "col_fill",
+         rect_poly(0, 56, 188, 64), dict(rect=(0, 56, 188, 64), ref=(51, 55), fy=1.0, fx=1.0)),
+        ("white glare line over the label stock, bottom (clean rows 55-56 of the same columns; "
+         "ink columns such as the vertical rule keep their line)", "col_fill",
+         rect_poly(188, 57, 386, 64), dict(rect=(188, 57, 386, 64), ref=(55, 57), fy=1.0, fx=1.0)),
+        ("same, beside the hourglass: its dark base ends at row 55, so its columns take the "
+         "stock rows 61-63", "col_fill",
+         rect_poly(386, 57, 402, 64), dict(rect=(386, 57, 402, 64), ref=(61, 64), fy=1.0, fx=1.0)),
+        ("same, right of the hourglass (halo of the clear import sticker at rows 57-59)",
+         "col_fill",
+         rect_poly(402, 57, 488, 64), dict(rect=(402, 57, 488, 64), ref=(55, 57), fy=1.0, fx=1.0)),
+        ("barcode washed by the glare line: the bars continue to the edge", "col_fill",
+         rect_poly(488, 54, 644, 64), dict(rect=(488, 54, 644, 64), ref=(48, 53), fy=2.0, fx=1.0)),
+        ("white glare line over the label stock right of the barcode", "col_fill",
+         rect_poly(644, 57, 694, 64), dict(rect=(644, 57, 694, 64), ref=(55, 57), fy=1.0, fx=1.0)),
+        ("white glare line + fold shadow over the navy, bottom right", "col_fill",
+         rect_poly(696, 56, 880, 64), dict(rect=(696, 56, 880, 64), ref=(51, 55), fy=1.0, fx=1.0)),
+    ],
+    ("angiolite", "top"): [
+        ("white specks / scratch (foil glare) along the bottom of the magenta end band",
+         "col_fill", rect_poly(810, 49, 960, 64),
+         dict(rect=(810, 49, 960, 64), ref=(42, 48), sigma_x=1.0, fy=2.0, fx=1.0)),
+    ],
+    ("conqueror_nc_pro", "top"): [
+        ("fold highlight + grey fold rows along the bottom of the left aqua end (same aqua as "
+         "the right end below)", "col_fill",
+         rect_poly(0, 41, 160, 48), dict(rect=(0, 41, 160, 48), ref=(36, 40), sigma_x=1.5, fy=2.0, fx=2.0)),
+        ("washed-out right end beyond 'Lollipop': glare turned the aqua nearly white; "
+         "per-row aqua of the clean left end (columns between logo and tag), yellow tag kept; "
+         "profile held constant over the 4 outermost rows at the top and the bottom fold",
+         "rows", rect_poly(738, 0, 920, 48),
+         dict(xa=140, xb=160, smooth=2.0, feather=1.5, keep_warm=15, clamp=(4, 38), grow=0)),
+    ],
+    ("ultimaster_nagomi", "top"): [
+        ("glossy clear-sticker glare over the white label stock (additive veil removed, "
+         "ink kept)", "unveil",
+         rect_poly(222, 0, 787, 64),
+         dict(rect=(222, 0, 787, 64))),
     ],
 }
 
@@ -455,6 +539,43 @@ EDGE_SRC = {
 }
 
 
+def apply_fill(img, method, polys, par):
+    """Run one FILLS / POST_FILLS entry.  Returns (img, binary mask of the fill)."""
+    if isinstance(polys[0][0], (int, float)):
+        polys = [polys]
+    m = tc.poly_mask(img.shape, polys)
+    if method == "inpaint":
+        img = tc.inpaint(img, m, **(par or {}))
+    elif method == "stock":
+        img = tc.stock_fill(img, m, **par)
+    elif method == "rows":
+        img = tc.row_fill(img, m, **par)
+    elif method == "clone":
+        img = tc.clone(img, m, *par)
+    elif method == "smear_down":
+        img = tc.smear_down(img, polys[0], *par)
+    elif method == "col_fill":
+        img = tc.col_fill(img, **par)
+    elif method == "silver":
+        img = tc.silver_fill(img, **par)
+    elif method == "unveil":
+        par = dict(par)
+        img = tc.unveil(img, par.pop("rect"), **par)
+    else:
+        raise ValueError(method)
+    return img, m
+
+
+def post_face(box, side, img):
+    """Stage 5: local repairs on the finished (colour-matched) texture."""
+    key = (box, side)
+    if key in POST_BANDS:
+        img = tc.mirror_bands(img, POST_BANDS[key])
+    for what, method, polys, par in POST_FILLS.get(key, []):
+        img, _ = apply_fill(img, method, polys, par)
+    return img
+
+
 def clean_face(box, side, img, valid, report):
     key = (box, side)
     h, w = img.shape[:2]
@@ -464,27 +585,15 @@ def clean_face(box, side, img, valid, report):
         img = tc.inpaint(img, inv, scale=4, radius=5, grow=0)
     if key in BANDS:
         img = tc.mirror_bands(img, BANDS[key])
+    if key in LEFT_REPLICATE:
+        img = tc.edge_columns(img, LEFT_REPLICATE[key])
     excl = np.zeros((h, w), np.uint8)
     for what, method, polys, par in FILLS.get(key, []):
         if method == "mirror_left":
             img = tc.mirror_left(img, polys)
             continue
-        if isinstance(polys[0][0], (int, float)):
-            polys = [polys]
-        m = tc.poly_mask(img.shape, polys)
+        img, m = apply_fill(img, method, polys, par)
         excl = cv2.bitwise_or(excl, m)
-        if method == "inpaint":
-            img = tc.inpaint(img, m, **(par or {}))
-        elif method == "stock":
-            img = tc.stock_fill(img, m, **par)
-        elif method == "rows":
-            img = tc.row_fill(img, m, **par)
-        elif method == "clone":
-            img = tc.clone(img, m, *par)
-        elif method == "smear_down":
-            img = tc.smear_down(img, polys[0], *par)
-        else:
-            raise ValueError(method)
     if key in FLATTEN:
         fl = FLATTEN[key]
         img, info = tc.flatten(img, fl["rects"], fl.get("deg", 1),
@@ -539,6 +648,8 @@ def main():
             if name in EDGE_SRC else median_rgb(*sm["edge"])
         report.append("  edge/bottom sRGB %s" % (edge,))
         print("\n".join(report))
+        for f in faces:
+            faces[f] = post_face(name, f, faces[f])
 
         o = os.path.join(OUT, name)
         save(os.path.join(o, "top.png"), faces["top"])
