@@ -1,0 +1,87 @@
+# Medical device cartons modelled for Isaac Sim.
+#
+# Box frame (all boxes): origin at the geometric centre, Z-up, metres.
+#   X = "height"    (front artwork left -> right)
+#   Y = "length"    (front artwork bottom -> top)
+#   Z = "thickness" (+Z = front face; the box lies front-up on a table)
+#
+# Faces and texture orientation (image right / image up, seen from outside):
+#   front  (+Z): right = +X, up = +Y     image size W x H = height x length
+#   back   (-Z): right = -X, up = +Y     height x length
+#   top    (+Y): right = -X, up = +Z     height x thickness  (the labelled spine)
+#   bottom (-Y): right = +X, up = +Z     height x thickness
+#   right  (+X): right = +Y, up = +Z     length x thickness
+#   left   (-X): right = -Y, up = +Z     length x thickness
+#
+# Dimensions: the user's caliper measurements (source/photos/size.txt). No manufacturer
+# publishes unit-carton dimensions; searches checked manufacturer pages, IFUs,
+# catalogs, AccessGUDID, NHS Supply Chain, IndiaMART, EUDAMED/GS1/resale/TFDA
+# (2026-10-05).  Cross-check: the straight-on internet photos agree with the
+# measured face aspect (height/length): Agent 0.925 vs 0.920, Accuforce back
+# 0.866 vs 0.880.
+#
+# Mass: no published weight was found, so it is ESTIMATED as
+#   350 g/m2 folding board x 1.25 (flaps/glue) x outer area + 50 g contents
+#   (coiled catheter in hoop dispenser, foil pouch, IFU booklet).
+# Replace with a scale reading when available.
+#
+# Spine assumption: the labelled spine is the +Y (top) face, and its text
+# reads upright with the text's "up" towards the front (+Z).
+
+boxes:
+  agent_monorail:
+    product: "Boston Scientific Agent Monorail paclitaxel-coated PTCA balloon catheter"
+    size: "2.75 x 30 mm"
+    catalog_candidates:
+      eu: {catalog: H74939222273010, gtin: "08714729831587"}
+      us: {catalog: H7493960830270, gtin: "00191506014889"}
+    dims_mm: {height: 230.0, length: 250.0, thickness: 15.0}
+    mass_kg: 0.105
+    mass_source: estimate
+    photo: source/photos/1.jpeg
+    textures:
+      top: spine photo (source/photos/1.jpeg)
+      front: "reseller photo of the US carton (catalog 39608-3027), faint MMI watermarks: https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/34451/17191/Agent_39608-3027__01363.1784315828.png?c=3"
+      back: plain colour (no image found)
+      bottom: plain colour
+      left: plain colour
+      right: plain colour
+
+  angiolite:
+    product: "iVascular Angiolite sirolimus eluting coronary stent system"
+    size: "4.0 x 19 mm"
+    ref: SCCDSR14150400019
+    gtin: "08435387305004"
+    dims_mm: {height: 240.0, length: 250.0, thickness: 16.0}
+    mass_kg: 0.110
+    mass_source: estimate
+    photo: source/photos/2.jpeg
+    textures:
+      top: spine photo (source/photos/2.jpeg)
+      front: plain colour (no internet image found)
+      back: plain colour
+      bottom: plain colour
+      left: plain colour
+      right: plain colour
+
+  accuforce:
+    product: "Terumo Accuforce NC PTCA balloon catheter"
+    size: "2.5 x 12 mm"
+    ref: DC-RM2512HHW
+    dims_mm: {height: 220.0, length: 250.0, thickness: 16.0}
+    mass_kg: 0.105
+    mass_source: estimate
+    photo: source/photos/3.jpeg
+    textures:
+      top: spine photo (source/photos/3.jpeg)
+      front: "internet photo of the same carton design (REF DC-RM2020HHW, India market): https://5.imimg.com/data5/SELLER/Default/2023/8/333172497/CJ/NZ/ZX/20510505/accuforce-terumo-balloon-catheter-1000x1000.jpg"
+      back: "internet photo (same listing): https://5.imimg.com/data5/SELLER/Default/2023/8/333172498/WX/XW/TG/20510505/accuforce-terumo-balloon-catheter-1000x1000.jpg"
+      bottom: plain colour
+      left: plain colour
+      right: plain colour
+
+# Physics material for folding carton (typical cardboard values).
+physics_material:
+  static_friction: 0.5
+  dynamic_friction: 0.4
+  restitution: 0.1

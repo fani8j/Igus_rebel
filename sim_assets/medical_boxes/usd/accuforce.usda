@@ -1,0 +1,335 @@
+#usda 1.0
+(
+    defaultPrim = "accuforce"
+    kilogramsPerUnit = 1
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "accuforce" (
+    prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+    assetInfo = {
+        asset identifier = @accuforce.usda@
+        string name = "accuforce"
+        string version = "1.0.0"
+    }
+    customData = {
+        string device_size = "2.5 x 12 mm"
+        dictionary dims_mm = {
+            double height = 220
+            double length = 250
+            double thickness = 16
+        }
+        string generator_version = "1.0.0"
+        double mass_kg = 0.105
+        string mass_source = "estimate"
+        string product = "Terumo Accuforce NC PTCA balloon catheter"
+        string ref = "DC-RM2512HHW"
+    }
+    doc = "Terumo Accuforce NC PTCA balloon catheter carton, box frame: origin at centre, Z up, X=height, Y=length, Z=thickness (+Z = front)."
+    kind = "component"
+)
+{
+    point3f physics:centerOfMass = (0, 0, 0)
+    float3 physics:diagonalInertia = (0.000549115, 0.00042574, 0.000970375)
+    float physics:mass = 0.105
+    quatf physics:principalAxes = (1, 0, 0, 0)
+
+    def Mesh "geom" (
+        prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "MaterialBindingAPI"]
+    )
+    {
+        uniform bool doubleSided = 0
+        float3[] extent = [(-0.11, -0.125, -0.008), (0.11, 0.125, 0.008)]
+        int[] faceVertexCounts = [4, 4, 4, 4, 4, 4]
+        int[] faceVertexIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+        rel material:binding:physics = </accuforce/Physics/cardboard> (
+            bindMaterialAs = "weakerThanDescendants"
+        )
+        normal3f[] normals = [(0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, -1), (0, 0, -1), (0, 0, -1), (0, 0, -1), (0, 1, 0), (0, 1, 0), (0, 1, 0), (0, 1, 0), (0, -1, 0), (0, -1, 0), (0, -1, 0), (0, -1, 0), (-1, 0, 0), (-1, 0, 0), (-1, 0, 0), (-1, 0, 0), (1, 0, 0), (1, 0, 0), (1, 0, 0), (1, 0, 0)] (
+            interpolation = "faceVarying"
+        )
+        uniform token orientation = "rightHanded"
+        uniform token physics:approximation = "convexHull"
+        point3f[] points = [(-0.11, -0.125, 0.008), (0.11, -0.125, 0.008), (0.11, 0.125, 0.008), (-0.11, 0.125, 0.008), (0.11, -0.125, -0.008), (-0.11, -0.125, -0.008), (-0.11, 0.125, -0.008), (0.11, 0.125, -0.008), (0.11, 0.125, -0.008), (-0.11, 0.125, -0.008), (-0.11, 0.125, 0.008), (0.11, 0.125, 0.008), (-0.11, -0.125, -0.008), (0.11, -0.125, -0.008), (0.11, -0.125, 0.008), (-0.11, -0.125, 0.008), (-0.11, 0.125, -0.008), (-0.11, -0.125, -0.008), (-0.11, -0.125, 0.008), (-0.11, 0.125, 0.008), (0.11, -0.125, -0.008), (0.11, 0.125, -0.008), (0.11, 0.125, 0.008), (0.11, -0.125, 0.008)]
+        texCoord2f[] primvars:st = [(0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1)] (
+            interpolation = "faceVarying"
+        )
+        uniform token subdivisionScheme = "none"
+        uniform token subsetFamily:materialBind:familyType = "partition"
+
+        def GeomSubset "front" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [0]
+            rel material:binding = </accuforce/Looks/front>
+        }
+
+        def GeomSubset "back" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [1]
+            rel material:binding = </accuforce/Looks/back>
+        }
+
+        def GeomSubset "top" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [2]
+            rel material:binding = </accuforce/Looks/top>
+        }
+
+        def GeomSubset "bottom" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [3]
+            rel material:binding = </accuforce/Looks/bottom>
+        }
+
+        def GeomSubset "left" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [4]
+            rel material:binding = </accuforce/Looks/left>
+        }
+
+        def GeomSubset "right" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [5]
+            rel material:binding = </accuforce/Looks/right>
+        }
+    }
+
+    def Scope "Looks"
+    {
+        def Material "front"
+        {
+            token outputs:surface.connect = </accuforce/Looks/front/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </accuforce/Looks/front/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/accuforce/front.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </accuforce/Looks/front/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+
+        def Material "back"
+        {
+            token outputs:surface.connect = </accuforce/Looks/back/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </accuforce/Looks/back/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/accuforce/back.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </accuforce/Looks/back/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+
+        def Material "top"
+        {
+            token outputs:surface.connect = </accuforce/Looks/top/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </accuforce/Looks/top/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/accuforce/top.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </accuforce/Looks/top/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+
+        def Material "bottom"
+        {
+            token outputs:surface.connect = </accuforce/Looks/bottom/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </accuforce/Looks/bottom/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/accuforce/bottom.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </accuforce/Looks/bottom/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+
+        def Material "left"
+        {
+            token outputs:surface.connect = </accuforce/Looks/left/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </accuforce/Looks/left/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/accuforce/left.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </accuforce/Looks/left/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+
+        def Material "right"
+        {
+            token outputs:surface.connect = </accuforce/Looks/right/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </accuforce/Looks/right/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/accuforce/right.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </accuforce/Looks/right/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+    }
+
+    def Scope "Physics"
+    {
+        def Material "cardboard" (
+            prepend apiSchemas = ["PhysicsMaterialAPI"]
+        )
+        {
+            float physics:dynamicFriction = 0.4
+            float physics:restitution = 0.1
+            float physics:staticFriction = 0.5
+        }
+    }
+}
+

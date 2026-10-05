@@ -1,0 +1,7 @@
+1. 1,5 x 23 x 25
+2. 1,6 x 24 x 25
+3. 1,6 x 22 x 25
+4. 1,6 x 25 x 29,5
+5. 1,2 x 23 x 25
+
+thickness x height x lenght
