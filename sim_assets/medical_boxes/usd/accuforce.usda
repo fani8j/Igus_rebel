@@ -21,7 +21,7 @@ def Xform "accuforce" (
             double thickness = 16
         }
         string generator_version = "1.0.0"
-        double mass_kg = 0.105
+        double mass_kg = 0.082
         string mass_source = "estimate"
         string product = "Terumo Accuforce NC PTCA balloon catheter"
         string ref = "DC-RM2512HHW"
@@ -31,8 +31,8 @@ def Xform "accuforce" (
 )
 {
     point3f physics:centerOfMass = (0, 0, 0)
-    float3 physics:diagonalInertia = (0.000549115, 0.00042574, 0.000970375)
-    float physics:mass = 0.105
+    float3 physics:diagonalInertia = (0.00042883266, 0.00033248265, 0.00075781666)
+    float physics:mass = 0.082
     quatf physics:principalAxes = (1, 0, 0, 0)
 
     def Mesh "geom" (

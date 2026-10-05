@@ -21,7 +21,7 @@ def Xform "conqueror_nc_pro" (
             double thickness = 12
         }
         string generator_version = "1.0.0"
-        double mass_kg = 0.105
+        double mass_kg = 0.078
         string mass_source = "estimate"
         string product = "APT Medical Conqueror NC Pro PTCA balloon catheter"
         string ref = "134400080"
@@ -31,8 +31,8 @@ def Xform "conqueror_nc_pro" (
 )
 {
     point3f physics:centerOfMass = (0, 0, 0)
-    float3 physics:diagonalInertia = (0.000548135, 0.000464135, 0.00100975)
-    float physics:mass = 0.105
+    float3 physics:diagonalInertia = (0.000407186, 0.000344786, 0.0007501)
+    float physics:mass = 0.078
     quatf physics:principalAxes = (1, 0, 0, 0)
 
     def Mesh "geom" (

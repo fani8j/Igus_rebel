@@ -20,10 +20,14 @@
 # measured face aspect (height/length): Agent 0.925 vs 0.920, Accuforce back
 # 0.866 vs 0.880.
 #
-# Mass: no published weight was found, so it is ESTIMATED as
-#   350 g/m2 folding board x 1.25 (flaps/glue) x outer area + 50 g contents
-#   (coiled catheter in hoop dispenser, foil pouch, IFU booklet).
-# Replace with a scale reading when available.
+# Mass: no published weight exists (manufacturer, GUDID, EUDAMED, distributors checked
+# 2026-10-05), so it is ESTIMATED as carton board + contents (mass_estimate_g):
+#   carton   = outer area x 1.2 (flaps/glue) x 320 g/m2 board  (range 1.15x250 .. 1.3x400)
+#   contents = catheter + hoop/dispenser + pouch(es) + IFU + labels, per product, from the
+#              IFU page counts and formats where available (Agent DFU 30 pp Letter, Angiolite
+#              IFU 72 pp A5) and typical component masses; foil pack + absorber for the DES.
+# mass_kg = carton + contents (likely). low/high bound the plausible range. When the empty
+# cartons are weighed, replace `carton` with the scale reading and mass_kg with the new sum.
 #
 # Spine: the labelled spine is the +Y (top) face, the edge opposite the "Open here" tuck
 # tab, and its text reads upright with the text's "up" towards the front (+Z). The
@@ -43,8 +47,9 @@ boxes:
       eu: {catalog: H74939222273010, gtin: "08714729831587"}
       us: {catalog: H7493960830270, gtin: "00191506014889"}
     dims_mm: {height: 230.0, length: 250.0, thickness: 15.0}
-    mass_kg: 0.105
+    mass_kg: 0.107
     mass_source: estimate
+    mass_estimate_g: {carton: 50, contents: 57, low: 67, high: 167}
     photo: source/photos/1.jpeg
     textures:
       top: spine photo (source/photos/1.jpeg)
@@ -63,8 +68,9 @@ boxes:
     ref: SCCDSR14150400019
     gtin: "08435387305004"
     dims_mm: {height: 240.0, length: 250.0, thickness: 16.0}
-    mass_kg: 0.110
+    mass_kg: 0.128
     mass_source: estimate
+    mass_estimate_g: {carton: 52, contents: 76, low: 95, high: 190}
     photo: source/photos/2.jpeg
     textures:
       top: spine photo (source/photos/2.jpeg)
@@ -82,8 +88,9 @@ boxes:
     size: "2.5 x 12 mm"
     ref: DC-RM2512HHW
     dims_mm: {height: 220.0, length: 250.0, thickness: 16.0}
-    mass_kg: 0.105
+    mass_kg: 0.082
     mass_source: estimate
+    mass_estimate_g: {carton: 48, contents: 34, low: 53, high: 134}
     photo: source/photos/3.jpeg
     textures:
       top: spine photo (source/photos/3.jpeg)
@@ -103,6 +110,7 @@ boxes:
     dims_mm: {height: 250.0, length: 295.0, thickness: 16.0}
     mass_kg: 0.120
     mass_source: estimate
+    mass_estimate_g: {carton: 63, contents: 57, low: 75, high: 188}
     photo: source/photos/4.jpeg
     textures:
       top: spine photo (source/photos/4.jpeg)
@@ -120,8 +128,9 @@ boxes:
     size: "4.00 x 8 mm"
     ref: "134400080"
     dims_mm: {height: 230.0, length: 250.0, thickness: 12.0}
-    mass_kg: 0.105
+    mass_kg: 0.078
     mass_source: estimate
+    mass_estimate_g: {carton: 49, contents: 29, low: 50, high: 125}
     photo: source/photos/5.jpeg
     textures:
       top: spine photo (source/photos/5.jpeg)

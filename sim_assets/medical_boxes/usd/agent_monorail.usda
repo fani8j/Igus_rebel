@@ -26,7 +26,7 @@ def Xform "agent_monorail" (
         string gtin = "08714729831587"
         string gtin_eu = "08714729831587"
         string gtin_us = "00191506014889"
-        double mass_kg = 0.105
+        double mass_kg = 0.107
         string mass_source = "estimate"
         string product = "Boston Scientific Agent Monorail paclitaxel-coated PTCA balloon catheter"
         string ref = "H74939222273010"
@@ -36,8 +36,8 @@ def Xform "agent_monorail" (
 )
 {
     point3f physics:centerOfMass = (0, 0, 0)
-    float3 physics:diagonalInertia = (0.00054884376, 0.00046484376, 0.00100975)
-    float physics:mass = 0.105
+    float3 physics:diagonalInertia = (0.0005592979, 0.0004736979, 0.0010289834)
+    float physics:mass = 0.107
     quatf physics:principalAxes = (1, 0, 0, 0)
 
     def Mesh "geom" (

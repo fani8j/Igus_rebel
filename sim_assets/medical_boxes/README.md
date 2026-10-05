@@ -58,8 +58,9 @@ cuboid of uniform density (m/12 * (b^2 + c^2) per axis) rather than left to Phys
 Dimensions are the caliper measurements in `source/photos/size.txt`; no manufacturer publishes
 carton dimensions. The straight-on internet photos agree with the measured face aspect
 (Agent 0.925 vs 0.920, Accuforce back 0.866 vs 0.880). Mass is an ESTIMATE
-(`mass_source: estimate`; 350 g/m2 board x 1.25 x outer area + 50 g contents), because no weight is
-published; replace it in `boxes.yaml` with a scale reading when available. See `boxes.yaml` for details.
+(`mass_source: estimate`, 78-128 g): carton board (outer area x 1.2 x 320 g/m2) plus per-product
+contents (catheter, hoop, pouches, IFU sized from the real leaflets), with a low/high range in
+`mass_estimate_g`, because no weight is published. Weigh the empty cartons to replace the board part. See `boxes.yaml` for details.
 Asset metadata (product, REF/GTIN, dims_mm, mass_source, generator_version) is in the root prim's customData.
 
 ## Regenerate and verify

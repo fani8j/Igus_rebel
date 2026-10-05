@@ -22,7 +22,7 @@ def Xform "angiolite" (
         }
         string generator_version = "1.0.0"
         string gtin = "08435387305004"
-        double mass_kg = 0.11
+        double mass_kg = 0.128
         string mass_source = "estimate"
         string product = "iVascular Angiolite sirolimus eluting coronary stent system"
         string ref = "SCCDSR14150400019"
@@ -32,8 +32,8 @@ def Xform "angiolite" (
 )
 {
     point3f physics:centerOfMass = (0, 0, 0)
-    float3 physics:diagonalInertia = (0.00057526334, 0.00053034665, 0.0011009166)
-    float physics:mass = 0.11
+    float3 physics:diagonalInertia = (0.00066939736, 0.00061713066, 0.0012810667)
+    float physics:mass = 0.128
     quatf physics:principalAxes = (1, 0, 0, 0)
 
     def Mesh "geom" (
