@@ -1,0 +1,549 @@
+{
+ "families": {
+  "medtronic_prevail_dcb": {
+   "maker": "Medtronic",
+   "product": "Prevail Paclitaxel Coated PTCA Balloon Catheter (Prevail DCB)",
+   "device_type": "coronary DCB (paclitaxel + urea FreePac coating), rapid exchange",
+   "generation_notes": "Successor to IN.PACT Falcon DCB (same FreePac coating, adds PowerTrac shaft). CE marked 2021; sold in >79 countries; NOT approved/sold in USA, France or Japan (US pivotal IDE trial only). Current generation.",
+   "sizes": {
+    "diameters_mm": [
+     2.0,
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.5,
+     4.0
+    ],
+    "lengths_mm": [
+     10,
+     15,
+     20,
+     25,
+     30
+    ],
+    "matrix_notes": "All diameters x all 5 lengths EXCEPT 2.25 x 30 and 2.75 x 30, which are not offered (dash in table). 7 diameters, 33 sizes total. Inventory sizes seen (e.g. 4.0x20, 2.0x30, 2.5x30) are all valid.",
+    "shaft_lengths_cm": [
+     142
+    ],
+    "other": "Useable shaft 142 cm RX; 0.014 in guidewire; 5F guide catheter (ID 0.055 in / 1.42 mm); platinum-iridium markers; ultra-slim balloon; hydrophilic coating.",
+    "sources": [
+     "https://femanimedical.com.ar/wp-content/uploads/BALON-CORONARIO-LIBERADOR-DE-DROGA-PREVAIL.pdf (Medtronic Prevail brochure 09/2020, ordering table)",
+     "https://kategorizacia.mzsr.sk/Pomocky/Download/RequestAttachment/113797 (Medtronic technical specs: 142 cm, 0.014 in, 5F)",
+     "https://www.medtronic.com/content/dam/medtronic-wide/public/united-states/products/cardiac-vascular/cardiovascular/drug-coated-balloons/prevail-dcb-launch-digital-brochure.pdf (found via search; returned 404 when fetched)"
+    ]
+   },
+   "ref_scheme": "PRV + diameter code (2.00=020, 2.25=0225, 2.50=025, 2.75=0275, 3.00=030, 3.50=035, 4.00=040) + 2-digit length mm + RX; e.g. PRV022510RX = 2.25 x 10, PRV030020RX = 3.0 x 20",
+   "example_refs": [
+    "PRV020010RX",
+    "PRV025030RX",
+    "PRV030020RX",
+    "PRV040030RX",
+    "PRV022525RX"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no GUDID/EUDAMED/tender/distributor package dimensions or weight published; AccessGUDID records checked list no package data or weight). Use photo-based estimate in inventory.",
+    "sources": []
+   },
+   "images": [],
+   "colors": [
+    "#4a4d52 dark grey (from inventory photo)",
+    "#d8d8d6 light grey flap",
+    "#f2f2f0 white label"
+   ],
+   "inventory_corrections": "Identity confirmed. Inventory size list valid; no 2.25x30 or 2.75x30 exist (none in inventory). No carton photos found online (only device renders in brochure); carton colours rely on inventory photo notes.",
+   "confidence": "high (identity and sizes); no carton images"
+  },
+  "medtronic_resolute_onyx": {
+   "maker": "Medtronic",
+   "product": "Resolute Onyx Zotarolimus-Eluting Coronary Stent System",
+   "device_type": "coronary DES (zotarolimus, BioLinx polymer, cobalt-alloy shell with Pt-Ir core)",
+   "generation_notes": "Current Medtronic DES flagship. Predecessor Resolute Integrity; successor/line extension Onyx Frontier (enhanced delivery system, same stent, REF ONYXNG...). Distinct from Frontier: do not confuse.",
+   "sizes": {
+    "diameters_mm": [
+     2.0,
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.5,
+     4.0,
+     4.5,
+     5.0
+    ],
+    "lengths_mm": [
+     8,
+     12,
+     15,
+     18,
+     22,
+     26,
+     30,
+     34,
+     38
+    ],
+    "matrix_notes": "2.0: 8-30 (8,12,15,18,22,26,30). 2.25-4.0: 8,12,15,18,22,26,30,34,38. 4.5 and 5.0: 12,15,18,22,26,30 (RX only). OTW only for 2.0-4.0. Some sizes/lengths (e.g. 4.5/5.0, 38 mm) are region-dependent: check local approval.",
+    "shaft_lengths_cm": [
+     140
+    ],
+    "other": "RX shaft 2.7F (2.0-4.0) / 3.2F (4.5-5.0); OTW 2.0-4.0 only; 140 cm. Inventory sizes ('diameters printed 4.5/4.0/3.5/3.0/2.75/2.5/2.25/2.0 lengths 12-38') consistent.",
+    "sources": [
+     "https://www.medtronic.com/en-us/healthcare-professionals/products/cardiovascular/coronary-stents/resolute-onyx-drug-eluting-stent.html",
+     "https://www.medtronic.com/me-en/healthcare-professionals/products/cardiovascular/stents/resolute-onyx-des.html",
+     "https://www.accessdata.fda.gov/cdrh_docs/pdf16/P160043C.pdf (FDA IFU)"
+    ]
+   },
+   "ref_scheme": "RONYX + DDD(dia x100, e.g. 300) + LL(2 digits) + UX (RX) or W (OTW)",
+   "example_refs": [
+    "RONYX20008UX",
+    "RONYX30015W",
+    "RONYX30018UX",
+    "RONYX30038UX"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no GUDID/EUDAMED/tender/distributor package dimensions or weight published; AccessGUDID records checked list no package data or weight). Use photo-based estimate in inventory.",
+    "sources": []
+   },
+   "images": [
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/medtronic_resolute_onyx/front_3.0x15_OTW_medmat.png",
+     "url": "https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/29372/10584/Resolute_Onyx_Zotarolimus-Eluting_RONYX30015W__48050.1762802271.png",
+     "shows": "straight-on FRONT face: white panel with yellow top/left border, navy 'Medtronic', grey 'Resolute Onyx Zotarolimus-Eluting Coronary Stent System' and stent photo",
+     "size_variant": "3.0 x 15 OTW (RONYX30015W)",
+     "watermark": true
+    }
+   ],
+   "colors": [
+    "#F5C400 yellow border",
+    "#FFFFFF white panel",
+    "#1F3A8A Medtronic wordmark navy",
+    "#4A4A4A grey title text"
+   ],
+   "inventory_corrections": "Confirmed. Spine: yellow with 'Medtronic' wordmark. No spine/back photo found. Watermark 'MMI Medical Materials Inc.' tiled over image.",
+   "confidence": "high"
+  },
+  "medtronic_export_advance_edge": {
+   "maker": "Medtronic",
+   "product": "Export Advance Aspiration Catheter 6F (REF ADVANCE)",
+   "device_type": "coronary thrombus aspiration catheter (NOT a balloon/stent); dual-lumen",
+   "generation_notes": "Older generation: FDA 510(k) K130536 (2013). Superseded by Export AP (Medtronic). Photo of a box shows manufacture 2013-07-30, use-by 2015-07-30. Medtronic lists only single item ADVANCE (6F).",
+   "sizes": {
+    "diameters_mm": [],
+    "lengths_mm": [],
+    "matrix_notes": "Single size: 6F, 140 cm working length. Not a diameter x length matrix.",
+    "shaft_lengths_cm": [
+     140
+    ],
+    "other": "Needs 6F guide (ID 0.070 in); 0.014 in wire; proximal/distal extraction lumen 0.044/0.043 in; tip 1.37 mm (0.054 in) distal, 1.73 mm (0.068 in) proximal as printed on box; full-wall shaft; pre-loaded stylet. 7F is a different product (Export 7F, 145 cm).",
+    "sources": [
+     "https://www.medtronic.com/en-us/healthcare-professionals/products/cardiovascular/coronary-catheters/export-advance-aspiration-catheter.html",
+     "https://www.accessdata.fda.gov/cdrh_docs/pdf13/K130536.pdf",
+     "https://www.medicalecart.com/export-advance-aspiration-catheter-6fr/"
+    ]
+   },
+   "ref_scheme": "Single catalog number 'ADVANCE' (printed 'Catalog Number ADVANCE' on box)",
+   "example_refs": [
+    "ADVANCE"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no GUDID/EUDAMED/tender/distributor package dimensions or weight published; AccessGUDID records checked list no package data or weight). Use photo-based estimate in inventory.",
+    "sources": []
+   },
+   "images": [
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/medtronic_export_advance_edge/front_6F_medicalecart.jpg",
+     "url": "https://cdn10.bigcommerce.com/s-x81fqsb/products/435/images/642/export_advance_aspiration_catheter_6fr__70432.1414426974.1280.1280.jpg",
+     "shows": "white label/back face rotated ~90 deg: green side strip with Medtronic logo, 'Export Advance ASPIRATION CATHETER' and white '6F' in green square; multilingual text, diagram, barcodes; REF ADVANCE",
+     "size_variant": "6F",
+     "watermark": false
+    }
+   ],
+   "colors": [
+    "#8CC63F lime green (side panel/'6F' badge)",
+    "#2F8F4F darker green",
+    "#FFFFFF label"
+   ],
+   "inventory_corrections": "Device type is aspiration catheter (inventory 'other' is right). Only one size (6F) exists so inventory sizes 6F fine. Newer stock may be Export AP.",
+   "confidence": "medium-high (identity); carton image is an oblique seller photo"
+  },
+  "medtronic_nc_euphora_edge": {
+   "maker": "Medtronic",
+   "product": "NC Euphora Noncompliant Balloon Dilatation Catheter (RX)",
+   "device_type": "coronary noncompliant PTCA balloon (rapid exchange)",
+   "generation_notes": "Current Medtronic coronary NC balloon (LIGHT low-inflation-growth balloon material, Dura-Trac hydrophilic coating); successor to NC Sprinter/NC Sprinter Legend.",
+   "sizes": {
+    "diameters_mm": [
+     2.0,
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.25,
+     3.5,
+     3.75,
+     4.0,
+     4.5,
+     5.0
+    ],
+    "lengths_mm": [
+     6,
+     8,
+     12,
+     15,
+     20,
+     27
+    ],
+    "matrix_notes": "2.0, 2.25: 6-20 (no 27). 2.5-4.0 (all steps incl 3.25, 3.75): 6,8,12,15,20,27. 4.5: 8,12,15,20 (no 6, 27). 5.0: 8,12,15 (no 6, 20, 27). Nominal pressure 12 atm; RBP up to 20-25 atm depending on size.",
+    "shaft_lengths_cm": [
+     142
+    ],
+    "other": "RX, 142 cm; guide catheter compat per IFU (not extracted).",
+    "sources": [
+     "https://www.medtronic.com/content/dam/medtronic-wide/public/united-states/products/cardiac-vascular/cardiovascular/coronary-catheters/nc-euphora-brochure-en.pdf (ordering table)",
+     "https://www.medtronic.com/en-us/healthcare-professionals/products/cardiovascular/coronary-balloons/nc-euphora-noncompliant-balloon-dilatation-catheter.html"
+    ]
+   },
+   "ref_scheme": "NCEUP + DD(dia, 2.0->20, 2.5->25, 3.0->30, 3.5->35, 4.0->40, 4.5->45, 5.0->50; quarter sizes: 225,275,325,375) + LL(2 digits) + X",
+   "example_refs": [
+    "NCEUP2006X",
+    "NCEUP3520X",
+    "NCEUP27527X",
+    "NCEUP4515X",
+    "NCEUP5012X"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no GUDID/EUDAMED/tender/distributor package dimensions or weight published; AccessGUDID records checked list no package data or weight). Use photo-based estimate in inventory.",
+    "sources": []
+   },
+   "images": [
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/medtronic_nc_euphora_edge/front_3.5x20_medmat.png",
+     "url": "https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/7134/15618/NC_Euphora_NCEUP3520X__88190.1777575385.png",
+     "shows": "straight-on FRONT face: white/pale grey, blue 'Medtronic' logo top-left, teal band behind 'NC Euphora', 'NONCOMPLIANT BALLOON DILATATION CATHETER', blue tube-on-ring photo",
+     "size_variant": "3.5 x 20 (NCEUP3520X)",
+     "watermark": true
+    }
+   ],
+   "colors": [
+    "#FFFFFF white",
+    "#1FA98A teal band/cap",
+    "#1F3A8A navy Medtronic",
+    "#2B2B2B title text"
+   ],
+   "inventory_corrections": "Confirmed. Inventory sizes list empty; full matrix given above.",
+   "confidence": "high"
+  },
+  "medtronic_pacific_plus": {
+   "maker": "Medtronic",
+   "product": "Pacific Plus PTA Catheter (OTW, .018 in)",
+   "device_type": "peripheral PTA balloon catheter, OTW, 0.018 in max wire",
+   "generation_notes": "Current Medtronic PTA balloon; 4-7 mm balloons redesigned 2023. Companion to IN.PACT 018 DCB. Not coronary (contraindicated in coronaries).",
+   "sizes": {
+    "diameters_mm": [
+     2.0,
+     2.5,
+     3.0,
+     3.5,
+     4.0,
+     5.0,
+     6.0,
+     7.0
+    ],
+    "lengths_mm": [
+     20,
+     40,
+     60,
+     80,
+     100,
+     120,
+     150,
+     200,
+     250,
+     300
+    ],
+    "matrix_notes": "2.0-3.5 mm: lengths 20,40,60,80,120,150; shafts 90,130,150,180. 4.0-7.0 mm: shafts 90,150,200 only (no 130/180); lengths 20-60 all, 80,100,120,150,200,250,300 (7.0: 20..250 in the table captured; 300 not seen). Overall range 2-7 mm x 20-300 mm. Minimum sheath 4F (5F for 5.0 x 250+, 6.0 x 150+, 7.0 x 80+). Nominal 8 atm; RBP 12-22 atm.",
+    "shaft_lengths_cm": [
+     90,
+     130,
+     150,
+     180,
+     200
+    ],
+    "other": "OTW coaxial, hydrophilic balloon coating, shaft 4.0/5.0F, Pt-Ir markers. Inventory entry '2.0 x 160' is not a catalogued length (probably misread 150).",
+    "sources": [
+     "https://www.medtronic.com/content/dam/medtronic-wide/public/united-states/products/cardiac-vascular/cardiovascular/pta-balloons/pacific-plus-product-brochure-omni.pdf (ordering table)",
+     "https://www.medtronic.com/en-us/healthcare-professionals/products/cardiovascular/pta-balloons/pacific-plus-pta-catheter.html"
+    ]
+   },
+   "ref_scheme": "PCP + DDD(dia x100, 3 digits) + LLL(length mm, 3 digits) + ZZZ(shaft cm, 3 digits); PCP = Pacific Plus United States",
+   "example_refs": [
+    "PCP020020090",
+    "PCP025040130",
+    "PCP030120150",
+    "PCP040080150",
+    "PCP070250200"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no GUDID/EUDAMED/tender/distributor package dimensions or weight published; AccessGUDID records checked list no package data or weight). Use photo-based estimate in inventory.",
+    "sources": []
+   },
+   "images": [
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/medtronic_pacific_plus/front_4.0x80x130_medmat.png",
+     "url": "https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/13371/2490/Pacific_Plus_PCP040080130__32542.1749478109.png",
+     "shows": "straight-on FRONT face (nearly square): silvery white with catheter graphic, blue 'Medtronic' logo top-left, green band with 'Pacific Plus | PTA Catheter', 4 label blanks bottom-right",
+     "size_variant": "4.0 x 80 x 130 listing (note: 4.0 x 130 is not in the current table; older/other-market SKU)",
+     "watermark": true
+    }
+   ],
+   "colors": [
+    "#F2F2F2 pale grey/white",
+    "#5FB61E green band",
+    "#1F3A8A navy Medtronic",
+    "#F2C230 yellow cap (from inventory)"
+   ],
+   "inventory_corrections": "Confirmed Pacific Plus, .018 in (not .014). Seen 4.0 x 40-80 / 130 combos disagree with brochure (4-7 mm available in 90/150/200 cm only); likely misreads of 150 or older SKUs. 2.0 x 160 not catalogued.",
+   "confidence": "high for identity/sizes (US brochure); medium for 130 cm 4.0 mm"
+  },
+  "medtronic_amphirion_deep": {
+   "maker": "Medtronic (ex-Invatec / ev3, Italian-made)",
+   "product": "Amphirion Deep 0.014 in OTW PTA Balloon Catheter",
+   "device_type": "peripheral PTA balloon (below-the-knee / below-the-ankle), OTW, 0.014 in",
+   "generation_notes": "Legacy Invatec/ev3 product still sold by Medtronic mainly outside the US (AccessGUDID shows the US record ended 2019-10-21). Flexitec Ultra balloon, LFC hydrophilic coating, nominal 7 atm.",
+   "sizes": {
+    "diameters_mm": [
+     2.0,
+     2.5,
+     3.0,
+     3.5,
+     4.0
+    ],
+    "lengths_mm": [
+     40,
+     80,
+     120,
+     150,
+     210
+    ],
+    "matrix_notes": "Full matrix not obtained (official ordering table not accessible). Confirmed from Medtronic page: 2.0-4.0 mm dia; up to 210 mm length; shafts 120 and 150 cm; 4F sheath. Individual SKUs seen: 2.0x120, 2.0x40/80/120 (150 cm), 2.5x40, 2.5x120 (120 cm), 2.5x210, 3.0x40, 3.0x80, 3.5x40, 4.0x120. Shelf sizes in inventory fit this range.",
+    "shaft_lengths_cm": [
+     120,
+     150
+    ],
+    "other": "Shaft 3.9F proximal / 3.3F middle / 2.8-2.6F distal; 0.014 in wire; 4F sheath; nominal 7 atm (7-14 atm by size).",
+    "sources": [
+     "https://www.medtronic.com/en-ie/healthcare-professionals/products/cardiovascular/pta-balloons/amphirion-deep-pta-balloon-catheter.html",
+     "https://accessgudid.nlm.nih.gov/devices/08033477050348",
+     "https://medicalmaterials.com/balloons/amphirion-deep-pta-balloon-catheter-otw-014-4fr-x-2-5mm-x-40mm-x-150cm/"
+    ]
+   },
+   "ref_scheme": "Legacy: AMP + DDD(dia x100) + LLL(length mm) + SSS (152 = 150 cm, 122 = 120 cm). Medtronic-style: AMD DDD LLL 152/002.",
+   "example_refs": [
+    "AMP020120152",
+    "AMP025040152",
+    "AMP030080152",
+    "AMP035040152",
+    "AMP040120152"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no GUDID/EUDAMED/tender/distributor package dimensions or weight published; AccessGUDID records checked list no package data or weight). Use photo-based estimate in inventory.",
+    "sources": []
+   },
+   "images": [],
+   "colors": [
+    "#1F3A5F navy cap",
+    "#FFFFFF white body (from inventory)"
+   ],
+   "inventory_corrections": "Confirmed (note: Invatec/ev3 heritage). Inventory lists 2.0 x 150 and 2.5 x 150; 150 mm lengths are in matrix. No carton photo found.",
+   "confidence": "medium"
+  },
+  "abbott_xience_skypoint": {
+   "maker": "Abbott",
+   "product": "XIENCE Skypoint Everolimus Eluting Coronary Stent System",
+   "device_type": "coronary DES (everolimus, L-605 CoCr, MULTI-LINK peak-to-valley)",
+   "generation_notes": "Current Abbott DES (successor to XIENCE Sierra / Xpedition). Extra-large 4.5/5.0 mm and 48 mm lengths added.",
+   "sizes": {
+    "diameters_mm": [
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.25,
+     3.5,
+     4.0,
+     4.5,
+     5.0
+    ],
+    "lengths_mm": [
+     8,
+     12,
+     15,
+     18,
+     23,
+     28,
+     33,
+     38,
+     48
+    ],
+    "matrix_notes": "2.25-4.0: 8,12,15,18,23,28,33,38. 48 mm: only 2.5, 2.75, 3.0, 3.5, 4.0 (not 2.25, 3.25, 4.5, 5.0). 4.5 and 5.0: 12,15,18,23,28,33 (no 8, 38, 48). 3.25 mm exists (not in inventory). Inventory 2.5 x 23/18/33, 3.0 x 33 valid.",
+    "shaft_lengths_cm": [
+     145
+    ],
+    "other": "Working catheter 145 +/- 2 cm; min guide 5F (2.25-4.0, 8-38 mm), 6F for 48 mm and 4.5-5.0; nominal 9 atm (2.25-2.5)/12 atm; RBP 16 atm; Pebax 72D balloon.",
+    "sources": [
+     "https://www.cardiovascular.abbott/us/en/hcp/products/percutaneous-coronary-intervention/xience-family/xience-skypoint/ordering-information.html",
+     "https://www.cardiovascular.abbott/us/en/hcp/products/percutaneous-coronary-intervention/xience-family/xience-skypoint/ordering-information-extra-large.html",
+     "https://accessgudid.nlm.nih.gov/devices/08717648233203"
+    ]
+   },
+   "ref_scheme": "1804 + DDD0 style: '180' + '4' + 3-digit dia x100 (e.g. 225, 250, 400, 450) + '-' + LL (length mm, 2 digits); site typo '1840350-48' for 3.5 x 48 (probably 1804350-48)",
+   "example_refs": [
+    "1804225-08",
+    "1804275-38",
+    "1804250-33",
+    "1804400-48",
+    "1804500-18"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no GUDID/EUDAMED/tender/distributor package dimensions or weight published; AccessGUDID records checked list no package data or weight). Use photo-based estimate in inventory.",
+    "sources": []
+   },
+   "images": [
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/abbott_xience_skypoint/front_2.5x33_medmat.png",
+     "url": "https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/27602/2147/Xience_Skypoint_1804250-33__00629.1748884094.png",
+     "shows": "straight-on FRONT face: light blue with white 'a Abbott' logo top-left, white stent graphic, white label panel right with purple header 'Abbott' + green corner, 'XIENCE Skypoint Everolimus Eluting Coronary Stent System', black/white size box",
+     "size_variant": "2.5 x 33 (1804250-33)",
+     "watermark": true
+    }
+   ],
+   "colors": [
+    "#3E8EDE light blue (front)",
+    "#FFFFFF white label",
+    "#6A2C91 purple label header",
+    "#6BBF4E green corner",
+    "#1F5FA0 darker blue cap/spine"
+   ],
+   "inventory_corrections": "Confirmed. Inventory sizes all valid (48 mm on 2.5, 2.75 confirmed).",
+   "confidence": "high"
+  },
+  "abbott_armada_35": {
+   "maker": "Abbott",
+   "product": "Armada 35 PTA Catheter (and Armada 35 LL long-balloon variants)",
+   "device_type": "peripheral PTA balloon, OTW, 0.035 in",
+   "generation_notes": "Current Abbott large-vessel PTA balloon; 80 cm and 135 cm shaft versions. Armada 14 / 18 are the .014/.018 siblings.",
+   "sizes": {
+    "diameters_mm": [
+     3.0,
+     4.0,
+     5.0,
+     6.0,
+     7.0,
+     8.0,
+     9.0,
+     10.0,
+     12.0,
+     14.0
+    ],
+    "lengths_mm": [
+     20,
+     40,
+     60,
+     80,
+     100,
+     120
+    ],
+    "matrix_notes": "Standard Armada 35: 3.0: 20,40. 4.0/5.0/6.0/7.0: 20,40,60,80,100,120. 8.0, 9.0, 10.0, 12.0, 14.0: 20,40,60,80. Armada 35 LL (long): 4.0-7.0 mm in 150,200,250 mm (7.0 x 150, 200 captured; table truncated). Each size in both 80 and 135 cm shaft. Sheath 5F up to ~7.0x80, 6F for 7.0x100+, 8-12 mm; 14 mm = 7F. Nominal 4-8 atm; RBP 7-28 atm.",
+    "shaft_lengths_cm": [
+     80,
+     135
+    ],
+    "other": "Max wire 0.035 in. Inventory '8.0 x 80 / 80' valid.",
+    "sources": [
+     "https://www.cardiovascular.abbott/us/en/hcp/products/peripheral-intervention/peripheral-dilatation-catheters/armada-35/ordering-information.html"
+    ]
+   },
+   "ref_scheme": "B + shaft code (1 = 80 cm, 2 = 135 cm) + DD0 (dia x10, 2 digits: 030..140) + '-' + LLL (length mm)",
+   "example_refs": [
+    "B1040-020",
+    "B2040-040",
+    "B2070-020",
+    "B1140-040",
+    "B2140-080"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no GUDID/EUDAMED/tender/distributor package dimensions or weight published; AccessGUDID records checked list no package data or weight). Use photo-based estimate in inventory.",
+    "sources": []
+   },
+   "images": [
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/abbott_armada_35/front_4.0x20x80_medmat.png",
+     "url": "https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/16008/3593/Armada_35_B1040-020__99278.1750348787.png",
+     "shows": "straight-on FRONT face (nearly square): light blue, white 'a Abbott' logo and white catheter loop graphic, pink-lilac label 'Armada 35' with small Abbott logo at bottom",
+     "size_variant": "4.0 x 20 x 80 cm (B1040-020)",
+     "watermark": true
+    },
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/abbott_armada_35/front_14x20x135_medmat.png",
+     "url": "https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/16015/3598/Armada_35_B2140-020__35516.1750348951.png",
+     "shows": "front face of the 135 cm version",
+     "size_variant": "14.0 x 20 x 135 cm (B2140-020)",
+     "watermark": true
+    }
+   ],
+   "colors": [
+    "#4FA3DA light blue",
+    "#FFFFFF white graphic",
+    "#D9A5E0 lilac label (inventory: #C58FD6)",
+    "#F2C230 OTW cell"
+   ],
+   "inventory_corrections": "Confirmed OTW .035. Product shelf mixes 80 cm and 135 cm versions. Inventory 'purple .035 band' for 135 cm - fine. Note 7.0 x 60/80, 12.0 x 135 etc valid.",
+   "confidence": "high"
+  },
+  "unknown_blue_des": {
+   "maker": "unidentified",
+   "product": "unknown 'DES' (dark blue carton, large white 'DES' on spine cap)",
+   "device_type": "coronary DES (guess from 'DES' print)",
+   "generation_notes": "Not identified. Inspected the hospital_2 photo crop: dark navy top cap with 'DES' in large white capitals, white body with small black/grey icon cells (balloon/stent pictograms) and a barcode strip, blue bottom; stands next to Xience Skypoint boxes. Searched for Medtronic (Resolute Onyx = yellow, Resolute Integrity = silver/blue, Onyx Frontier) and others; no carton with a large 'DES' print found online. The generic 'DES' label may be a hospital-specific or Chinese-market/private-label or distributor carton. Needs a legible label close-up to identify.",
+   "sizes": {
+    "diameters_mm": [],
+    "lengths_mm": [],
+    "matrix_notes": "not found",
+    "shaft_lengths_cm": [],
+    "other": "",
+    "sources": []
+   },
+   "ref_scheme": "",
+   "example_refs": [],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no GUDID/EUDAMED/tender/distributor package dimensions or weight published; AccessGUDID records checked list no package data or weight). Use photo-based estimate in inventory.",
+    "sources": []
+   },
+   "images": [],
+   "colors": [
+    "#1F5FA0 navy blue",
+    "#FFFFFF white"
+   ],
+   "inventory_corrections": "Brand remains unknown; cannot be corrected. Suggest closer photo of the white label or the front face.",
+   "confidence": "low"
+  }
+ }
+}

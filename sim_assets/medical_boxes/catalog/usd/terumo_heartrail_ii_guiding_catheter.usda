@@ -1,0 +1,340 @@
+#usda 1.0
+(
+    defaultPrim = "terumo_heartrail_ii_guiding_catheter"
+    kilogramsPerUnit = 1
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "terumo_heartrail_ii_guiding_catheter" (
+    prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsMassAPI"]
+    assetInfo = {
+        asset identifier = @terumo_heartrail_ii_guiding_catheter.usda@
+        string name = "terumo_heartrail_ii_guiding_catheter"
+        string version = "1.0.0"
+    }
+    customData = {
+        string device_size = "BL-3.0 6F (GC-F6BL300N)"
+        dictionary dims_mm = {
+            double height = 1050
+            double length = 150
+            double thickness = 30
+        }
+        string generator_version = "1.0.0"
+        double mass_kg = 0.209
+        string mass_source = "estimate"
+        string product = "Terumo Heartrail II PTCA guiding catheter"
+    }
+    doc = "Terumo Heartrail II PTCA guiding catheter carton, box frame: origin at centre, Z up, X=height, Y=length, Z=thickness (+Z = front)."
+    kind = "component"
+)
+{
+    point3f physics:centerOfMass = (0, 0, 0)
+    float3 physics:diagonalInertia = (0.00040755, 0.01921755, 0.01959375)
+    float physics:mass = 0.209
+    quatf physics:principalAxes = (1, 0, 0, 0)
+    int physxRigidBody:solverPositionIterationCount = 16
+    int physxRigidBody:solverVelocityIterationCount = 2
+
+    def Mesh "geom" (
+        prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "PhysxCollisionAPI", "MaterialBindingAPI"]
+    )
+    {
+        uniform bool doubleSided = 0
+        float3[] extent = [(-0.525, -0.075, -0.015), (0.525, 0.075, 0.015)]
+        int[] faceVertexCounts = [4, 4, 4, 4, 4, 4]
+        int[] faceVertexIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+        rel material:binding:physics = </terumo_heartrail_ii_guiding_catheter/Physics/cardboard> (
+            bindMaterialAs = "weakerThanDescendants"
+        )
+        normal3f[] normals = [(0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, -1), (0, 0, -1), (0, 0, -1), (0, 0, -1), (0, 1, 0), (0, 1, 0), (0, 1, 0), (0, 1, 0), (0, -1, 0), (0, -1, 0), (0, -1, 0), (0, -1, 0), (-1, 0, 0), (-1, 0, 0), (-1, 0, 0), (-1, 0, 0), (1, 0, 0), (1, 0, 0), (1, 0, 0), (1, 0, 0)] (
+            interpolation = "faceVarying"
+        )
+        uniform token orientation = "rightHanded"
+        uniform token physics:approximation = "boundingCube"
+        float physxCollision:contactOffset = 0.002
+        float physxCollision:restOffset = 0
+        point3f[] points = [(-0.525, -0.075, 0.015), (0.525, -0.075, 0.015), (0.525, 0.075, 0.015), (-0.525, 0.075, 0.015), (0.525, -0.075, -0.015), (-0.525, -0.075, -0.015), (-0.525, 0.075, -0.015), (0.525, 0.075, -0.015), (0.525, 0.075, -0.015), (-0.525, 0.075, -0.015), (-0.525, 0.075, 0.015), (0.525, 0.075, 0.015), (-0.525, -0.075, -0.015), (0.525, -0.075, -0.015), (0.525, -0.075, 0.015), (-0.525, -0.075, 0.015), (-0.525, 0.075, -0.015), (-0.525, -0.075, -0.015), (-0.525, -0.075, 0.015), (-0.525, 0.075, 0.015), (0.525, -0.075, -0.015), (0.525, 0.075, -0.015), (0.525, 0.075, 0.015), (0.525, -0.075, 0.015)]
+        texCoord2f[] primvars:st = [(0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1)] (
+            interpolation = "faceVarying"
+        )
+        uniform token subdivisionScheme = "none"
+        uniform token subsetFamily:materialBind:familyType = "partition"
+
+        def GeomSubset "front" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [0]
+            rel material:binding = </terumo_heartrail_ii_guiding_catheter/Looks/front>
+        }
+
+        def GeomSubset "back" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [1]
+            rel material:binding = </terumo_heartrail_ii_guiding_catheter/Looks/back>
+        }
+
+        def GeomSubset "top" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [2]
+            rel material:binding = </terumo_heartrail_ii_guiding_catheter/Looks/top>
+        }
+
+        def GeomSubset "bottom" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [3]
+            rel material:binding = </terumo_heartrail_ii_guiding_catheter/Looks/bottom>
+        }
+
+        def GeomSubset "left" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [4]
+            rel material:binding = </terumo_heartrail_ii_guiding_catheter/Looks/left>
+        }
+
+        def GeomSubset "right" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [5]
+            rel material:binding = </terumo_heartrail_ii_guiding_catheter/Looks/right>
+        }
+    }
+
+    def Scope "Looks"
+    {
+        def Material "front"
+        {
+            token outputs:surface.connect = </terumo_heartrail_ii_guiding_catheter/Looks/front/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </terumo_heartrail_ii_guiding_catheter/Looks/front/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/terumo_heartrail_ii_guiding_catheter/front.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </terumo_heartrail_ii_guiding_catheter/Looks/front/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+
+        def Material "back"
+        {
+            token outputs:surface.connect = </terumo_heartrail_ii_guiding_catheter/Looks/back/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </terumo_heartrail_ii_guiding_catheter/Looks/back/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/terumo_heartrail_ii_guiding_catheter/back.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </terumo_heartrail_ii_guiding_catheter/Looks/back/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+
+        def Material "top"
+        {
+            token outputs:surface.connect = </terumo_heartrail_ii_guiding_catheter/Looks/top/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </terumo_heartrail_ii_guiding_catheter/Looks/top/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/terumo_heartrail_ii_guiding_catheter/top.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </terumo_heartrail_ii_guiding_catheter/Looks/top/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+
+        def Material "bottom"
+        {
+            token outputs:surface.connect = </terumo_heartrail_ii_guiding_catheter/Looks/bottom/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </terumo_heartrail_ii_guiding_catheter/Looks/bottom/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/terumo_heartrail_ii_guiding_catheter/bottom.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </terumo_heartrail_ii_guiding_catheter/Looks/bottom/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+
+        def Material "left"
+        {
+            token outputs:surface.connect = </terumo_heartrail_ii_guiding_catheter/Looks/left/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </terumo_heartrail_ii_guiding_catheter/Looks/left/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/terumo_heartrail_ii_guiding_catheter/left.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </terumo_heartrail_ii_guiding_catheter/Looks/left/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+
+        def Material "right"
+        {
+            token outputs:surface.connect = </terumo_heartrail_ii_guiding_catheter/Looks/right/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </terumo_heartrail_ii_guiding_catheter/Looks/right/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/terumo_heartrail_ii_guiding_catheter/right.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </terumo_heartrail_ii_guiding_catheter/Looks/right/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+    }
+
+    def Scope "Physics"
+    {
+        def Material "cardboard" (
+            prepend apiSchemas = ["PhysicsMaterialAPI", "PhysxMaterialAPI"]
+        )
+        {
+            float physics:dynamicFriction = 0.3
+            float physics:restitution = 0.05
+            float physics:staticFriction = 0.35
+            uniform token physxMaterial:frictionCombineMode = "average"
+            uniform token physxMaterial:restitutionCombineMode = "average"
+        }
+    }
+}
+

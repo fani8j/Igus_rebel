@@ -1,0 +1,1881 @@
+conventions: front/back W x H = height x length (front right=+X, back right=-X, up=+Y); top = spine; photo-derived 4 px/mm capped at 2048 px,
+  plain colours 1 px/mm
+families:
+  abbott_armada_35:
+    base_color: {hex: '#64A9E9', reason: 'light blue carton (front photo border), blue spine end bands [sampled #64A9E9 from the carton image
+        side strips]'}
+    dims_mm: {height: 190.0, length: 210.0, thickness: 14.0}
+    faces:
+      back:
+        file: textures/abbott_armada_35/back.png
+        notes: 'no real back photo; base colour: light blue carton (front photo border), blue spine end bands [sampled #64A9E9 from the carton
+          image side strips]'
+        px_per_mm: 1
+        size_px: [190, 210]
+        source: plain(rgb 100,169,233)
+      bottom:
+        file: textures/abbott_armada_35/bottom.png
+        notes: 'base colour: light blue carton (front photo border), blue spine end bands [sampled #64A9E9 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [190, 14]
+        source: plain(rgb 100,169,233)
+      front:
+        family_check: 'Armada 35 front: light-blue carton, Abbott logo, lilac ''Armada 35'' label; matches the spine (blue ends, ''Armada 35'')'
+        file: textures/abbott_armada_35/front.png
+        fit:
+          aspect_change_pct: -7.4
+          crop_quad_px:
+          - [239.0, 100.0]
+          - [1038.0, 100.0]
+          - [1039.0, 859.0]
+          - [239.0, 859.0]
+          edge_conf: [3.52, 3.69, 3.91, 3.88]
+          pad_pct: 7.3
+          pad_side: bottom
+          picked_quad_px:
+          - [239.0, 100.0]
+          - [1038.0, 100.0]
+          - [1038.0, 859.0]
+          - [239.0, 859.0]
+          source_aspect: 1.054
+          source_px: [800, 759]
+          target_aspect: 0.905
+          wb: label-stock (10% white px) gains(BGR)=[1.0299999713897705, 1.0, 0.9800000190734863]
+        notes: 'seller watermark (translucent MMI logo/text) kept: no cheap safe removal; flagged'
+        orientation_rule: upright
+        px_per_mm: 4.0
+        research_file: abbott_armada_35/front_4.0x20x80_medmat.png
+        size_px: [760, 840]
+        source: research_image(https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/16008/3593/Armada_35_B1040-020__99278.1750348787.png)
+        url: https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/16008/3593/Armada_35_B1040-020__99278.1750348787.png
+        watermark: true
+      left:
+        file: textures/abbott_armada_35/left.png
+        notes: 'base colour: light blue carton (front photo border), blue spine end bands [sampled #64A9E9 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [210, 14]
+        source: plain(rgb 100,169,233)
+      right:
+        file: textures/abbott_armada_35/right.png
+        notes: 'base colour: light blue carton (front photo border), blue spine end bands [sampled #64A9E9 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [210, 14]
+        source: plain(rgb 100,169,233)
+      top: {file: textures/abbott_armada_35/top.png, grade: A, notes: none, source: photo_spine}
+  abbott_xience_skypoint:
+    base_color: {hex: '#CDD7F5', reason: 'light/mid blue carton (front photo), blue spine end bands [sampled #CDD7F5 from the carton image side
+        strips]'}
+    dims_mm: {height: 150.0, length: 165.0, thickness: 13.0}
+    faces:
+      back:
+        file: textures/abbott_xience_skypoint/back.png
+        notes: 'no real back photo; base colour: light/mid blue carton (front photo), blue spine end bands [sampled #CDD7F5 from the carton image
+          side strips]'
+        px_per_mm: 1
+        size_px: [150, 165]
+        source: plain(rgb 205,215,245)
+      bottom:
+        file: textures/abbott_xience_skypoint/bottom.png
+        notes: 'base colour: light/mid blue carton (front photo), blue spine end bands [sampled #CDD7F5 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [150, 13]
+        source: plain(rgb 205,215,245)
+      front:
+        family_check: 'XIENCE Skypoint front: light-blue carton, Abbott logo, purple/green label corner; matches the spine'
+        file: textures/abbott_xience_skypoint/front.png
+        fit:
+          aspect_change_pct: -7.4
+          crop_quad_px:
+          - [204.0, 81.0]
+          - [1075.0, 81.0]
+          - [1075.0, 906.0]
+          - [204.0, 906.0]
+          edge_conf: [3.4, 3.48, 3.69, 3.82]
+          pad_pct: 7.0
+          pad_side: bottom
+          picked_quad_px:
+          - [204.0, 81.0]
+          - [1076.0, 81.0]
+          - [1076.0, 906.0]
+          - [204.0, 906.0]
+          source_aspect: 1.056
+          source_px: [871, 825]
+          target_aspect: 0.909
+          wb: label-stock (25% white px) gains(BGR)=[1.0199999809265137, 1.0, 1.0]
+        notes: 'seller watermark (translucent MMI logo/text) kept: no cheap safe removal; flagged'
+        orientation_rule: upright
+        px_per_mm: 4.0
+        research_file: abbott_xience_skypoint/front_2.5x33_medmat.png
+        size_px: [600, 660]
+        source: research_image(https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/27602/2147/Xience_Skypoint_1804250-33__00629.1748884094.png)
+        url: https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/27602/2147/Xience_Skypoint_1804250-33__00629.1748884094.png
+        watermark: true
+      left:
+        file: textures/abbott_xience_skypoint/left.png
+        notes: 'base colour: light/mid blue carton (front photo), blue spine end bands [sampled #CDD7F5 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [165, 13]
+        source: plain(rgb 205,215,245)
+      right:
+        file: textures/abbott_xience_skypoint/right.png
+        notes: 'base colour: light/mid blue carton (front photo), blue spine end bands [sampled #CDD7F5 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [165, 13]
+        source: plain(rgb 205,215,245)
+      top: {file: textures/abbott_xience_skypoint/top.png, grade: B, notes: none, source: photo_spine}
+  apt_medical_tresfort_35:
+    base_color: {hex: '#E6E6E2', reason: 'white carton, orange label only'}
+    dims_mm: {height: 245.0, length: 270.0, thickness: 13.0}
+    faces:
+      back:
+        file: textures/apt_medical_tresfort_35/back.png
+        notes: 'no real back photo; base colour: white carton, orange label only'
+        px_per_mm: 1
+        size_px: [245, 270]
+        source: plain(rgb 230,230,226)
+      bottom:
+        file: textures/apt_medical_tresfort_35/bottom.png
+        notes: 'base colour: white carton, orange label only'
+        px_per_mm: 1
+        size_px: [245, 13]
+        source: plain(rgb 230,230,226)
+      front:
+        file: textures/apt_medical_tresfort_35/front.png
+        notes: 'no usable carton front image; base colour: white carton, orange label only'
+        px_per_mm: 1
+        size_px: [245, 270]
+        source: plain(rgb 230,230,226)
+      left:
+        file: textures/apt_medical_tresfort_35/left.png
+        notes: 'base colour: white carton, orange label only'
+        px_per_mm: 1
+        size_px: [270, 13]
+        source: plain(rgb 230,230,226)
+      right:
+        file: textures/apt_medical_tresfort_35/right.png
+        notes: 'base colour: white carton, orange label only'
+        px_per_mm: 1
+        size_px: [270, 13]
+        source: plain(rgb 230,230,226)
+      top: {file: textures/apt_medical_tresfort_35/top.png, grade: B, notes: none, source: photo_spine}
+  avantigard_d_logo:
+    base_color: {hex: '#1E2326', reason: near-black spine end bands / carton}
+    dims_mm: {height: 155.0, length: 170.0, thickness: 11.0}
+    faces:
+      back:
+        file: textures/avantigard_d_logo/back.png
+        notes: 'no real back photo; base colour: near-black spine end bands / carton'
+        px_per_mm: 1
+        size_px: [155, 170]
+        source: plain(rgb 30,35,38)
+      bottom:
+        file: textures/avantigard_d_logo/bottom.png
+        notes: 'base colour: near-black spine end bands / carton'
+        px_per_mm: 1
+        size_px: [155, 11]
+        source: plain(rgb 30,35,38)
+      front:
+        file: textures/avantigard_d_logo/front.png
+        notes: 'no usable carton front image; base colour: near-black spine end bands / carton'
+        px_per_mm: 1
+        size_px: [155, 170]
+        source: plain(rgb 30,35,38)
+      left:
+        file: textures/avantigard_d_logo/left.png
+        notes: 'base colour: near-black spine end bands / carton'
+        px_per_mm: 1
+        size_px: [170, 11]
+        source: plain(rgb 30,35,38)
+      right:
+        file: textures/avantigard_d_logo/right.png
+        notes: 'base colour: near-black spine end bands / carton'
+        px_per_mm: 1
+        size_px: [170, 11]
+        source: plain(rgb 30,35,38)
+      top: {file: textures/avantigard_d_logo/top.png, grade: B, notes: none, source: photo_spine}
+  bard_conquest_pta:
+    base_color: {hex: '#1F63A8', reason: blue large face (photo)}
+    dims_mm: {height: 850.0, length: 120.0, thickness: 30.0}
+    faces:
+      back:
+        file: textures/bard_conquest_pta/back.png
+        notes: 'no real back photo; base colour: blue large face (photo)'
+        px_per_mm: 1
+        size_px: [850, 120]
+        source: plain(rgb 31,99,168)
+      bottom:
+        file: textures/bard_conquest_pta/bottom.png
+        notes: 'base colour: blue large face (photo)'
+        px_per_mm: 1
+        size_px: [850, 30]
+        source: plain(rgb 31,99,168)
+      front:
+        clipped_photo_bottom_mm: 119.9
+        covers_mm_of_height: 850.0
+        file: textures/bard_conquest_pta/front.png
+        notes: rectified label-face crop of the shelf photo at true scale from the +X (photo top) end; image right = +X = photo top, image up
+          = +Y = photo left; remainder = base; compressed by 8 % along the height because the photo shows a longer/narrower face than dims.yaml;
+          photo bottom end (120 mm, partly hidden by torn cardboard) dropped
+        photo: hospital_0.jpg
+        placement: right edge (+X, photo top end)
+        px_per_mm: 2.409
+        remainder_fill: base
+        size_px: [2048, 289]
+        source: photo_face
+        stretch_along_height: 0.92
+      left:
+        file: textures/bard_conquest_pta/left.png
+        notes: 'base colour: blue large face (photo)'
+        px_per_mm: 1
+        size_px: [120, 30]
+        source: plain(rgb 31,99,168)
+      right:
+        file: textures/bard_conquest_pta/right.png
+        notes: 'base colour: blue large face (photo)'
+        px_per_mm: 1
+        size_px: [120, 30]
+        source: plain(rgb 31,99,168)
+      top: {file: textures/bard_conquest_pta/top.png, notes: plain base colour; the photo quad of this family is the large front face, source: 'plain(rgb
+          31,99,168)'}
+    rejected_research_images:
+    - {file: front_6x20_75cm_MMI_watermark.png, reason: watermarked product shot with the device in front of the carton; the shelf photo of the
+        real carton face (no watermark) is used}
+  biosensors_chroma:
+    base_color: {hex: '#BCD0E2', reason: pale blue-grey left end band}
+    dims_mm: {height: 120.0, length: 130.0, thickness: 10.0}
+    faces:
+      back:
+        file: textures/biosensors_chroma/back.png
+        notes: 'no real back photo; base colour: pale blue-grey left end band'
+        px_per_mm: 1
+        size_px: [120, 130]
+        source: plain(rgb 188,208,226)
+      bottom:
+        file: textures/biosensors_chroma/bottom.png
+        notes: 'base colour: pale blue-grey left end band'
+        px_per_mm: 1
+        size_px: [120, 10]
+        source: plain(rgb 188,208,226)
+      front:
+        file: textures/biosensors_chroma/front.png
+        notes: 'no usable carton front image; base colour: pale blue-grey left end band'
+        px_per_mm: 1
+        size_px: [120, 130]
+        source: plain(rgb 188,208,226)
+      left:
+        file: textures/biosensors_chroma/left.png
+        notes: 'base colour: pale blue-grey left end band'
+        px_per_mm: 1
+        size_px: [130, 10]
+        source: plain(rgb 188,208,226)
+      right:
+        file: textures/biosensors_chroma/right.png
+        notes: 'base colour: pale blue-grey left end band'
+        px_per_mm: 1
+        size_px: [130, 10]
+        source: plain(rgb 188,208,226)
+      top: {file: textures/biosensors_chroma/top.png, grade: B, notes: none, source: photo_spine}
+  biotronik_orsiro_mission:
+    base_color: {hex: '#E8E9E9', reason: white carton (magenta label panel only)}
+    dims_mm: {height: 165.0, length: 180.0, thickness: 15.0}
+    faces:
+      back:
+        file: textures/biotronik_orsiro_mission/back.png
+        notes: 'no real back photo; base colour: white carton (magenta label panel only)'
+        px_per_mm: 1
+        size_px: [165, 180]
+        source: plain(rgb 232,233,233)
+      bottom:
+        file: textures/biotronik_orsiro_mission/bottom.png
+        notes: 'base colour: white carton (magenta label panel only)'
+        px_per_mm: 1
+        size_px: [165, 15]
+        source: plain(rgb 232,233,233)
+      front:
+        file: textures/biotronik_orsiro_mission/front.png
+        notes: 'no usable carton front image; base colour: white carton (magenta label panel only)'
+        px_per_mm: 1
+        size_px: [165, 180]
+        source: plain(rgb 232,233,233)
+      left:
+        file: textures/biotronik_orsiro_mission/left.png
+        notes: 'base colour: white carton (magenta label panel only)'
+        px_per_mm: 1
+        size_px: [180, 15]
+        source: plain(rgb 232,233,233)
+      right:
+        file: textures/biotronik_orsiro_mission/right.png
+        notes: 'base colour: white carton (magenta label panel only)'
+        px_per_mm: 1
+        size_px: [180, 15]
+        source: plain(rgb 232,233,233)
+      top: {file: textures/biotronik_orsiro_mission/top.png, grade: B, notes: none, source: photo_spine}
+    rejected_research_images:
+    - {file: medicalecart_orsiro_404676_3.5x40.jpg, reason: 'plain Orsiro (REF 404676) carton, not the Orsiro Mission product of this family'}
+  biotronik_passeo_18:
+    base_color: {hex: '#E9EAE8', reason: white carton (dark-red label panel only)}
+    dims_mm: {height: 185.0, length: 205.0, thickness: 13.0}
+    faces:
+      back:
+        file: textures/biotronik_passeo_18/back.png
+        notes: 'no real back photo; base colour: white carton (dark-red label panel only)'
+        px_per_mm: 1
+        size_px: [185, 205]
+        source: plain(rgb 233,234,232)
+      bottom:
+        file: textures/biotronik_passeo_18/bottom.png
+        notes: 'base colour: white carton (dark-red label panel only)'
+        px_per_mm: 1
+        size_px: [185, 13]
+        source: plain(rgb 233,234,232)
+      front:
+        file: textures/biotronik_passeo_18/front.png
+        notes: 'no usable carton front image; base colour: white carton (dark-red label panel only)'
+        px_per_mm: 1
+        size_px: [185, 205]
+        source: plain(rgb 233,234,232)
+      left:
+        file: textures/biotronik_passeo_18/left.png
+        notes: 'base colour: white carton (dark-red label panel only)'
+        px_per_mm: 1
+        size_px: [205, 13]
+        source: plain(rgb 233,234,232)
+      right:
+        file: textures/biotronik_passeo_18/right.png
+        notes: 'base colour: white carton (dark-red label panel only)'
+        px_per_mm: 1
+        size_px: [205, 13]
+        source: plain(rgb 233,234,232)
+      top: {file: textures/biotronik_passeo_18/top.png, grade: A, notes: 'tilted stack, neighbour edges close; corners picked by hand', source: photo_spine}
+    rejected_research_images:
+    - {file: pouch_label_not_carton_4x120_130.jpg, reason: 'sterile pouch label, not the carton'}
+  biotronik_passeo_35_xeo:
+    base_color: {hex: '#EEEEEC', reason: white carton (plum label panel only)}
+    dims_mm: {height: 200.0, length: 220.0, thickness: 14.0}
+    faces:
+      back:
+        file: textures/biotronik_passeo_35_xeo/back.png
+        notes: 'no real back photo; base colour: white carton (plum label panel only)'
+        px_per_mm: 1
+        size_px: [200, 220]
+        source: plain(rgb 238,238,236)
+      bottom:
+        file: textures/biotronik_passeo_35_xeo/bottom.png
+        notes: 'base colour: white carton (plum label panel only)'
+        px_per_mm: 1
+        size_px: [200, 14]
+        source: plain(rgb 238,238,236)
+      front:
+        file: textures/biotronik_passeo_35_xeo/front.png
+        notes: 'no usable carton front image; base colour: white carton (plum label panel only)'
+        px_per_mm: 1
+        size_px: [200, 220]
+        source: plain(rgb 238,238,236)
+      left:
+        file: textures/biotronik_passeo_35_xeo/left.png
+        notes: 'base colour: white carton (plum label panel only)'
+        px_per_mm: 1
+        size_px: [220, 14]
+        source: plain(rgb 238,238,236)
+      right:
+        file: textures/biotronik_passeo_35_xeo/right.png
+        notes: 'base colour: white carton (plum label panel only)'
+        px_per_mm: 1
+        size_px: [220, 14]
+        source: plain(rgb 238,238,236)
+      top: {file: textures/biotronik_passeo_35_xeo/top.png, grade: A, notes: none, source: photo_spine}
+  biotronik_pk_papyrus:
+    base_color: {hex: '#E6E6E6', reason: white carton}
+    dims_mm: {height: 170.0, length: 185.0, thickness: 12.0}
+    faces:
+      back:
+        file: textures/biotronik_pk_papyrus/back.png
+        notes: 'no real back photo; base colour: white carton'
+        px_per_mm: 1
+        size_px: [170, 185]
+        source: plain(rgb 230,230,230)
+      bottom:
+        file: textures/biotronik_pk_papyrus/bottom.png
+        notes: 'base colour: white carton'
+        px_per_mm: 1
+        size_px: [170, 12]
+        source: plain(rgb 230,230,230)
+      front:
+        file: textures/biotronik_pk_papyrus/front.png
+        notes: 'no usable carton front image; base colour: white carton'
+        px_per_mm: 1
+        size_px: [170, 185]
+        source: plain(rgb 230,230,230)
+      left:
+        file: textures/biotronik_pk_papyrus/left.png
+        notes: 'base colour: white carton'
+        px_per_mm: 1
+        size_px: [185, 12]
+        source: plain(rgb 230,230,230)
+      right:
+        file: textures/biotronik_pk_papyrus/right.png
+        notes: 'base colour: white carton'
+        px_per_mm: 1
+        size_px: [185, 12]
+        source: plain(rgb 230,230,230)
+      top: {file: textures/biotronik_pk_papyrus/top.png, grade: B, notes: lower carton of two stacked PK Papyrus; tilted, source: photo_spine}
+  biotronik_red_blue_unknown:
+    base_color: {hex: '#9D2F34', reason: red left end band (blue right end band is the smaller)}
+    dims_mm: {height: 115.0, length: 125.0, thickness: 9.0}
+    faces:
+      back:
+        file: textures/biotronik_red_blue_unknown/back.png
+        notes: 'no real back photo; base colour: red left end band (blue right end band is the smaller)'
+        px_per_mm: 1
+        size_px: [115, 125]
+        source: plain(rgb 157,47,52)
+      bottom:
+        file: textures/biotronik_red_blue_unknown/bottom.png
+        notes: 'base colour: red left end band (blue right end band is the smaller)'
+        px_per_mm: 1
+        size_px: [115, 9]
+        source: plain(rgb 157,47,52)
+      front:
+        file: textures/biotronik_red_blue_unknown/front.png
+        notes: 'no usable carton front image; base colour: red left end band (blue right end band is the smaller)'
+        px_per_mm: 1
+        size_px: [115, 125]
+        source: plain(rgb 157,47,52)
+      left:
+        file: textures/biotronik_red_blue_unknown/left.png
+        notes: 'base colour: red left end band (blue right end band is the smaller)'
+        px_per_mm: 1
+        size_px: [125, 9]
+        source: plain(rgb 157,47,52)
+      right:
+        file: textures/biotronik_red_blue_unknown/right.png
+        notes: 'base colour: red left end band (blue right end band is the smaller)'
+        px_per_mm: 1
+        size_px: [125, 9]
+        source: plain(rgb 157,47,52)
+      top: {file: textures/biotronik_red_blue_unknown/top.png, grade: B, notes: none, source: photo_spine}
+    rejected_research_images:
+    - {file: medicalecart_pantera_leo_367039.jpg, reason: Pantera LEO NC carton (orange header) - research says it is NOT the red/blue box}
+  boston_scientific_mustang:
+    base_color: {hex: '#AE1A22', reason: red lower field of the front / red end bands}
+    dims_mm: {height: 230.0, length: 255.0, thickness: 11.0}
+    faces:
+      back:
+        file: textures/boston_scientific_mustang/back.png
+        notes: 'no real back photo; base colour: red lower field of the front / red end bands'
+        px_per_mm: 1
+        size_px: [230, 255]
+        source: plain(rgb 174,26,34)
+      bottom:
+        file: textures/boston_scientific_mustang/bottom.png
+        notes: 'base colour: red lower field of the front / red end bands'
+        px_per_mm: 1
+        size_px: [230, 11]
+        source: plain(rgb 174,26,34)
+      front:
+        family_check: 'Mustang over-the-wire front: navy header, red field, white label; matches the spine (red ends, MUSTANG panel)'
+        file: textures/boston_scientific_mustang/front.png
+        fit:
+          aspect_change_pct: 4.2
+          crop_quad_px:
+          - [138.0, 92.0]
+          - [858.0, 90.0]
+          - [853.0, 914.0]
+          - [146.0, 915.0]
+          edge_conf: [3.1, 3.73, 3.23, 3.73]
+          pad_pct: 0.0
+          pad_side: none
+          picked_quad_px:
+          - [137.0, 91.0]
+          - [858.0, 90.0]
+          - [859.0, 914.0]
+          - [138.0, 915.0]
+          source_aspect: 0.865
+          source_px: [713, 824]
+          target_aspect: 0.902
+          wb: label-stock (25% white px) gains(BGR)=[1.1299999952316284, 1.1200000047683716, 1.1100000143051147]
+        orientation_rule: upright
+        px_per_mm: 4.0
+        research_file: boston_scientific_mustang/front_3.0x40x135.jpg
+        size_px: [920, 1020]
+        source: research_image(https://primismedical.com/cdn/shop/files/Shopify_-_2025-07-15T153556.204.jpg?v=1752615385&width=1000)
+        url: https://primismedical.com/cdn/shop/files/Shopify_-_2025-07-15T153556.204.jpg?v=1752615385&width=1000
+        watermark: false
+      left:
+        file: textures/boston_scientific_mustang/left.png
+        notes: 'base colour: red lower field of the front / red end bands'
+        px_per_mm: 1
+        size_px: [255, 11]
+        source: plain(rgb 174,26,34)
+      right:
+        file: textures/boston_scientific_mustang/right.png
+        notes: 'base colour: red lower field of the front / red end bands'
+        px_per_mm: 1
+        size_px: [255, 11]
+        source: plain(rgb 174,26,34)
+      top: {file: textures/boston_scientific_mustang/top.png, grade: A, notes: 'top box of a stack under the shelf lip; quad re-picked on 4x crops
+          to cover the full spine thickness (red BSC end band, MUSTANG panel, red 035 end band); the stack is tilted ~4 deg', source: photo_spine}
+    rejected_research_images:
+    - {file: front_8.0x40x75.png, reason: 'same artwork, a seller card stands in front; the cleaner 3.0x40x135 image was used'}
+    - {file: front_spine_angled_4.0x40x75.jpg, reason: 'angled view, not a straight face'}
+  boston_scientific_synergy_xd:
+    base_color: {hex: '#FFAE7F', reason: 'orange field of the front, orange end band [sampled #FFAE7F from the carton image side strips]'}
+    dims_mm: {height: 135.0, length: 150.0, thickness: 12.0}
+    faces:
+      back:
+        file: textures/boston_scientific_synergy_xd/back.png
+        notes: 'no real back photo; base colour: orange field of the front, orange end band [sampled #FFAE7F from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [135, 150]
+        source: plain(rgb 255,174,127)
+      bottom:
+        file: textures/boston_scientific_synergy_xd/bottom.png
+        notes: 'base colour: orange field of the front, orange end band [sampled #FFAE7F from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [135, 12]
+        source: plain(rgb 255,174,127)
+      front:
+        family_check: 'SYNERGY XD front: orange field, stent image; matches the orange XD spine'
+        file: textures/boston_scientific_synergy_xd/front.png
+        fit:
+          aspect_change_pct: -5.6
+          crop_quad_px:
+          - [239.0, 60.0]
+          - [1040.0, 58.0]
+          - [1041.0, 901.0]
+          - [238.0, 899.0]
+          edge_conf: [3.93, 3.16, 3.79, 3.56]
+          pad_pct: 0.0
+          pad_side: none
+          picked_quad_px:
+          - [239.0, 60.0]
+          - [1040.0, 60.0]
+          - [1040.0, 899.0]
+          - [239.0, 899.0]
+          source_aspect: 0.954
+          source_px: [802, 841]
+          target_aspect: 0.9
+          wb: label-stock (17% white px) gains(BGR)=[1.0700000524520874, 1.0499999523162842, 1.0700000524520874]
+        notes: 'seller watermark (translucent MMI logo/text) kept: no cheap safe removal; flagged'
+        orientation_rule: upright
+        px_per_mm: 4.0
+        research_file: boston_scientific_synergy_xd/front_synergy_xd_3.0x20_mmi_watermark.jpg
+        size_px: [540, 600]
+        source: research_image(https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/23185/5084/Synergy_XD_39418-2030__63917.1751999453.jpg?c=3)
+        url: https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/23185/5084/Synergy_XD_39418-2030__63917.1751999453.jpg?c=3
+        watermark: true
+      left:
+        file: textures/boston_scientific_synergy_xd/left.png
+        notes: 'base colour: orange field of the front, orange end band [sampled #FFAE7F from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [150, 12]
+        source: plain(rgb 255,174,127)
+      right:
+        file: textures/boston_scientific_synergy_xd/right.png
+        notes: 'base colour: orange field of the front, orange end band [sampled #FFAE7F from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [150, 12]
+        source: plain(rgb 255,174,127)
+      top: {file: textures/boston_scientific_synergy_xd/top.png, grade: B, notes: none, source: photo_spine}
+    rejected_research_images:
+    - {file: front_original_synergy_2.5x16_older_gen.jpg, reason: 'older non-XD SYNERGY artwork (black/grey), different generation'}
+  boston_scientific_v18_control_wire:
+    base_color: {hex: '#0E1116', reason: black-navy front and end band}
+    dims_mm: {height: 235.0, length: 260.0, thickness: 13.0}
+    faces:
+      back:
+        file: textures/boston_scientific_v18_control_wire/back.png
+        notes: 'no real back photo; base colour: black-navy front and end band'
+        px_per_mm: 1
+        size_px: [235, 260]
+        source: plain(rgb 14,17,22)
+      bottom:
+        file: textures/boston_scientific_v18_control_wire/bottom.png
+        notes: 'base colour: black-navy front and end band'
+        px_per_mm: 1
+        size_px: [235, 13]
+        source: plain(rgb 14,17,22)
+      front:
+        family_check: 'V-18 Control Wire front: navy-black carton, yellow ''018'' corner; matches the black spine with yellow end'
+        file: textures/boston_scientific_v18_control_wire/front.png
+        fit:
+          aspect_change_pct: -3.6
+          crop_quad_px:
+          - [16.0, 143.0]
+          - [932.0, 138.0]
+          - [934.0, 1112.0]
+          - [23.0, 1117.9]
+          edge_conf: [3.22, 3.16, 2.79, 2.11]
+          pad_pct: 0.0
+          pad_side: none
+          picked_quad_px:
+          - [11.0, 138.0]
+          - [932.0, 138.0]
+          - [932.0, 1112.0]
+          - [11.0, 1112.0]
+          source_aspect: 0.937
+          source_px: [913, 974]
+          target_aspect: 0.904
+          wb: label-stock (25% white px) gains(BGR)=[1.2599999904632568, 1.2300000190734863, 1.2400000095367432]
+        orientation_rule: upright
+        px_per_mm: 4.0
+        research_file: boston_scientific_v18_control_wire/front_V-18_300cm_long_taper.jpg
+        size_px: [940, 1040]
+        source: research_image(https://cdn10.bigcommerce.com/s-x81fqsb/products/3765/images/7581/Boston_Scientific_M001468600_V-18_ControlWire_Guidewire__30258.1741816691.1280.1280.jpg?c=2)
+        url: https://cdn10.bigcommerce.com/s-x81fqsb/products/3765/images/7581/Boston_Scientific_M001468600_V-18_ControlWire_Guidewire__30258.1741816691.1280.1280.jpg?c=2
+        watermark: false
+      left:
+        file: textures/boston_scientific_v18_control_wire/left.png
+        notes: 'base colour: black-navy front and end band'
+        px_per_mm: 1
+        size_px: [260, 13]
+        source: plain(rgb 14,17,22)
+      right:
+        file: textures/boston_scientific_v18_control_wire/right.png
+        notes: 'base colour: black-navy front and end band'
+        px_per_mm: 1
+        size_px: [260, 13]
+        source: plain(rgb 14,17,22)
+      top: {file: textures/boston_scientific_v18_control_wire/top.png, grade: A, notes: 'second carton of the tilted V-18 stack (300 cm, lot 2027-08-27);
+          the rough corners covered the neighbour box', source: photo_spine}
+    rejected_research_images:
+    - {file: label_older_meditech_46-860_300cm.jpg, reason: 'older MEDI-TECH generation, white box'}
+  bsci_mach1_guiding_catheter:
+    base_color: {hex: '#E4E6E7', reason: white-grey stock of the large face}
+    dims_mm: {height: 1050.0, length: 150.0, thickness: 30.0}
+    faces:
+      back:
+        file: textures/bsci_mach1_guiding_catheter/back.png
+        notes: 'no real back photo; base colour: white-grey stock of the large face'
+        px_per_mm: 1
+        size_px: [1050, 150]
+        source: plain(rgb 228,230,231)
+      bottom:
+        file: textures/bsci_mach1_guiding_catheter/bottom.png
+        notes: 'base colour: white-grey stock of the large face'
+        px_per_mm: 1
+        size_px: [1050, 30]
+        source: plain(rgb 228,230,231)
+      front:
+        clipped_photo_bottom_mm: 0.0
+        covers_mm_of_height: 721.3
+        file: textures/bsci_mach1_guiding_catheter/front.png
+        notes: rectified label-face crop of the shelf photo at true scale from the +X (photo top) end; image right = +X = photo top, image up
+          = +Y = photo left; remainder = base
+        photo: hospital_0.jpg
+        placement: right edge (+X, photo top end)
+        px_per_mm: 1.95
+        remainder_fill: base
+        size_px: [2048, 293]
+        source: photo_face
+        stretch_along_height: 1.0
+      left:
+        file: textures/bsci_mach1_guiding_catheter/left.png
+        notes: 'base colour: white-grey stock of the large face'
+        px_per_mm: 1
+        size_px: [150, 30]
+        source: plain(rgb 228,230,231)
+      right:
+        file: textures/bsci_mach1_guiding_catheter/right.png
+        notes: 'base colour: white-grey stock of the large face'
+        px_per_mm: 1
+        size_px: [150, 30]
+        source: plain(rgb 228,230,231)
+      top: {file: textures/bsci_mach1_guiding_catheter/top.png, notes: plain base colour; the photo quad of this family is the large front face,
+        source: 'plain(rgb 228,230,231)'}
+    rejected_research_images:
+    - {file: front_7F_JR4_full_length.png, reason: device carton photo is only 1.2 px/mm and the shelf photo already gives the label face at 1.95
+        px/mm; shelf photo used}
+    - {file: alt_view_7F_JR4_device_visible_through_window.png, reason: second view of the same carton with the catheter loop visible}
+  bsci_nc_emerge_monorail:
+    base_color: {hex: '#2B2D30', reason: dark charcoal front and spine end band}
+    dims_mm: {height: 235.0, length: 260.0, thickness: 16.0}
+    faces:
+      back:
+        file: textures/bsci_nc_emerge_monorail/back.png
+        notes: 'no real back photo; base colour: dark charcoal front and spine end band'
+        px_per_mm: 1
+        size_px: [235, 260]
+        source: plain(rgb 43,45,48)
+      bottom:
+        file: textures/bsci_nc_emerge_monorail/bottom.png
+        notes: 'base colour: dark charcoal front and spine end band'
+        px_per_mm: 1
+        size_px: [235, 16]
+        source: plain(rgb 43,45,48)
+      front:
+        family_check: 'NC Emerge Monorail front: dark carton with Boston Scientific logo, white label, green MR corner; matches the spine (MR
+          block)'
+        file: textures/bsci_nc_emerge_monorail/front.png
+        fit:
+          aspect_change_pct: -0.3
+          crop_quad_px:
+          - [279.0, 82.0]
+          - [1000.0, 83.0]
+          - [998.0, 878.0]
+          - [278.0, 877.0]
+          edge_conf: [2.54, 3.39, 3.03, 3.4]
+          pad_pct: 0.0
+          pad_side: none
+          picked_quad_px:
+          - [279.0, 82.0]
+          - [996.0, 88.0]
+          - [996.0, 880.0]
+          - [273.0, 876.0]
+          source_aspect: 0.907
+          source_px: [721, 795]
+          target_aspect: 0.904
+          wb: label-stock (25% white px) gains(BGR)=[1.0, 0.9700000286102295, 0.9800000190734863]
+        notes: 'seller watermark (translucent MMI logo/text) kept: no cheap safe removal; flagged'
+        orientation_rule: upright
+        px_per_mm: 4.0
+        research_file: bsci_nc_emerge_monorail/front_4.5x15_mmi_watermark.jpg
+        size_px: [940, 1040]
+        source: research_image(https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/15624/4782/NC_Emerge_39267-1545__05130.1751399496.jpg?c=3)
+        url: https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/15624/4782/NC_Emerge_39267-1545__05130.1751399496.jpg?c=3
+        watermark: true
+      left:
+        file: textures/bsci_nc_emerge_monorail/left.png
+        notes: 'base colour: dark charcoal front and spine end band'
+        px_per_mm: 1
+        size_px: [260, 16]
+        source: plain(rgb 43,45,48)
+      right:
+        file: textures/bsci_nc_emerge_monorail/right.png
+        notes: 'base colour: dark charcoal front and spine end band'
+        px_per_mm: 1
+        size_px: [260, 16]
+        source: plain(rgb 43,45,48)
+      top: {file: textures/bsci_nc_emerge_monorail/top.png, grade: B, notes: none, source: photo_spine}
+  bsci_permanent_sled_bag_carton:
+    base_color: {hex: '#1E3470', reason: navy end bands}
+    dims_mm: {height: 220.0, length: 240.0, thickness: 17.5}
+    faces:
+      back:
+        file: textures/bsci_permanent_sled_bag_carton/back.png
+        notes: 'no real back photo; base colour: navy end bands'
+        px_per_mm: 1
+        size_px: [220, 240]
+        source: plain(rgb 30,52,112)
+      bottom:
+        file: textures/bsci_permanent_sled_bag_carton/bottom.png
+        notes: 'base colour: navy end bands'
+        px_per_mm: 1
+        size_px: [220, 18]
+        source: plain(rgb 30,52,112)
+      front:
+        file: textures/bsci_permanent_sled_bag_carton/front.png
+        notes: 'no usable carton front image; base colour: navy end bands'
+        px_per_mm: 1
+        size_px: [220, 240]
+        source: plain(rgb 30,52,112)
+      left:
+        file: textures/bsci_permanent_sled_bag_carton/left.png
+        notes: 'base colour: navy end bands'
+        px_per_mm: 1
+        size_px: [240, 18]
+        source: plain(rgb 30,52,112)
+      right:
+        file: textures/bsci_permanent_sled_bag_carton/right.png
+        notes: 'base colour: navy end bands'
+        px_per_mm: 1
+        size_px: [240, 18]
+        source: plain(rgb 30,52,112)
+      top: {file: textures/bsci_permanent_sled_bag_carton/top.png, grade: B, notes: none, source: photo_spine}
+  bsci_wolverine_cutting_balloon:
+    base_color: {hex: '#00AD67', reason: 'green front / end bands [sampled #00AD67 from the carton image side strips]'}
+    dims_mm: {height: 140.0, length: 155.0, thickness: 11.0}
+    faces:
+      back:
+        file: textures/bsci_wolverine_cutting_balloon/back.png
+        notes: 'no real back photo; base colour: green front / end bands [sampled #00AD67 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [140, 155]
+        source: plain(rgb 0,173,103)
+      bottom:
+        file: textures/bsci_wolverine_cutting_balloon/bottom.png
+        notes: 'base colour: green front / end bands [sampled #00AD67 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [140, 11]
+        source: plain(rgb 0,173,103)
+      front:
+        family_check: 'Wolverine cutting balloon front: green carton; matches the green spine with MR block. Bottom ~8 % cropped (a seller business
+          card stands in front of it)'
+        file: textures/bsci_wolverine_cutting_balloon/front.png
+        fit:
+          aspect_change_pct: -2.6
+          crop_quad_px:
+          - [14.0, 78.0]
+          - [879.8, 89.2]
+          - [867.0, 1005.0]
+          - [22.0, 1005.0]
+          edge_conf: [3.78, 2.1, null, 3.51]
+          pad_pct: 0.0
+          pad_side: none
+          picked_quad_px:
+          - [17.0, 78.0]
+          - [868.0, 78.0]
+          - [868.0, 1005.0]
+          - [17.0, 1005.0]
+          source_aspect: 0.927
+          source_px: [855, 922]
+          target_aspect: 0.903
+          wb: label-stock (25% white px) gains(BGR)=[1.0, 1.0, 1.0299999713897705]
+        orientation_rule: upright
+        px_per_mm: 4.0
+        research_file: bsci_wolverine_cutting_balloon/front.png
+        size_px: [560, 620]
+        source: research_image(https://cdn10.bigcommerce.com/s-x81fqsb/products/9694/images/13757/Boston_Scientific_H74939401064000_WOLVERINE_Monorail__43202.1680216442.1280.1280.png?c=2)
+        url: https://cdn10.bigcommerce.com/s-x81fqsb/products/9694/images/13757/Boston_Scientific_H74939401064000_WOLVERINE_Monorail__43202.1680216442.1280.1280.png?c=2
+        watermark: false
+      left:
+        file: textures/bsci_wolverine_cutting_balloon/left.png
+        notes: 'base colour: green front / end bands [sampled #00AD67 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [155, 11]
+        source: plain(rgb 0,173,103)
+      right:
+        file: textures/bsci_wolverine_cutting_balloon/right.png
+        notes: 'base colour: green front / end bands [sampled #00AD67 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [155, 11]
+        source: plain(rgb 0,173,103)
+      top: {file: textures/bsci_wolverine_cutting_balloon/top.png, grade: B, notes: none, source: photo_spine}
+    rejected_research_images:
+    - {file: front_mmi_watermark.png, reason: blank-label duplicate with watermark; the clean front.png was used}
+  elixir_desyne_x2:
+    base_color: {hex: '#143268', reason: navy end band}
+    dims_mm: {height: 210.0, length: 230.0, thickness: 13.0}
+    faces:
+      back:
+        file: textures/elixir_desyne_x2/back.png
+        notes: 'no real back photo; base colour: navy end band'
+        px_per_mm: 1
+        size_px: [210, 230]
+        source: plain(rgb 20,50,104)
+      bottom:
+        file: textures/elixir_desyne_x2/bottom.png
+        notes: 'base colour: navy end band'
+        px_per_mm: 1
+        size_px: [210, 13]
+        source: plain(rgb 20,50,104)
+      front:
+        file: textures/elixir_desyne_x2/front.png
+        notes: 'no usable carton front image; base colour: navy end band'
+        px_per_mm: 1
+        size_px: [210, 230]
+        source: plain(rgb 20,50,104)
+      left:
+        file: textures/elixir_desyne_x2/left.png
+        notes: 'base colour: navy end band'
+        px_per_mm: 1
+        size_px: [230, 13]
+        source: plain(rgb 20,50,104)
+      right:
+        file: textures/elixir_desyne_x2/right.png
+        notes: 'base colour: navy end band'
+        px_per_mm: 1
+        size_px: [230, 13]
+        source: plain(rgb 20,50,104)
+      top: {file: textures/elixir_desyne_x2/top.png, grade: B, notes: none, source: photo_spine}
+  ivascular_essential_pro_balloon:
+    base_color: {hex: '#D81B73', reason: magenta end bands (lavender is the label only)}
+    dims_mm: {height: 220.0, length: 240.0, thickness: 14.5}
+    faces:
+      back:
+        file: textures/ivascular_essential_pro_balloon/back.png
+        notes: 'no real back photo; base colour: magenta end bands (lavender is the label only)'
+        px_per_mm: 1
+        size_px: [220, 240]
+        source: plain(rgb 216,27,115)
+      bottom:
+        file: textures/ivascular_essential_pro_balloon/bottom.png
+        notes: 'base colour: magenta end bands (lavender is the label only)'
+        px_per_mm: 1
+        size_px: [220, 14]
+        source: plain(rgb 216,27,115)
+      front:
+        file: textures/ivascular_essential_pro_balloon/front.png
+        notes: 'no usable carton front image; base colour: magenta end bands (lavender is the label only)'
+        px_per_mm: 1
+        size_px: [220, 240]
+        source: plain(rgb 216,27,115)
+      left:
+        file: textures/ivascular_essential_pro_balloon/left.png
+        notes: 'base colour: magenta end bands (lavender is the label only)'
+        px_per_mm: 1
+        size_px: [240, 14]
+        source: plain(rgb 216,27,115)
+      right:
+        file: textures/ivascular_essential_pro_balloon/right.png
+        notes: 'base colour: magenta end bands (lavender is the label only)'
+        px_per_mm: 1
+        size_px: [240, 14]
+        source: plain(rgb 216,27,115)
+      top: {file: textures/ivascular_essential_pro_balloon/top.png, notes: clean procedural redraw; warped photo kept as top_photo.png, photo_reference: textures/ivascular_essential_pro_balloon/top_photo.png,
+        source: redrawn}
+    rejected_research_images:
+    - {file: front_render_marketing.png, reason: 'marketing render with the carton in a banner, not a carton photo'}
+  ivascular_oceanus_14_pro:
+    base_color: {hex: '#1C2865', reason: navy end bands}
+    dims_mm: {height: 190.0, length: 210.0, thickness: 15.0}
+    faces:
+      back:
+        file: textures/ivascular_oceanus_14_pro/back.png
+        notes: 'no real back photo; base colour: navy end bands'
+        px_per_mm: 1
+        size_px: [190, 210]
+        source: plain(rgb 28,40,101)
+      bottom:
+        file: textures/ivascular_oceanus_14_pro/bottom.png
+        notes: 'base colour: navy end bands'
+        px_per_mm: 1
+        size_px: [190, 15]
+        source: plain(rgb 28,40,101)
+      front:
+        file: textures/ivascular_oceanus_14_pro/front.png
+        notes: 'no usable carton front image; base colour: navy end bands'
+        px_per_mm: 1
+        size_px: [190, 210]
+        source: plain(rgb 28,40,101)
+      left:
+        file: textures/ivascular_oceanus_14_pro/left.png
+        notes: 'base colour: navy end bands'
+        px_per_mm: 1
+        size_px: [210, 15]
+        source: plain(rgb 28,40,101)
+      right:
+        file: textures/ivascular_oceanus_14_pro/right.png
+        notes: 'base colour: navy end bands'
+        px_per_mm: 1
+        size_px: [210, 15]
+        source: plain(rgb 28,40,101)
+      top: {file: textures/ivascular_oceanus_14_pro/top.png, grade: B, notes: bottom (iVascular) end cut by the photo edge; rough corners covered
+          3 cartons; cut off at the bottom of the photo, source: photo_spine}
+  ivascular_oceanus_18:
+    base_color: {hex: '#1F1F5C', reason: dark navy end bands}
+    dims_mm: {height: 190.0, length: 210.0, thickness: 13.0}
+    faces:
+      back:
+        file: textures/ivascular_oceanus_18/back.png
+        notes: 'no real back photo; base colour: dark navy end bands'
+        px_per_mm: 1
+        size_px: [190, 210]
+        source: plain(rgb 31,31,92)
+      bottom:
+        file: textures/ivascular_oceanus_18/bottom.png
+        notes: 'base colour: dark navy end bands'
+        px_per_mm: 1
+        size_px: [190, 13]
+        source: plain(rgb 31,31,92)
+      front:
+        file: textures/ivascular_oceanus_18/front.png
+        notes: 'no usable carton front image; base colour: dark navy end bands'
+        px_per_mm: 1
+        size_px: [190, 210]
+        source: plain(rgb 31,31,92)
+      left:
+        file: textures/ivascular_oceanus_18/left.png
+        notes: 'base colour: dark navy end bands'
+        px_per_mm: 1
+        size_px: [210, 13]
+        source: plain(rgb 31,31,92)
+      right:
+        file: textures/ivascular_oceanus_18/right.png
+        notes: 'base colour: dark navy end bands'
+        px_per_mm: 1
+        size_px: [210, 13]
+        source: plain(rgb 31,31,92)
+      top: {file: textures/ivascular_oceanus_18/top.png, grade: A, notes: none, source: photo_spine}
+  ivascular_oceanus_35:
+    base_color: {hex: '#33348A', reason: indigo-navy end bands}
+    dims_mm: {height: 210.0, length: 230.0, thickness: 15.0}
+    faces:
+      back:
+        file: textures/ivascular_oceanus_35/back.png
+        notes: 'no real back photo; base colour: indigo-navy end bands'
+        px_per_mm: 1
+        size_px: [210, 230]
+        source: plain(rgb 51,52,138)
+      bottom:
+        file: textures/ivascular_oceanus_35/bottom.png
+        notes: 'base colour: indigo-navy end bands'
+        px_per_mm: 1
+        size_px: [210, 15]
+        source: plain(rgb 51,52,138)
+      front:
+        file: textures/ivascular_oceanus_35/front.png
+        notes: 'no usable carton front image; base colour: indigo-navy end bands'
+        px_per_mm: 1
+        size_px: [210, 230]
+        source: plain(rgb 51,52,138)
+      left:
+        file: textures/ivascular_oceanus_35/left.png
+        notes: 'base colour: indigo-navy end bands'
+        px_per_mm: 1
+        size_px: [230, 15]
+        source: plain(rgb 51,52,138)
+      right:
+        file: textures/ivascular_oceanus_35/right.png
+        notes: 'base colour: indigo-navy end bands'
+        px_per_mm: 1
+        size_px: [230, 15]
+        source: plain(rgb 51,52,138)
+      top: {file: textures/ivascular_oceanus_35/top.png, grade: A, notes: none, source: photo_spine}
+  medalliance_selution_slr_dcb:
+    base_color: {hex: '#E4E4E2', reason: white carton}
+    dims_mm: {height: 210.0, length: 230.0, thickness: 13.5}
+    faces:
+      back:
+        file: textures/medalliance_selution_slr_dcb/back.png
+        notes: 'no real back photo; base colour: white carton'
+        px_per_mm: 1
+        size_px: [210, 230]
+        source: plain(rgb 228,228,226)
+      bottom:
+        file: textures/medalliance_selution_slr_dcb/bottom.png
+        notes: 'base colour: white carton'
+        px_per_mm: 1
+        size_px: [210, 14]
+        source: plain(rgb 228,228,226)
+      front:
+        file: textures/medalliance_selution_slr_dcb/front.png
+        notes: 'no usable carton front image; base colour: white carton'
+        px_per_mm: 1
+        size_px: [210, 230]
+        source: plain(rgb 228,228,226)
+      left:
+        file: textures/medalliance_selution_slr_dcb/left.png
+        notes: 'base colour: white carton'
+        px_per_mm: 1
+        size_px: [230, 14]
+        source: plain(rgb 228,228,226)
+      right:
+        file: textures/medalliance_selution_slr_dcb/right.png
+        notes: 'base colour: white carton'
+        px_per_mm: 1
+        size_px: [230, 14]
+        source: plain(rgb 228,228,226)
+      top: {file: textures/medalliance_selution_slr_dcb/top.png, notes: clean procedural redraw; warped photo kept as top_photo.png, photo_reference: textures/medalliance_selution_slr_dcb/top_photo.png,
+        source: redrawn}
+  medtronic_amphirion_deep:
+    base_color: {hex: '#E4E6E7', reason: white carton (dark slate block at one end only)}
+    dims_mm: {height: 190.0, length: 210.0, thickness: 15.0}
+    faces:
+      back:
+        file: textures/medtronic_amphirion_deep/back.png
+        notes: 'no real back photo; base colour: white carton (dark slate block at one end only)'
+        px_per_mm: 1
+        size_px: [190, 210]
+        source: plain(rgb 228,230,231)
+      bottom:
+        file: textures/medtronic_amphirion_deep/bottom.png
+        notes: 'base colour: white carton (dark slate block at one end only)'
+        px_per_mm: 1
+        size_px: [190, 15]
+        source: plain(rgb 228,230,231)
+      front:
+        file: textures/medtronic_amphirion_deep/front.png
+        notes: 'no usable carton front image; base colour: white carton (dark slate block at one end only)'
+        px_per_mm: 1
+        size_px: [190, 210]
+        source: plain(rgb 228,230,231)
+      left:
+        file: textures/medtronic_amphirion_deep/left.png
+        notes: 'base colour: white carton (dark slate block at one end only)'
+        px_per_mm: 1
+        size_px: [210, 15]
+        source: plain(rgb 228,230,231)
+      right:
+        file: textures/medtronic_amphirion_deep/right.png
+        notes: 'base colour: white carton (dark slate block at one end only)'
+        px_per_mm: 1
+        size_px: [210, 15]
+        source: plain(rgb 228,230,231)
+      top: {file: textures/medtronic_amphirion_deep/top.png, grade: B, notes: bottom (Medtronic) end cut by the photo edge; cut off at the bottom
+          of the photo, source: photo_spine}
+  medtronic_export_advance_edge:
+    base_color: {hex: '#1F7050', reason: deep Medtronic green end band}
+    dims_mm: {height: 220.0, length: 240.0, thickness: 22.5}
+    faces:
+      back:
+        file: textures/medtronic_export_advance_edge/back.png
+        notes: 'no real back photo; base colour: deep Medtronic green end band'
+        px_per_mm: 1
+        size_px: [220, 240]
+        source: plain(rgb 31,112,80)
+      bottom:
+        file: textures/medtronic_export_advance_edge/bottom.png
+        notes: 'base colour: deep Medtronic green end band'
+        px_per_mm: 1
+        size_px: [220, 22]
+        source: plain(rgb 31,112,80)
+      front:
+        file: textures/medtronic_export_advance_edge/front.png
+        notes: 'no usable carton front image; base colour: deep Medtronic green end band'
+        px_per_mm: 1
+        size_px: [220, 240]
+        source: plain(rgb 31,112,80)
+      left:
+        file: textures/medtronic_export_advance_edge/left.png
+        notes: 'base colour: deep Medtronic green end band'
+        px_per_mm: 1
+        size_px: [240, 22]
+        source: plain(rgb 31,112,80)
+      right:
+        file: textures/medtronic_export_advance_edge/right.png
+        notes: 'base colour: deep Medtronic green end band'
+        px_per_mm: 1
+        size_px: [240, 22]
+        source: plain(rgb 31,112,80)
+      top: {file: textures/medtronic_export_advance_edge/top.png, grade: B, notes: none, source: photo_spine}
+    rejected_research_images:
+    - {file: front_6F_medicalecart.jpg, reason: 'partial, strongly keystoned rotated label face that fills the frame (no carton edges); kept plain'}
+  medtronic_nc_euphora_edge:
+    base_color: {hex: '#E8E8E5', reason: 'white / pale grey front (front photo) [sampled #E8E8E5 from the carton image side strips]'}
+    dims_mm: {height: 220.0, length: 240.0, thickness: 15.5}
+    faces:
+      back:
+        file: textures/medtronic_nc_euphora_edge/back.png
+        notes: 'no real back photo; base colour: white / pale grey front (front photo) [sampled #E8E8E5 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [220, 240]
+        source: plain(rgb 232,232,229)
+      bottom:
+        file: textures/medtronic_nc_euphora_edge/bottom.png
+        notes: 'base colour: white / pale grey front (front photo) [sampled #E8E8E5 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [220, 16]
+        source: plain(rgb 232,232,229)
+      front:
+        family_check: 'NC Euphora front: white carton, teal band; matches the NC Euphora spine'
+        file: textures/medtronic_nc_euphora_edge/front.png
+        fit:
+          aspect_change_pct: -7.4
+          crop_quad_px:
+          - [148.0, 122.0]
+          - [1130.0, 122.0]
+          - [1130.0, 837.0]
+          - [149.0, 837.0]
+          edge_conf: [4.54, 4.03, 4.04, 4.2]
+          pad_pct: 27.9
+          pad_side: bottom
+          picked_quad_px:
+          - [149.0, 122.0]
+          - [1130.0, 122.0]
+          - [1130.0, 837.0]
+          - [149.0, 837.0]
+          source_aspect: 1.373
+          source_px: [982, 715]
+          target_aspect: 0.917
+          wb: label-stock (25% white px) gains(BGR)=[1.0700000524520874, 1.0499999523162842, 1.0399999618530273]
+        notes: 'seller watermark (translucent MMI logo/text) kept: no cheap safe removal; flagged'
+        orientation_rule: upright
+        px_per_mm: 4.0
+        research_file: medtronic_nc_euphora_edge/front_3.5x20_medmat.png
+        size_px: [880, 960]
+        source: research_image(https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/7134/15618/NC_Euphora_NCEUP3520X__88190.1777575385.png)
+        url: https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/7134/15618/NC_Euphora_NCEUP3520X__88190.1777575385.png
+        watermark: true
+      left:
+        file: textures/medtronic_nc_euphora_edge/left.png
+        notes: 'base colour: white / pale grey front (front photo) [sampled #E8E8E5 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [240, 16]
+        source: plain(rgb 232,232,229)
+      right:
+        file: textures/medtronic_nc_euphora_edge/right.png
+        notes: 'base colour: white / pale grey front (front photo) [sampled #E8E8E5 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [240, 16]
+        source: plain(rgb 232,232,229)
+      top: {file: textures/medtronic_nc_euphora_edge/top.png, notes: clean procedural redraw; warped photo kept as top_photo.png, photo_reference: textures/medtronic_nc_euphora_edge/top_photo.png,
+        source: redrawn}
+  medtronic_pacific_plus:
+    base_color: {hex: '#D7D7D8', reason: 'silvery white front (front photo) [sampled #D7D7D8 from the carton image side strips]'}
+    dims_mm: {height: 175.0, length: 195.0, thickness: 13.0}
+    faces:
+      back:
+        file: textures/medtronic_pacific_plus/back.png
+        notes: 'no real back photo; base colour: silvery white front (front photo) [sampled #D7D7D8 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [175, 195]
+        source: plain(rgb 215,215,216)
+      bottom:
+        file: textures/medtronic_pacific_plus/bottom.png
+        notes: 'base colour: silvery white front (front photo) [sampled #D7D7D8 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [175, 13]
+        source: plain(rgb 215,215,216)
+      front:
+        family_check: 'Pacific Plus front: silvery white carton, green band; matches the Pacific Plus spine'
+        file: textures/medtronic_pacific_plus/front.png
+        fit:
+          aspect_change_pct: -7.4
+          crop_quad_px:
+          - [282.0, 87.0]
+          - [1047.0, 86.0]
+          - [1045.0, 862.0]
+          - [282.0, 863.0]
+          edge_conf: [4.1, 4.23, 4.02, 3.92]
+          pad_pct: 1.5
+          pad_side: bottom
+          picked_quad_px:
+          - [282.0, 88.0]
+          - [1048.0, 88.0]
+          - [1048.0, 861.0]
+          - [282.0, 861.0]
+          source_aspect: 0.985
+          source_px: [764, 776]
+          target_aspect: 0.897
+          wb: label-stock (25% white px) gains(BGR)=[1.0399999618530273, 1.0199999809265137, 1.0299999713897705]
+        notes: 'seller watermark (translucent MMI logo/text) kept: no cheap safe removal; flagged'
+        orientation_rule: upright
+        px_per_mm: 4.0
+        research_file: medtronic_pacific_plus/front_4.0x80x130_medmat.png
+        size_px: [700, 780]
+        source: research_image(https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/13371/2490/Pacific_Plus_PCP040080130__32542.1749478109.png)
+        url: https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/13371/2490/Pacific_Plus_PCP040080130__32542.1749478109.png
+        watermark: true
+      left:
+        file: textures/medtronic_pacific_plus/left.png
+        notes: 'base colour: silvery white front (front photo) [sampled #D7D7D8 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [195, 13]
+        source: plain(rgb 215,215,216)
+      right:
+        file: textures/medtronic_pacific_plus/right.png
+        notes: 'base colour: silvery white front (front photo) [sampled #D7D7D8 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [195, 13]
+        source: plain(rgb 215,215,216)
+      top: {file: textures/medtronic_pacific_plus/top.png, grade: A, notes: none, source: photo_spine}
+  medtronic_prevail_dcb:
+    base_color: {hex: '#E6E6E6', reason: white carton (thin black ends)}
+    dims_mm: {height: 190.0, length: 210.0, thickness: 14.0}
+    faces:
+      back:
+        file: textures/medtronic_prevail_dcb/back.png
+        notes: 'no real back photo; base colour: white carton (thin black ends)'
+        px_per_mm: 1
+        size_px: [190, 210]
+        source: plain(rgb 230,230,230)
+      bottom:
+        file: textures/medtronic_prevail_dcb/bottom.png
+        notes: 'base colour: white carton (thin black ends)'
+        px_per_mm: 1
+        size_px: [190, 14]
+        source: plain(rgb 230,230,230)
+      front:
+        file: textures/medtronic_prevail_dcb/front.png
+        notes: 'no usable carton front image; base colour: white carton (thin black ends)'
+        px_per_mm: 1
+        size_px: [190, 210]
+        source: plain(rgb 230,230,230)
+      left:
+        file: textures/medtronic_prevail_dcb/left.png
+        notes: 'base colour: white carton (thin black ends)'
+        px_per_mm: 1
+        size_px: [210, 14]
+        source: plain(rgb 230,230,230)
+      right:
+        file: textures/medtronic_prevail_dcb/right.png
+        notes: 'base colour: white carton (thin black ends)'
+        px_per_mm: 1
+        size_px: [210, 14]
+        source: plain(rgb 230,230,230)
+      top: {file: textures/medtronic_prevail_dcb/top.png, grade: A, notes: none, source: photo_spine}
+  medtronic_resolute_onyx:
+    base_color: {hex: '#EBD400', reason: yellow border of the front / yellow spine}
+    dims_mm: {height: 165.0, length: 180.0, thickness: 11.5}
+    faces:
+      back:
+        file: textures/medtronic_resolute_onyx/back.png
+        notes: 'no real back photo; base colour: yellow border of the front / yellow spine'
+        px_per_mm: 1
+        size_px: [165, 180]
+        source: plain(rgb 235,212,0)
+      bottom:
+        file: textures/medtronic_resolute_onyx/bottom.png
+        notes: 'base colour: yellow border of the front / yellow spine'
+        px_per_mm: 1
+        size_px: [165, 12]
+        source: plain(rgb 235,212,0)
+      front:
+        family_check: 'Resolute Onyx front: yellow border, white panel; matches the yellow spine'
+        file: textures/medtronic_resolute_onyx/front.png
+        fit:
+          aspect_change_pct: -7.4
+          crop_quad_px:
+          - [152.0, 79.0]
+          - [1127.0, 79.0]
+          - [1127.0, 880.0]
+          - [152.0, 880.0]
+          edge_conf: [4.23, 4.41, 4.44, 4.34]
+          pad_pct: 18.6
+          pad_side: bottom
+          picked_quad_px:
+          - [152.0, 79.0]
+          - [1127.0, 79.0]
+          - [1127.0, 880.0]
+          - [152.0, 880.0]
+          source_aspect: 1.217
+          source_px: [975, 801]
+          target_aspect: 0.917
+          wb: label-stock (25% white px) gains(BGR)=[1.0800000429153442, 1.059999942779541, 1.059999942779541]
+        notes: 'seller watermark (translucent MMI logo/text) kept: no cheap safe removal; flagged'
+        orientation_rule: upright
+        px_per_mm: 4.0
+        research_file: medtronic_resolute_onyx/front_3.0x15_OTW_medmat.png
+        size_px: [660, 720]
+        source: research_image(https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/29372/10584/Resolute_Onyx_Zotarolimus-Eluting_RONYX30015W__48050.1762802271.png)
+        url: https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/29372/10584/Resolute_Onyx_Zotarolimus-Eluting_RONYX30015W__48050.1762802271.png
+        watermark: true
+      left:
+        file: textures/medtronic_resolute_onyx/left.png
+        notes: 'base colour: yellow border of the front / yellow spine'
+        px_per_mm: 1
+        size_px: [180, 12]
+        source: plain(rgb 235,212,0)
+      right:
+        file: textures/medtronic_resolute_onyx/right.png
+        notes: 'base colour: yellow border of the front / yellow spine'
+        px_per_mm: 1
+        size_px: [180, 12]
+        source: plain(rgb 235,212,0)
+      top: {file: textures/medtronic_resolute_onyx/top.png, grade: A, notes: none, source: photo_spine}
+  meril_nexgen_balloon:
+    base_color: {hex: '#9B1B30', reason: dark red carton board under the white label}
+    dims_mm: {height: 120.0, length: 130.0, thickness: 11.0}
+    faces:
+      back:
+        file: textures/meril_nexgen_balloon/back.png
+        notes: 'no real back photo; base colour: dark red carton board under the white label'
+        px_per_mm: 1
+        size_px: [120, 130]
+        source: plain(rgb 155,27,48)
+      bottom:
+        file: textures/meril_nexgen_balloon/bottom.png
+        notes: 'base colour: dark red carton board under the white label'
+        px_per_mm: 1
+        size_px: [120, 11]
+        source: plain(rgb 155,27,48)
+      front:
+        file: textures/meril_nexgen_balloon/front.png
+        notes: 'no usable carton front image; base colour: dark red carton board under the white label'
+        px_per_mm: 1
+        size_px: [120, 130]
+        source: plain(rgb 155,27,48)
+      left:
+        file: textures/meril_nexgen_balloon/left.png
+        notes: 'base colour: dark red carton board under the white label'
+        px_per_mm: 1
+        size_px: [130, 11]
+        source: plain(rgb 155,27,48)
+      right:
+        file: textures/meril_nexgen_balloon/right.png
+        notes: 'base colour: dark red carton board under the white label'
+        px_per_mm: 1
+        size_px: [130, 11]
+        source: plain(rgb 155,27,48)
+      top: {file: textures/meril_nexgen_balloon/top.png, notes: clean procedural redraw; warped photo kept as top_photo.png, photo_reference: textures/meril_nexgen_balloon/top_photo.png,
+        source: redrawn}
+  nse_alpha_scoring_balloon:
+    base_color: {hex: '#7A3A52', reason: plum-maroon end band}
+    dims_mm: {height: 170.0, length: 185.0, thickness: 13.5}
+    faces:
+      back:
+        file: textures/nse_alpha_scoring_balloon/back.png
+        notes: 'no real back photo; base colour: plum-maroon end band'
+        px_per_mm: 1
+        size_px: [170, 185]
+        source: plain(rgb 122,58,82)
+      bottom:
+        file: textures/nse_alpha_scoring_balloon/bottom.png
+        notes: 'base colour: plum-maroon end band'
+        px_per_mm: 1
+        size_px: [170, 14]
+        source: plain(rgb 122,58,82)
+      front:
+        file: textures/nse_alpha_scoring_balloon/front.png
+        notes: 'no usable carton front image; base colour: plum-maroon end band'
+        px_per_mm: 1
+        size_px: [170, 185]
+        source: plain(rgb 122,58,82)
+      left:
+        file: textures/nse_alpha_scoring_balloon/left.png
+        notes: 'base colour: plum-maroon end band'
+        px_per_mm: 1
+        size_px: [185, 14]
+        source: plain(rgb 122,58,82)
+      right:
+        file: textures/nse_alpha_scoring_balloon/right.png
+        notes: 'base colour: plum-maroon end band'
+        px_per_mm: 1
+        size_px: [185, 14]
+        source: plain(rgb 122,58,82)
+      top: {file: textures/nse_alpha_scoring_balloon/top.png, grade: B, notes: 'carton lies on the shelf, spine strip seen at a grazing angle;
+          left maroon end face excluded', source: photo_spine}
+  orbusneich_combo_plus:
+    base_color: {hex: '#1B3F9A', reason: navy end bands}
+    dims_mm: {height: 195.0, length: 215.0, thickness: 13.5}
+    faces:
+      back:
+        file: textures/orbusneich_combo_plus/back.png
+        notes: 'no real back photo; base colour: navy end bands'
+        px_per_mm: 1
+        size_px: [195, 215]
+        source: plain(rgb 27,63,154)
+      bottom:
+        file: textures/orbusneich_combo_plus/bottom.png
+        notes: 'base colour: navy end bands'
+        px_per_mm: 1
+        size_px: [195, 14]
+        source: plain(rgb 27,63,154)
+      front:
+        file: textures/orbusneich_combo_plus/front.png
+        notes: 'no usable carton front image; base colour: navy end bands'
+        px_per_mm: 1
+        size_px: [195, 215]
+        source: plain(rgb 27,63,154)
+      left:
+        file: textures/orbusneich_combo_plus/left.png
+        notes: 'base colour: navy end bands'
+        px_per_mm: 1
+        size_px: [215, 14]
+        source: plain(rgb 27,63,154)
+      right:
+        file: textures/orbusneich_combo_plus/right.png
+        notes: 'base colour: navy end bands'
+        px_per_mm: 1
+        size_px: [215, 14]
+        source: plain(rgb 27,63,154)
+      top: {file: textures/orbusneich_combo_plus/top.png, notes: clean procedural redraw; warped photo kept as top_photo.png, photo_reference: textures/orbusneich_combo_plus/top_photo.png,
+        source: redrawn}
+  orbusneich_sapphire_3:
+    base_color: {hex: '#E4E7E8', reason: pale grey-white carton}
+    dims_mm: {height: 225.0, length: 250.0, thickness: 12.0}
+    faces:
+      back:
+        file: textures/orbusneich_sapphire_3/back.png
+        notes: 'no real back photo; base colour: pale grey-white carton'
+        px_per_mm: 1
+        size_px: [225, 250]
+        source: plain(rgb 228,231,232)
+      bottom:
+        file: textures/orbusneich_sapphire_3/bottom.png
+        notes: 'base colour: pale grey-white carton'
+        px_per_mm: 1
+        size_px: [225, 12]
+        source: plain(rgb 228,231,232)
+      front:
+        file: textures/orbusneich_sapphire_3/front.png
+        notes: 'no usable carton front image; base colour: pale grey-white carton'
+        px_per_mm: 1
+        size_px: [225, 250]
+        source: plain(rgb 228,231,232)
+      left:
+        file: textures/orbusneich_sapphire_3/left.png
+        notes: 'base colour: pale grey-white carton'
+        px_per_mm: 1
+        size_px: [250, 12]
+        source: plain(rgb 228,231,232)
+      right:
+        file: textures/orbusneich_sapphire_3/right.png
+        notes: 'base colour: pale grey-white carton'
+        px_per_mm: 1
+        size_px: [250, 12]
+        source: plain(rgb 228,231,232)
+      top: {file: textures/orbusneich_sapphire_3/top.png, notes: clean procedural redraw; warped photo kept as top_photo.png, photo_reference: textures/orbusneich_sapphire_3/top_photo.png,
+        source: redrawn}
+  orbusneich_scoreflex:
+    base_color: {hex: '#BDB966', reason: khaki-olive end band}
+    dims_mm: {height: 125.0, length: 140.0, thickness: 9.0}
+    faces:
+      back:
+        file: textures/orbusneich_scoreflex/back.png
+        notes: 'no real back photo; base colour: khaki-olive end band'
+        px_per_mm: 1
+        size_px: [125, 140]
+        source: plain(rgb 189,185,102)
+      bottom:
+        file: textures/orbusneich_scoreflex/bottom.png
+        notes: 'base colour: khaki-olive end band'
+        px_per_mm: 1
+        size_px: [125, 9]
+        source: plain(rgb 189,185,102)
+      front:
+        file: textures/orbusneich_scoreflex/front.png
+        notes: 'no usable carton front image; base colour: khaki-olive end band'
+        px_per_mm: 1
+        size_px: [125, 140]
+        source: plain(rgb 189,185,102)
+      left:
+        file: textures/orbusneich_scoreflex/left.png
+        notes: 'base colour: khaki-olive end band'
+        px_per_mm: 1
+        size_px: [140, 9]
+        source: plain(rgb 189,185,102)
+      right:
+        file: textures/orbusneich_scoreflex/right.png
+        notes: 'base colour: khaki-olive end band'
+        px_per_mm: 1
+        size_px: [140, 9]
+        source: plain(rgb 189,185,102)
+      top: {file: textures/orbusneich_scoreflex/top.png, grade: B, notes: none, source: photo_spine}
+  teleflex_guideliner:
+    base_color: {hex: '#DBDBD9', reason: 'pale white-grey carton (front photo) [sampled #DBDBD9 from the carton image side strips]'}
+    dims_mm: {height: 240.0, length: 265.0, thickness: 25.0}
+    faces:
+      back:
+        file: textures/teleflex_guideliner/back.png
+        notes: 'no real back photo; base colour: pale white-grey carton (front photo) [sampled #DBDBD9 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [240, 265]
+        source: plain(rgb 219,219,217)
+      bottom:
+        file: textures/teleflex_guideliner/bottom.png
+        notes: 'base colour: pale white-grey carton (front photo) [sampled #DBDBD9 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [240, 25]
+        source: plain(rgb 219,219,217)
+      front:
+        family_check: 'GuideLiner V3 (5.5F) front: plain pale grey carton with a transparent-looking white label; same family as the white 6F
+          spine (other French size). Bottom ~12 % cropped (a seller business card stands in front of it)'
+        file: textures/teleflex_guideliner/front.png
+        fit:
+          aspect_change_pct: -7.4
+          crop_quad_px:
+          - [35.0, 31.9]
+          - [1086.9, 47.9]
+          - [1080.0, 958.0]
+          - [37.0, 958.0]
+          edge_conf: [1.29, 1.71, null, 2.76]
+          pad_pct: 14.3
+          pad_side: bottom
+          picked_quad_px:
+          - [40.0, 36.0]
+          - [1092.0, 36.0]
+          - [1092.0, 958.0]
+          - [40.0, 958.0]
+          source_aspect: 1.142
+          source_px: [1048, 918]
+          target_aspect: 0.906
+          wb: label-stock (25% white px) gains(BGR)=[1.2100000381469727, 1.2100000381469727, 1.2300000190734863]
+        orientation_rule: upright
+        px_per_mm: 4.0
+        research_file: teleflex_guideliner/front_5.5F_V3.png
+        size_px: [960, 1060]
+        source: research_image(https://cdn10.bigcommerce.com/s-x81fqsb/products/1074/images/12191/5570_GuideLiner_V3_Catheter__05355.1660216295.1280.1280.png?c=2)
+        url: https://cdn10.bigcommerce.com/s-x81fqsb/products/1074/images/12191/5570_GuideLiner_V3_Catheter__05355.1660216295.1280.1280.png?c=2
+        watermark: false
+      left:
+        file: textures/teleflex_guideliner/left.png
+        notes: 'base colour: pale white-grey carton (front photo) [sampled #DBDBD9 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [265, 25]
+        source: plain(rgb 219,219,217)
+      right:
+        file: textures/teleflex_guideliner/right.png
+        notes: 'base colour: pale white-grey carton (front photo) [sampled #DBDBD9 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [265, 25]
+        source: plain(rgb 219,219,217)
+      top: {file: textures/teleflex_guideliner/top.png, grade: B, notes: 'white spine with 6F tag, GuideLiner logo, REF 5571 and LOT text (verified
+          by eye on the stack: it is the narrow labelled edge, not a plain large face); cut off at the bottom of the photo', source: photo_spine}
+    rejected_research_images:
+    - {file: label_5.5F_V2_older_gen.jpg, reason: 'older V2 Vascular Solutions label crop, not a full face'}
+  terumo_heartrail_ii_guiding_catheter:
+    base_color: {hex: '#E6E8EA', reason: white stock of the large face}
+    dims_mm: {height: 1050.0, length: 150.0, thickness: 30.0}
+    faces:
+      back:
+        file: textures/terumo_heartrail_ii_guiding_catheter/back.png
+        notes: 'no real back photo; base colour: white stock of the large face'
+        px_per_mm: 1
+        size_px: [1050, 150]
+        source: plain(rgb 230,232,234)
+      bottom:
+        file: textures/terumo_heartrail_ii_guiding_catheter/bottom.png
+        notes: 'base colour: white stock of the large face'
+        px_per_mm: 1
+        size_px: [1050, 30]
+        source: plain(rgb 230,232,234)
+      front:
+        clipped_photo_bottom_mm: 0.0
+        covers_mm_of_height: 915.1
+        file: textures/terumo_heartrail_ii_guiding_catheter/front.png
+        notes: rectified label-face crop of the shelf photo at true scale from the +X (photo top) end; image right = +X = photo top, image up
+          = +Y = photo left; remainder = last_rows
+        photo: hospital_0.jpg
+        placement: right edge (+X, photo top end)
+        px_per_mm: 1.95
+        remainder_fill: last_rows
+        size_px: [2048, 293]
+        source: photo_face
+        stretch_along_height: 1.0
+      left:
+        file: textures/terumo_heartrail_ii_guiding_catheter/left.png
+        notes: 'base colour: white stock of the large face'
+        px_per_mm: 1
+        size_px: [150, 30]
+        source: plain(rgb 230,232,234)
+      right:
+        file: textures/terumo_heartrail_ii_guiding_catheter/right.png
+        notes: 'base colour: white stock of the large face'
+        px_per_mm: 1
+        size_px: [150, 30]
+        source: plain(rgb 230,232,234)
+      top: {file: textures/terumo_heartrail_ii_guiding_catheter/top.png, notes: plain base colour; the photo quad of this family is the large
+          front face, source: 'plain(rgb 230,232,234)'}
+  terumo_navicross:
+    base_color: {hex: '#DBDDE6', reason: 'very pale blue-white front (front photo) [sampled #DBDDE6 from the carton image side strips]'}
+    dims_mm: {height: 250.0, length: 275.0, thickness: 28.0}
+    faces:
+      back:
+        file: textures/terumo_navicross/back.png
+        notes: 'no real back photo; base colour: very pale blue-white front (front photo) [sampled #DBDDE6 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [250, 275]
+        source: plain(rgb 219,221,230)
+      bottom:
+        file: textures/terumo_navicross/bottom.png
+        notes: 'base colour: very pale blue-white front (front photo) [sampled #DBDDE6 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [250, 28]
+        source: plain(rgb 219,221,230)
+      front:
+        family_check: 'NaviCross front: very pale carton with the blue ''NaviCross'' wordmark and TERUMO logo; matches the spine'
+        file: textures/terumo_navicross/front.png
+        fit:
+          aspect_change_pct: -7.4
+          crop_quad_px:
+          - [228.0, 96.0]
+          - [1052.0, 95.0]
+          - [1051.0, 864.0]
+          - [227.0, 863.0]
+          edge_conf: [4.02, 4.35, 3.9, 4.0]
+          pad_pct: 8.5
+          pad_side: bottom
+          picked_quad_px:
+          - [228.0, 97.0]
+          - [1050.0, 97.0]
+          - [1050.0, 863.0]
+          - [228.0, 863.0]
+          source_aspect: 1.073
+          source_px: [824, 768]
+          target_aspect: 0.909
+          wb: label-stock (25% white px) gains(BGR)=[1.0499999523162842, 1.0099999904632568, 1.0099999904632568]
+        notes: 'seller watermark (translucent MMI logo/text) kept: no cheap safe removal; flagged'
+        orientation_rule: upright
+        px_per_mm: 4.0
+        research_file: terumo_navicross/front_NC35900_0.035_90cm.png
+        size_px: [1000, 1100]
+        source: research_image(https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280w/products/8369/5274/NaviCross_NC35900__89539.1752152656.png)
+        url: https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280w/products/8369/5274/NaviCross_NC35900__89539.1752152656.png
+        watermark: true
+      left:
+        file: textures/terumo_navicross/left.png
+        notes: 'base colour: very pale blue-white front (front photo) [sampled #DBDDE6 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [275, 28]
+        source: plain(rgb 219,221,230)
+      right:
+        file: textures/terumo_navicross/right.png
+        notes: 'base colour: very pale blue-white front (front photo) [sampled #DBDDE6 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [275, 28]
+        source: plain(rgb 219,221,230)
+      top: {file: textures/terumo_navicross/top.png, grade: B, notes: 'carton lies flat; the crop is its narrow long SIDE (NaviCross, size, barcode,
+          TERUMO), i.e. the labelled spine, not the large front face; confirmed by eye; text reads left to right', source: photo_spine}
+  terumo_ryurei_balloon:
+    base_color: {hex: '#C7CDC0', reason: 'pale green-white carton (back photo) [sampled #C7CDC0 from the carton image side strips]'}
+    dims_mm: {height: 215.0, length: 235.0, thickness: 14.5}
+    faces:
+      back:
+        family_check: Ryurei back label (white label with Ryurei 1.25 x 10 spec table), pale green-white carton; matches the Ryurei spine (Terumo
+          green right end). 'Open here' tab is at the photo top, so the image is rotated 180 deg to put the spine edge at the top
+        file: textures/terumo_ryurei_balloon/back.png
+        fit:
+          aspect_change_pct: 5.5
+          crop_quad_px:
+          - [102.0, 44.0]
+          - [865.0, 44.0]
+          - [865.0, 925.0]
+          - [102.0, 924.0]
+          edge_conf: [3.61, 3.38, 2.92, 3.82]
+          pad_pct: 0.0
+          pad_side: none
+          picked_quad_px:
+          - [102.0, 44.0]
+          - [865.0, 44.0]
+          - [865.0, 924.0]
+          - [102.0, 924.0]
+          source_aspect: 0.867
+          source_px: [763, 880]
+          target_aspect: 0.915
+          wb: label-stock (25% white px) gains(BGR)=[1.100000023841858, 1.100000023841858, 1.0700000524520874]
+        orientation_rule: tab_opposite
+        px_per_mm: 4.0
+        research_file: terumo_ryurei_balloon/back_label_1.25x10.jpg
+        size_px: [860, 940]
+        source: research_image(https://5.imimg.com/data5/SELLER/Default/2021/9/OI/GY/JE/136318087/terumo-ryurei-ptca-balloon-1000x1000.jpg)
+        url: https://5.imimg.com/data5/SELLER/Default/2021/9/OI/GY/JE/136318087/terumo-ryurei-ptca-balloon-1000x1000.jpg
+        watermark: false
+      bottom:
+        file: textures/terumo_ryurei_balloon/bottom.png
+        notes: 'base colour: pale green-white carton (back photo) [sampled #C7CDC0 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [215, 14]
+        source: plain(rgb 199,205,192)
+      front:
+        file: textures/terumo_ryurei_balloon/front.png
+        notes: 'no usable carton front image; base colour: pale green-white carton (back photo) [sampled #C7CDC0 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [215, 235]
+        source: plain(rgb 199,205,192)
+      left:
+        file: textures/terumo_ryurei_balloon/left.png
+        notes: 'base colour: pale green-white carton (back photo) [sampled #C7CDC0 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [235, 14]
+        source: plain(rgb 199,205,192)
+      right:
+        file: textures/terumo_ryurei_balloon/right.png
+        notes: 'base colour: pale green-white carton (back photo) [sampled #C7CDC0 from the carton image side strips]'
+        px_per_mm: 1
+        size_px: [235, 14]
+        source: plain(rgb 199,205,192)
+      top: {file: textures/terumo_ryurei_balloon/top.png, grade: B, notes: none, source: photo_spine}
+  trireme_tri_wedge:
+    base_color: {hex: '#2A1A2C', reason: 'dark purple-black carton, white label only'}
+    dims_mm: {height: 220.0, length: 240.0, thickness: 15.0}
+    faces:
+      back:
+        file: textures/trireme_tri_wedge/back.png
+        notes: 'no real back photo; base colour: dark purple-black carton, white label only'
+        px_per_mm: 1
+        size_px: [220, 240]
+        source: plain(rgb 42,26,44)
+      bottom:
+        file: textures/trireme_tri_wedge/bottom.png
+        notes: 'base colour: dark purple-black carton, white label only'
+        px_per_mm: 1
+        size_px: [220, 15]
+        source: plain(rgb 42,26,44)
+      front:
+        file: textures/trireme_tri_wedge/front.png
+        notes: 'no usable carton front image; base colour: dark purple-black carton, white label only'
+        px_per_mm: 1
+        size_px: [220, 240]
+        source: plain(rgb 42,26,44)
+      left:
+        file: textures/trireme_tri_wedge/left.png
+        notes: 'base colour: dark purple-black carton, white label only'
+        px_per_mm: 1
+        size_px: [240, 15]
+        source: plain(rgb 42,26,44)
+      right:
+        file: textures/trireme_tri_wedge/right.png
+        notes: 'base colour: dark purple-black carton, white label only'
+        px_per_mm: 1
+        size_px: [240, 15]
+        source: plain(rgb 42,26,44)
+      top: {file: textures/trireme_tri_wedge/top.png, grade: A, notes: none, source: photo_spine}
+  unknown_blue_des:
+    base_color: {hex: '#2A5A88', reason: blue end band}
+    dims_mm: {height: 170.0, length: 185.0, thickness: 11.0}
+    faces:
+      back:
+        file: textures/unknown_blue_des/back.png
+        notes: 'no real back photo; base colour: blue end band'
+        px_per_mm: 1
+        size_px: [170, 185]
+        source: plain(rgb 42,90,136)
+      bottom:
+        file: textures/unknown_blue_des/bottom.png
+        notes: 'base colour: blue end band'
+        px_per_mm: 1
+        size_px: [170, 11]
+        source: plain(rgb 42,90,136)
+      front:
+        file: textures/unknown_blue_des/front.png
+        notes: 'no usable carton front image; base colour: blue end band'
+        px_per_mm: 1
+        size_px: [170, 185]
+        source: plain(rgb 42,90,136)
+      left:
+        file: textures/unknown_blue_des/left.png
+        notes: 'base colour: blue end band'
+        px_per_mm: 1
+        size_px: [185, 11]
+        source: plain(rgb 42,90,136)
+      right:
+        file: textures/unknown_blue_des/right.png
+        notes: 'base colour: blue end band'
+        px_per_mm: 1
+        size_px: [185, 11]
+        source: plain(rgb 42,90,136)
+      top: {file: textures/unknown_blue_des/top.png, grade: A, notes: none, source: photo_spine}
+  unknown_teal_boston_style:
+    base_color: {hex: '#3CC8A6', reason: teal cap (grey front is the artwork only)}
+    dims_mm: {height: 165.0, length: 180.0, thickness: 11.0}
+    faces:
+      back:
+        file: textures/unknown_teal_boston_style/back.png
+        notes: 'no real back photo; base colour: teal cap (grey front is the artwork only)'
+        px_per_mm: 1
+        size_px: [165, 180]
+        source: plain(rgb 60,200,166)
+      bottom:
+        file: textures/unknown_teal_boston_style/bottom.png
+        notes: 'base colour: teal cap (grey front is the artwork only)'
+        px_per_mm: 1
+        size_px: [165, 11]
+        source: plain(rgb 60,200,166)
+      front:
+        family_check: 'SYNERGY MEGATRON front: grey field, white label, green MR corner. Family identification is by elimination (research confidence
+          low-medium); the grey/teal leaning carton on the hospital shelf photo matches this front'
+        file: textures/unknown_teal_boston_style/front.png
+        fit:
+          aspect_change_pct: -4.2
+          crop_quad_px:
+          - [245.0, 67.0]
+          - [1034.0, 67.0]
+          - [1034.0, 892.0]
+          - [245.0, 892.0]
+          edge_conf: [3.89, 4.03, 3.18, 3.85]
+          pad_pct: 0.0
+          pad_side: none
+          picked_quad_px:
+          - [245.0, 67.0]
+          - [1034.0, 67.0]
+          - [1034.0, 893.0]
+          - [245.0, 893.0]
+          source_aspect: 0.956
+          source_px: [789, 825]
+          target_aspect: 0.917
+          wb: label-stock (25% white px) gains(BGR)=[1.0499999523162842, 1.0, 0.9900000095367432]
+        notes: 'seller watermark (translucent MMI logo/text) kept: no cheap safe removal; flagged'
+        orientation_rule: upright
+        px_per_mm: 4.0
+        research_file: unknown_teal_boston_style/front_synergy_megatron_3.5x8_mmi_watermark.png
+        size_px: [660, 720]
+        source: research_image(https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/20976/6463/Synergy_Megatron_Monorail_39428-0835__98579.1755197173.png?c=3)
+        url: https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/20976/6463/Synergy_Megatron_Monorail_39428-0835__98579.1755197173.png?c=3
+        watermark: true
+      left:
+        file: textures/unknown_teal_boston_style/left.png
+        notes: 'base colour: teal cap (grey front is the artwork only)'
+        px_per_mm: 1
+        size_px: [180, 11]
+        source: plain(rgb 60,200,166)
+      right:
+        file: textures/unknown_teal_boston_style/right.png
+        notes: 'base colour: teal cap (grey front is the artwork only)'
+        px_per_mm: 1
+        size_px: [180, 11]
+        source: plain(rgb 60,200,166)
+      top: {file: textures/unknown_teal_boston_style/top.png, grade: B, notes: none, source: photo_spine}
+generator: tools/catalog_faces.py
+orientation_rule: spine edge (+Y, image top) is opposite the 'Open here' tab when visible (tab_opposite), else artwork upright (upright)

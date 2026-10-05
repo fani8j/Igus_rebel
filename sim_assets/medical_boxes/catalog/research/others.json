@@ -1,0 +1,520 @@
+{
+ "families": {
+  "apt_conqueror_nc_pro": {
+   "maker": "APT Medical Inc. (Shenzhen, China)",
+   "product": "CONQUEROR Lollipop NC PTCA Balloon Catheter (carton in shelf photo reads 'CONQUEROR NC Pro')",
+   "device_type": "coronary non-compliant (NC) PTCA balloon",
+   "generation_notes": "APT site lists the NC line only as 'CONQUEROR Lollipop NC' (spherical-tip and tapered-tip variants). The 'NC Pro' name was not found on aptmed.com; likely a market/distributor name for the same line. Sibling lines: CONQUEROR SC, Epoch (high pressure).",
+   "sizes": {
+    "diameters_mm": [
+     2.0,
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.25,
+     3.5,
+     3.75,
+     4.0,
+     4.5,
+     5.0
+    ],
+    "lengths_mm": [
+     6,
+     8,
+     12,
+     15,
+     20,
+     30
+    ],
+    "matrix_notes": "All diameters 2.00-4.00 come in all six lengths; 4.50 and 5.00 mm only in 6-20 mm (no 30 mm). Each size exists with spherical tip and tapered tip.",
+    "shaft_lengths_cm": [],
+    "other": "Shaft length, F size and guidewire not on the web page (0.014 in. presumed, not confirmed). Tapered tip entry profile 0.016 in. Owner's carton measured: 4.00 x 8.",
+    "sources": [
+     "https://www.aptmed.com/cardiology-therapeutic/nc-ptca-balloon-catheter.html"
+    ]
+   },
+   "ref_scheme": "Web code = 41 + diameter(3 digits, e.g. 400) + length(2 digits, e.g. 08) + tip digit (1 spherical, 0 tapered). 4.00x8 spherical = 41400081, tapered = 41400080. The known REF 134400080 on the owner's carton is the same code with a '13' prefix (probably export/market prefix, inferred) = 4.00x8 tapered.",
+   "example_refs": [
+    "41400081 (4.00x8 spherical)",
+    "41400080 (4.00x8 tapered)",
+    "134400080 (owner carton, per user)",
+    "41200061 (2.00x6 spherical)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no published unit-carton dimensions/weight located; openFDA GUDID has no package dims)",
+    "sources": []
+   },
+   "images": [],
+   "colors": [
+    "#bfe0ee (pale blue, from inventory)",
+    "#f6ee9a (yellow distributor sticker, not brand)"
+   ],
+   "inventory_corrections": "Maker and type confirmed. Official product name is 'CONQUEROR Lollipop NC', not 'NC Pro'. No carton photos found online (APT pages show only device renders, which I did not keep).",
+   "confidence": "medium"
+  },
+  "apt_medical_tresfort_35": {
+   "maker": "APT Medical Inc.",
+   "product": "Tresfort 35 PTA Balloon Catheter",
+   "device_type": "peripheral PTA balloon, 5-fold semi-compliant, OTW, 0.035 in.",
+   "generation_notes": "Current line; siblings Tresfort 18 and Tresfort Armor (ultra-high pressure).",
+   "sizes": {
+    "diameters_mm": [
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     12
+    ],
+    "lengths_mm": [
+     20,
+     30,
+     40,
+     60,
+     80,
+     100,
+     120,
+     150,
+     180,
+     200
+    ],
+    "matrix_notes": "Diameters 3-7 mm in all lengths 20-200; diameters 8, 9, 10, 12 mm only in 20-80 mm. Same matrix for all three shaft lengths. (A search-engine snippet said 20-200 mm 'diameters'; the product page table shows 3-12 mm diameters x 20-200 mm lengths.)",
+    "shaft_lengths_cm": [
+     75,
+     100,
+     135
+    ],
+    "other": "0.040 in. tapered tip, matches 0.035 in. guidewire. F size not published on the page (shelf sizes read 5F for 5-7 mm x 80 / 75 cm).",
+    "sources": [
+     "https://www.aptmed.com/peripheral-therapeutic/Tresfort35.html"
+    ]
+   },
+   "ref_scheme": "109 + diameter(2 digits) + length(3 digits, or 2 digits for <100 mm: 020,030,040,060,080,100,...) + shaft suffix: none = 75 cm, 1 = 100 cm, 2 = 135 cm. E.g. 10905080 = 5x80, 75 cm; 10905081 = 100 cm; 10905082 = 135 cm.",
+   "example_refs": [
+    "10905080 (5x80, 75 cm)",
+    "10906080 (6x80, 75 cm)",
+    "10907080 (7x80, 75 cm)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no published unit-carton dimensions/weight located; openFDA GUDID has no package dims)",
+    "sources": []
+   },
+   "images": [],
+   "colors": [
+    "#FFFFFF",
+    "#F0902A (orange, inventory)",
+    "#1F3A8A (blue, inventory)"
+   ],
+   "inventory_corrections": "None; identity confirmed. Shelf sizes 5/6/7 x 80 / 75 cm are valid catalogue entries. No carton photos found.",
+   "confidence": "high"
+  },
+  "meril_nexgen_balloon": {
+   "maker": "Meril Life Sciences Pvt. Ltd. (Vapi, India)",
+   "product": "NEXGEN (NexGen) cobalt-chromium coronary stent system",
+   "device_type": "coronary bare-metal stent (BMS), NOT a balloon and NOT a DES",
+   "generation_notes": "NexGen is Meril's 65 um L605 CoCr BMS platform; the BioMime sirolimus DES is built on it. Shelf cartons say only NEXGEN, so these are the BMS.",
+   "sizes": {
+    "diameters_mm": [
+     2.0,
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.5,
+     4.0,
+     4.5
+    ],
+    "lengths_mm": [
+     8,
+     13,
+     16,
+     19,
+     24,
+     29,
+     32,
+     37,
+     40
+    ],
+    "matrix_notes": "2.00 mm: 13-40 only (no 8 mm). All other diameters in all nine lengths per the ordering table. Shelf also shows 2.25x40 and 2.25x24, consistent. (Brochure table has typos NXG35029 misplaced, MXG40032.)",
+    "shaft_lengths_cm": [
+     140,
+     142
+    ],
+    "other": "Rapid exchange; 5F guide (min ID 0.056 in.); max guidewire 0.014 in.; nominal 9 atm, RBP 14/16 atm; crossing profile 0.83-1.19 mm. Shelf sizes in inventory (e.g. 3.50x40) all valid.",
+    "sources": [
+     "https://endolifemed.com.br/wp-content/uploads/2020/02/nexgen.pdf",
+     "https://www.merillife.com/medical-devices/vascular-intervention/coronary/stents/bare-metal-stent/nexgen"
+    ]
+   },
+   "ref_scheme": "NXG + diameter(3 digits, 250=2.50) + length(2 digits); e.g. NXG40024 = 4.00 x 24.",
+   "example_refs": [
+    "NXG40024",
+    "NXG35032",
+    "NXG40013"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no published unit-carton dimensions/weight located; openFDA GUDID has no package dims)",
+    "sources": []
+   },
+   "images": [],
+   "colors": [
+    "#9b1b30 (dark red end/back, from shelf photo)",
+    "#ecedec (white)",
+    "#1f5fbf (blue Meril tag)"
+   ],
+   "inventory_corrections": "Inventory device_type 'coronary_des' is wrong: NEXGEN is a bare-metal stent. Family id 'meril_nexgen_balloon' is a misnomer (not a balloon). Inventory size 4.50x29 and 4.50x16 valid. No carton photos found (stock images on margpharma.com are device renders).",
+   "confidence": "high"
+  },
+  "medalliance_selution_slr_dcb": {
+   "maker": "M.A. Med Alliance SA (MedAlliance), a Cordis company",
+   "product": "SELUTION SLR 014 Sirolimus Drug-Eluting Balloon (coronary PTCA)",
+   "device_type": "coronary drug-coated (sirolimus) balloon, RX",
+   "generation_notes": "Current coronary generation (0.014 in.). Also a peripheral SELUTION SLR 018 line (not this carton).",
+   "sizes": {
+    "diameters_mm": [
+     1.5,
+     2.0,
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.25,
+     3.5,
+     3.75,
+     4.0,
+     4.5,
+     5.0
+    ],
+    "lengths_mm": [
+     10,
+     15,
+     20,
+     25,
+     30,
+     35,
+     40
+    ],
+    "matrix_notes": "Full matrix, every diameter x every length (84 SKUs). Availability varies by market (CE; FDA/IDE status for coronary indications not confirmed here).",
+    "shaft_lengths_cm": [
+     140
+    ],
+    "other": "Rapid exchange, 0.014 in. guidewire, tip entry 0.016 in., guide >=5F (1.5-3.75 mm) / >=6F (4.0-5.0 mm). NP 6 bar, RBP 12 bar. Drug dose 1.0 ug/mm2.",
+    "sources": [
+     "https://cordis.com/uploads/files/Selution-SLR-Brochure-100640237-05.24-FINAL.pdf",
+     "https://cordis.com/na/products/intervene/cardiology/drug-eluting-ptca-balloons/selution-slr-ptca-drug-eluting-balloon"
+    ]
+   },
+   "ref_scheme": "SC14-DDDLLL = SC14 + diameter(3 digits) + length(3 digits), e.g. SC14-350025 = 3.50 x 25 mm.",
+   "example_refs": [
+    "SC14-350025",
+    "SC14-300020",
+    "SC14-400020"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no published unit-carton dimensions/weight located; openFDA GUDID has no package dims)",
+    "sources": []
+   },
+   "images": [],
+   "colors": [
+    "#e4e4e2 (white, inventory)"
+   ],
+   "inventory_corrections": "Confirmed. All inventory sizes (2.50-4.00 x 20-40) fall within the catalogue; brand may now read 'Cordis' on newer cartons. No carton photos found (Cordis site shows only chart images). Brochure PDF saved.",
+   "confidence": "high"
+  },
+  "avantigard_d_logo": {
+   "maker": null,
+   "product": "AVANTIGARD (as read from spine photo)",
+   "device_type": "unconfirmed; sizes pattern (2.5-4.0 x 16/20/25/31) suggests a coronary stent",
+   "generation_notes": "",
+   "sizes": {
+    "diameters_mm": [],
+    "lengths_mm": [],
+    "matrix_notes": "not found",
+    "shaft_lengths_cm": [],
+    "other": "",
+    "sources": []
+   },
+   "ref_scheme": "not found",
+   "example_refs": [],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no published unit-carton dimensions/weight located; openFDA GUDID has no package dims)",
+    "sources": []
+   },
+   "images": [],
+   "colors": [
+    "#0d0d10",
+    "#f4f4f2",
+    "#2d8fd6"
+   ],
+   "inventory_corrections": "Maker NOT identified. Searches (web, openFDA UDI) for 'Avantigard' returned nothing. Not to be confused with Alvimedica 'Avantgarde' carbostent (CID, Italy) or Boston Sci AVANT GUARD ablation trial. The spelling may be misread from the spine; recommend a closer photo of the end panel text and the logo next to the 'D'.",
+   "confidence": "low"
+  },
+  "nse_alpha_scoring_balloon": {
+   "maker": "Goodman Co., Ltd. (Japan; 'NSE ALPHA' is their trademark). Distributed by Nipro (also B. Braun in some markets; Infraredx as 'Lacrosse NSE ALPHA' in the US)",
+   "product": "NSE ALPHA Coronary Scoring (dilatation) Balloon Catheter",
+   "device_type": "coronary scoring (3 nylon elements) NC balloon",
+   "generation_notes": "Current Alpha generation; predecessors Lacrosse NSE and Aperta NSE (peripheral/4 elements).",
+   "sizes": {
+    "diameters_mm": [
+     2.0,
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.25,
+     3.5,
+     4.0
+    ],
+    "lengths_mm": [
+     13
+    ],
+    "matrix_notes": "Single balloon length 13 mm. 2.00, 2.25 and 4.00 mm are made to order.",
+    "shaft_lengths_cm": [
+     142
+    ],
+    "other": "Distal shaft 2.7F (0.90 mm); 0.014 in. guidewire; tip entry 0.0167 in.; NP 6 atm, RBP 14 atm; element height 0.0155 in. Depth markers 93 and 103 cm.",
+    "sources": [
+     "https://niproasia.com.sg/wp-content/uploads/2022/12/NSE-ALPHA-Catalog_NSE-2001-E8.pdf",
+     "https://www.nipro-group.com/en/our-offer/products-services/nse-alpha-vascular-balloon"
+    ]
+   },
+   "ref_scheme": "NSA + diameter(3 digits) + 13; e.g. NSA27513 = 2.75 x 13.",
+   "example_refs": [
+    "NSA27513",
+    "NSA30013",
+    "NSA35013"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no published unit-carton dimensions/weight located; openFDA GUDID has no package dims)",
+    "sources": []
+   },
+   "images": [],
+   "colors": [
+    "#6a1a3c (maroon)",
+    "#c2307a (magenta SCORING tag)"
+   ],
+   "inventory_corrections": "Maker resolved: Goodman (NSE = Novel Scientific Engineering), sold by Nipro / B. Braun. Seen 2.75x13 is a valid size. No carton photos found.",
+   "confidence": "high"
+  },
+  "bard_conquest_pta": {
+   "maker": "C. R. Bard / Bard Peripheral Vascular (now BD)",
+   "product": "Conquest PTA Balloon Dilatation Catheter (Conquest 40 variants carry CQF prefix)",
+   "device_type": "peripheral PTA balloon, high-pressure non-compliant, 0.035 in. OTW",
+   "generation_notes": "Older CQ-prefixed refs are Conquest; newer 'Conquest 40' (CQF...) is current BD listing.",
+   "sizes": {
+    "diameters_mm": [
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     12
+    ],
+    "lengths_mm": [
+     20,
+     30,
+     40,
+     60,
+     80,
+     100
+    ],
+    "matrix_notes": "Per BD: 4-12 mm diameters, 2-10 cm lengths (BD snippet said 20-100 mm; 3,6,8 cm also listed). Complete per-size matrix not extracted; the BD product-family page lists ~50 SKUs.",
+    "shaft_lengths_cm": [
+     50,
+     75,
+     120
+    ],
+    "other": "Shaft F size by diameter: ~5.5-6F for 4-8 mm, 5.8F for 9 mm, 6.5F for 12 mm (mixed listings; CQF75124 12x40 shown as 8F in one BD page), 0.035 in. guidewire. Owner's carton: 6x20, 75 cm, 6F, CQ7562 matches (distributors list 5.5F).",
+    "sources": [
+     "https://www.bd.com/en-us/products-and-solutions/products/product-families/conquest-pta-dilatation-catheters",
+     "https://medicalmaterials.com/balloons/cardiac/conquest-pta-balloon-dilatation-catheter-6mm-x-2cm-x-75cm/"
+    ]
+   },
+   "ref_scheme": "CQ + shaft cm + diameter + length cm; CQ7562 = 75 cm, 6 mm, 2 cm; CQ75124 = 75 cm, 12 mm, 4 cm; CQ12094 = 120 cm, 9 mm, 4 cm. CQF... for Conquest 40.",
+   "example_refs": [
+    "CQ7562",
+    "CQF7562",
+    "CQ5062",
+    "CQ12062",
+    "CQ7594",
+    "CQ75124"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found; the carton in the distributor photo appears near-square/portrait (hanger-style box), not measured",
+    "sources": []
+   },
+   "images": [
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/bard_conquest_pta/front_6x20_75cm_MMI_watermark.png",
+     "url": "https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/6952/17519/Conquest_PTA_Balloon_Dilatation_Catheter_CQ7562__54042.1786115437.png",
+     "shows": "front face of blue Conquest carton: CONQUEST 'Strength Redefined' logo upper right, two balloon illustrations, white spec label lower half with BARD logo (label fields redacted by seller)",
+     "size_variant": "6 mm x 20 mm, 75 cm (CQ7562)",
+     "watermark": true
+    }
+   ],
+   "colors": [
+    "#1a6bb5 (blue, inventory)",
+    "#e8e8e6 (white label)",
+    "blue-gradient artwork with white CONQUEST wordmark"
+   ],
+   "inventory_corrections": "Confirmed. Image watermark 'MMI' (Medical Materials Inc.) tiled across it.",
+   "confidence": "medium"
+  },
+  "trireme_tri_wedge": {
+   "maker": "BrosMed Medical Co., Ltd. (China). UK distributor APR Medtech. NOT Trireme.",
+   "product": "Tri-Wedge PTA Scoring Balloon Dilatation Catheter",
+   "device_type": "peripheral PTA scoring (3 triangular metallic wires) non-compliant balloon, OTW (0.018 in. and 0.035 in. versions); also AV fistula use",
+   "generation_notes": "CE mark news on brosmed site; FDA 510(k) K241478 cleared 2024-10-22. The inventory 'guidewire_or_accessory' is wrong.",
+   "sizes": {
+    "diameters_mm": [
+     3,
+     4,
+     5,
+     6,
+     7,
+     8
+    ],
+    "lengths_mm": [
+     20,
+     30,
+     40,
+     60
+    ],
+    "matrix_notes": "Full matrix diameters 3-8 x lengths 20/30/40/60 for each configuration below.",
+    "shaft_lengths_cm": [
+     50,
+     75,
+     90
+    ],
+    "other": "0.018 in. version: working length 50 or 90 cm. 0.035 in. version: 50 or 75 cm. Distal shaft OD 0.018: 1.32/1.65 mm, 0.035: 1.91/2.03 mm. RBP 16-20 atm. BrosMed site lists 50-150 cm working length overall; the 150 cm .018 versions on the shelf are not in the APR (UK) brochure, so they may be a non-UK variant (not verified). Shelf sizes like 3.0x60/150 cm and 8.0x60/90 not contradicted for 90 cm.",
+    "sources": [
+     "https://aprmedtech.com/wp-content/uploads/2023/09/Tri-Wedge-Brochure.pdf",
+     "https://fda.innolitics.com/submissions/CV/subpart-b%E2%80%94cardiovascular-diagnostic-devices/PNO/K241478",
+     "https://www.medicalexpo.com/prod/brosmed-medical/product-83905-971570.html"
+    ]
+   },
+   "ref_scheme": "APR Medtech UK codes 21-{18|35}{S|L}{dia digit}{len digit}. 18 = .018, 35 = .035; S = 50 cm; L = 90 cm for .018 or 75 cm for .035; dia digit = mm (3..8); len digit 2/3/4/6 = 20/30/40/60 mm. BrosMed's own REFs not found.",
+   "example_refs": [
+    "21-18S32 (.018, 50 cm, 3.0x20)",
+    "21-18L64 (.018, 90 cm, 6.0x40)",
+    "21-35S44 (.035, 50 cm, 4.0x40)",
+    "21-35L66 (.035, 75 cm, 6.0x60)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no published unit-carton dimensions/weight located; openFDA GUDID has no package dims)",
+    "sources": []
+   },
+   "images": [],
+   "colors": [
+    "#2A1C33 (black/purple, from shelf photo)",
+    "#FFFFFF",
+    "APR UK brochure uses teal #00A99D, but the shelf box is BrosMed black/purple"
+   ],
+   "inventory_corrections": "Maker is BrosMed (APR Medtech distributes in UK), not Trireme. Device is a scoring PTA balloon, not guidewire/accessory. Brochure PDF saved (device images only; no carton photo).",
+   "confidence": "high"
+  },
+  "bbraun_sequent_please_neo_dcb": {
+   "maker": "B. Braun Melsungen AG (Vascular Systems, Berlin)",
+   "product": "SeQuent Please NEO",
+   "device_type": "coronary paclitaxel/iopromide drug-coated balloon (RX)",
+   "generation_notes": "Second generation DCB (successor of SeQuent Please; separate SeQuent Neo NC balloon exists).",
+   "sizes": {
+    "diameters_mm": [
+     2.0,
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.5,
+     4.0
+    ],
+    "lengths_mm": [
+     10,
+     15,
+     20,
+     25,
+     30,
+     35,
+     40
+    ],
+    "matrix_notes": "Full 7x7 = 49 sizes per brochure (3.25 mm not offered).",
+    "shaft_lengths_cm": [
+     145
+    ],
+    "other": "Proximal shaft 1.9F, distal 2.5F, 5F guide, 0.014 in. wire, lesion entry 0.016 in., crossing profile 0.033-0.037 in., NP 6 atm, RBP 14 atm.",
+    "sources": [
+     "https://www.bbraun.com/content/dam/b-braun/global/website/products-and-therapies/interventional-vascular-diagnostics-&-therapy/6050333_0918-2-2_SeQuentPleaseNEO.pdf"
+    ]
+   },
+   "ref_scheme": "50232xx: 5023200 = 2.0x10; last digit = diameter (0=2.0,1=2.25,2=2.5,3=2.75,4=3.0,6=3.5,7=4.0), tens digit = length (0=10,1=15,2=20,3=25,4=30,5=35,6=40).",
+   "example_refs": [
+    "5023200 (2.0x10)",
+    "5023224 (3.0x20)",
+    "5023267 (4.0x40)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no published unit-carton dimensions/weight located; openFDA GUDID has no package dims)",
+    "sources": []
+   },
+   "images": [],
+   "colors": [
+    "#f0f0ee (white)"
+   ],
+   "inventory_corrections": "Identity comes only from the handwritten shelf label (no spine read), so the family is unverified on the shelf but the product and catalogue are confirmed. No carton photos found online. Brochure PDF saved in the download folder.",
+   "confidence": "medium"
+  },
+  "unknown_bottom_yellow_green": {
+   "maker": null,
+   "product": "not identified",
+   "device_type": "unknown",
+   "generation_notes": "",
+   "sizes": {
+    "diameters_mm": [],
+    "lengths_mm": [],
+    "matrix_notes": "",
+    "shaft_lengths_cm": [],
+    "other": "",
+    "sources": []
+   },
+   "ref_scheme": "",
+   "example_refs": [],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no published unit-carton dimensions/weight located; openFDA GUDID has no package dims)",
+    "sources": []
+   },
+   "images": [],
+   "colors": [
+    "#E8D83A",
+    "#2F9E4F"
+   ],
+   "inventory_corrections": "Skipped: crop shows only cut-off yellow '018' ends at the frame bottom (just under a Terumo NaviCross shelf); not enough visible to identify. Note: Boston Scientific V-18 Control Wire boxes elsewhere on that shelf also have yellow '018' bands, so this may be that same family or similar.",
+   "confidence": "low"
+  }
+ }
+}

@@ -1,0 +1,340 @@
+#usda 1.0
+(
+    defaultPrim = "biosensors_chroma"
+    kilogramsPerUnit = 1
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "biosensors_chroma" (
+    prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsMassAPI"]
+    assetInfo = {
+        asset identifier = @biosensors_chroma.usda@
+        string name = "biosensors_chroma"
+        string version = "1.0.0"
+    }
+    customData = {
+        string device_size = "4.0 x 29"
+        dictionary dims_mm = {
+            double height = 120
+            double length = 130
+            double thickness = 10
+        }
+        string generator_version = "1.0.0"
+        double mass_kg = 0.059
+        string mass_source = "estimate"
+        string product = "Biosensors Chroma cobalt-chromium coronary stent (bare metal)"
+    }
+    doc = "Biosensors Chroma cobalt-chromium coronary stent (bare metal) carton, box frame: origin at centre, Z up, X=height, Y=length, Z=thickness (+Z = front)."
+    kind = "component"
+)
+{
+    point3f physics:centerOfMass = (0, 0, 0)
+    float3 physics:diagonalInertia = (0.000083583334, 0.000071291666, 0.00015389167)
+    float physics:mass = 0.059
+    quatf physics:principalAxes = (1, 0, 0, 0)
+    int physxRigidBody:solverPositionIterationCount = 16
+    int physxRigidBody:solverVelocityIterationCount = 2
+
+    def Mesh "geom" (
+        prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "PhysxCollisionAPI", "MaterialBindingAPI"]
+    )
+    {
+        uniform bool doubleSided = 0
+        float3[] extent = [(-0.06, -0.065, -0.005), (0.06, 0.065, 0.005)]
+        int[] faceVertexCounts = [4, 4, 4, 4, 4, 4]
+        int[] faceVertexIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+        rel material:binding:physics = </biosensors_chroma/Physics/cardboard> (
+            bindMaterialAs = "weakerThanDescendants"
+        )
+        normal3f[] normals = [(0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, -1), (0, 0, -1), (0, 0, -1), (0, 0, -1), (0, 1, 0), (0, 1, 0), (0, 1, 0), (0, 1, 0), (0, -1, 0), (0, -1, 0), (0, -1, 0), (0, -1, 0), (-1, 0, 0), (-1, 0, 0), (-1, 0, 0), (-1, 0, 0), (1, 0, 0), (1, 0, 0), (1, 0, 0), (1, 0, 0)] (
+            interpolation = "faceVarying"
+        )
+        uniform token orientation = "rightHanded"
+        uniform token physics:approximation = "boundingCube"
+        float physxCollision:contactOffset = 0.002
+        float physxCollision:restOffset = 0
+        point3f[] points = [(-0.06, -0.065, 0.005), (0.06, -0.065, 0.005), (0.06, 0.065, 0.005), (-0.06, 0.065, 0.005), (0.06, -0.065, -0.005), (-0.06, -0.065, -0.005), (-0.06, 0.065, -0.005), (0.06, 0.065, -0.005), (0.06, 0.065, -0.005), (-0.06, 0.065, -0.005), (-0.06, 0.065, 0.005), (0.06, 0.065, 0.005), (-0.06, -0.065, -0.005), (0.06, -0.065, -0.005), (0.06, -0.065, 0.005), (-0.06, -0.065, 0.005), (-0.06, 0.065, -0.005), (-0.06, -0.065, -0.005), (-0.06, -0.065, 0.005), (-0.06, 0.065, 0.005), (0.06, -0.065, -0.005), (0.06, 0.065, -0.005), (0.06, 0.065, 0.005), (0.06, -0.065, 0.005)]
+        texCoord2f[] primvars:st = [(0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1)] (
+            interpolation = "faceVarying"
+        )
+        uniform token subdivisionScheme = "none"
+        uniform token subsetFamily:materialBind:familyType = "partition"
+
+        def GeomSubset "front" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [0]
+            rel material:binding = </biosensors_chroma/Looks/front>
+        }
+
+        def GeomSubset "back" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [1]
+            rel material:binding = </biosensors_chroma/Looks/back>
+        }
+
+        def GeomSubset "top" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [2]
+            rel material:binding = </biosensors_chroma/Looks/top>
+        }
+
+        def GeomSubset "bottom" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [3]
+            rel material:binding = </biosensors_chroma/Looks/bottom>
+        }
+
+        def GeomSubset "left" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [4]
+            rel material:binding = </biosensors_chroma/Looks/left>
+        }
+
+        def GeomSubset "right" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [5]
+            rel material:binding = </biosensors_chroma/Looks/right>
+        }
+    }
+
+    def Scope "Looks"
+    {
+        def Material "front"
+        {
+            token outputs:surface.connect = </biosensors_chroma/Looks/front/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </biosensors_chroma/Looks/front/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/biosensors_chroma/front.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </biosensors_chroma/Looks/front/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+
+        def Material "back"
+        {
+            token outputs:surface.connect = </biosensors_chroma/Looks/back/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </biosensors_chroma/Looks/back/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/biosensors_chroma/back.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </biosensors_chroma/Looks/back/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+
+        def Material "top"
+        {
+            token outputs:surface.connect = </biosensors_chroma/Looks/top/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </biosensors_chroma/Looks/top/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/biosensors_chroma/top.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </biosensors_chroma/Looks/top/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+
+        def Material "bottom"
+        {
+            token outputs:surface.connect = </biosensors_chroma/Looks/bottom/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </biosensors_chroma/Looks/bottom/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/biosensors_chroma/bottom.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </biosensors_chroma/Looks/bottom/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+
+        def Material "left"
+        {
+            token outputs:surface.connect = </biosensors_chroma/Looks/left/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </biosensors_chroma/Looks/left/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/biosensors_chroma/left.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </biosensors_chroma/Looks/left/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+
+        def Material "right"
+        {
+            token outputs:surface.connect = </biosensors_chroma/Looks/right/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </biosensors_chroma/Looks/right/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/biosensors_chroma/right.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </biosensors_chroma/Looks/right/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+    }
+
+    def Scope "Physics"
+    {
+        def Material "cardboard" (
+            prepend apiSchemas = ["PhysicsMaterialAPI", "PhysxMaterialAPI"]
+        )
+        {
+            float physics:dynamicFriction = 0.3
+            float physics:restitution = 0.05
+            float physics:staticFriction = 0.35
+            uniform token physxMaterial:frictionCombineMode = "average"
+            uniform token physxMaterial:restitutionCombineMode = "average"
+        }
+    }
+}
+

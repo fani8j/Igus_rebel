@@ -189,7 +189,27 @@ def build_box(name, spec, cfg, out_dir, textures_root):
     return path
 
 
-def build_scene(boxes, specs, out_dir, cfg):
+def grid_layout(boxes, specs, cols, gap):
+    """Shelf-packed grid for large catalogues: `cols` boxes per row, rows stacked along -Y.
+    Each box keeps its own X (height) footprint; the row pitch is the row's longest box (Y) so
+    tall cartons (guiding catheters, ~1 m) never touch their neighbours. Returns
+    ({name: (x, y)}, half_x, half_y) with the layout centred on the origin."""
+    rows = [boxes[i:i + cols] for i in range(0, len(boxes), cols)]
+    widths = [sum(specs[n]["dims_mm"]["height"] * MM for n in r) + gap * (len(r) - 1) for r in rows]
+    depths = [max(specs[n]["dims_mm"]["length"] * MM for n in r) for r in rows]
+    total_y = sum(depths) + gap * (len(rows) - 1)
+    pos, y = {}, total_y / 2
+    for r, w, dep in zip(rows, widths, depths):
+        x = -w / 2
+        for n in r:
+            h = specs[n]["dims_mm"]["height"] * MM
+            pos[n] = (x + h / 2, y - dep / 2)
+            x += h + gap
+        y -= dep + gap
+    return pos, max(widths) / 2, total_y / 2
+
+
+def build_scene(boxes, specs, out_dir, cfg, grid_cols=0, grid_gap=0.05):
     path = os.path.join(out_dir, "medical_boxes_scene.usda")
     stage = Usd.Stage.CreateNew(path)
     UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
@@ -197,6 +217,11 @@ def build_scene(boxes, specs, out_dir, cfg):
     UsdPhysics.SetStageKilogramsPerUnit(stage, 1.0)
     world = UsdGeom.Xform.Define(stage, "/World")
     stage.SetDefaultPrim(world.GetPrim())
+    gpos = None
+    if grid_cols:
+        gpos, hx, hy = grid_layout(boxes, specs, grid_cols, grid_gap)
+        world.GetPrim().SetCustomData({"scene_layout": "grid", "grid_cols": int(grid_cols),
+                                       "grid_gap_m": float(grid_gap)})
 
     ps = UsdPhysics.Scene.Define(stage, "/World/PhysicsScene")
     ps.CreateGravityDirectionAttr(Gf.Vec3f(0, 0, -1))
@@ -205,13 +230,16 @@ def build_scene(boxes, specs, out_dir, cfg):
 
     g = UsdGeom.Mesh.Define(stage, "/World/Ground")
     s = 2.0
-    g.CreatePointsAttr(Vt.Vec3fArray([Gf.Vec3f(-s, -s, 0), Gf.Vec3f(s, -s, 0),
-                                       Gf.Vec3f(s, s, 0), Gf.Vec3f(-s, s, 0)]))
+    sx = sy = s
+    if gpos:
+        sx, sy = max(s, hx + 0.5), max(s, hy + 0.5)
+    g.CreatePointsAttr(Vt.Vec3fArray([Gf.Vec3f(-sx, -sy, 0), Gf.Vec3f(sx, -sy, 0),
+                                       Gf.Vec3f(sx, sy, 0), Gf.Vec3f(-sx, sy, 0)]))
     g.CreateFaceVertexCountsAttr(Vt.IntArray([4]))
     g.CreateFaceVertexIndicesAttr(Vt.IntArray([0, 1, 2, 3]))
     g.CreateNormalsAttr(Vt.Vec3fArray([Gf.Vec3f(0, 0, 1)] * 4))
     g.SetNormalsInterpolation(UsdGeom.Tokens.faceVarying)
-    g.CreateExtentAttr(Vt.Vec3fArray([Gf.Vec3f(-s, -s, 0), Gf.Vec3f(s, s, 0)]))
+    g.CreateExtentAttr(Vt.Vec3fArray([Gf.Vec3f(-sx, -sy, 0), Gf.Vec3f(sx, sy, 0)]))
     g.CreateSubdivisionSchemeAttr(UsdGeom.Tokens.none)
     g.CreateDisplayColorAttr(Vt.Vec3fArray([Gf.Vec3f(0.55, 0.55, 0.58)]))
     UsdPhysics.CollisionAPI.Apply(g.GetPrim())
@@ -229,7 +257,10 @@ def build_scene(boxes, specs, out_dir, cfg):
         prim.GetReferences().AddReference(f"./{name}.usda")
         xf = UsdGeom.Xformable(prim)
         thick = specs[name]["dims_mm"]["thickness"] * MM
-        xf.AddTranslateOp().Set(Gf.Vec3d((i - (n - 1) / 2) * spacing, 0.0, thick / 2))
+        if gpos:
+            xf.AddTranslateOp().Set(Gf.Vec3d(gpos[name][0], gpos[name][1], thick / 2))
+        else:
+            xf.AddTranslateOp().Set(Gf.Vec3d((i - (n - 1) / 2) * spacing, 0.0, thick / 2))
     stage.GetRootLayer().Save()
     return path
 
@@ -240,6 +271,11 @@ def main():
     ap.add_argument("--out-dir", default=os.path.join(ROOT, "usd"))
     ap.add_argument("--textures-root", default=os.path.join(ROOT, "textures"),
                     help="directory holding <box>/<face>.png (default: repo textures/)")
+    ap.add_argument("--scene-grid-cols", type=int, default=0,
+                    help="lay the scene out as a shelf-packed grid with this many boxes per row "
+                         "(default 0 = the single 0.35 m-spaced row)")
+    ap.add_argument("--scene-grid-gap", type=float, default=0.05,
+                    help="gap in metres between boxes in the grid layout")
     a = ap.parse_args()
 
     with open(a.boxes_yaml) as f:
@@ -253,7 +289,8 @@ def main():
         for face in FACE_ORDER:
             if not os.path.isfile(os.path.join(tex_root, name, face + ".png")):
                 print(f"  warning: missing texture {name}/{face}.png under {tex_root}")
-    print("wrote", build_scene(list(cfg["boxes"]), cfg["boxes"], out_dir, cfg))
+    print("wrote", build_scene(list(cfg["boxes"]), cfg["boxes"], out_dir, cfg,
+                           a.scene_grid_cols, a.scene_grid_gap))
 
 
 if __name__ == "__main__":

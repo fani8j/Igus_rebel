@@ -1,0 +1,646 @@
+{
+ "families": {
+  "bsci_agent_monorail_dcb": {
+   "maker": "Boston Scientific (balloon manufactured by Hemoteq AG for BSC)",
+   "product": "AGENT Paclitaxel-Coated PTCA Balloon Catheter (AGENT DCB), Monorail",
+   "device_type": "coronary DCB (paclitaxel/ATBC, 2 ug/mm2; semi-compliant, built on Emerge balloon platform)",
+   "generation_notes": "Current and only generation. FDA-approved Apr 2024 for coronary in-stent restenosis (US); CE-marked earlier (OUS 2015 spec sheet IC-236507-AB). BSC EU page lists a 40 mm length added 2025 ('limited sizes'); the 2026 US catalog does not list it. 24-month shelf life.",
+   "sizes": {
+    "diameters_mm": [
+     2.0,
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.5,
+     4.0
+    ],
+    "lengths_mm": [
+     12,
+     15,
+     20,
+     30
+    ],
+    "matrix_notes": "Full 7 x 4 matrix = 28 sizes (every diameter in every length) per BSC OUS spec sheet and 2026 US catalog. Nominal 6 atm; rated burst 14 atm (2.0-3.0 mm) and 12 atm (3.5-4.0 mm). A 40 mm length exists in limited sizes per BSC EU product page (not itemised in any document I could read). All inventory sizes seen (2.00-4.00 x 15/20/30; 2.25x20; 2.5x15; 2.75x30) are valid; '2.00 x ?' is a valid diameter.",
+    "shaft_lengths_cm": [
+     144
+    ],
+    "other": "Rapid-exchange (Monorail), 5F guide compatible (guide ID >= 0.056 in / 1.42 mm), 0.014 in guidewire, shaft OD 1.67 mm, lesion entry profile 0.017 in (0.43 mm), crossing profile 0.91-1.14 mm, marks at 90 cm and 100 cm. Supplied with a CLIPIT hypotube clip; 1 per carton.",
+    "sources": [
+     "https://www.bostonscientific.com/content/dam/bostonscientific/Interventional%20Cardiology/portfolio-group/Catheters-Balloon/Agent/IC-236507-AB_Agent_SpecSheet_FINAL.pdf",
+     "https://www.accessdata.fda.gov/cdrh_docs/pdf23/P230035C.pdf",
+     "https://www.bostonscientific.com/content/dam/bostonscientific/Interventional%20Cardiology/product/ic-product-catalog.pdf",
+     "https://www.bostonscientific.com/en-EU/products/balloons--drug-coated/agent.html"
+    ]
+   },
+   "ref_scheme": "US: H749 39608 <LL><DD> 0 where LL = balloon length (12/15/20/30) and DD = diameter code (20,22,25,27,30,35,40); OUS/CE: H749 39222 <DD> <LL> 0 (14-digit form H74939222<DD>01210 etc.).",
+   "example_refs": [
+    "H749 396081220 0 (US, 2.00 x 12)",
+    "H749 396083040 0 (US, 4.00 x 30)",
+    "H74939222302010 (OUS, 3.00 x 20)",
+    "H74939222401210 (OUS, 4.00 x 12)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "Not found in GUDID, BSC literature or distributor listings. The only figure is the operator's own measurement carried in inventory_a.json (15 x 230 x 250 mm, thickness x spine x face). Reseller listings give no usable weights.",
+    "sources": []
+   },
+   "images": [
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/bsci_agent_monorail_dcb/front_3.0x20_mmi_watermark.png",
+     "url": "https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/35034/18849/Agent_39608-2030__83090.1789060342.png?c=3",
+     "shows": "Front face of the carton (viewed straight on): 'AGENT' wordmark top-left, cyan-to-blue gradient with drug-particle spray and balloon tip, BSC logo top-right, white label strip at bottom. Face is near-square.",
+     "size_variant": "3.00 x 20 (US REF 39608-2030)",
+     "watermark": true
+    }
+   ],
+   "colors": [
+    "#1FA9D6 (front cyan-blue gradient)",
+    "#1E78C8 (BSC blue band)",
+    "#E8EAEC (white body/spine)",
+    "#2AA24A (green MR end)",
+    "#202020 (MONORAIL bar)"
+   ],
+   "inventory_corrections": "None needed: brand, type and sizes are right. Add: sizes are 2.00-4.00 x 12/15/20/30 (12 mm also exists; 40 mm limited/new). Inventory 'which_end_up' notes are consistent with the BSC convention (MR green end, BSC wordmark end).",
+   "confidence": "high"
+  },
+  "bsci_nc_emerge_monorail": {
+   "maker": "Boston Scientific",
+   "product": "NC EMERGE Monorail PTCA Dilatation Catheter",
+   "device_type": "coronary non-compliant (NC) balloon for post-dilatation of stents / high-pressure dilatation",
+   "generation_notes": "Current generation (Emerge platform, 2015-era design; IC-329213 DEC2015 ordering table). Replaced NC Quantum Apex. Same platform is used for the Wolverine cutting balloon and the Agent DCB. Companion semi-compliant Emerge Monorail also exists (pre-dilatation).",
+   "sizes": {
+    "diameters_mm": [
+     2.0,
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.25,
+     3.5,
+     3.75,
+     4.0,
+     4.5,
+     5.0,
+     5.5,
+     6.0
+    ],
+    "lengths_mm": [
+     6,
+     8,
+     12,
+     15,
+     20,
+     30
+    ],
+    "matrix_notes": "Monorail matrix (BSC product page): 2.00-4.00 mm (0.25 steps) in 6, 8, 12, 15, 20, 30 mm lengths; 4.50 and 5.00 mm in 6, 8, 12, 15, 20 mm (no 30); 5.50 and 6.00 mm in 8, 12, 15, 20 mm (no 6, no 30). 2026 US catalog lists the 12/15/20/30 mm Monorail families (30 mm only to 4.00 mm). Shelf carton 5.50 x 12 is a valid size (REF H7493926712550). OTW version exists with the same matrix (REF prefix H74939268).",
+    "shaft_lengths_cm": [
+     143
+    ],
+    "other": "Rapid exchange, 143 cm effective length (2026 US catalog). 0.014 in wire, platinum-iridium markers. Rated burst pressure not read from a primary source here.",
+    "sources": [
+     "https://www.bostonscientific.com/en-US/products/catheters--balloon/nc-emerge-balloon-catheter.html",
+     "https://www.bostonscientific.com/content/dam/bostonscientific/Interventional%20Cardiology/product/ic-product-catalog.pdf"
+    ]
+   },
+   "ref_scheme": "Monorail: H749 39267 <LL><DD> 0, with LL = balloon length (06,08,12,15,20,30) and DD = diameter x10 or code (20,22,25,27,30,32,35,37,40,45,50,55,60); e.g. 15 mm x 3.00 = H749 392671530 0 and website 14-digit form H7493926712550 = 12 mm x 5.50. OTW uses prefix 39268.",
+   "example_refs": [
+    "H7493926712550 (5.50 x 12 Monorail, the size on the shelf)",
+    "H749 392671530 0 (3.00 x 15)",
+    "H749 392672060 0 (6.00 x 20)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "Not found. Inventory estimate only (about 16 x 234 mm spine, photo-derived).",
+    "sources": []
+   },
+   "images": [
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/bsci_nc_emerge_monorail/front_4.5x15_mmi_watermark.jpg",
+     "url": "https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/15624/4782/NC_Emerge_39267-1545__05130.1751399496.jpg?c=3",
+     "shows": "Front face of the carton: white/blue BSC front with balloon image, 'NC Emerge MONORAIL PTCA Dilatation Catheter' label panel. Label fields are blank in this stock image. Near-square face with the green corner flap at bottom-right.",
+     "size_variant": "4.50 x 15 (REF 39267-1545)",
+     "watermark": true
+    }
+   ],
+   "colors": [
+    "#1B3FA0 (front blue)",
+    "#FFFFFF (white)",
+    "#2AA24A (green MR cap on spine)",
+    "#1A1A1A (black BSC wordmark band)"
+   ],
+   "inventory_corrections": "None: brand and type are right. Note the front face is blue/white (spine is green/white), so the spine alone does not reveal the face colour.",
+   "confidence": "high"
+  },
+  "bsci_wolverine_cutting_balloon": {
+   "maker": "Boston Scientific",
+   "product": "WOLVERINE Coronary Cutting Balloon, Monorail",
+   "device_type": "coronary scoring/cutting balloon (atherotomes; for balloon-resistant lesions)",
+   "generation_notes": "Current generation, built on the NC EMERGE platform (spec sheet IC-413305-AF 2024). Resellers still list the older FLEXTOME cutting balloon (Quantum Apex-based predecessor) with the same 6/10/15 mm blade lengths; the Wolverine is the successor.",
+   "sizes": {
+    "diameters_mm": [
+     2.0,
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.25,
+     3.5,
+     3.75,
+     4.0
+    ],
+    "lengths_mm": [
+     6,
+     10,
+     15
+    ],
+    "matrix_notes": "Full 9 x 3 matrix = 27 sizes. Rated burst 12 atm, nominal 6 atm. Guide: 2.00-3.25 mm need >= 0.056 in (5F); 3.50-4.00 mm need >= 0.066 in (6F). Crossing profile 0.037 in (0.93 mm), tip entry 0.017 in. All 12 inventory sizes seen are valid (6 mm length also exists but was not seen).",
+    "shaft_lengths_cm": [
+     143
+    ],
+    "other": "Monorail only in the US spec sheet (143 cm). Each size has its own GTIN 0871472988xxxx.",
+    "sources": [
+     "https://www.bostonscientific.com/content/dam/bostonscientific/Interventional%20Cardiology/pdp/wolverine/IC-413305-AF_WOLVERINE_Spec_Sheet_Print_v4.pdf"
+    ]
+   },
+   "ref_scheme": "H749 39401 <LL><DDD> 0 (LL = 06/10/15 mm, DDD = diameter x100), e.g. 3.00 x 10 = H749 3940110300 0.",
+   "example_refs": [
+    "H749 3940106400 0 (4.00 x 6)",
+    "H749 3940110325 0 (3.25 x 10, the carton in the inventory)",
+    "H749 3940115350 0 (3.50 x 15)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "Not found. Front-face photo suggests a roughly 4:5 (w:h) flat face; no mm figure published.",
+    "sources": []
+   },
+   "images": [
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/bsci_wolverine_cutting_balloon/front.png",
+     "url": "https://cdn10.bigcommerce.com/s-x81fqsb/products/9694/images/13757/Boston_Scientific_H74939401064000_WOLVERINE_Monorail__43202.1680216442.1280.1280.png?c=2",
+     "shows": "Straight-on front face, 4.00 x 6 carton: green field, BSC wordmark top-right, balloon image, 'Wolverine Coronary Cutting Balloon MONORAIL' label panel with size roundel. A MedicalEcart business card stands in front at bottom.",
+     "size_variant": "4.00 x 6",
+     "watermark": false
+    },
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/bsci_wolverine_cutting_balloon/front_mmi_watermark.png",
+     "url": "https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/14824/2768/Wolverine_39401-06300__43583.1750098029.png?c=3",
+     "shows": "Front face on blue background, label blank; MMI watermark across the image.",
+     "size_variant": "3.00 x 6",
+     "watermark": true
+    }
+   ],
+   "colors": [
+    "#1FA357 (front green)",
+    "#FFFFFF (white label)",
+    "#1A1A1A (text)"
+   ],
+   "inventory_corrections": "None: identity correct. Add 6 mm length and the 3.25/3.75 diameters to the matrix (some already seen).",
+   "confidence": "high"
+  },
+  "bsci_mach1_guiding_catheter": {
+   "maker": "Boston Scientific",
+   "product": "MACH 1 Guide Catheter",
+   "device_type": "coronary guiding catheter (braided, PTFE-lined)",
+   "generation_notes": "Current BSC guide catheter (2026 US catalog lists it with Runway guides). REF H749 34357661 0 read in the inventory = JL3.5, 7F (verified in the catalog). Inventory 'MP1 7F' carton = H749 3435738 0.",
+   "sizes": {
+    "diameters_mm": [],
+    "lengths_mm": [],
+    "matrix_notes": "French size / ID: 6F 0.070 in, 7F 0.081 in, 8F 0.091 in (guide catheters have no balloon diameter/length). Standard shaft length 100 cm; brachial BR1 80 cm; IM 85/90 cm; some 8F curves 90 cm. Curves by size (2026 US catalog; SH = side holes, ST = short tip): JUDKINS LEFT 6F: JL3, 3.5, 4, 4.5, 5, 6, 3.5SH, 4SH; 7F: JL3, 3.5, 4, 4.5, 5, 6 + SH versions of 3-5; 8F: same + JL4 90cm. JUDKINS RIGHT 6F: JR3-6, JR3.5SH, JR4SH; 7F: JR3-5 + SH; 8F: JR3-5 + SH + 90 cm. AMPLATZ LEFT AL.75/1/1.5/2/3 (6F, 7F, 8F, also ST and SH); AMPLATZ RIGHT AR1, AR2 (+SH) 6/7/8F; ALLRIGHT ART3, 3.5, 4 (+SH, ART4.5 6F); CLS3-4.5; FCL/FCR3.5-4; FL3-6 (+ST, SH); FR3-5; Hockey Stick; IM; KIESZ KL/KR; Left Back-up; LCB/RCB bypass; MP1, MP2 (6/7/8F); Q-curve 3.5-5; Shepherd's Crook RC3.5/4 SC; VODA Right VR1/VR2; VODA Left VL3-5; radial: KIMNY, KIMNY MINI, MANN IM, MUTA ML3-4.5, Radial, Radial ST, RBL3.5-4.5, RBR3-4. Complete per-curve table is in the catalog (pp. 22-29).",
+    "shaft_lengths_cm": [
+     100,
+     90,
+     85,
+     80
+    ],
+    "other": "Large lumen; 7F is the most common hospital size. Radial/brachial curves are 6F (some 7F).",
+    "sources": [
+     "https://www.bostonscientific.com/content/dam/bostonscientific/Interventional%20Cardiology/product/ic-product-catalog.pdf",
+     "https://www.bostonscientific.com/en-US/products/catheters--guide/mach1-guide-catheter.html",
+     "https://www.medicalecart.com/products/boston-scientific-h749343576860-mach-1-34357686-guide-catheter-7f-id-0-081-2-0-mm-judkins-right-curve-jr4-100-cm-shaft-length-box-of-01.html"
+    ]
+   },
+   "ref_scheme": "H749 3435 <F><CCC> 0 where the digit after 3435 is 6/7/8 for 6F/7F/8F, e.g. 34357661 = 7F JL3.5; 3435738 = 7F MP1; 34356661 = 6F JL3.5; 34358661 = 8F JL3.5. Brachial BR1: H749 3435640 0.",
+   "example_refs": [
+    "H749 34357661 0 (7F JL3.5, the shelf carton)",
+    "H749 3435738 0 (7F MP1)",
+    "H749 34357686 0 (7F JR4)",
+    "H749 34356661 0 (6F JL3.5)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "Not published. From a reseller photo (7F JR4 front view) the carton is a straight, long, narrow white box about 9:1 in length:width (photo-aspect estimate, not a measurement); at 100 cm shaft length the box must be at least about 1 m long. No weight found (reseller shipping weights are generic placeholders).",
+    "sources": []
+   },
+   "images": [
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/bsci_mach1_guiding_catheter/front_7F_JR4_full_length.png",
+     "url": "https://cdn10.bigcommerce.com/s-x81fqsb/products/9235/images/13056/Boston_Scientific_H749343576860_Mach_1_34357686_Guide_Catheter__83522.1669772265.1280.1280.png?c=2",
+     "shows": "Full-length front of the carton photographed upright: white box, navy BSC header with 'Mach1' and orange 7F roundel at top, black curve bar (JR4), GTIN/REF label, CE 2797 mark.",
+     "size_variant": "7F JR4",
+     "watermark": false
+    },
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/bsci_mach1_guiding_catheter/alt_view_7F_JR4_device_visible_through_window.png",
+     "url": "https://cdn10.bigcommerce.com/s-x81fqsb/products/9235/images/13057/Boston_Scientific_H749343576860_Mach_1_34357686_Guide_Catheter__80623.1669772266.1280.1280.png?c=2",
+     "shows": "Second view of the same JR4 carton, with the loop of catheter visible at the bottom (a window/open end, or the bagged coil).",
+     "size_variant": "7F JR4",
+     "watermark": false
+    }
+   ],
+   "colors": [
+    "#F2F2F0 (white)",
+    "#1E3A8A (navy BSC header)",
+    "#F1A04A (orange 7F badge; badge colour is French-size coded)",
+    "#111111 (curve bar)"
+   ],
+   "inventory_corrections": "None. Note the unprinted white back face (with EC REP text) belongs to the same family. The 'estimated_dims_mm' of 15-25 mm thickness and about 1000 mm spine is plausible for a 100 cm shaft; thickness not confirmed.",
+   "confidence": "medium"
+  },
+  "boston_scientific_mustang": {
+   "maker": "Boston Scientific",
+   "product": "MUSTANG 0.035 in Balloon Dilatation Catheter (over-the-wire)",
+   "device_type": "PTA balloon, non-compliant, 0.035 in OTW, up to 24 atm rated burst (NyBax balloon)",
+   "generation_notes": "Current generation (launched ~2011; brochure PI-225202-AB OCT2017). Indicated for iliac, femoral, popliteal, tibial, peroneal, subclavian, renal, AV dialysis fistulae and (to 120 mm) biliary strictures; not for coronary.",
+   "sizes": {
+    "diameters_mm": [
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     12
+    ],
+    "lengths_mm": [
+     20,
+     30,
+     40,
+     60,
+     80,
+     100,
+     120,
+     150,
+     180,
+     200
+    ],
+    "matrix_notes": "203 catalogue codes (matches BSC's '203 codes'). Diameters 3-8 mm: lengths 20,30,40,60,80,100,120,150,180,200 mm. 9, 10 and 12 mm: lengths 20,30,40,60,80 mm only. Shaft lengths 40, 75, 135 cm; every size is offered at 75 and 135 cm; 40 cm shaft exists for lengths <= 100 mm (5, 6 mm to 120 mm), and the >= 120 mm 3, 4, 7, 8 mm sizes are 75/135 only. Sheath: 3-7 mm = 5F; 8, 9, 10 mm = 6F; 12 mm = 7F. Rated burst: 3-5 mm 24 atm; 6 mm 22-24; 7-8 mm 18-20; 9 mm 18; 10 and 12 mm 14. Every inventory size read (e.g. 12.0x20/135 7F, 10.0x20/135 6F, 9.0x20/135 6F, 8.0x80/75, 6.0x60/75) matches a valid code.",
+    "shaft_lengths_cm": [
+     40,
+     75,
+     135
+    ],
+    "other": "Tip entry 0.040 in; fits 0.035 in guidewire; 7x200 through 5F and 10x80 through 6F per brochure. Full diameter x length x shaft table with UPN in the product-code brochure.",
+    "sources": [
+     "https://www.bostonscientific.com/content/dam/bostonscientific/pi/portfolio-group/catheter-balloon/Mustang/mustang-product-code-brochure.pdf",
+     "https://www.bostonscientific.com/en-US/products/catheters--balloon/Mustang_Balloon_Dilatation_Catheter.html",
+     "https://www.bostonscientific.com/content/dam/bostonscientific/pi/portfolio-group/catheter-balloon/Mustang/mustang-brochure.pdf"
+    ]
+   },
+   "ref_scheme": "UPN H749 39171 <DD><LL/10><S> 0 where DD = 2-digit diameter (03..12), LL/10 = 2-digit balloon length in cm-tens (02=20 mm ... 20=200 mm), S = shaft digit (4 = 40 cm, 7 = 75 cm, 1 = 135 cm). Old catalog number 39171-DDLLS.",
+   "example_refs": [
+    "H74939171080470 (8.0 x 40 x 75, 6F)",
+    "H74939171030410 (3.0 x 40 x 135, 5F)",
+    "H74939171120210 (12.0 x 20 x 135, 7F)",
+    "H74939171040470 (4.0 x 40 x 75)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "Not found. The photos show a flat, near-square front (about 0.8-0.85 w:h) and a thin spine; no mm figure published. Reseller weights are placeholders.",
+    "sources": []
+   },
+   "images": [
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/boston_scientific_mustang/front_3.0x40x135.jpg",
+     "url": "https://primismedical.com/cdn/shop/files/Shopify_-_2025-07-15T153556.204.jpg?v=1752615385&width=1000",
+     "shows": "Clean straight-on front: navy upper band with BSC logo, red lower field, balloon image, white label with size roundel and '035' lower right; barcode sticker top-right.",
+     "size_variant": "3.0 x 40 x 135 (5F)",
+     "watermark": false
+    },
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/boston_scientific_mustang/front_spine_angled_4.0x40x75.jpg",
+     "url": "https://www.keebomed.com/cdn/shop/products/IMG_3023_1000x1000.JPG?v=1571708546",
+     "shows": "Carton photographed at an angle: front plus the bottom edge/spine strip (red with '035' and size row).",
+     "size_variant": "4.0 x 40 x 75 (5F)",
+     "watermark": false
+    },
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/boston_scientific_mustang/front_8.0x40x75.png",
+     "url": "https://cdn10.bigcommerce.com/s-x81fqsb/products/6467/images/10910/Boston_Scientific_H74939171080470_Mustang__76144.1643934413.1280.1280.png?c=2",
+     "shows": "Straight-on front, 8.0 x 40 x 75 (6F); MedicalEcart card in foreground.",
+     "size_variant": "8.0 x 40 x 75 (6F)",
+     "watermark": false
+    }
+   ],
+   "colors": [
+    "#D9202A (red lower field)",
+    "#1B2A5C (navy upper band)",
+    "#FFFFFF (white label)",
+    "#1A1A1A (text)"
+   ],
+   "inventory_corrections": "None: brand, type and sizes check out (inventory colours red/white/black fine; add navy). Matrix statement: 9, 10, 12 mm are only up to 80 mm long.",
+   "confidence": "high"
+  },
+  "boston_scientific_synergy_xd": {
+   "maker": "Boston Scientific",
+   "product": "SYNERGY XD Everolimus-Eluting Platinum Chromium Coronary Stent System (Monorail)",
+   "device_type": "coronary DES (PtCr, abluminal bioabsorbable PLGA polymer, everolimus)",
+   "generation_notes": "Current generation (XD = 'Xtra Deliverability' update to the original SYNERGY; original SYNERGY spec sheet lists 2.25-4.0 mm x 8-38 mm with a different black/gray carton). SYNERGY MEGATRON is the separate large-vessel 3.5-5.0 mm line. 2026 US catalog.",
+   "sizes": {
+    "diameters_mm": [
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.5,
+     4.0,
+     4.5,
+     5.0
+    ],
+    "lengths_mm": [
+     8,
+     12,
+     16,
+     20,
+     24,
+     28,
+     32,
+     38,
+     48
+    ],
+    "matrix_notes": "2026 US catalog: 2.25 mm: 8,12,16,20,24,28,32,38; 2.50, 2.75, 3.00, 3.50, 4.00 mm: 8,12,16,20,24,28,32,38,48; 4.50 mm: 12,16,20,24,28,32; 5.00 mm: 12,16,20,24,28,32. Nominal 11 atm; rated burst 18 atm (2.25-2.75) or 16 atm (3.0-5.0). Original SYNERGY spec sheet (older) lists only 2.25-4.0 mm x 8-38 mm and an OTW version (H74939261xx). Inventory note about labels '4.0 .. 80' on lying boxes does not match any SYNERGY XD size: lengths top out at 48 mm, so the label text is likely misread (possibly 4.0 x 28 or x 38).",
+    "shaft_lengths_cm": [
+     144
+    ],
+    "other": "Rapid exchange, 144 cm delivery system, wire exit about 25 cm from tip, 0.014 in guidewire, guide ID >= 0.056 in (5F) for the original SYNERGY; tip profile 0.017 in; average stent profile 0.039 in (2.50 mm).",
+    "sources": [
+     "https://www.bostonscientific.com/content/dam/bostonscientific/Interventional%20Cardiology/product/ic-product-catalog.pdf",
+     "https://www.bostonscientific.com/content/dam/bostonscientific/Interventional%20Cardiology/portfolio-group/Stents/Synergy/resource-center/SYNERGY-Product-Spec-Sheet.pdf"
+    ]
+   },
+   "ref_scheme": "H749 39418 <LL><DD> 0 (e.g. 2.50 x 16 = H749 394181625 0, 3.00 x 38 = H749 394183830 0). Original SYNERGY Monorail: H749 39260 <LL><DDD>... (e.g. H7493926016250 = 2.5 x 16). SYNERGY MEGATRON: H749 39428 <LL><DD> 0.",
+   "example_refs": [
+    "H749 394181625 0 (XD 2.50 x 16)",
+    "H749 394182030 0 (XD 3.00 x 20)",
+    "H749 394184840 0 (XD 4.00 x 48)",
+    "H7493926016250 (original SYNERGY 2.5 x 16)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "Not found. Photos show an almost square front face (width about equal to height). Reseller listing shows 5 lb, which is a placeholder shipping weight, not a carton weight; not used.",
+    "sources": [
+     "https://www.medicalecart.com/products/boston-scientific-h7493926016250-synergy-monorail-2-5mm-x-16mm-everolimus-eluting-platinum-chromium-coronary-stent-system.html"
+    ]
+   },
+   "images": [
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/boston_scientific_synergy_xd/front_synergy_xd_3.0x20_mmi_watermark.jpg",
+     "url": "https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/23185/5084/Synergy_XD_39418-2030__63917.1751999453.jpg?c=3",
+     "shows": "Front face of the current XD carton: orange field with stent image, 'SYNERGY XD' wordmark, BSC logo top-right, 'bioabsorbable polymer' roundel bottom-left, white label strip (blank here), green MR corner at bottom-right.",
+     "size_variant": "3.00 x 20",
+     "watermark": true
+    },
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/boston_scientific_synergy_xd/front_original_synergy_2.5x16_older_gen.jpg",
+     "url": "https://cdn10.bigcommerce.com/s-x81fqsb/products/4075/images/5531/H7493926016250__67801.1563399087.1280.1280.jpg?c=2",
+     "shows": "Front of the OLDER original SYNERGY (non-XD) Monorail carton: black/gray front with stent graphic, orange 'bioabsorbable polymer' roundel, PtCr logo, size roundel 2.50 x 16, green MR corner. Not the XD artwork.",
+     "size_variant": "original SYNERGY 2.50 x 16",
+     "watermark": false
+    }
+   ],
+   "colors": [
+    "#F58220 (orange front/spine cap)",
+    "#FFFFFF (white)",
+    "#1E9E4A (green MR block)",
+    "#202020 (black size cells)"
+   ],
+   "inventory_corrections": "Name and type correct. The '4.0 .. 80' label reading is not a valid size (max length 48 mm). Add the 4.5 and 5.0 mm diameters and the 48 mm length.",
+   "confidence": "high"
+  },
+  "boston_scientific_v18_control_wire": {
+   "maker": "Boston Scientific",
+   "product": "V-18 ControlWire (and V-14 ControlWire) guidewires, ICE hydrophilic coating, straight shapeable tip",
+   "device_type": "peripheral guidewire (0.018 in V-18, 0.014 in V-14); not a coronary device",
+   "generation_notes": "Current BSC peripheral wires (EU page PI-572505-AA, US page PI-343640-AA SEP2015). Older boxes are branded 'Boston Scientific MEDI-TECH' with model codes V18/12/300 and catalog 46-860 (white box). Shelf box says 'V-18 Control Wire' with a yellow '018' tab and magenta '014' for V-14.",
+   "sizes": {
+    "diameters_mm": [
+     0.36,
+     0.46
+    ],
+    "lengths_mm": [],
+    "matrix_notes": "Wire diameter 0.014 in (0.36 mm) for V-14 and 0.018 in (0.46 mm) for V-18. V-14: 182 and 300 cm, short or long taper, straight (shapeable) or angled tip, 3 g / 6 g tip loads. V-18: 110, 150, 200 and 300 cm, short or long taper, straight (shapeable) tip, 6 g / 8 g tip loads. Shelf-photo sizes (V-14 x 300, V-18 x 300, V-18 x 200) are valid; the label 'short taper' vs 'long taper' is a separate variant (taper length 8 cm short, 12 cm long).",
+    "shaft_lengths_cm": [
+     110,
+     150,
+     182,
+     200,
+     300
+    ],
+    "other": "Wire: V-14 UPNs listed on the EU page: H74939216718210 (short, 182, straight), ...18220 (angled), ...30010/30020 (short, 300), long taper H74939216918210/18220/30010/30020. V-18 retail catalog numbers: 46-850 (150 cm short), 46-852 (200 cm short), 46-854 (300 cm short, M001468540), 46-858 (200 cm long, M001468580), 46-860 (300 cm long, M001468600). A full V-18 UPN table was not found in a primary document.",
+    "sources": [
+     "https://www.bostonscientific.com/en-US/products/guidewires/v18-v14-controlwire-guidewire.html",
+     "https://www.bostonscientific.com/en-EU/products/guidewires/v14-controlwire-guidewire.html",
+     "https://www.medicalecart.com/products/boston-scientific-m001468600-v-18-controlwire-46-860-guidewire-0-018-x-300cm-box-of-01.html"
+    ]
+   },
+   "ref_scheme": "V-18: legacy catalog 46-8xx / M0014 68xx0 (e.g. 46-854 = M001468540). V-14: UPN H749 39216 7/9 <length> <tip> 0 (e.g. H74939216730010). No current V-18 UPN table was found.",
+   "example_refs": [
+    "46-854 / M001468540 (V-18 short taper 300 cm)",
+    "46-860 / M001468600 (V-18 long taper 300 cm)",
+    "46-858 / M001468580 (V-18 long taper 200 cm)",
+    "H74939216730010 (V-14 short taper 300 cm straight)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "Not found. The front is a near-square flat box (wire is supplied coiled in a hoop); older white MEDI-TECH box is also square. No mm figure published; reseller 3 lb weight is a placeholder.",
+    "sources": []
+   },
+   "images": [
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/boston_scientific_v18_control_wire/front_V-18_300cm_long_taper.jpg",
+     "url": "https://cdn10.bigcommerce.com/s-x81fqsb/products/3765/images/7581/Boston_Scientific_M001468600_V-18_ControlWire_Guidewire__30258.1741816691.1280.1280.jpg?c=2",
+     "shows": "Front of the V-18 carton, 0.018 in x 300 cm long taper: navy-to-black field, BSC logo top-left, white label with size roundel, yellow corner tab with '018'. MedicalEcart card at bottom.",
+     "size_variant": "V-18 0.018 x 300 cm long taper (46-860)",
+     "watermark": false
+    },
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/boston_scientific_v18_control_wire/label_older_meditech_46-860_300cm.jpg",
+     "url": "https://cdn10.bigcommerce.com/s-x81fqsb/products/3544/images/4740/IMG_6003__92527.1538503988.1280.1280.JPG?c=2",
+     "shows": "OLDER-generation MEDI-TECH white carton for 46-860 (V18/12/300): white box with printed label.",
+     "size_variant": "older V-18 12 cm taper x 300 cm",
+     "watermark": false
+    }
+   ],
+   "colors": [
+    "#1A1A1A (black lower field and top cap)",
+    "#0F3FA8 (blue upper swoosh)",
+    "#FFD500 (yellow 018 tab)",
+    "#D9007E (magenta 014 tab)",
+    "#FFFFFF (label)"
+   ],
+   "inventory_corrections": "Device is a peripheral guidewire (ok: 'guidewire_or_accessory'). The 'short taper' guess in the product name is not read from the photo: both short- and long-taper variants exist with the same artwork. Sizes seen are valid.",
+   "confidence": "medium"
+  },
+  "bsci_permanent_sled_bag_carton": {
+   "maker": "Boston Scientific (Interventional Cardiology, IVUS)",
+   "product": "Permanent Sled Bag (sterile bag for the MDU5 PLUS motordrive / permanent pullback sled)",
+   "device_type": "IVUS accessory: sterile single-use bag/drape, NOT an implant or stent sled",
+   "generation_notes": "Identified from the 2026 US catalog 'Imaging Accessories' table: REF H749 39315010 0 'Permanent Sled Bag', GTIN 08714729896845; AccessGUDID: 'Sterile bag for MDU5 PLUS Motordrive', device count 1. Used with AVVIGO+ / Polaris IVUS imaging consoles and the Permanent Sled (REF H749 39316010 0). Not usable with the Automatic Pullback Sled. IFU 51575186-01A.",
+   "sizes": {
+    "diameters_mm": [],
+    "lengths_mm": [],
+    "matrix_notes": "Single size / single REF. No diameter or length.",
+    "shaft_lengths_cm": [],
+    "other": "1 unit per package (GUDID device count 1). Bag dimensions not published.",
+    "sources": [
+     "https://www.bostonscientific.com/content/dam/bostonscientific/Interventional%20Cardiology/product/ic-product-catalog.pdf",
+     "https://accessgudid.nlm.nih.gov/devices/08714729896845",
+     "https://www.bostonscientific.com/content/dam/elabeling/ic/-permanent_sled_bag/-permanent_sled_bag_ifu/51575186-01A_PERMANENTSLEDBAG_IFU_ML_s.pdf"
+    ]
+   },
+   "ref_scheme": "H749 39315010 0 (14-digit form H749393150100).",
+   "example_refs": [
+    "H749 39315010 0 (GTIN 08714729896845)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "Not found in GUDID or the catalog. DOTmed lists the item (8 units) with no dimensions. Inventory photo-based estimate only (about 17-18 x 219 mm).",
+    "sources": [
+     "https://www.dotmed.com/listing/disposables-general/boston-scientific/h749393150100/permanent-sled-bag/5079737"
+    ]
+   },
+   "images": [],
+   "colors": [
+    "#142A78 (navy)",
+    "#ECEEED (white)"
+   ],
+   "inventory_corrections": "Not a stent/sled-device carton: the product inside is the sterile bag for the IVUS motordrive (MDU5 PLUS / permanent sled). Device_type should be 'other' (IVUS accessory). No carton photo found online (searched reseller sites; the two listings found are text-only or blocked).",
+   "confidence": "high (identity), none (carton photo)"
+  },
+  "teleflex_guideliner": {
+   "maker": "Teleflex (formerly Vascular Solutions, Inc.; acquired 2017)",
+   "product": "GuideLiner V3 Catheter (guide extension catheter)",
+   "device_type": "coronary guide-extension (mother-and-child) catheter, rapid exchange; NOT a guidewire",
+   "generation_notes": "V3 (half-pipe technology) is current. Older GuideLiner V2 cartons carry a 'Vascular Solutions' label (see label image). Also exists: GuideLiner Coast (shorter, different design). REFs 5570 and 5571 as read on the shelf are V3 5.5F and 6F.",
+   "sizes": {
+    "diameters_mm": [],
+    "lengths_mm": [],
+    "matrix_notes": "V3 table (Teleflex brochure MC-003856): REF 5569 5F (needs guide ID >= 0.056 in; extension ID 0.046 in; tip OD 4.0F); REF 5570 5.5F (6F guide, ID >= 0.066 in; ID 0.051 in; tip 4.8F); REF 5571 6F (6F guide ID >= 0.070 in; ID 0.056 in; tip 5.1F); REF 5572 7F (7F guide ID >= 0.078 in; ID 0.062 in; tip 5.7F); REF 5573 8F (8F guide ID >= 0.088 in; ID 0.071 in; tip 6.5F).",
+    "shaft_lengths_cm": [
+     150
+    ],
+    "other": "Working length 150 cm, 25 cm rapid-exchange section, 17 cm half-pipe, 108 cm push rod; white positioning markers at 95 cm (single) and 105 cm (double). Packaged 1 per box.",
+    "sources": [
+     "https://www.teleflex.com/usa/en/product-areas/interventional/coronary-interventions/guide-extension-catheters/guideliner-v3-catheter/GuideLiner-Product-Brochure-MC-003856-Rev-0.1.pdf",
+     "https://www.medicalecart.com/products/5570-guideliner-v3-catheter-5-5-fr-150-cm-box-of-01.html"
+    ]
+   },
+   "ref_scheme": "4-digit REF = 5569 (5F), 5570 (5.5F), 5571 (6F), 5572 (7F), 5573 (8F); the French size is the main variable.",
+   "example_refs": [
+    "5570 (5.5F)",
+    "5571 (6F, the shelf carton REF)",
+    "5572 (7F)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "Not found. The front is a flat, almost square white box (one 5.5F photo shows it clearly) holding a 150 cm hooped device in a pouch; no mm figure published. Reseller listings carry placeholder weights (3 lb) that are not carton weights.",
+    "sources": []
+   },
+   "images": [
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/teleflex_guideliner/front_5.5F_V3.png",
+     "url": "https://cdn10.bigcommerce.com/s-x81fqsb/products/1074/images/12191/5570_GuideLiner_V3_Catheter__05355.1660216295.1280.1280.png?c=2",
+     "shows": "Front of the V3 5.5F carton: plain white square-ish box, GuideLiner wordmark with black '5.5F' tag, REF 5570, Teleflex logo, device diagram, symbols; MedicalEcart card in front.",
+     "size_variant": "V3 5.5F REF 5570",
+     "watermark": false
+    },
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/teleflex_guideliner/label_5.5F_V2_older_gen.jpg",
+     "url": "https://cdn10.bigcommerce.com/s-x81fqsb/products/1074/images/1306/5570_guideliner_catheter_v2_5.5fr__19757.1608335370.1280.1280.jpg?c=2",
+     "shows": "Label panel of an OLDER V2 5.5F box (Vascular Solutions branding, LOT 555072); cropped label, not the full face.",
+     "size_variant": "V2 5.5F REF 5570",
+     "watermark": false
+    }
+   ],
+   "colors": [
+    "#F4F4F2 (white)",
+    "#2A9A50 (6F tag)",
+    "#222222 (5.5F tag)"
+   ],
+   "inventory_corrections": "Brand: Teleflex (Vascular Solutions); device_type should be 'guide extension catheter' (not 'guidewire_or_accessory'). Other sizes on the family: 5F 5569, 7F 5572, 8F 5573; REF 5570 = 5.5F and 5571 = 6F as the inventory states.",
+   "confidence": "high"
+  },
+  "unknown_teal_boston_style": {
+   "maker": "Boston Scientific (probable)",
+   "product": "SYNERGY MEGATRON Everolimus-Eluting Platinum Chromium Coronary Stent System, Monorail (probable)",
+   "device_type": "coronary DES (large-vessel, 3.5-5.0 mm)",
+   "generation_notes": "Identification is by elimination plus carton-face match, not by readable text. Evidence: (1) the layout is identical to the neighbouring orange SYNERGY XD spine (cap, white body with vertical dark bar and black size cell, dark green MR block); (2) one carton leans out in the shot and shows a dark gray/teal upper front with a white lower label, matching the Megatron front artwork (gray field, teal stent ring, white label strip, bioabsorbable-polymer roundel) shown on reseller photos; (3) BSC colour-codes the SYNERGY family (orange = XD) and Megatron is the only other current SYNERGY product in the 2026 US catalog. Caveat: the faint '3.0/' cell read in the inventory does not fit Megatron (sizes start at 3.50), but the cell is too small to trust; and I found no photo of a Megatron spine to confirm the teal colour. Confidence in the family is moderate, in the exact variant low.",
+   "sizes": {
+    "diameters_mm": [
+     3.5,
+     4.0,
+     4.5,
+     5.0
+    ],
+    "lengths_mm": [
+     8,
+     12,
+     16,
+     20,
+     24,
+     28,
+     32
+    ],
+    "matrix_notes": "2026 US catalog: 3.50, 4.00, 4.50, 5.00 mm, each in 8, 12, 16, 20, 24, 28, 32 mm (28 sizes). Nominal 11 atm, rated burst 16 atm. Delivery system 144 cm.",
+    "shaft_lengths_cm": [
+     144
+    ],
+    "other": "Intended for large proximal vessels (3.5-5.0 mm; overexpansion to 6 mm class). Rapid exchange.",
+    "sources": [
+     "https://www.bostonscientific.com/content/dam/bostonscientific/Interventional%20Cardiology/product/ic-product-catalog.pdf",
+     "https://www.bostonscientific.com/en-US/products/stents--coronary/synergy-megatron.html"
+    ]
+   },
+   "ref_scheme": "H749 39428 <LL><DD> 0 (e.g. 3.50 x 8 = H749 394280835 0; 5.00 x 32 = H749 394283250 0).",
+   "example_refs": [
+    "H749 394280835 0 (3.50 x 8)",
+    "H749 394281645 0 (4.50 x 16)",
+    "H749 394283250 0 (5.00 x 32)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "Not found. Same artwork format and spine height as SYNERGY XD on the shelf, so use the XD estimate (about 135 mm spine, 12 mm thick) as a working value only; this is an inference from the photo, not a source.",
+    "sources": []
+   },
+   "images": [
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/unknown_teal_boston_style/front_synergy_megatron_3.5x8_mmi_watermark.png",
+     "url": "https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280x1280/products/20976/6463/Synergy_Megatron_Monorail_39428-0835__98579.1755197173.png?c=3",
+     "shows": "Front face of the SYNERGY MEGATRON carton: gray field, 'SYNERGY MEGATRON' wordmark, teal/red stent ring, bioabsorbable-polymer roundel, blank white label with MONORAIL bar, green MR corner. Spine not shown.",
+     "size_variant": "3.50 x 8 (REF 39428-0835)",
+     "watermark": true
+    }
+   ],
+   "colors": [
+    "#3CC8A6 (teal cap on shelf spine, from photo)",
+    "#FFFFFF (white spine body)",
+    "#1E9E4A (green MR block)",
+    "#4A4F52 (gray/dark front, from Megatron photo)"
+   ],
+   "inventory_corrections": "Not a different brand: probable BSC SYNERGY MEGATRON (stent, device_type coronary_des stays). Not 'Synergy XD with another coating'. Please verify with a close photo of the spine text (reads SYNERGY MEGATRON vertically) or a size cell of 3.5/4.0/4.5/5.0.",
+   "confidence": "low-medium"
+  }
+ }
+}

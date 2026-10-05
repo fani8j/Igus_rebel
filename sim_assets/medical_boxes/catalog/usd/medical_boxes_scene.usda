@@ -1,0 +1,397 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    kilogramsPerUnit = 1
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "World" (
+    customData = {
+        int grid_cols = 8
+        double grid_gap_m = 0.05
+        string scene_layout = "grid"
+    }
+)
+{
+    def PhysicsScene "PhysicsScene" (
+        prepend apiSchemas = ["PhysxSceneAPI"]
+    )
+    {
+        vector3f physics:gravityDirection = (0, 0, -1)
+        float physics:gravityMagnitude = 9.81
+        bool physxScene:enableStabilization = 0
+        uniform token physxScene:solverType = "TGS"
+        uint physxScene:timeStepsPerSecond = 240
+    }
+
+    def Mesh "Ground" (
+        prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "MaterialBindingAPI"]
+    )
+    {
+        float3[] extent = [(-2.3475, -2, 0), (2.3475, 2, 0)]
+        int[] faceVertexCounts = [4]
+        int[] faceVertexIndices = [0, 1, 2, 3]
+        rel material:binding:physics = </World/Physics/floor> (
+            bindMaterialAs = "weakerThanDescendants"
+        )
+        normal3f[] normals = [(0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, 1)] (
+            interpolation = "faceVarying"
+        )
+        uniform token physics:approximation = "none"
+        point3f[] points = [(-2.3475, -2, 0), (2.3475, -2, 0), (2.3475, 2, 0), (-2.3475, 2, 0)]
+        color3f[] primvars:displayColor = [(0.55, 0.55, 0.58)]
+        uniform token subdivisionScheme = "none"
+    }
+
+    def Scope "Physics"
+    {
+        def Material "floor" (
+            prepend apiSchemas = ["PhysicsMaterialAPI", "PhysxMaterialAPI"]
+        )
+        {
+            float physics:dynamicFriction = 0.4
+            float physics:restitution = 0.05
+            float physics:staticFriction = 0.5
+            uniform token physxMaterial:frictionCombineMode = "average"
+            uniform token physxMaterial:restitutionCombineMode = "average"
+        }
+    }
+
+    def Xform "abbott_xience_skypoint" (
+        prepend references = @./abbott_xience_skypoint.usda@
+    )
+    {
+        double3 xformOp:translate = (-0.7775000000000001, 0.7725000000000001, 0.006500000000000001)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "biotronik_orsiro_mission" (
+        prepend references = @./biotronik_orsiro_mission.usda@
+    )
+    {
+        double3 xformOp:translate = (-0.5700000000000001, 0.7725000000000001, 0.0075)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "boston_scientific_synergy_xd" (
+        prepend references = @./boston_scientific_synergy_xd.usda@
+    )
+    {
+        double3 xformOp:translate = (-0.37000000000000005, 0.7725000000000001, 0.006)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "elixir_desyne_x2" (
+        prepend references = @./elixir_desyne_x2.usda@
+    )
+    {
+        double3 xformOp:translate = (-0.14750000000000008, 0.7725000000000001, 0.006500000000000001)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "medtronic_resolute_onyx" (
+        prepend references = @./medtronic_resolute_onyx.usda@
+    )
+    {
+        double3 xformOp:translate = (0.08999999999999996, 0.7725000000000001, 0.00575)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "orbusneich_combo_plus" (
+        prepend references = @./orbusneich_combo_plus.usda@
+    )
+    {
+        double3 xformOp:translate = (0.31999999999999995, 0.7725000000000001, 0.00675)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "unknown_blue_des" (
+        prepend references = @./unknown_blue_des.usda@
+    )
+    {
+        double3 xformOp:translate = (0.5525, 0.7725000000000001, 0.0055)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "unknown_teal_boston_style" (
+        prepend references = @./unknown_teal_boston_style.usda@
+    )
+    {
+        double3 xformOp:translate = (0.77, 0.7725000000000001, 0.0055)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "biosensors_chroma" (
+        prepend references = @./biosensors_chroma.usda@
+    )
+    {
+        double3 xformOp:translate = (-0.8, 0.48250000000000004, 0.005)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "meril_nexgen_balloon" (
+        prepend references = @./meril_nexgen_balloon.usda@
+    )
+    {
+        double3 xformOp:translate = (-0.6300000000000001, 0.48250000000000004, 0.0055)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "biotronik_pk_papyrus" (
+        prepend references = @./biotronik_pk_papyrus.usda@
+    )
+    {
+        double3 xformOp:translate = (-0.4350000000000002, 0.48250000000000004, 0.006)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "ivascular_essential_pro_balloon" (
+        prepend references = @./ivascular_essential_pro_balloon.usda@
+    )
+    {
+        double3 xformOp:translate = (-0.19000000000000022, 0.48250000000000004, 0.00725)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "medalliance_selution_slr_dcb" (
+        prepend references = @./medalliance_selution_slr_dcb.usda@
+    )
+    {
+        double3 xformOp:translate = (0.0749999999999998, 0.48250000000000004, 0.00675)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "medtronic_prevail_dcb" (
+        prepend references = @./medtronic_prevail_dcb.usda@
+    )
+    {
+        double3 xformOp:translate = (0.32499999999999984, 0.48250000000000004, 0.007)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "biotronik_red_blue_unknown" (
+        prepend references = @./biotronik_red_blue_unknown.usda@
+    )
+    {
+        double3 xformOp:translate = (0.5274999999999999, 0.48250000000000004, 0.0045000000000000005)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "orbusneich_sapphire_3" (
+        prepend references = @./orbusneich_sapphire_3.usda@
+    )
+    {
+        double3 xformOp:translate = (0.7474999999999998, 0.48250000000000004, 0.006)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "terumo_ryurei_balloon" (
+        prepend references = @./terumo_ryurei_balloon.usda@
+    )
+    {
+        double3 xformOp:translate = (-0.825, 0.17750000000000005, 0.00725)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "bsci_nc_emerge_monorail" (
+        prepend references = @./bsci_nc_emerge_monorail.usda@
+    )
+    {
+        double3 xformOp:translate = (-0.5499999999999999, 0.17750000000000005, 0.008)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "medtronic_nc_euphora_edge" (
+        prepend references = @./medtronic_nc_euphora_edge.usda@
+    )
+    {
+        double3 xformOp:translate = (-0.27249999999999996, 0.17750000000000005, 0.00775)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "bsci_wolverine_cutting_balloon" (
+        prepend references = @./bsci_wolverine_cutting_balloon.usda@
+    )
+    {
+        double3 xformOp:translate = (-0.04249999999999993, 0.17750000000000005, 0.0055)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "nse_alpha_scoring_balloon" (
+        prepend references = @./nse_alpha_scoring_balloon.usda@
+    )
+    {
+        double3 xformOp:translate = (0.1625000000000001, 0.17750000000000005, 0.00675)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "orbusneich_scoreflex" (
+        prepend references = @./orbusneich_scoreflex.usda@
+    )
+    {
+        double3 xformOp:translate = (0.3600000000000001, 0.17750000000000005, 0.0045000000000000005)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "trireme_tri_wedge" (
+        prepend references = @./trireme_tri_wedge.usda@
+    )
+    {
+        double3 xformOp:translate = (0.5825000000000001, 0.17750000000000005, 0.0075)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "abbott_armada_35" (
+        prepend references = @./abbott_armada_35.usda@
+    )
+    {
+        double3 xformOp:translate = (0.8375000000000001, 0.17750000000000005, 0.007)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "apt_medical_tresfort_35" (
+        prepend references = @./apt_medical_tresfort_35.usda@
+    )
+    {
+        double3 xformOp:translate = (-1.2025, -0.13749999999999996, 0.006500000000000001)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "bard_conquest_pta" (
+        prepend references = @./bard_conquest_pta.usda@
+    )
+    {
+        double3 xformOp:translate = (-0.605, -0.13749999999999996, 0.015)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "biotronik_passeo_18" (
+        prepend references = @./biotronik_passeo_18.usda@
+    )
+    {
+        double3 xformOp:translate = (-0.037500000000000006, -0.13749999999999996, 0.006500000000000001)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "biotronik_passeo_35_xeo" (
+        prepend references = @./biotronik_passeo_35_xeo.usda@
+    )
+    {
+        double3 xformOp:translate = (0.205, -0.13749999999999996, 0.007)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "boston_scientific_mustang" (
+        prepend references = @./boston_scientific_mustang.usda@
+    )
+    {
+        double3 xformOp:translate = (0.47, -0.13749999999999996, 0.0055)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "ivascular_oceanus_14_pro" (
+        prepend references = @./ivascular_oceanus_14_pro.usda@
+    )
+    {
+        double3 xformOp:translate = (0.73, -0.13749999999999996, 0.0075)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "ivascular_oceanus_18" (
+        prepend references = @./ivascular_oceanus_18.usda@
+    )
+    {
+        double3 xformOp:translate = (0.97, -0.13749999999999996, 0.006500000000000001)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "ivascular_oceanus_35" (
+        prepend references = @./ivascular_oceanus_35.usda@
+    )
+    {
+        double3 xformOp:translate = (1.22, -0.13749999999999996, 0.0075)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "medtronic_amphirion_deep" (
+        prepend references = @./medtronic_amphirion_deep.usda@
+    )
+    {
+        double3 xformOp:translate = (-1.7525, -0.45999999999999996, 0.0075)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "medtronic_pacific_plus" (
+        prepend references = @./medtronic_pacific_plus.usda@
+    )
+    {
+        double3 xformOp:translate = (-1.52, -0.45999999999999996, 0.006500000000000001)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "bsci_mach1_guiding_catheter" (
+        prepend references = @./bsci_mach1_guiding_catheter.usda@
+    )
+    {
+        double3 xformOp:translate = (-0.8574999999999998, -0.45999999999999996, 0.015)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "terumo_heartrail_ii_guiding_catheter" (
+        prepend references = @./terumo_heartrail_ii_guiding_catheter.usda@
+    )
+    {
+        double3 xformOp:translate = (0.24250000000000027, -0.45999999999999996, 0.015)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "teleflex_guideliner" (
+        prepend references = @./teleflex_guideliner.usda@
+    )
+    {
+        double3 xformOp:translate = (0.9375000000000003, -0.45999999999999996, 0.0125)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "terumo_navicross" (
+        prepend references = @./terumo_navicross.usda@
+    )
+    {
+        double3 xformOp:translate = (1.2325000000000004, -0.45999999999999996, 0.014)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "boston_scientific_v18_control_wire" (
+        prepend references = @./boston_scientific_v18_control_wire.usda@
+    )
+    {
+        double3 xformOp:translate = (1.5250000000000004, -0.45999999999999996, 0.006500000000000001)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "avantigard_d_logo" (
+        prepend references = @./avantigard_d_logo.usda@
+    )
+    {
+        double3 xformOp:translate = (1.7700000000000002, -0.45999999999999996, 0.0055)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "bsci_permanent_sled_bag_carton" (
+        prepend references = @./bsci_permanent_sled_bag_carton.usda@
+    )
+    {
+        double3 xformOp:translate = (-0.135, -0.7675, 0.00875)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "medtronic_export_advance_edge" (
+        prepend references = @./medtronic_export_advance_edge.usda@
+    )
+    {
+        double3 xformOp:translate = (0.135, -0.7675, 0.01125)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+}
+

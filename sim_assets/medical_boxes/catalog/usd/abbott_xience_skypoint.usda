@@ -1,0 +1,340 @@
+#usda 1.0
+(
+    defaultPrim = "abbott_xience_skypoint"
+    kilogramsPerUnit = 1
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "abbott_xience_skypoint" (
+    prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsMassAPI"]
+    assetInfo = {
+        asset identifier = @abbott_xience_skypoint.usda@
+        string name = "abbott_xience_skypoint"
+        string version = "1.0.0"
+    }
+    customData = {
+        string device_size = "3.5 x 38"
+        dictionary dims_mm = {
+            double height = 150
+            double length = 165
+            double thickness = 13
+        }
+        string generator_version = "1.0.0"
+        double mass_kg = 0.079
+        string mass_source = "estimate"
+        string product = "Abbott XIENCE Skypoint everolimus-eluting coronary stent system"
+    }
+    doc = "Abbott XIENCE Skypoint everolimus-eluting coronary stent system carton, box frame: origin at centre, Z up, X=height, Y=length, Z=thickness (+Z = front)."
+    kind = "component"
+)
+{
+    point3f physics:centerOfMass = (0, 0, 0)
+    float3 physics:diagonalInertia = (0.00018034384, 0.00014923759, 0.00032735625)
+    float physics:mass = 0.079
+    quatf physics:principalAxes = (1, 0, 0, 0)
+    int physxRigidBody:solverPositionIterationCount = 16
+    int physxRigidBody:solverVelocityIterationCount = 2
+
+    def Mesh "geom" (
+        prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "PhysxCollisionAPI", "MaterialBindingAPI"]
+    )
+    {
+        uniform bool doubleSided = 0
+        float3[] extent = [(-0.075, -0.0825, -0.0065), (0.075, 0.0825, 0.0065)]
+        int[] faceVertexCounts = [4, 4, 4, 4, 4, 4]
+        int[] faceVertexIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+        rel material:binding:physics = </abbott_xience_skypoint/Physics/cardboard> (
+            bindMaterialAs = "weakerThanDescendants"
+        )
+        normal3f[] normals = [(0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, -1), (0, 0, -1), (0, 0, -1), (0, 0, -1), (0, 1, 0), (0, 1, 0), (0, 1, 0), (0, 1, 0), (0, -1, 0), (0, -1, 0), (0, -1, 0), (0, -1, 0), (-1, 0, 0), (-1, 0, 0), (-1, 0, 0), (-1, 0, 0), (1, 0, 0), (1, 0, 0), (1, 0, 0), (1, 0, 0)] (
+            interpolation = "faceVarying"
+        )
+        uniform token orientation = "rightHanded"
+        uniform token physics:approximation = "boundingCube"
+        float physxCollision:contactOffset = 0.002
+        float physxCollision:restOffset = 0
+        point3f[] points = [(-0.075, -0.0825, 0.0065), (0.075, -0.0825, 0.0065), (0.075, 0.0825, 0.0065), (-0.075, 0.0825, 0.0065), (0.075, -0.0825, -0.0065), (-0.075, -0.0825, -0.0065), (-0.075, 0.0825, -0.0065), (0.075, 0.0825, -0.0065), (0.075, 0.0825, -0.0065), (-0.075, 0.0825, -0.0065), (-0.075, 0.0825, 0.0065), (0.075, 0.0825, 0.0065), (-0.075, -0.0825, -0.0065), (0.075, -0.0825, -0.0065), (0.075, -0.0825, 0.0065), (-0.075, -0.0825, 0.0065), (-0.075, 0.0825, -0.0065), (-0.075, -0.0825, -0.0065), (-0.075, -0.0825, 0.0065), (-0.075, 0.0825, 0.0065), (0.075, -0.0825, -0.0065), (0.075, 0.0825, -0.0065), (0.075, 0.0825, 0.0065), (0.075, -0.0825, 0.0065)]
+        texCoord2f[] primvars:st = [(0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1)] (
+            interpolation = "faceVarying"
+        )
+        uniform token subdivisionScheme = "none"
+        uniform token subsetFamily:materialBind:familyType = "partition"
+
+        def GeomSubset "front" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [0]
+            rel material:binding = </abbott_xience_skypoint/Looks/front>
+        }
+
+        def GeomSubset "back" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [1]
+            rel material:binding = </abbott_xience_skypoint/Looks/back>
+        }
+
+        def GeomSubset "top" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [2]
+            rel material:binding = </abbott_xience_skypoint/Looks/top>
+        }
+
+        def GeomSubset "bottom" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [3]
+            rel material:binding = </abbott_xience_skypoint/Looks/bottom>
+        }
+
+        def GeomSubset "left" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [4]
+            rel material:binding = </abbott_xience_skypoint/Looks/left>
+        }
+
+        def GeomSubset "right" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [5]
+            rel material:binding = </abbott_xience_skypoint/Looks/right>
+        }
+    }
+
+    def Scope "Looks"
+    {
+        def Material "front"
+        {
+            token outputs:surface.connect = </abbott_xience_skypoint/Looks/front/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </abbott_xience_skypoint/Looks/front/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/abbott_xience_skypoint/front.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </abbott_xience_skypoint/Looks/front/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+
+        def Material "back"
+        {
+            token outputs:surface.connect = </abbott_xience_skypoint/Looks/back/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </abbott_xience_skypoint/Looks/back/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/abbott_xience_skypoint/back.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </abbott_xience_skypoint/Looks/back/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+
+        def Material "top"
+        {
+            token outputs:surface.connect = </abbott_xience_skypoint/Looks/top/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </abbott_xience_skypoint/Looks/top/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/abbott_xience_skypoint/top.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </abbott_xience_skypoint/Looks/top/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+
+        def Material "bottom"
+        {
+            token outputs:surface.connect = </abbott_xience_skypoint/Looks/bottom/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </abbott_xience_skypoint/Looks/bottom/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/abbott_xience_skypoint/bottom.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </abbott_xience_skypoint/Looks/bottom/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+
+        def Material "left"
+        {
+            token outputs:surface.connect = </abbott_xience_skypoint/Looks/left/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </abbott_xience_skypoint/Looks/left/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/abbott_xience_skypoint/left.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </abbott_xience_skypoint/Looks/left/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+
+        def Material "right"
+        {
+            token outputs:surface.connect = </abbott_xience_skypoint/Looks/right/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </abbott_xience_skypoint/Looks/right/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/abbott_xience_skypoint/right.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </abbott_xience_skypoint/Looks/right/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+    }
+
+    def Scope "Physics"
+    {
+        def Material "cardboard" (
+            prepend apiSchemas = ["PhysicsMaterialAPI", "PhysxMaterialAPI"]
+        )
+        {
+            float physics:dynamicFriction = 0.3
+            float physics:restitution = 0.05
+            float physics:staticFriction = 0.35
+            uniform token physxMaterial:frictionCombineMode = "average"
+            uniform token physxMaterial:restitutionCombineMode = "average"
+        }
+    }
+}
+

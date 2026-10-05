@@ -1,0 +1,1853 @@
+families:
+  abbott_armada_35:
+    brand: Abbott
+    product: Armada 35 (OTW .035)
+    device_type: pta_balloon
+    existing_asset: null
+    exemplar:
+      photo: hospital_3
+      corners_px:
+      - - 2562
+        - 1195
+      - - 2612
+        - 1195
+      - - 2612
+        - 1822
+      - - 2560
+        - 1822
+      spine_long_px: 627
+      spine_short_px: 51
+      which_end_up: 'top: Abbott ''a'' logo on blue; OTW yellow/orange cell; then ''Armada 35'' reading downward; bottom blue'
+    photo_estimate_mm:
+      spine_length: 190
+      thickness: 14
+      confidence: medium
+      basis: 627 px/3.3; 51 px/3.6
+    colors:
+    - '#4FA3DA'
+    - '#FFFFFF'
+    - '#C58FD6'
+    - '#F2C230'
+    sizes_seen:
+    - 14.0 x 40 / 80 and /135
+    - 12.0 x 40 / 80 and /135
+    - 10.0 x 40 / 80
+    - 9.0 x 40 / 80
+    - 8.0 x 40 / 80
+    - 8.0 x 80 / 80
+    - 7.0 x 40 / 80
+    - 7.0 x 60 / 80
+    - 7.0 x 80 / 80
+    - 6.0 x 40 / 80
+    - 6.0 x 60 / 80
+    - 6.0 x 80 / 80
+    - 6.0 x 40 / 135
+    - 6.0 x 80 / 135
+    - 5.0 x 40 / 80
+    - 5.0 x 80 / 80
+    - 5.0 x 40 / 135
+    - 5.0 x 80 / 135
+    - 5.0 x 120 / 135
+    - 4.0 x 40 / 80
+    - 4.0 x 60 / 80
+    - 4.0 x 120 / 135
+  abbott_xience_skypoint:
+    brand: Abbott
+    product: Xience Skypoint
+    device_type: coronary_des
+    existing_asset: null
+    exemplar:
+      photo: hospital_2
+      corners_px:
+      - - 1648
+        - 2965
+      - - 1692
+        - 2965
+      - - 1692
+        - 3400
+      - - 1648
+        - 3400
+      spine_long_px: 435
+      spine_short_px: 44
+      which_end_up: 'top: blue cap with Abbott ''a'' logo; green stripe; then ''Xience Skypoint'' reading downward; bottom
+        blue'
+    photo_estimate_mm:
+      spine_length: 150
+      thickness: 13
+      confidence: low-medium
+      basis: 435 px/3.0 (+top)
+    colors:
+    - '#2E86D1'
+    - '#FFFFFF'
+    - '#6BBF4E'
+    - '#F2C230'
+    sizes_seen:
+    - 3.5 x 38
+    - 3.0 x 38
+    - 3.0 x 38
+    - 3.0 x 33
+    - 3.0 x 28
+    - 3.0 x 28
+    - 2.75 x 48
+    - 2.75 x 48
+    - 2.75 x 38
+    - 2.75 x 28
+    - 2.5 x 48
+    - 2.5 x 48
+    - 2.5 x 38
+    - 2.5 x 33
+    - 2.5 x 23
+    - 2.5 x 23
+    - 2.5 x 18
+  apt_conqueror_nc_pro:
+    brand: APT Medical
+    product: CONQUEROR NC Pro
+    device_type: coronary_balloon_nc
+    existing_asset: conqueror_nc_pro
+    exemplar:
+      photo: own_shelf.jpg
+      corners_px:
+      - - 798
+        - 290
+      - - 834
+        - 290
+      - - 795
+        - 908
+      - - 757
+        - 908
+      spine_long_px: 619
+      spine_short_px: 37
+      which_end_up: 'image top: pale blue cap (yellow ''Lollipop'' sticker lower on the spine) | image bottom: pale blue with
+        APT Medical logo'
+    photo_estimate_mm:
+      thickness: 12
+      spine_length: 230
+      confidence: measured (given)
+    colors:
+    - '#bfe0ee (pale blue)'
+    - '#f6ee9a (yellow sticker)'
+    sizes_seen:
+    - 4.00 x 8
+    - 3.50 x 15
+  apt_medical_tresfort_35:
+    brand: APT Medical
+    product: Tresfort 35 (OTW .035)
+    device_type: pta_balloon
+    existing_asset: null
+    exemplar:
+      photo: hospital_3
+      corners_px:
+      - - 18
+        - 108
+      - - 70
+        - 122
+      - - 98
+        - 922
+      - - 55
+        - 922
+      spine_long_px: 808
+      spine_short_px: 48
+      which_end_up: 'top: APT Medical logo; orange/blue band with ''Tresfort 35''; bottom white'
+    photo_estimate_mm:
+      spine_length: 245
+      thickness: 13
+      confidence: low
+      basis: 808 px/3.3 (includes lean)
+    colors:
+    - '#FFFFFF'
+    - '#F0902A'
+    - '#1F3A8A'
+    sizes_seen:
+    - 5.0 x 80 / 75cm (5F)
+    - 6.0 x 80 / 75cm (5F)
+    - 7.0 x 80 / 75cm (5F)
+  avantigard_d_logo:
+    brand: AVANTIGARD (as read; logo is a blue 'D' on black)
+    product: AVANTIGARD
+    device_type: coronary_des
+    existing_asset: null
+    exemplar:
+      photo: hospital_1.jpg
+      corners_px:
+      - - 2173
+        - 3308
+      - - 2225
+        - 3308
+      - - 2204
+        - 4001
+      - - 2158
+        - 4001
+      spine_long_px: 693
+      spine_short_px: 49
+      which_end_up: 'image top: black cap with ''AVANTIGARD'' wordmark | image bottom: black band with ''AVANTIGARD'' wordmark'
+    photo_estimate_mm:
+      thickness: 10-12
+      spine_length: 140-170 (nominal 155)
+      confidence: low
+    colors:
+    - '#0d0d10 (black)'
+    - '#f4f4f2 (white)'
+    - '#2d8fd6 (blue D)'
+    sizes_seen:
+    - 4.00 x 31
+    - 4.00 x 25
+    - 4.00 x 20
+    - 4.00 x 16
+    - 3.50 x 31
+    - 3.50 x 25
+    - 3.50 x 20
+    - 3.50 x 16
+    - 3.00 x 25
+    - 3.00 x 20
+    - 3.00 x 16
+    - 2.75 x 25
+    - 2.75 x 20
+    - 2.75 x 16
+    - 2.50 x 25
+    - 2.50 x 20
+    - 2.50 x 16
+  bard_conquest_pta:
+    brand: Bard
+    product: CONQUEST PTA Balloon Dilatation Catheter
+    device_type: pta_balloon
+    existing_asset: null
+    exemplar:
+      photo: hospital_0.jpg
+      corners_px:
+      - - 2322
+        - 1450
+      - - 2471
+        - 1444
+      - - 2465
+        - 2744
+      - - 2276
+        - 2744
+      spine_long_px: 1297
+      spine_short_px: 169
+      which_end_up: 'image top: blue box with hanger tab | image bottom: blue ''QUEST strength redefined'' (CON-QUEST)'
+    photo_estimate_mm:
+      thickness: 20-30
+      spine_length: ~750-900 (75 cm catheter)
+      confidence: very low
+    colors:
+    - '#1a6bb5 (blue)'
+    - '#e8e8e6 (white label)'
+    sizes_seen:
+    - 6mm x 20mm
+  biosensors_chroma:
+    brand: Biosensors
+    product: CHROMA
+    device_type: coronary_des
+    existing_asset: null
+    exemplar:
+      photo: hospital_1.jpg
+      corners_px:
+      - - 1346
+        - 3416
+      - - 1387
+        - 3416
+      - - 1394
+        - 3929
+      - - 1354
+        - 3929
+      spine_long_px: 513
+      spine_short_px: 40
+      which_end_up: 'image top: light blue cap with ''CHROMA'' text | image bottom: blue band with Biosensors logo'
+    photo_estimate_mm:
+      thickness: 9-11
+      spine_length: 110-140 (nominal 120)
+      confidence: low
+    colors:
+    - '#bcd4ee (light blue)'
+    - '#f2f2f0 (white)'
+    - '#1b62c9 (blue bottom)'
+    sizes_seen:
+    - 4.0 x 29
+    - 4.0 x 19
+    - 4.0 x 14
+    - 3.5 x 36
+    - 3.5 x 29
+    - 3.5 x 24
+    - 3.5 x 19
+    - 3.5 x 14
+    - 3.0 x 36
+    - 3.0 x 33
+    - 3.0 x 29
+    - 3.0 x 24
+    - 3.0 x 19
+    - 3.0 x 14
+    - 2.75 x 33
+    - 2.75 x 29
+    - 2.75 x 24
+    - 2.75 x 19
+    - 2.5 x 36
+    - 2.5 x 33
+    - 2.5 x 29
+    - 2.5 x 24
+    - 2.5 x 19
+    - 2.5 x 14
+  biotronik_orsiro_mission:
+    brand: Biotronik
+    product: Orsiro Mission
+    device_type: coronary_des
+    existing_asset: null
+    exemplar:
+      photo: hospital_2
+      corners_px:
+      - - 2450
+        - 2330
+      - - 2500
+        - 2330
+      - - 2500
+        - 2820
+      - - 2450
+        - 2825
+      spine_long_px: 492
+      spine_short_px: 50
+      which_end_up: 'top: white cap; magenta band with ''Orsiro Mission'' reading downward; bottom: white with BIOTRONIK logo
+        and QR'
+    photo_estimate_mm:
+      spine_length: 165
+      thickness: 15
+      confidence: medium
+      basis: 492 px/3.0; 50 px/3.4 (thickness may include slight side view)
+    colors:
+    - '#C8104E'
+    - '#FFFFFF'
+    - '#1A1A1A'
+    sizes_seen:
+    - 4.0 x 40
+    - 4.0 x 35
+    - 4.0 x 30
+    - 4.0 x 26
+    - 4.0 x 22
+    - 4.0 x 18
+    - 3.5 x 40
+    - 3.5 x 30
+    - 3.5 x 26
+    - 3.5 x 22
+    - 3.5 x 18
+    - 3.5 x 15
+    - 3.0 x 40
+    - 3.0 x 35
+    - 3.0 x 30
+    - 3.0 x 26
+    - 3.0 x 22
+    - 3.0 x 18
+    - 3.0 x 15
+    - 2.75 x 40
+    - 2.75 x 35
+    - 2.75 x 30
+    - 2.75 x 26
+    - 2.75 x 22
+    - 2.75 x 18
+    - 2.75 x 15
+    - 2.5 x 40
+    - 2.5 x 35
+    - 2.5 x 30
+    - 2.5 x 26
+    - 2.5 x 22
+    - 2.5 x 18
+    - 2.5 x 15
+    - 2.25 x 40
+    - 2.25 x 35
+    - 2.25 x 30
+    - 2.25 x 26
+    - 2.25 x 22
+    - 2.25 x 18
+  biotronik_passeo_18:
+    brand: Biotronik
+    product: Passeo-18
+    device_type: pta_balloon
+    existing_asset: null
+    exemplar:
+      photo: hospital_3
+      corners_px:
+      - - 1034
+        - 1982
+      - - 1080
+        - 1982
+      - - 1082
+        - 2592
+      - - 1036
+        - 2592
+      spine_long_px: 610
+      spine_short_px: 46
+      which_end_up: 'top: white cap, red band ''Passeo-18''; bottom white with BIOTRONIK'
+    photo_estimate_mm:
+      spine_length: 185
+      thickness: 13
+      confidence: medium
+      basis: 610 px/3.3
+    colors:
+    - '#B1262E'
+    - '#FFFFFF'
+    sizes_seen:
+    - 6 x 80 / 130
+    - 5 x 80 / 130
+    - 3 x 150 / 130
+    - 3 x 120 / 130
+    - 2.5 x 200 / 130
+    - 2.5 x 150 / 130
+    - 2.5 x 120 / 130
+    - 2 x 200 / 150
+    - 2 x 150 / 150
+  biotronik_passeo_35_xeo:
+    brand: Biotronik
+    product: Passeo-35 Xeo
+    device_type: pta_balloon
+    existing_asset: null
+    exemplar:
+      photo: hospital_3
+      corners_px:
+      - - 1295
+        - 1158
+      - - 1345
+        - 1158
+      - - 1348
+        - 1822
+      - - 1296
+        - 1822
+      spine_long_px: 664
+      spine_short_px: 51
+      which_end_up: 'top: white cap, then maroon band ''Passeo-35 Xeo'' reading downward; bottom: white with BIOTRONIK logo'
+    photo_estimate_mm:
+      spine_length: 200
+      thickness: 14
+      confidence: medium
+      basis: 664 px/3.3; 51 px/3.6
+    colors:
+    - '#6B1F3A'
+    - '#FFFFFF'
+    - '#1A1A1A'
+    sizes_seen:
+    - 10 x 40 / 90
+    - 8 x 80 / 90
+    - 8 x 60 / 90
+    - 8 x 40 / 90
+    - 7 x 80 / 90
+    - 7 x 60 / 90
+    - 7 x 40 / 90
+    - 7 x 40 / 90
+    - 6 x 80 / 90
+    - 6 x 40 / 90
+    - 5 x 40 / 90
+    - 5 x 40 / 90
+    - 4 x 40 / 90
+  biotronik_pk_papyrus:
+    brand: Biotronik
+    product: PK Papyrus (covered coronary stent)
+    device_type: coronary_des
+    existing_asset: null
+    exemplar:
+      photo: hospital_2
+      corners_px:
+      - - 548
+        - 2365
+      - - 585
+        - 2375
+      - - 588
+        - 2870
+      - - 550
+        - 2875
+      spine_long_px: 503
+      spine_short_px: 38
+      which_end_up: 'top: white cap then green band reading ''PK Papyrus'''
+    photo_estimate_mm:
+      spine_length: 168
+      thickness: 12
+      confidence: low
+      basis: 503 px/3.0
+    colors:
+    - '#7A9A2B'
+    - '#FFFFFF'
+    - '#1A1A1A'
+    sizes_seen:
+    - 3.0 x 15
+    - 2.5 x 20
+  biotronik_red_blue_unknown:
+    brand: Biotronik
+    product: unidentified red/white/blue line (BIOTRONIK on label; product name not legible)
+    device_type: coronary_balloon_sc
+    existing_asset: null
+    exemplar:
+      photo: hospital_2
+      corners_px:
+      - - 872
+        - 3632
+      - - 902
+        - 3632
+      - - 902
+        - 3980
+      - - 872
+        - 3980
+      spine_long_px: 348
+      spine_short_px: 30
+      which_end_up: 'top: red cap; bottom: blue block'
+    photo_estimate_mm:
+      spine_length: 115
+      thickness: 9
+      confidence: low
+      basis: 348 px/3.0 (measured white+red part only; blue base adds ~2 mm?)
+    colors:
+    - '#C8202C'
+    - '#FFFFFF'
+    - '#1F5FD0'
+    sizes_seen:
+    - 3.5 x 14
+    - 3.5 x 19
+    - 3.5 x 33
+    - 3.5 x 38 (lying boxes)
+    - 3.0 x ..
+    - 2.75 x 23..33
+    - 2.5 x ..
+    - 2.25 ..
+  boston_scientific_mustang:
+    brand: Boston Scientific
+    product: MUSTANG OVER-THE-WIRE (.035)
+    device_type: pta_balloon
+    existing_asset: null
+    exemplar:
+      photo: hospital_3
+      corners_px:
+      - - 2960
+        - 123
+      - - 2998
+        - 121
+      - - 2977
+        - 887
+      - - 2935
+        - 887
+      spine_long_px: 765
+      spine_short_px: 40
+      which_end_up: 'top: red cap with ''Boston Scientific'' reading downward; bottom: red with ''035'''
+    photo_estimate_mm:
+      spine_length: 232
+      thickness: 11
+      confidence: low-medium
+      basis: 765 px/3.3
+    colors:
+    - '#D9202A'
+    - '#FFFFFF'
+    - '#1A1A1A'
+    sizes_seen:
+    - 12.0 x 20 / 135cm (7F)
+    - 10.0 x 20 / 135cm (6F)
+    - 9.0 x 20 / 135 (6F)
+    - 9.0 x 40 / 135
+    - 8.0 x 40 / 135
+    - 8.0 x 80 / 135
+    - 7.0 x 40 / 135
+    - 7.0 x 80 / 135
+    - 6.0 x 40 / 135
+    - 6.0 x 80 / 135
+    - 5.0 x 40 / 135
+    - 5.0 x 80 / 135
+    - 4.0 x 40 / 135
+    - 4.0 x 80 / 135
+    - 12.0 x 40 / 75 (7F)
+    - 10.0 x 20 / 75
+    - 9.0 x 20 / 75
+    - 9.0 x 40 / 75
+    - 8.0 x 20 / 75
+    - 8.0 x 40 / 75
+    - 8.0 x 80 / 75
+    - 7.0 x 20 / 75
+    - 7.0 x 40 / 75
+    - 7.0 x 60 / 75
+    - 6.0 x 40 / 75
+    - 6.0 x 60 / 75
+    - 6.0 x 20 / 75
+    - 5.0 x 20 / 75
+    - 5.0 x 40 / 75
+    - 5.0 x 60 / 75
+    - 5.0 x 80 / 75
+    - 4.0 x 20 / 75
+    - 4.0 x 40 / 75
+    - 4.0 x 60 / 75
+    - 3.0 x 20 / 75
+    - 3.0 x 40 / 75
+  boston_scientific_synergy_xd:
+    brand: Boston Scientific
+    product: SYNERGY XD
+    device_type: coronary_des
+    existing_asset: null
+    exemplar:
+      photo: hospital_2
+      corners_px:
+      - - 1416
+        - 3625
+      - - 1455
+        - 3625
+      - - 1462
+        - 4015
+      - - 1420
+        - 4015
+      spine_long_px: 390
+      spine_short_px: 40
+      which_end_up: 'top: orange cap with wave pattern; bottom: green block with MR marking'
+    photo_estimate_mm:
+      spine_length: 135
+      thickness: 12
+      confidence: low
+      basis: 390 px/3.0 measured from orange cap to green end ~400 px
+    colors:
+    - '#F58220'
+    - '#FFFFFF'
+    - '#1E9E4A'
+    sizes_seen:
+    - sizes in black cells, illegible; four SYNERGY XD boxes lie flat on top of the rows with labels '4.0 .. 80'
+  boston_scientific_v18_control_wire:
+    brand: Boston Scientific
+    product: V-14 / V-18 Control Wire (short taper, straight tip shapeable)
+    device_type: guidewire_or_accessory
+    existing_asset: null
+    exemplar:
+      photo: hospital_3
+      corners_px:
+      - - 1938
+        - 1908
+      - - 1981
+        - 1908
+      - - 2100
+        - 2672
+      - - 2050
+        - 2672
+      spine_long_px: 773
+      spine_short_px: 46
+      which_end_up: 'top: black cap with ''Boston Scientific''; white label reads ''V-18 Control Wire''; bottom: yellow (018)
+        or magenta (014) cap'
+    photo_estimate_mm:
+      spine_length: 235
+      thickness: 13
+      confidence: low
+      basis: 773 px/3.3, tilted
+    colors:
+    - '#1A1A1A'
+    - '#FFFFFF'
+    - '#FFD500'
+    - '#D9007E'
+    sizes_seen:
+    - V-14 0.014in x 300cm
+    - V-18 0.018in x 300cm
+    - V-18 0.018in x 200cm
+  bsci_agent_monorail_dcb:
+    brand: Boston Scientific
+    product: Agent MONORAIL
+    device_type: coronary_dcb
+    existing_asset: agent_monorail
+    exemplar:
+      photo: own_shelf.jpg
+      corners_px:
+      - - 446
+        - 306
+      - - 498
+        - 308
+      - - 522
+        - 933
+      - - 481
+        - 933
+      spine_long_px: 627
+      spine_short_px: 47
+      which_end_up: 'image top: green MR cap above cyan band | image bottom: blue Boston Scientific wordmark (text runs bottom-to-top
+        in this photo)'
+    photo_estimate_mm:
+      thickness: 15
+      spine_length: 230
+      confidence: measured (given)
+    colors:
+    - '#1e78c8 (blue Boston Scientific band)'
+    - '#e8eaec (white body)'
+    - '#2aa24a (green MR end)'
+    - '#202020 (MONORAIL bar)'
+    sizes_seen:
+    - 4.00 x 30
+    - 4.00 x 20
+    - 4.00 x 15
+    - 3.50 x 30
+    - 3.50 x 20
+    - 3.50 x 15
+    - 3.00 x 30
+    - 3.00 x 20
+    - 3.00 x 15
+    - 2.75 x 30
+    - 2.50 x 30
+    - 2.50 x 20
+    - 2.50 x 15
+    - 2.25 x 20
+    - 2.00 x ?
+  bsci_mach1_guiding_catheter:
+    brand: Boston Scientific
+    product: Mach1
+    device_type: guiding_catheter
+    existing_asset: null
+    exemplar:
+      photo: hospital_0.jpg
+      corners_px:
+      - - 1682
+        - 1427
+      - - 1979
+        - 1418
+      - - 1953
+        - 2791
+      - - 1652
+        - 2800
+      spine_long_px: 1373
+      spine_short_px: 299
+      which_end_up: 'image top: blue Boston Scientific / 7F label near top | image bottom: bottom of box hidden by bin rim'
+    photo_estimate_mm:
+      thickness: 15-25
+      spine_length: ~1000
+      confidence: very low
+    colors:
+    - '#f2f2f0 (white)'
+    - '#1e3a8a (BSC blue label)'
+    - '#f1a04a (7F badge)'
+    sizes_seen:
+    - JL3.5 7F
+    - MP1 7F (smaller box in right bin)
+  bsci_nc_emerge_monorail:
+    brand: Boston Scientific
+    product: NC Emerge MONORAIL
+    device_type: coronary_balloon_nc
+    existing_asset: null
+    exemplar:
+      photo: own_shelf.jpg
+      corners_px:
+      - - 70
+        - 322
+      - - 122
+        - 324
+      - - 207
+        - 956
+      - - 163
+        - 956
+      spine_long_px: 639
+      spine_short_px: 48
+      which_end_up: 'image top: green ''MR'' cap | image bottom: black ''Boston Scientific'' wordmark band'
+    photo_estimate_mm:
+      thickness: 16 (15-17)
+      spine_length: 234 (225-245)
+      confidence: medium (same row as 5 measured cartons)
+    colors:
+    - '#2aa24a (green)'
+    - '#e8eaec (white)'
+    - '#1a1a1a (black bottom)'
+    sizes_seen:
+    - 5.50 x 12
+  bsci_permanent_sled_bag_carton:
+    brand: Boston Scientific
+    product: Permanent Sled Bag (generic printed carton)
+    device_type: other
+    existing_asset: null
+    exemplar:
+      photo: own_shelf.jpg
+      corners_px:
+      - - 678
+        - 316
+      - - 734
+        - 318
+      - - 720
+        - 918
+      - - 670
+        - 918
+      spine_long_px: 601
+      spine_short_px: 53
+      which_end_up: 'image top: plain navy | image bottom: navy Boston Scientific wordmark'
+    photo_estimate_mm:
+      thickness: 17-18
+      spine_length: 219 (210-228)
+      confidence: medium
+    colors:
+    - '#142a78 (navy)'
+    - '#eceeed (white)'
+    sizes_seen: []
+  bsci_wolverine_cutting_balloon:
+    brand: Boston Scientific
+    product: Wolverine Coronary Cutting Balloon MONORAIL
+    device_type: scoring_cutting_balloon
+    existing_asset: null
+    exemplar:
+      photo: hospital_1.jpg
+      corners_px:
+      - - 309
+        - 2743
+      - - 356
+        - 2741
+      - - 390
+        - 3304
+      - - 342
+        - 3306
+      spine_long_px: 564
+      spine_short_px: 48
+      which_end_up: 'image top: green cap | image bottom: green ''MR'' band'
+    photo_estimate_mm:
+      thickness: 10-12
+      spine_length: 120-160 (nominal 140)
+      confidence: low
+    colors:
+    - '#22a24a (green)'
+    - '#ecedec (white)'
+    sizes_seen:
+    - 4.00 x 10
+    - 3.75 x 10
+    - 3.50 x 15
+    - 3.50 x 10
+    - 3.25 x 10
+    - 3.00 x 15
+    - 3.00 x 10
+    - 2.75 x 10
+    - 2.50 x 15
+    - 2.50 x 10
+    - 2.25 x 10
+    - 2.00 x 10
+  elixir_desyne_x2:
+    brand: Elixir Medical
+    product: DESyne X2 (RX)
+    device_type: coronary_des
+    existing_asset: null
+    exemplar:
+      photo: hospital_2
+      corners_px:
+      - - 2773
+        - 962
+      - - 2821
+        - 964
+      - - 2793
+        - 1586
+      - - 2752
+        - 1590
+      spine_long_px: 625
+      spine_short_px: 45
+      which_end_up: 'top: blue cap with ''Elixir'' (reads downward), green RX band, then ''DESyne X2''; bottom: blue with
+        teal chevrons'
+    photo_estimate_mm:
+      spine_length: 210
+      thickness: 13
+      confidence: low-medium
+      basis: 625 px/3.0; 45 px/3.4
+    colors:
+    - '#1E5DB5'
+    - '#8DC63F'
+    - '#FFFFFF'
+    - '#2AA9B8'
+    sizes_seen:
+    - 3.0 x 33
+    - 3.0 x 28
+    - 3.0 x 23
+    - 3.0 x 18
+    - 2.75 x 38
+    - 2.75 x 33
+    - 2.75 x 28
+    - 2.75 x 18
+    - 2.5 x 38
+    - 2.5 x 33
+    - 2.5 x 28
+    - 2.5 x 23
+    - 2.5 x 18
+  ivascular_angiolite_des:
+    brand: iVascular
+    product: angiolite
+    device_type: coronary_des
+    existing_asset: angiolite
+    exemplar:
+      photo: own_shelf.jpg
+      corners_px:
+      - - 387
+        - 285
+      - - 441
+        - 287
+      - - 479
+        - 939
+      - - 433
+        - 939
+      spine_long_px: 654
+      spine_short_px: 50
+      which_end_up: 'image top: magenta cap with ''iVascular'' wordmark | image bottom: magenta cap with CARDIO circular logo'
+    photo_estimate_mm:
+      thickness: 16
+      spine_length: 240
+      confidence: measured (given)
+    colors:
+    - '#d81b73 (magenta)'
+    - '#6fc9b5 (teal)'
+    sizes_seen:
+    - 4 x 19 (REF SCCDSRI4150400019, LOT 2512587, exp 2028-09-21)
+    - 2.5 x 29 (REF SCCDSRI4150250029, LOT 251631)
+    - 2.5 x 40 (partly hidden, far left)
+  ivascular_essential_pro_balloon:
+    brand: iVascular
+    product: essential pro
+    device_type: coronary_balloon_sc
+    existing_asset: null
+    exemplar:
+      photo: hospital_4.jpg
+      corners_px:
+      - - 2200
+        - 2349
+      - - 2314
+        - 2346
+      - - 2577
+        - 3772
+      - - 2429
+        - 3753
+      spine_long_px: 1436
+      spine_short_px: 132
+      which_end_up: 'image top: magenta cap with white circular CARDIO logo | image bottom: magenta ''iVascular'' wordmark'
+    photo_estimate_mm:
+      thickness: 14-15
+      spine_length: 215-225
+      confidence: low-medium
+    colors:
+    - '#d81b73 (magenta)'
+    - '#b8b0e0 (lavender)'
+    sizes_seen:
+    - 4 x 40 (REF BCDPRI4NI50400040)
+    - 4 x 30 (..400030)
+    - 4 x 25 (..400025)
+    - 3.5 x 40 (..350040)
+    - 3 x 40 (..300040)
+    - 3 x 30 (..300030)
+    - 3 x 25 (..300025)
+    - 2.75 x 30 (..275030)
+    - 2.75 x 25 (..275025)
+    - 2.5 x 40 (..250040)
+    - 2.5 x 30 (..250030)
+    - 2.5 x 25 (..250025)
+    - 2 x 40 (..200040)
+    - 2 x 30 (..200030)
+    - 2 x 25 (..200025)
+  ivascular_oceanus_14_pro:
+    brand: iVascular
+    product: Oceanus 14 pro
+    device_type: pta_balloon
+    existing_asset: null
+    exemplar:
+      photo: hospital_3
+      corners_px:
+      - - 1125
+        - 3410
+      - - 1190
+        - 3410
+      - - 1195
+        - 4032
+      - - 1125
+        - 4032
+      spine_long_px: 622
+      spine_short_px: 68
+      which_end_up: 'top: navy cap with logo; pink band ''oceanus 14 pro''; bottom navy ''iVascular'''
+    photo_estimate_mm:
+      spine_length: '>=190'
+      thickness: 15
+      confidence: low
+      basis: 622 px visible / 3.3
+    colors:
+    - '#F2B6C8'
+    - '#2B3A9A'
+    sizes_seen:
+    - 4 x 80 / 150
+    - 4 x 40 / 150
+    - 3.5 x 80 / 150
+    - 3.5 x 40 / 150
+    - 3 x 80 / 150
+    - 3 x 40 / 150
+    - 2 x 40 / 150
+  ivascular_oceanus_18:
+    brand: iVascular
+    product: Oceanus 18 (OTW)
+    device_type: pta_balloon
+    existing_asset: null
+    exemplar:
+      photo: hospital_3
+      corners_px:
+      - - 720
+        - 1965
+      - - 768
+        - 1965
+      - - 770
+        - 2600
+      - - 722
+        - 2600
+      spine_long_px: 635
+      spine_short_px: 48
+      which_end_up: 'top: dark blue cap with logo; pink band ''oceanus 18''; bottom navy ''iVascular'''
+    photo_estimate_mm:
+      spine_length: 192
+      thickness: 13
+      confidence: medium
+      basis: 635 px/3.3; 48 px/3.6
+    colors:
+    - '#EC9AB3'
+    - '#2B3A9A'
+    - '#FFFFFF'
+    sizes_seen:
+    - 6 x 120 / 140
+    - 6 x 60 / 140
+    - 6 x 40 / 140
+    - 5 x 120 / 140
+    - 5 x 80 / 140
+    - 5 x 60 / 140
+    - 5 x 40 / 140
+    - 4 x 120 / 150
+    - 4 x 80 / 150
+    - 3 x 120 / 150
+    - 3 x 80 / 150
+    - 2.5 x 120 / 150
+    - 2.5 x 80 / 150
+  ivascular_oceanus_35:
+    brand: iVascular
+    product: Oceanus 35 (OTW)
+    device_type: pta_balloon
+    existing_asset: null
+    exemplar:
+      photo: hospital_3
+      corners_px:
+      - - 757
+        - 1128
+      - - 810
+        - 1130
+      - - 818
+        - 1818
+      - - 762
+        - 1820
+      spine_long_px: 690
+      spine_short_px: 55
+      which_end_up: 'top: dark blue cap with circular logo; pink band ''oceanus 35''; bottom: dark blue with ''iVascular'''
+    photo_estimate_mm:
+      spine_length: 210
+      thickness: 15
+      confidence: medium
+      basis: 690 px/3.3; 55 px/3.6
+    colors:
+    - '#EC6C93'
+    - '#2B3A9A'
+    - '#FFFFFF'
+    sizes_seen:
+    - 8 x 40 / 80 (BPPC3508000040)
+    - 7 x 80 / 80 (BPPC3507000080)
+    - 6 x 200 / 140 (BPPC3506000200)
+    - 6 x 120 / 140 (BPPC35140600120)
+    - 5 x 150 / 140
+    - 5 x 120 / 140
+    - 6 x 40 / 80 (BPPC3508060040)
+    - 5 x 40 / 80 (BPPC3508050040)
+    - 5 x 40 / 80
+  medalliance_selution_slr_dcb:
+    brand: MedAlliance
+    product: SELUTION SLR 014 PTCA BALLOON CATHETER
+    device_type: coronary_dcb
+    existing_asset: null
+    exemplar:
+      photo: hospital_1.jpg
+      corners_px:
+      - - 2250
+        - 771
+      - - 2299
+        - 756
+      - - 2362
+        - 1456
+      - - 2307
+        - 1458
+      spine_long_px: 696
+      spine_short_px: 53
+      which_end_up: 'image top: white top flap, MedAlliance sunburst logo | image bottom: plain white'
+    photo_estimate_mm:
+      thickness: 13-14
+      spine_length: 205-220
+      confidence: low (relative to essential pro, itself estimated)
+    colors:
+    - '#e4e4e2 (white)'
+    - '#111 (size box)'
+    sizes_seen:
+    - 4.00 x 20
+    - 3.50 x 40
+    - 3.50 x 30
+    - 3.50 x 25
+    - 3.50 x 20
+    - 3.00 x 40
+    - 3.00 x 30
+    - 3.00 x 25
+    - 3.00 x 20
+    - 2.75 x 40
+    - 2.75 x 30
+    - 2.75 x 20
+    - 2.50 x 40
+    - 2.50 x 30
+    - 2.50 x 20
+  medtronic_amphirion_deep:
+    brand: Medtronic
+    product: Amphirion Deep (0.014 OTW PTA)
+    device_type: pta_balloon
+    existing_asset: null
+    exemplar:
+      photo: hospital_3
+      corners_px:
+      - - 2040
+        - 3435
+      - - 2095
+        - 3435
+      - - 2090
+        - 4032
+      - - 2035
+        - 4032
+      spine_long_px: 597
+      spine_short_px: 55
+      which_end_up: 'top: navy cap; white body ''Amphirion Deep''; bottom: ''Medtronic'' (partly cut by frame)'
+    photo_estimate_mm:
+      spine_length: '>=190 (bottom cut by frame)'
+      thickness: 15
+      confidence: low
+      basis: 597 px visible /3.3; true length likely 190-200
+    colors:
+    - '#1F3A5F'
+    - '#FFFFFF'
+    sizes_seen:
+    - 4.0 x 120 / 150
+    - 4.0 x 80 / 150
+    - 4.0 x 40 / 150
+    - 3.0 x 120 / 150
+    - 3.0 x 80
+    - 3.0 x 40
+    - 2.5 x 150
+    - 2.5 x 120
+    - 2.5 x 80
+    - 2.5 x 40
+    - 2.0 x 150
+    - 2.0 x 120
+    - 2.0 x 80
+    - 2.0 x 40
+  medtronic_export_advance_edge:
+    brand: Medtronic
+    product: Export Advance (6F)
+    device_type: other
+    existing_asset: null
+    exemplar:
+      photo: hospital_2
+      corners_px:
+      - - 2861
+        - 3437
+      - - 2921
+        - 3437
+      - - 2921
+        - 4010
+      - - 2861
+        - 4010
+      spine_long_px: 573
+      spine_short_px: 60
+      which_end_up: 'top: green cap with ''Medtronic'' (reads upward); bottom: lime green with ''Export Advance 6F'''
+    photo_estimate_mm:
+      spine_length: null
+      thickness: null
+      confidence: none
+      basis: partial
+    colors:
+    - '#2F8F4F'
+    - '#8CC63F'
+    - '#FFFFFF'
+    sizes_seen:
+    - 6F
+  medtronic_nc_euphora_edge:
+    brand: Medtronic
+    product: NC Euphora
+    device_type: coronary_balloon_nc
+    existing_asset: null
+    exemplar:
+      photo: hospital_2
+      corners_px:
+      - - 2921
+        - 2993
+      - - 2980
+        - 3000
+      - - 2985
+        - 3340
+      - - 2925
+        - 3340
+      spine_long_px: 347
+      spine_short_px: 58
+      which_end_up: teal cap at top, black label with 'NC Euphora' below
+    photo_estimate_mm:
+      spine_length: null
+      thickness: null
+      confidence: none
+      basis: partial
+    colors:
+    - '#4CC3A8'
+    - '#FFFFFF'
+    - '#1A1A1A'
+    sizes_seen: []
+  medtronic_pacific_plus:
+    brand: Medtronic
+    product: Pacific Plus (PTA, OTW, .018 / .014?)
+    device_type: pta_balloon
+    existing_asset: null
+    exemplar:
+      photo: hospital_3
+      corners_px:
+      - - 722
+        - 2755
+      - - 770
+        - 2755
+      - - 770
+        - 3332
+      - - 722
+        - 3332
+      spine_long_px: 577
+      spine_short_px: 48
+      which_end_up: 'top: yellow cap ''.018"'' with green ''PTA'' cell; bottom: green block ''Medtronic'''
+    photo_estimate_mm:
+      spine_length: 175
+      thickness: 13
+      confidence: medium
+      basis: 577 px/3.3; 48 px/3.6
+    colors:
+    - '#FFFFFF'
+    - '#6BBF3B'
+    - '#F2C230'
+    sizes_seen:
+    - 4.0 x 200 / 150cm (.018, 130cm?)
+    - 4.0 x 150
+    - 4.0 x 120
+    - 4.0 x 80
+    - 4.0 x 40 (all x 150)
+    - 3.0 x 120 / 130
+    - 3.0 x 80 / 130
+    - 3.0 x 40 / 130
+    - 2.5 x 120 / 130
+    - 2.5 x 80 / 130
+    - 2.5 x 40 / 130
+    - 2.0 x 150 / 130
+    - 2.0 x 120 / 130
+    - 2.0 x 80 / 130
+    - 2.0 x 40 / 130
+    - 7.0 x 40 / 90
+    - 7.0 x 60 / 90
+    - 7.0 x 80 / 90
+    - 6.0 x 40 / 90
+    - 6.0 x 80 / 90
+    - 6.0 x 100 / 90
+    - 6.0 x 120 / 90
+    - 5.0 x 40 / 90
+    - 5.0 x 80 / 90
+    - 5.0 x 120 / 90
+    - 5.0 x 200 / 90
+    - 5.0 x 250 / 90
+    - 4.0 x 40 / 90
+    - 4.0 x 80 / 90
+    - 4.0 x 100 / 90
+    - 4.0 x 120 / 90
+    - 4.0 x 150 / 90
+    - 3.0 x 40 / 90
+    - 3.0 x 120 / 90
+    - 2.5 x 40 / 90
+    - 2.5 x 80 / 90
+    - 2.5 x 150 / 90
+    - 2.0 x 40 / 90
+    - 2.0 x 80 / 90
+    - 2.0 x 160 / 90
+  medtronic_prevail_dcb:
+    brand: Medtronic
+    product: Prevail RX DCB
+    device_type: coronary_dcb
+    existing_asset: null
+    exemplar:
+      photo: hospital_4.jpg
+      corners_px:
+      - - 458
+        - 2546
+      - - 566
+        - 2538
+      - - 609
+        - 3754
+      - - 515
+        - 3754
+      spine_long_px: 1213
+      spine_short_px: 101
+      which_end_up: 'image top: dark grey top flap with barcode strip | image bottom: black ''Medtronic'' wordmark on dark
+        grey (Prevail text runs bottom-to-top)'
+    photo_estimate_mm:
+      thickness: 13-15
+      spine_length: 185-200 (nominal 190)
+      confidence: low-medium (transferred from Agent in hospital_4; different shelf)
+    colors:
+    - '#4a4d52 (dark grey)'
+    - '#d8d8d6 (light grey flap)'
+    - '#f2f2f0 (white label)'
+    - '#111 (size box)'
+    sizes_seen:
+    - 4.0 x 30
+    - 4.0 x 20
+    - 3.5 x 30
+    - 3.5 x 25
+    - 3.5 x 20
+    - 3.0 x 30
+    - 3.0 x 25
+    - 3.0 x 20
+    - 2.75 x 25
+    - 2.75 x 20
+    - 2.5 x 30
+    - 2.5 x 25
+    - 2.25 x 25
+    - 2.25 x 20
+    - 2.0 x 30
+    - 2.0 x 20
+  medtronic_resolute_onyx:
+    brand: Medtronic
+    product: Resolute Onyx
+    device_type: coronary_des
+    existing_asset: null
+    exemplar:
+      photo: hospital_2
+      corners_px:
+      - - 1012
+        - 1758
+      - - 1050
+        - 1756
+      - - 1050
+        - 2248
+      - - 1011
+        - 2250
+      spine_long_px: 492
+      spine_short_px: 39
+      which_end_up: 'top: yellow with barcode label; bottom: ''Medtronic'' printed reading upward on yellow'
+    photo_estimate_mm:
+      spine_length: 165
+      thickness: 11.5
+      confidence: medium
+      basis: 492 px/3.0; 39 px/3.4
+    colors:
+    - '#FFE600'
+    - '#1A1A1A'
+    - '#2ECC71'
+    sizes_seen:
+    - diameters printed 4.5/4.0/3.5/3.0/2.75/2.5/2.25/2.0 with lengths 12-38 mm; individual (dia x len) pairs not legible
+      at this resolution
+  meril_nexgen_balloon:
+    brand: Meril
+    product: NEXGEN
+    device_type: coronary_des
+    existing_asset: null
+    exemplar:
+      photo: hospital_1.jpg
+      corners_px:
+      - - 1283
+        - 2735
+      - - 1326
+        - 2736
+      - - 1331
+        - 3239
+      - - 1289
+        - 3240
+      spine_long_px: 504
+      spine_short_px: 43
+      which_end_up: 'image top: white ''NEXGEN'' wordmark area | image bottom: dark red end with blue ''Meril'' logo'
+    photo_estimate_mm:
+      thickness: 10-12
+      spine_length: 110-140 (nominal 120)
+      confidence: low
+    colors:
+    - '#9b1b30 (dark red)'
+    - '#ecedec (white)'
+    - '#1f5fbf (blue Meril tag)'
+    sizes_seen:
+    - 4.50 x 29
+    - 4.50 x 16
+    - 4.00 x 40
+    - 4.00 x 32
+    - 4.00 x 29
+    - 4.00 x 24
+    - 4.00 x 19
+    - 4.00 x 16
+    - 4.00 x 13
+    - 3.50 x 40
+    - 3.50 x 32
+    - 3.50 x 29
+    - 3.50 x 24
+    - 3.50 x 19
+    - 3.50 x 16
+    - 3.50 x 13
+    - 3.00 x 40
+    - 3.00 x 32
+    - 3.00 x 29
+    - 3.00 x 24
+    - 3.00 x 19
+    - 3.00 x 16
+    - 3.00 x 13
+    - 2.75 x 40
+    - 2.75 x 32
+    - 2.75 x 29
+    - 2.75 x 24
+    - 2.75 x 19
+    - 2.75 x 16
+    - 2.75 x 13
+    - 2.50 x 40
+    - 2.50 x 32
+    - 2.50 x 29
+    - 2.50 x 24
+    - 2.50 x 19
+    - 2.50 x 16
+    - 2.50 x 13
+    - 2.25 x 40
+    - 2.25 x 24
+  nse_alpha_scoring_balloon:
+    brand: NSE (full maker not read)
+    product: NSE ALPHA SCORING
+    device_type: scoring_cutting_balloon
+    existing_asset: null
+    exemplar:
+      photo: hospital_1.jpg
+      corners_px:
+      - - 413
+        - 3475
+      - - 486
+        - 3423
+      - - 493
+        - 4004
+      - - 429
+        - 4007
+      spine_long_px: 557
+      spine_short_px: 77
+      which_end_up: 'image top: maroon cap with ''NSE ALPHA'' text | image bottom: maroon with NSE logo'
+    photo_estimate_mm:
+      thickness: 12-15
+      spine_length: unknown
+      confidence: very low
+    colors:
+    - '#6a1a3c (maroon)'
+    - '#c2307a (magenta SCORING tag)'
+    - '#f2f2f0 (white)'
+    sizes_seen:
+    - 2.75 x 13
+  orbusneich_combo_plus:
+    brand: OrbusNeich (inferred; brand not legible)
+    product: COMBO Plus (printed 'COMBO +' on spine top)
+    device_type: coronary_des
+    existing_asset: null
+    exemplar:
+      photo: hospital_2
+      corners_px:
+      - - 902
+        - 1062
+      - - 948
+        - 1062
+      - - 1062
+        - 1625
+      - - 1016
+        - 1628
+      spine_long_px: 576
+      spine_short_px: 46
+      which_end_up: 'top: blue cap, then vertical text ''COMBO+'' reading downward'
+    photo_estimate_mm:
+      spine_length: 195
+      thickness: 13.5
+      confidence: low-medium
+      basis: exemplar 576 px /3.0 plus tilt correction ~2%
+    colors:
+    - '#1B3F9A'
+    - '#FFFFFF'
+    sizes_seen:
+    - 4.0 x 38
+    - 4.0 x 33
+    - 4.0 x 23
+    - 4.0 x 18
+    - 3.5 x 38
+    - 3.5 x 33
+    - 3.5 x 28
+    - 3.5 x 23
+    - 3.5 x 18
+    - 3.5 x 15
+    - 3.0 x 38
+    - 3.0 x 33
+    - 3.0 x 28
+    - 3.0 x 23
+    - 3.0 x 18
+    - 3.0 x 15
+    - 2.75 x 28
+    - 2.75 x 18
+    - 2.75 x 15
+    - 2.5 x 33
+    - 2.5 x 23
+  orbusneich_sapphire_3:
+    brand: OrbusNeich (inferred; spine shows Sapphire 3 only)
+    product: SAPPHIRE 3 PTCA Balloon
+    device_type: coronary_balloon_sc
+    existing_asset: null
+    exemplar:
+      photo: own_shelf.jpg
+      corners_px:
+      - - 834
+        - 273
+      - - 875
+        - 273
+      - - 863
+        - 899
+      - - 832
+        - 899
+      spine_long_px: 626
+      spine_short_px: 36
+      which_end_up: 'image top: pale/white top (hidden behind folder; yellow Lollipop sticker lower) | image bottom: black
+        band with orange ''3'' and ''SAPPHIRE'''
+    photo_estimate_mm:
+      thickness: 12 (11-14)
+      spine_length: 225 (215-235)
+      confidence: low
+    colors:
+    - '#e8ecee (pale)'
+    - '#1b1b1f (black)'
+    - '#f26b3a (orange 3)'
+    sizes_seen:
+    - 3.0 x 15
+  orbusneich_scoreflex:
+    brand: OrbusNeich (inferred; spine shows scoreflex only)
+    product: scoreflex
+    device_type: scoring_cutting_balloon
+    existing_asset: null
+    exemplar:
+      photo: hospital_1.jpg
+      corners_px:
+      - - 588
+        - 3418
+      - - 624
+        - 3416
+      - - 638
+        - 3920
+      - - 602
+        - 3921
+      spine_long_px: 504
+      spine_short_px: 36
+      which_end_up: 'image top: olive-yellow cap | image bottom: olive-yellow band'
+    photo_estimate_mm:
+      thickness: 8-10
+      spine_length: 110-140
+      confidence: low
+    colors:
+    - '#b4b04a (olive)'
+    - '#8a8c8c (grey band)'
+    - '#f0f0ee (white)'
+    sizes_seen:
+    - 4.0 x 15
+    - 3.5 x 15
+    - 3.0 x 20
+    - 3.0 x 15
+    - 3.0 x 10
+    - 2.5 x 15
+    - 2.5 x 10
+    - 2.0 x 20
+    - 2.0 x 10
+  orbusneich_scoreflex_green_variant:
+    brand: OrbusNeich (inferred)
+    product: scoreflex (dark green variant with circle badge)
+    device_type: scoring_cutting_balloon
+    existing_asset: null
+    exemplar:
+      photo: null
+      corners_px: null
+      spine_long_px: null
+      spine_short_px: null
+      which_end_up: null
+    photo_estimate_mm:
+      thickness: 8-10
+      spine_length: 110-140
+      confidence: very low
+    colors:
+    - '#1e4a3f (dark teal)'
+    - '#f0f0ee (white)'
+    - '#e6c8c8 (pink bottom)'
+    sizes_seen:
+    - 3.5 x 15
+    - 2.0 x 15
+  teleflex_guideliner:
+    brand: 'Teleflex / Vascular Solutions (as read: GuideLiner)'
+    product: GuideLiner
+    device_type: guidewire_or_accessory
+    existing_asset: null
+    exemplar:
+      photo: hospital_1.jpg
+      corners_px:
+      - - 146
+        - 3407
+      - - 214
+        - 3396
+      - - 236
+        - 4029
+      - - 179
+        - 4029
+      spine_long_px: 628
+      spine_short_px: 63
+      which_end_up: 'image top: white, no cap | image bottom: white'
+    photo_estimate_mm:
+      thickness: 20-30
+      spine_length: unknown (>=150)
+      confidence: very low
+    colors:
+    - '#f4f4f2 (white)'
+    - '#2a9a50 (6F tag)'
+    - '#222 (5.5F tag)'
+    sizes_seen:
+    - 6F (REF 5571)
+    - 5.5F (REF 5570)
+  terumo_accuforce_nc:
+    brand: Terumo
+    product: Accuforce
+    device_type: coronary_balloon_nc
+    existing_asset: accuforce
+    exemplar:
+      photo: own_shelf.jpg
+      corners_px:
+      - - 237
+        - 349
+      - - 286
+        - 350
+      - - 338
+        - 952
+      - - 293
+        - 955
+      spine_long_px: 606
+      spine_short_px: 47
+      which_end_up: 'image top: navy cap with ''Accuforce'' wordmark (this carton) - other Accuforce cartons have TERUMO logo
+        on top | image bottom: navy cap with TERUMO logo'
+    photo_estimate_mm:
+      thickness: 16
+      spine_length: 220
+      confidence: measured (given)
+    colors:
+    - '#1f2a6b (navy)'
+    - '#eceeed (white)'
+    sizes_seen:
+    - 2.5 x 12 (REF DC-RM2612HHW, LOT 261014)
+    - 2.75 x 20 (REF DC-RM2720HHW, LOT 261023)
+    - 3.5 x 15 (REF DC-RM3615HHW, LOT 260226)
+  terumo_heartrail_ii_guiding_catheter:
+    brand: Terumo
+    product: Heartrail II
+    device_type: guiding_catheter
+    existing_asset: null
+    exemplar:
+      photo: hospital_0.jpg
+      corners_px:
+      - - 1127
+        - 1380
+      - - 1373
+        - 1380
+      - - 1373
+        - 2801
+      - - 1143
+        - 2801
+      spine_long_px: 1421
+      spine_short_px: 238
+      which_end_up: 'image top: green TERUMO/Heartrail II label (''Open here'' tab above) | image bottom: blue band with big
+        TERUMO logo'
+    photo_estimate_mm:
+      thickness: 15-25 (stack of boxes ~27 px each vs face width ~250 px)
+      spine_length: ~1000-1100 (est. from 100 cm catheter)
+      face_width: ~130-150
+      confidence: very low
+    colors:
+    - '#2a9a50 (6F label)'
+    - '#e8742a (7F label)'
+    - '#3c64a8 (blue band)'
+    - '#f2f2f0 (white)'
+    sizes_seen:
+    - BL-3.0 6F (GC-F6BL300N)
+    - IL-3.5 Ikari 6F (GC-F6IL350N)
+    - JR-3.5 6F (GC-F6JR350N)
+    - JR-3.5 7F (GC-F7JR350N, orange label)
+  terumo_navicross:
+    brand: Terumo
+    product: NaviCross (0.035 straight 90cm; 0.018 straight 90 and 135cm)
+    device_type: guidewire_or_accessory
+    existing_asset: null
+    exemplar:
+      photo: hospital_3
+      corners_px:
+      - - 400
+        - 2658
+      - - 1240
+        - 2678
+      - - 1220
+        - 2755
+      - - 400
+        - 2750
+      spine_long_px: 86
+      spine_short_px: 830
+      which_end_up: 'spine reads left to right: ''NaviCross'' (blue) then TERUMO logo at right end (box lying flat)'
+    photo_estimate_mm:
+      spine_length: 250
+      thickness: 28
+      confidence: low
+      basis: 830 px/3.3
+      note: 'thickness is the height of box lying flat: ~95 px/3.6 = 26 mm, perspective unknown'
+    colors:
+    - '#3F78C8'
+    - '#B7D8CC'
+    - '#FFFFFF'
+    sizes_seen:
+    - 0.035 straight 90 cm
+    - 0.018 straight 135 cm
+    - 0.018 straight 90 cm
+  terumo_ryurei_balloon:
+    brand: Terumo
+    product: Ryurei
+    device_type: coronary_balloon_sc
+    existing_asset: null
+    exemplar:
+      photo: own_shelf.jpg
+      corners_px:
+      - - 739
+        - 328
+      - - 790
+        - 329
+      - - 758
+        - 912
+      - - 720
+        - 912
+      spine_long_px: 584
+      spine_short_px: 45
+      which_end_up: 'image top: pale green band with red/green TERUMO logo | image bottom: red band with white ''Ryurei''
+        wordmark'
+    photo_estimate_mm:
+      thickness: 14-15
+      spine_length: 213 (205-220)
+      confidence: medium
+    colors:
+    - '#c9d8c0 (pale green)'
+    - '#d0202a (red)'
+    - '#eceeed (white)'
+    sizes_seen:
+    - 2.0 x 10 (REF DC-RR2010HHW, LOT 260116, exp 2028-12-31)
+  terumo_ultimaster_nagomi_des:
+    brand: Terumo
+    product: Ultimaster Nagomi
+    device_type: coronary_des
+    existing_asset: ultimaster_nagomi
+    exemplar:
+      photo: own_shelf.jpg
+      corners_px:
+      - - 331
+        - 243
+      - - 382
+        - 244
+      - - 430
+        - 943
+      - - 390
+        - 953
+      spine_long_px: 707
+      spine_short_px: 46
+      which_end_up: 'image top: green cap with ''Ultimaster Nagomi'' text | image bottom: green band with red/green TERUMO
+        logo'
+    photo_estimate_mm:
+      thickness: 16
+      spine_length: 250
+      confidence: measured (given)
+    colors:
+    - '#2a9a50 (green)'
+    - '#e8ecec (white)'
+    - '#a9d4b4 (pale green bottom)'
+    sizes_seen:
+    - 2.75 x 33 (REF DE-RS2733ASM, LOT 250725, exp 2027-06-30)
+    - 3.0 x 24 (REF DE-RS3024ASM, LOT 260206, exp 2028-01-31)
+  trireme_tri_wedge:
+    brand: Trireme Medical (inferred; brand not legible)
+    product: Tri-Wedge (.035 and .018 versions, OTW)
+    device_type: guidewire_or_accessory
+    existing_asset: null
+    exemplar:
+      photo: hospital_3
+      corners_px:
+      - - 248
+        - 1088
+      - - 320
+        - 1092
+      - - 315
+        - 1818
+      - - 280
+        - 1818
+      spine_long_px: 728
+      spine_short_px: 54
+      which_end_up: 'top: black/purple; vertical white label with ''Tri-Wedge'''
+    photo_estimate_mm:
+      spine_length: 220
+      thickness: 15
+      confidence: low
+      basis: 728 px/3.3; boxes dark so edge unclear
+    colors:
+    - '#2A1C33'
+    - '#FFFFFF'
+    sizes_seen:
+    - '.035: 6.0 x 60 / 75cm (6F)'
+    - '.035: 6.0 x 40 / 75 (6F)'
+    - '.035: 7.0 x 40 / 75 (7F)'
+    - '.018: 7.0 x 40 / 150cm (6F)'
+    - '.018: 6.0 x 60 / 150 (5F)'
+    - '.018: 4.0 x 60 / 150 (5F)'
+    - '.018: 3.0 x 60 / 150 (5F)'
+    - '.018: 7.0 x 60 / 90cm (6F)'
+    - '.018: 6.0 x 40 / 90 (6F)'
+    - '.018: 8.0 x 60 / 90 (6F)'
+    - '.018: 6.0 x 60 / 90'
+    - '.018: 5.0 x 60 / 90 (5F)'
+    - '.018: 5.0 x 40 / 90'
+  unknown_blue_des:
+    brand: unidentified (not legible)
+    product: '''DES'' (printed text on blue cap)'
+    device_type: coronary_des
+    existing_asset: null
+    exemplar:
+      photo: hospital_2
+      corners_px:
+      - - 1330
+        - 2902
+      - - 1367
+        - 2902
+      - - 1367
+        - 3405
+      - - 1330
+        - 3407
+      spine_long_px: 504
+      spine_short_px: 37
+      which_end_up: 'top: dark blue cap with ''DES'' reading downward; bottom: blue with fine pattern'
+    photo_estimate_mm:
+      spine_length: 168
+      thickness: 11
+      confidence: low
+      basis: 504 px/3.0; 37 px/3.4
+    colors:
+    - '#1F5FA0'
+    - '#FFFFFF'
+    sizes_seen:
+    - sizes in small cells with icon; not legible (e.g. 3.0/2.75/2.5 families)
+  unknown_teal_boston_style:
+    brand: unidentified (layout matches the Boston Scientific orange box next to it; brand not legible)
+    product: teal / white / green box (name unreadable; vertical dark bar, black 'size' cell)
+    device_type: coronary_des
+    existing_asset: null
+    exemplar:
+      photo: hospital_2
+      corners_px:
+      - - 2338
+        - 2902
+      - - 2375
+        - 2902
+      - - 2372
+        - 3395
+      - - 2334
+        - 3397
+      spine_long_px: 494
+      spine_short_px: 38
+      which_end_up: 'top: teal cap; bottom: dark green block'
+    photo_estimate_mm:
+      spine_length: 165
+      thickness: 11
+      confidence: low
+      basis: 494 px/3.0
+    colors:
+    - '#3CC8A6'
+    - '#FFFFFF'
+    - '#1E9E4A'
+    sizes_seen:
+    - only cell '3.0/ ...' faintly legible; unknown
+skipped:
+  generic_paper_pouches: paper pouches, not cartons
+  white_guidewire_pouches: pouches, not cartons
+  anyreach_boxes: hand labels only, no spine visible
+  bbraun_sequent_please_neo_dcb: shelf label only, no carton visible
+  unknown_bottom_yellow_green: cut off at the photo edge, unidentified

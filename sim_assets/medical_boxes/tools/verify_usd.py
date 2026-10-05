@@ -393,7 +393,19 @@ def verify_scene(names, specs, usd_dir, res, cfg):
         xs.append((rng.GetMin()[0] + rng.GetMax()[0]) / 2)
         R(f"box {n} resting on ground", ok, f"z range {rng.GetMin()[2]:.4f}..{rng.GetMax()[2]:.4f}, "
           f"rigid body={p.HasAPI(UsdPhysics.RigidBodyAPI)}")
-    if len(xs) == len(names) and len(xs) > 1:
+    layout = stage.GetPrimAtPath("/World").GetCustomData().get("scene_layout")
+    if layout == "grid":
+        # catalogue grid layout (build_usd.py --scene-grid-cols): boxes must not overlap in plan view
+        rects = []
+        for n in names:
+            p = stage.GetPrimAtPath(f"/World/{n}")
+            if p:
+                r = cache.ComputeWorldBound(p).ComputeAlignedRange()
+                rects.append((n, r.GetMin()[0], r.GetMax()[0], r.GetMin()[1], r.GetMax()[1]))
+        clash = [(a[0], b[0]) for i, a in enumerate(rects) for b in rects[i + 1:]
+                 if a[1] < b[2] and b[1] < a[2] and a[3] < b[4] and b[3] < a[4]]
+        R("grid layout: no boxes overlap", not clash, f"{len(rects)} boxes, clashes: {clash[:3]}")
+    elif len(xs) == len(names) and len(xs) > 1:
         gaps = np.diff(xs)
         R("boxes 0.35 m apart", np.allclose(gaps, 0.35, atol=1e-6), str(np.round(gaps, 4).tolist()))
     layers, assets, unresolved = UsdUtils.ComputeAllDependencies(Sdf.AssetPath(path))

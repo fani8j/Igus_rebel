@@ -1,0 +1,630 @@
+{
+ "families": {
+  "terumo_ultimaster_nagomi_des": {
+   "maker": "Terumo (Terumo Corporation / Terumo Interventional Systems)",
+   "product": "Ultimaster Nagomi",
+   "device_type": "coronary DES (sirolimus-eluting, bioresorbable abluminal polymer, CoCr L605, 80 um struts)",
+   "generation_notes": "Latest generation of the Ultimaster family (Ultimaster -> Ultimaster Tansei -> Ultimaster Nagomi). Nagomi adds 2.00 and 4.50 mm diameters and 44/50 mm lengths. Duplicate inventory entry terumo_ultimaster_nagomi (hospital_2, ~100 boxes) is the same product; treat as one family.",
+   "sizes": {
+    "diameters_mm": [
+     2.0,
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.5,
+     4.0,
+     4.5
+    ],
+    "lengths_mm": [
+     9,
+     12,
+     15,
+     18,
+     21,
+     24,
+     28,
+     33,
+     38,
+     44,
+     50
+    ],
+    "matrix_notes": "Full 8 x 11 matrix (every diameter in every length) per the Terumo Europe ordering table. Availability varies by region/market (source says so, no per-market list). Post-dilation limits: 3.50 mm (2.00-2.50), 4.50 mm (2.75-3.00), 6.25 mm (3.50-4.50). Stent: CoCr L605, 80 um struts, sirolimus 3.9 ug/mm. Delivery balloon NP 11 atm, RBP 16 atm.",
+    "shaft_lengths_cm": [
+     144
+    ],
+    "other": "Usable length 144 cm, rapid exchange, 0.014 in wire; 5 Fr guide for 2.00-4.00, 6 Fr for 4.50; distal shaft 2.7 Fr, proximal 2.0 Fr.",
+    "sources": [
+     "https://www.terumo-europe.com/en-emea/products/ultimaster-nagomi%E2%84%A2-sirolimus-eluting-coronary-stent-system",
+     "https://cmebg.com/wp-content/uploads/2021/07/Key-Benefits-and-Features_Brochure_Ultimaster-Nagomi.pdf (ordering table, saved as nagomi_brochure.pdf)"
+    ]
+   },
+   "ref_scheme": "DE-RS + 2-digit diameter code (20,22,25,27,30,35,40,45) + 2-digit length + ASM. Example: DE-RS2733ASM = 2.75 x 33.",
+   "example_refs": [
+    "DE-RS2009ASM (2.00x9)",
+    "DE-RS2733ASM (2.75x33)",
+    "DE-RS3024ASM (3.00x24)",
+    "DE-RS3033ASM (3.00x33)",
+    "DE-RS4550ASM (4.50x50)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found: no GUDID/EUDAMED/tender/distributor figure located. Inventory measurement 16 x 250 x 295 (own shelf) stands as the only value.",
+    "sources": []
+   },
+   "images": [
+    {
+     "file": "front_3.0x33_india_label.jpg",
+     "url": "https://5.imimg.com/data5/NSDMERP/Default/2024/2/392153691/GW/HZ/OE/214043788/214043788-product-1708767644211-1000x1000.jpg",
+     "shows": "Front face, pale green artwork, TERUMO logo top-left, 'Ultimaster Nagomi' wordmark, stent graphic; India import sticker covers lower half",
+     "size_variant": "3.0 x 33 (DE-RS3033ASM)",
+     "watermark": true
+    },
+    {
+     "file": "spine_indiamart.jpeg",
+     "url": "https://5.imimg.com/data5/SELLER/Default/2024/4/414410961/NX/DU/TG/214043788/ultimaster-nagomi-terumo-1000x1000.jpeg",
+     "shows": "Spine/side seen edge-on: green band with white italic 'Ultimaster Nagomi' left, red/green TERUMO logo right on pale band; seller image, no readable size",
+     "size_variant": "unknown",
+     "watermark": false
+    }
+   ],
+   "colors": [
+    "#2a9a50 (green spine band)",
+    "#e8ecec (pale grey-green front)",
+    "#a9d4b4 (pale green)",
+    "white"
+   ],
+   "inventory_corrections": "No brand error. terumo_ultimaster_nagomi (inventory_b) is the same family. Front face is pale grey-green with the TERUMO logo top-left, wordmark centred upper third.",
+   "confidence": "high"
+  },
+  "terumo_accuforce_nc": {
+   "maker": "Terumo",
+   "product": "Accuforce",
+   "device_type": "coronary NC (non-compliant) PTCA balloon, rapid exchange",
+   "generation_notes": "Current-generation Terumo NC balloon (triple-layer, RBP 22 atm; replaces the older Takeru NC / Hiryu NC line).",
+   "sizes": {
+    "diameters_mm": [
+     2.0,
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.25,
+     3.5,
+     3.75,
+     4.0,
+     4.5,
+     5.0
+    ],
+    "lengths_mm": [
+     6,
+     8,
+     12,
+     15,
+     20,
+     25,
+     30
+    ],
+    "matrix_notes": "6 and 8 mm lengths in all diameters; 12, 15, 20 in all diameters (4.5 and 5.0 only 6/8/12/15); 25 and 30 mm only for 2.50, 3.00, 3.50. Nominal 12 atm; RBP 22 atm (2.0-4.0), 20 atm (4.5, 5.0). 6/8 mm lengths and 4.5/5.0 diameters are uncoated.",
+    "shaft_lengths_cm": [
+     145
+    ],
+    "other": "RX, 0.014 in wire, entry profile 0.43 mm, shaft 1.9/2.5/2.6 Fr, 5 Fr guide (6 Fr for kissing/large).",
+    "sources": [
+     "https://colegiodehemodinamia.org/congreso2021/images/industria/terumo/034-accuforce.pdf (ordering table, saved as accuforce_brochure.pdf)",
+     "https://www.terumo-europe.com/en/interventional-systems/products/product-type/balloon-catheters/accuforce-ptca-dilatation-catheter"
+    ]
+   },
+   "ref_scheme": "DC-RM + 4 digits (diameter x100 first two, length) + HSW (6/8 mm lengths: HSW; 12+: HHW; 4.5/5.0 x12/15: HSW). Example DC-RM2512HHW = 2.5 x 12.",
+   "example_refs": [
+    "DC-RM2006HSW",
+    "DC-RM2512HHW",
+    "DC-RM2720HHW",
+    "DC-RM3515HHW",
+    "DC-RM4506HSW (4.5x6 on carton photo)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found. Inventory measurement 16 x 220 x 250 (own shelf) is the only value.",
+    "sources": []
+   },
+   "images": [
+    {
+     "file": "stack_spines.jpg",
+     "url": "https://5.imimg.com/data5/SELLER/Default/2023/8/333172496/BT/XS/AT/20510505/accuforce-terumo-balloon-catheter-1000x1000.jpg",
+     "shows": "Stack of 7 cartons, spine labels up: navy ends with 'Accuforce' (left) and TERUMO logo (right), white centre label with size, lot, expiry, REF and barcode",
+     "size_variant": "2.0-4.5 mixed",
+     "watermark": false
+    },
+    {
+     "file": "back_label_4.5x6.jpeg",
+     "url": "https://5.imimg.com/data5/SELLER/Default/2024/4/414410225/WI/WA/RT/214043788/accuforce-ptca-dilation-catheter-500x500.jpeg",
+     "shows": "Back/label face: navy, 'Open here' tab top, white label with TERUMO logo, compliance table",
+     "size_variant": "4.5 x 6 (DC-RM4506HSW)",
+     "watermark": false
+    },
+    {
+     "file": "front_artwork_india_label.jpeg",
+     "url": "https://5.imimg.com/data5/SELLER/Default/2024/4/414410629/EK/OY/MX/214043788/accuforce-ptca-dilation-catheter-500x500.jpeg",
+     "shows": "Front face: navy with blue/white swirl artwork, TERUMO top, italic 'Accuforce' centre; India sticker lower left. Slightly oblique",
+     "size_variant": "4.5 x 6",
+     "watermark": false
+    },
+    {
+     "file": "oblique_spine_top.jpeg",
+     "url": "https://5.imimg.com/data5/SELLER/Default/2024/4/414410726/AV/GM/KS/214043788/accuforce-ptca-dilation-catheter-500x500.jpeg",
+     "shows": "Carton from above at an angle, navy top edge with Accuforce / TERUMO",
+     "size_variant": "unknown",
+     "watermark": false
+    }
+   ],
+   "colors": [
+    "#1f2a6b (navy)",
+    "#eceeed (white label)",
+    "#3a7bc8 (swirl blue)"
+   ],
+   "inventory_corrections": "Brand/type correct (NC). Inventory REFs DC-RM2612HHW and DC-RM3615HHW do not match the published code pattern (2.5 -> DC-RM25xx, 3.5 -> DC-RM35xx); likely misread 5->6, i.e. DC-RM2512HHW and DC-RM3515HHW. Photo of a real stack reads DC-RM2515HHW for 2.5x15 (blurry).",
+   "confidence": "high"
+  },
+  "terumo_ryurei_balloon": {
+   "maker": "Terumo",
+   "product": "Ryurei",
+   "device_type": "coronary semi-compliant PTCA balloon, rapid exchange",
+   "generation_notes": "Current Terumo SC coronary balloon (successor to Hiryu / Tazuna lines); Accuforce is the NC sibling.",
+   "sizes": {
+    "diameters_mm": [
+     1.0,
+     1.25,
+     1.5,
+     2.0,
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.25,
+     3.5,
+     3.75,
+     4.0
+    ],
+    "lengths_mm": [
+     5,
+     10,
+     15,
+     20,
+     30,
+     40
+    ],
+    "matrix_notes": "1.00: 5 only. 1.25 and 1.50: 5, 10, 15, 20. 2.00, 2.50, 3.00, 3.50: 10, 15, 20, 30, 40. 2.25, 2.75, 3.25, 3.75, 4.00: 10, 15, 20. NP 6 atm; RBP 14 atm (1.0-3.0), 12 atm (3.25-4.0).",
+    "shaft_lengths_cm": [
+     145
+    ],
+    "other": "0.014 in wire; entry profile 0.41 mm (<=1.5) / 0.43 mm; shaft 1.9 Fr proximal, 2.4-2.7 / 2.6 Fr distal; single marker for <=1.5 mm, double otherwise.",
+    "sources": [
+     "https://www.terumo-radialedge.com/pt/product/ryurei/pdf01.pdf (saved as ryurei_brochure.pdf)",
+     "https://tis.terumo.com/products/ryurei"
+    ]
+   },
+   "ref_scheme": "DC-RR + diameter code (10,12,15,20,22,25,27,30,32,35,37,40) + length (05,10,15,20,30,40) + HH (<=1.5) or HHW. Example DC-RR2010HHW = 2.0 x 10.",
+   "example_refs": [
+    "DC-RR1005HH",
+    "DC-RR2010HHW",
+    "DC-RR3030HHW"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found. Inventory estimate ~14-15 x 213 mm unchanged.",
+    "sources": []
+   },
+   "images": [
+    {
+     "file": "back_label_1.25x10.jpg",
+     "url": "https://5.imimg.com/data5/SELLER/Default/2021/9/OI/GY/JE/136318087/terumo-ryurei-ptca-balloon-1000x1000.jpg",
+     "shows": "Label face: pale green with 'Open here' tab, white label with TERUMO, Ryurei wordmark, size 1.25 x 10, compliance table, barcode",
+     "size_variant": "1.25 x 10 (DC-RR1210HH)",
+     "watermark": false
+    }
+   ],
+   "colors": [
+    "#c9d8c0 (pale green)",
+    "#d0202a (red band)",
+    "#eceeed (white)"
+   ],
+   "inventory_corrections": "None.",
+   "confidence": "high"
+  },
+  "terumo_heartrail_ii_guiding_catheter": {
+   "maker": "Terumo",
+   "product": "Heartrail II",
+   "device_type": "PTCA guiding catheter (PTFE liner, flat braid, Zone technology)",
+   "generation_notes": "Heartrail II is the established line (Heartrail III exists in some markets, e.g. Ikari/Tiger). Radial-optimised Ikari and Tiger curves.",
+   "sizes": {
+    "diameters_mm": [],
+    "lengths_mm": [],
+    "matrix_notes": "French 5, 6, 7 (ID 1.50/1.80/2.06 mm). Curves (2016 Terumo EU catalogue): AL-1/2/3, AR-1/2, JL-3.0..6.0, JR-3.0..6.0, BL-2.5..4.5, BR-3.5/4.0, MPA-L, IMA-1.0, BP-L, BP-R, IL-3.0/3.5/4.0/4.5, IR-1.0/1.5/2.0, Tiger TR-5.0, ER4 (Catarina), VDR-L; not every curve in every French size (e.g. 3.0 and 2.5 curves 6 Fr only). 5-in-6 system: 5 Fr x 120 cm straight inner catheter.",
+    "shaft_lengths_cm": [
+     100,
+     120
+    ],
+    "other": "Usable length 100 cm; 120 cm only for the 5-in-6 inner catheter. Side-hole variants exist.",
+    "sources": [
+     "https://www.kefo.hr/Content/Images/uploaded/documents/IS%20Product%20Catalog%20(electronic%20version%20BD)%2007.07.2016.pdf",
+     "https://www.terumo-europe.com/en-emea/products/heartrail%E2%84%A2-ii-guiding-catheter"
+    ]
+   },
+   "ref_scheme": "EU: GC-K + French digit + curve code + 3 digits + N (e.g. GC-K6JR350N). Inventory shows GC-F prefix (e.g. GC-F6JR350N), a regional (likely Asia/Japan) variant; same pattern. JR350 = JR 3.5, 100 cm, no side holes.",
+   "example_refs": [
+    "GC-K6JR350N",
+    "GC-K6JL400N",
+    "GC-K6IL350N",
+    "GC-K5ST012NQ (5-in-6)",
+    "GC-F6JR350N (inventory)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found. A 100 cm catheter is coiled/hooped, so the box is not 1 m long; inventory estimate of ~1000+ mm spine length is almost certainly wrong and should be re-estimated from the photo (box face ~130-150 mm wide). Unverified: a surplus listing mentions 6.4 kg for 150x320x430 mm, but that is a shipper, not the unit box.",
+    "sources": []
+   },
+   "images": [],
+   "colors": [
+    "#2a9a50 (6F label)",
+    "#e8742a (7F label)",
+    "#3c64a8 (blue band)",
+    "#f2f2f0 (white)"
+   ],
+   "inventory_corrections": "Type correct. Spine length estimate (~1000-1100 mm) is based on the assumption that the box is as long as the catheter; guiding catheters ship coiled in a hoop in a flat box, so treat as unverified. No carton images found (IndiaMART shows only the device).",
+   "confidence": "medium"
+  },
+  "terumo_navicross": {
+   "maker": "Terumo",
+   "product": "NaviCross (and R2P NaviCross)",
+   "device_type": "peripheral support catheter (NOT a guidewire; braided stainless shaft, M-coat hydrophilic coating)",
+   "generation_notes": "Current. R2P NaviCross (200 cm, 0.035) is a related product; 0.018 version added ~2021. Not for coronary or cerebral use.",
+   "sizes": {
+    "diameters_mm": [],
+    "lengths_mm": [],
+    "matrix_notes": "Two wire classes: 0.035 in (4 Fr) and 0.018 in (2.6 Fr), each in straight or 30 deg angled tip.",
+    "shaft_lengths_cm": [
+     65,
+     90,
+     135,
+     150,
+     200
+    ],
+    "other": "0.035: 65/90/135/150 cm (+ R2P 200 cm); 0.018: 65/90/135/150 cm; sheath 4 Fr (0.035), 2.6 Fr (0.018); hydrophilic coating 40 cm; 3 markers (1 mm from tip, then 40 and 60 mm); max injection 300 psi for 0.018.",
+    "sources": [
+     "https://www.terumois.com/products/catheters/navicross.html",
+     "https://www.kefo.hr/Content/Images/uploaded/documents/IS%20Product%20Catalog%20(electronic%20version%20BD)%2007.07.2016.pdf"
+    ]
+   },
+   "ref_scheme": "US: NC18/NC35 + length (65,90,13=135,15=150 cm) + 0 (straight) or 1 (angled), e.g. NC35900 / NC18131. Rest of world: WS*NS350G3HM (straight) / WS*NA... (angled) 0.035; PN*NA180N3H (0.018 x 135 angled).",
+   "example_refs": [
+    "NC35900 (0.035 x 90 straight)",
+    "NC18130 (0.018 x 135 straight)",
+    "NC18900 (0.018 x 90 straight)",
+    "WS*NS35093HM (0.035x90 straight, EU)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found. Carton is a long flat box (catheter 90-135 cm coiled in a hoop? inventory saw boxes lying flat, spine ~250 mm).",
+    "sources": []
+   },
+   "images": [
+    {
+     "file": "front_NC35900_0.035_90cm.png",
+     "url": "https://cdn11.bigcommerce.com/s-kidr1s9c97/images/stencil/1280w/products/8369/5274/NaviCross_NC35900__89539.1752152656.png",
+     "shows": "Front face: blue field framing a white panel with TERUMO logo top and blue 'NaviCross' wordmark, label window and multilingual text right",
+     "size_variant": "0.035 x 90 cm straight (NC35900)",
+     "watermark": true
+    }
+   ],
+   "colors": [
+    "#3F78C8 (NaviCross blue)",
+    "#0b4aa8 (outer blue)",
+    "#FFFFFF"
+   ],
+   "inventory_corrections": "Device type should be support catheter, not guidewire/accessory. Image has MMI (Medical Materials Inc.) watermark and a lightened overlay.",
+   "confidence": "medium"
+  },
+  "ivascular_angiolite_des": {
+   "maker": "iVascular (Life Vascular Devices Biotech S.L., Spain)",
+   "product": "Angiolite",
+   "device_type": "coronary DES (sirolimus, durable fluoroacrylate polymer, CoCr L605, 75-85 um struts)",
+   "generation_notes": "Current; 44/49 mm lengths added 2021, 6.0 mm overexpansion. Angiolite BTK is a separate peripheral device.",
+   "sizes": {
+    "diameters_mm": [
+     2.0,
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.5,
+     4.0,
+     4.5
+    ],
+    "lengths_mm": [
+     9,
+     14,
+     16,
+     19,
+     24,
+     29,
+     34,
+     39,
+     44,
+     49
+    ],
+    "matrix_notes": "IFU grid (2019): lengths 9-39 in all diameters except 4.50 x 9 not offered. 44 and 49 mm only for 2.50, 2.75, 3.00, 3.50, 4.00 (CE 2021). Post-dilation max 4.0 (2.0-2.5), 5.25 (2.75-3.5), 6.0 (4.0-4.5). Strut 75 um (2.0-2.5), 80 (2.75-3.5), 85 (4.0-4.5).",
+    "shaft_lengths_cm": [
+     142
+    ],
+    "other": "Working length 142 cm (total 150), RX, 0.014 in wire.",
+    "sources": [
+     "https://www.ivascular.de/uploads/2019/05/02/angiolite-IFU.pdf (saved as angiolite_IFU.pdf)",
+     "https://citoday.com/news/ivascular-launches-long-lengths-of-angiolite-des",
+     "https://ivascular.global/ivascular-angiolite-6-00mm-maximum-overexpansion-capacity/"
+    ]
+   },
+   "ref_scheme": "SCCDSRI4150 + 3-digit diameter code + 4... (inventory reads SCCDSRI4150400019 = 4.0 x 19, SCCDSRI4150250029 = 2.5 x 29): SC CDSR I4 150 + diameter (xxx = mm x100) + length (4 digits, zero padded). Likely printed 'SC CDSR 14N 150 400 019' as for the other iVascular coronary REFs. Not published in a source I could open.",
+   "example_refs": [
+    "SCCDSRI4150400019 (4.0x19, inventory)",
+    "SCCDSRI4150250029 (2.5x29, inventory)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found; inventory measurement 16 x 240 x 250 stands.",
+    "sources": []
+   },
+   "images": [],
+   "colors": [
+    "#d81b73 (magenta)",
+    "#6fc9b5 (teal)"
+   ],
+   "inventory_corrections": "None. REF scheme parallels Essential Pro (BC DPR14N...), so 'I4' in inventory REFs is probably '14N'.",
+   "confidence": "medium"
+  },
+  "ivascular_essential_pro_balloon": {
+   "maker": "iVascular (Life Vascular Devices Biotech S.L.)",
+   "product": "Essential Pro",
+   "device_type": "coronary DRUG-COATED balloon (paclitaxel 3 ug/mm2, 80% PTX / 20% excipient), rapid exchange",
+   "generation_notes": "Current generation, launched June 2020; successor to the original Essential DCB.",
+   "sizes": {
+    "diameters_mm": [
+     1.5,
+     2.0,
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.25,
+     3.5,
+     3.75,
+     4.0,
+     4.5
+    ],
+    "lengths_mm": [
+     10,
+     15,
+     20,
+     25,
+     30,
+     40
+    ],
+    "matrix_notes": "1.50: 10, 15, 20, 30 only. 2.00 to 4.50: all of 10, 15, 20, 25, 30, 40. NP 6 atm, RBP 16 atm.",
+    "shaft_lengths_cm": [
+     142
+    ],
+    "other": "0.014 in wire; shaft 2.6 Fr (<=3.0) / 2.7 Fr (>=3.25); 5 Fr sheath (6 Fr kissing); 2 Pt/Ir markers; Hydrax plus coating.",
+    "sources": [
+     "https://medi-tech.ro/wp-content/uploads/2021/03/ivascular-esential-pro.pdf (saved as essential_pro_brochure.pdf)",
+     "https://citoday.com/news/ivasculars-essential-pro-drug-coated-balloon-launched-globally"
+    ]
+   },
+   "ref_scheme": "BC DPR14N 150 + diameter x100 (3 digits) + length (3 digits, e.g. 030). Printed on cartons as BCDPR14N150400030 = 4.0 x 30.",
+   "example_refs": [
+    "BCDPR14N150400030 (4.0x30)",
+    "BCDPR14N150300040 (3.0x40)",
+    "BCDPR14N150250025 (2.5x25)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found; inventory estimate 14-15 x 215-225.",
+    "sources": []
+   },
+   "images": [
+    {
+     "file": "front_render_marketing.png",
+     "url": "https://medi-tech.ro/wp-content/uploads/2021/03/ivascular-esential-pro.pdf (last page, rendered crop at 200 dpi)",
+     "shows": "Marketing render of the front face: magenta gradient box, 'essential pro' wordmark top, balloon graphic, iVascular logo bottom. Low resolution, slightly perspective",
+     "size_variant": "generic",
+     "watermark": false
+    }
+   ],
+   "colors": [
+    "#d81b73 (magenta)",
+    "#b8b0e0 (lavender)",
+    "#5b3a9a (balloon blue/purple accent)"
+   ],
+   "inventory_corrections": "MAJOR: Essential Pro is a paclitaxel drug-coated balloon (DCB), not a plain semi-compliant balloon (device_type coronary_balloon_sc is wrong). The inventory REF prefix 'BCDPRI4NI50...' is a misread of 'BCDPR14N150...'. Sizes seen in inventory (2.0-4.0 x 25/30/40 etc.) all exist in the catalogue.",
+   "confidence": "high"
+  },
+  "ivascular_oceanus_35": {
+   "maker": "iVascular (Life Vascular Devices Biotech S.L.)",
+   "product": "Oceanus 35",
+   "device_type": "PTA balloon, OTW, 0.035 in",
+   "generation_notes": "Current; 200 cm length added later (CE).",
+   "sizes": {
+    "diameters_mm": [
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     12
+    ],
+    "lengths_mm": [
+     20,
+     40,
+     60,
+     80,
+     120,
+     150,
+     200
+    ],
+    "matrix_notes": "80 and 140 cm shafts: 3-6 mm in all 7 lengths; 7 mm up to 120; 8 and 9 mm up to 80; 10 and 12 mm up to 60. 200 cm shaft: 6-12 mm in 20 mm length only. NP 6-7 atm, RBP 13-16 atm.",
+    "shaft_lengths_cm": [
+     80,
+     140,
+     200
+    ],
+    "other": "Sheath 5 Fr (3-7 mm), 6 Fr (7-12 mm); tip profile 0.036 in.",
+    "sources": [
+     "https://www.mermaidmedical.com/media/5mcfpsdp/mp53001_oceanus_35_brochure_eng_screen_ed4.pdf (saved)"
+    ]
+   },
+   "ref_scheme": "BP PC35 + catheter length (080/140/200) + diameter (mm x100, 10 mm = 100, 12 mm = 120... printed as 3-digit e.g. 300, 800, 100, 120) + balloon length (3-digit). Example BP PC35 080 800 040 = 8 mm x 40 mm, 80 cm.",
+   "example_refs": [
+    "BP PC35 080 800 040 (8x40, 80 cm)",
+    "BP PC35 080 700 080 (7x80, 80 cm)",
+    "BP PC35 140 600 120 (6x120, 140 cm)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found.",
+    "sources": []
+   },
+   "images": [],
+   "colors": [
+    "#EC6C93 (pink band)",
+    "#2B3A9A (navy)",
+    "#FFFFFF"
+   ],
+   "inventory_corrections": "None on brand/type. Inventory REF transcriptions are missing digits vs the 15-character scheme (e.g. BPPC3508000040 should be BPPC35080800040 for 8x40 on 80 cm); the sizes listed in the inventory all exist.",
+   "confidence": "high"
+  },
+  "ivascular_oceanus_18": {
+   "maker": "iVascular (Life Vascular Devices Biotech S.L.)",
+   "product": "Oceanus 18",
+   "device_type": "PTA balloon, OTW, 0.018 in (0.014 optional)",
+   "generation_notes": "Current line, indications iliac to BTK.",
+   "sizes": {
+    "diameters_mm": [
+     2.0,
+     2.5,
+     3.0,
+     3.5,
+     4.0,
+     5.0,
+     6.0,
+     7.0,
+     8.0
+    ],
+    "lengths_mm": [
+     20,
+     40,
+     60,
+     80,
+     120,
+     150,
+     200
+    ],
+    "matrix_notes": "2.0-6.0 mm: all 7 lengths; 7.0: up to 120; 8.0: up to 80. NP 7 atm; RBP 16 atm (14 atm at 8 mm).",
+    "shaft_lengths_cm": [
+     100,
+     140,
+     150
+    ],
+    "other": "100/150 cm shafts for 2.0-4.0 mm (4 Fr); 100/140 cm for 5.0-8.0 mm (5 Fr). Tip 0.019 in; crossing 0.029-0.057 in.",
+    "sources": [
+     "http://www.support4medicine.pl/images/Oceanus-18-Brochure.pdf (saved)",
+     "https://www.ivascular.de/uploads/2019/05/02/IFUS_oceanus_18_SCREEN-ed1-Mayo-2016.pdf"
+    ]
+   },
+   "ref_scheme": "BP PC18 + shaft length (100/140/150) + diameter x100 (3 digits) + balloon length (3 digits). Example BP PC18 150 400 120 = 4.0 x 120 on 150 cm.",
+   "example_refs": [
+    "BP PC18 100 200 020",
+    "BP PC18 140 600 120",
+    "BP PC18 150 300 080"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found.",
+    "sources": []
+   },
+   "images": [],
+   "colors": [
+    "#EC9AB3 (pink band)",
+    "#2B3A9A (navy)",
+    "#FFFFFF"
+   ],
+   "inventory_corrections": "Inventory lists 4x120/150, 3x120/150 and 2.5x120/150 etc.; these exist. Note the brochure has a typo (BP PC18 10 250 150) for 2.5x150 on 100 cm.",
+   "confidence": "high"
+  },
+  "ivascular_oceanus_14_pro": {
+   "maker": "iVascular (Life Vascular Devices Biotech S.L.)",
+   "product": "Oceanus 14 Pro",
+   "device_type": "PTA balloon, OTW, 0.014 in (small vessel / BTK)",
+   "generation_notes": "Pro version of Oceanus 14 (CE ~2022).",
+   "sizes": {
+    "diameters_mm": [
+     1.25,
+     1.5,
+     2.0,
+     2.5,
+     3.0,
+     3.5,
+     4.0
+    ],
+    "lengths_mm": [
+     10,
+     15,
+     20,
+     40,
+     60,
+     80,
+     120,
+     150,
+     200
+    ],
+    "matrix_notes": "1.25: 10, 15, 20. 1.5: 10, 15, 20, 40, 60, 80. 2.0: 10-200 (all 9). 2.5-3.5: 40-200. 4.0: 40-120. Same matrix on 100 and 150 cm shafts. NP 7, RBP 16, ABP 22 atm.",
+    "shaft_lengths_cm": [
+     100,
+     150
+    ],
+    "other": "4 Fr introducer; tip 0.017 in; crossing 0.021-0.033 in.",
+    "sources": [
+     "https://www.mermaidmedical.com/media/1xkhamla/mp53201_oceanus_14pro_brochureeng_screen_ed1.pdf (saved)"
+    ]
+   },
+   "ref_scheme": "BP PC14N + shaft length (100/150) + diameter x100 + balloon length (3 digits). Example BP PC14N 150 400 080 = 4.0 x 80 on 150 cm.",
+   "example_refs": [
+    "BP PC14N 150 400 080",
+    "BP PC14N 100 200 010"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found.",
+    "sources": []
+   },
+   "images": [],
+   "colors": [
+    "#F2B6C8 (light pink band)",
+    "#2B3A9A (navy)"
+   ],
+   "inventory_corrections": "None; all inventory sizes (2x40 ... 4x80, 150 cm) exist.",
+   "confidence": "high"
+  }
+ }
+}

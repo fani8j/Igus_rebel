@@ -1,0 +1,593 @@
+_doc: 'Carton dimensions (mm) and mass estimates for the catalogue families. height = spine length (the long edge of the labelled spine), length
+  = depth into the shelf, thickness = spine width. No maker publishes unit-carton dimensions or weights (research 2026-10-06), so all values are
+  ESTIMATES: thickness/height from the shelf photos scaled against the 5 caliper-measured cartons; length = 1.1 x height (face proportion of the
+  measured cartons); mass = board (outer area x 1.2 x 320 g/m2) + typical contents for the device type.'
+families:
+  abbott_armada_35:
+    device_type: pta_balloon
+    dims_mm:
+      height: 190.0
+      length: 210.0
+      thickness: 14.0
+    dims_confidence: medium
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.08
+    mass_estimate_g:
+      carton: 35
+      contents: 45
+      low: 46
+      high: 142
+  abbott_xience_skypoint:
+    device_type: coronary_des
+    dims_mm:
+      height: 150.0
+      length: 165.0
+      thickness: 13.0
+    dims_confidence: low
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.079
+    mass_estimate_g:
+      carton: 22
+      contents: 57
+      low: 45
+      high: 149
+  apt_medical_tresfort_35:
+    device_type: pta_balloon
+    dims_mm:
+      height: 245.0
+      length: 270.0
+      thickness: 13.0
+    dims_confidence: low
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.101
+    mass_estimate_g:
+      carton: 56
+      contents: 45
+      low: 62
+      high: 171
+  avantigard_d_logo:
+    device_type: other
+    dims_mm:
+      height: 155.0
+      length: 170.0
+      thickness: 11.0
+    dims_confidence: low
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.068
+    mass_estimate_g:
+      carton: 23
+      contents: 45
+      low: 32
+      high: 126
+  bard_conquest_pta:
+    device_type: pta_balloon
+    dims_mm:
+      height: 850.0
+      length: 120.0
+      thickness: 30.0
+    dims_confidence: very low
+    dims_basis: tall PTA box with hanger tab; face aspect 7.0 from the photo, long edge for 75 cm shaft sizes
+    mass_kg: 0.146
+    mass_estimate_g:
+      carton: 101
+      contents: 45
+      low: 95
+      high: 231
+  biosensors_chroma:
+    device_type: coronary_bms
+    dims_mm:
+      height: 120.0
+      length: 130.0
+      thickness: 10.0
+    dims_confidence: low
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.059
+    mass_estimate_g:
+      carton: 14
+      contents: 45
+      low: 35
+      high: 109
+  biotronik_orsiro_mission:
+    device_type: coronary_des
+    dims_mm:
+      height: 165.0
+      length: 180.0
+      thickness: 15.0
+    dims_confidence: low
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.084
+    mass_estimate_g:
+      carton: 27
+      contents: 57
+      low: 48
+      high: 155
+  biotronik_passeo_18:
+    device_type: pta_balloon
+    dims_mm:
+      height: 185.0
+      length: 205.0
+      thickness: 13.0
+    dims_confidence: medium
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.078
+    mass_estimate_g:
+      carton: 33
+      contents: 45
+      low: 45
+      high: 140
+  biotronik_passeo_35_xeo:
+    device_type: pta_balloon
+    dims_mm:
+      height: 200.0
+      length: 220.0
+      thickness: 14.0
+    dims_confidence: medium
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.083
+    mass_estimate_g:
+      carton: 38
+      contents: 45
+      low: 49
+      high: 147
+  biotronik_pk_papyrus:
+    device_type: covered_stent
+    dims_mm:
+      height: 170.0
+      length: 185.0
+      thickness: 12.0
+    dims_confidence: low
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.077
+    mass_estimate_g:
+      carton: 27
+      contents: 50
+      low: 49
+      high: 137
+  biotronik_red_blue_unknown:
+    device_type: coronary_balloon_sc
+    dims_mm:
+      height: 115.0
+      length: 125.0
+      thickness: 9.0
+    dims_confidence: low
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.045
+    mass_estimate_g:
+      carton: 13
+      contents: 32
+      low: 24
+      high: 86
+  boston_scientific_mustang:
+    device_type: pta_balloon
+    dims_mm:
+      height: 230.0
+      length: 255.0
+      thickness: 11.0
+    dims_confidence: medium
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.094
+    mass_estimate_g:
+      carton: 49
+      contents: 45
+      low: 57
+      high: 162
+  boston_scientific_synergy_xd:
+    device_type: coronary_des
+    dims_mm:
+      height: 135.0
+      length: 150.0
+      thickness: 12.0
+    dims_confidence: low
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.075
+    mass_estimate_g:
+      carton: 18
+      contents: 57
+      low: 42
+      high: 144
+  boston_scientific_v18_control_wire:
+    device_type: guidewire_or_accessory
+    dims_mm:
+      height: 235.0
+      length: 260.0
+      thickness: 13.0
+    dims_confidence: medium
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.092
+    mass_estimate_g:
+      carton: 52
+      contents: 40
+      low: 54
+      high: 160
+  bsci_mach1_guiding_catheter:
+    device_type: guiding_catheter
+    dims_mm:
+      height: 1050.0
+      length: 150.0
+      thickness: 30.0
+    dims_confidence: very low
+    dims_basis: 'tall flat guiding-catheter box (photo: tall boxes standing in a bin); long edge assumed for a 100 cm catheter'
+    mass_kg: 0.209
+    mass_estimate_g:
+      carton: 149
+      contents: 60
+      low: 136
+      high: 321
+  bsci_nc_emerge_monorail:
+    device_type: coronary_balloon_nc
+    dims_mm:
+      height: 235.0
+      length: 260.0
+      thickness: 16.0
+    dims_confidence: low
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.085
+    mass_estimate_g:
+      carton: 53
+      contents: 32
+      low: 54
+      high: 141
+  bsci_permanent_sled_bag_carton:
+    device_type: other
+    dims_mm:
+      height: 220.0
+      length: 240.0
+      thickness: 17.5
+    dims_confidence: low
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.092
+    mass_estimate_g:
+      carton: 47
+      contents: 45
+      low: 50
+      high: 158
+  bsci_wolverine_cutting_balloon:
+    device_type: scoring_cutting_balloon
+    dims_mm:
+      height: 140.0
+      length: 155.0
+      thickness: 11.0
+    dims_confidence: low
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.051
+    mass_estimate_g:
+      carton: 19
+      contents: 32
+      low: 28
+      high: 95
+  elixir_desyne_x2:
+    device_type: coronary_des
+    dims_mm:
+      height: 210.0
+      length: 230.0
+      thickness: 13.0
+    dims_confidence: low
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.098
+    mass_estimate_g:
+      carton: 41
+      contents: 57
+      low: 59
+      high: 175
+  ivascular_essential_pro_balloon:
+    device_type: coronary_dcb
+    dims_mm:
+      height: 220.0
+      length: 240.0
+      thickness: 14.5
+    dims_confidence: low
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.103
+    mass_estimate_g:
+      carton: 46
+      contents: 57
+      low: 64
+      high: 162
+  ivascular_oceanus_14_pro:
+    device_type: pta_balloon
+    dims_mm:
+      height: 190.0
+      length: 210.0
+      thickness: 15.0
+    dims_confidence: low
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.08
+    mass_estimate_g:
+      carton: 35
+      contents: 45
+      low: 46
+      high: 143
+  ivascular_oceanus_18:
+    device_type: pta_balloon
+    dims_mm:
+      height: 190.0
+      length: 210.0
+      thickness: 13.0
+    dims_confidence: medium
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.08
+    mass_estimate_g:
+      carton: 35
+      contents: 45
+      low: 46
+      high: 142
+  ivascular_oceanus_35:
+    device_type: pta_balloon
+    dims_mm:
+      height: 210.0
+      length: 230.0
+      thickness: 15.0
+    dims_confidence: medium
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.087
+    mass_estimate_g:
+      carton: 42
+      contents: 45
+      low: 52
+      high: 152
+  medalliance_selution_slr_dcb:
+    device_type: coronary_dcb
+    dims_mm:
+      height: 210.0
+      length: 230.0
+      thickness: 13.5
+    dims_confidence: low
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.099
+    mass_estimate_g:
+      carton: 42
+      contents: 57
+      low: 61
+      high: 156
+  medtronic_amphirion_deep:
+    device_type: pta_balloon
+    dims_mm:
+      height: 190.0
+      length: 210.0
+      thickness: 15.0
+    dims_confidence: low
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.08
+    mass_estimate_g:
+      carton: 35
+      contents: 45
+      low: 46
+      high: 143
+  medtronic_export_advance_edge:
+    device_type: other
+    dims_mm:
+      height: 220.0
+      length: 240.0
+      thickness: 22.5
+    dims_confidence: low
+    dims_basis: 'height/thickness: type default length 220 mm (other); thickness from px ratio; length = 1.1 x height'
+    mass_kg: 0.093
+    mass_estimate_g:
+      carton: 48
+      contents: 45
+      low: 51
+      high: 161
+  medtronic_nc_euphora_edge:
+    device_type: coronary_balloon_nc
+    dims_mm:
+      height: 220.0
+      length: 240.0
+      thickness: 15.5
+    dims_confidence: low
+    dims_basis: 'height/thickness: type default length 220 mm (coronary_balloon_nc); thickness from px ratio; length = 1.1 x height'
+    mass_kg: 0.078
+    mass_estimate_g:
+      carton: 46
+      contents: 32
+      low: 48
+      high: 131
+  medtronic_pacific_plus:
+    device_type: pta_balloon
+    dims_mm:
+      height: 175.0
+      length: 195.0
+      thickness: 13.0
+    dims_confidence: medium
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.075
+    mass_estimate_g:
+      carton: 30
+      contents: 45
+      low: 42
+      high: 135
+  medtronic_prevail_dcb:
+    device_type: coronary_dcb
+    dims_mm:
+      height: 190.0
+      length: 210.0
+      thickness: 14.0
+    dims_confidence: medium
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.092
+    mass_estimate_g:
+      carton: 35
+      contents: 57
+      low: 56
+      high: 147
+  medtronic_resolute_onyx:
+    device_type: coronary_des
+    dims_mm:
+      height: 165.0
+      length: 180.0
+      thickness: 11.5
+    dims_confidence: medium
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.083
+    mass_estimate_g:
+      carton: 26
+      contents: 57
+      low: 47
+      high: 154
+  meril_nexgen_balloon:
+    device_type: coronary_bms
+    dims_mm:
+      height: 120.0
+      length: 130.0
+      thickness: 11.0
+    dims_confidence: low
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.059
+    mass_estimate_g:
+      carton: 14
+      contents: 45
+      low: 36
+      high: 109
+  nse_alpha_scoring_balloon:
+    device_type: scoring_cutting_balloon
+    dims_mm:
+      height: 170.0
+      length: 185.0
+      thickness: 13.5
+    dims_confidence: low
+    dims_basis: 'height/thickness: thickness from photo_estimate_mm; length from px ratio; length = 1.1 x height'
+    mass_kg: 0.06
+    mass_estimate_g:
+      carton: 28
+      contents: 32
+      low: 35
+      high: 107
+  orbusneich_combo_plus:
+    device_type: coronary_des
+    dims_mm:
+      height: 195.0
+      length: 215.0
+      thickness: 13.5
+    dims_confidence: low
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.093
+    mass_estimate_g:
+      carton: 36
+      contents: 57
+      low: 55
+      high: 168
+  orbusneich_sapphire_3:
+    device_type: coronary_balloon_sc
+    dims_mm:
+      height: 225.0
+      length: 250.0
+      thickness: 12.0
+    dims_confidence: low
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.08
+    mass_estimate_g:
+      carton: 48
+      contents: 32
+      low: 50
+      high: 133
+  orbusneich_scoreflex:
+    device_type: scoring_cutting_balloon
+    dims_mm:
+      height: 125.0
+      length: 140.0
+      thickness: 9.0
+    dims_confidence: low
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.047
+    mass_estimate_g:
+      carton: 15
+      contents: 32
+      low: 25
+      high: 90
+  teleflex_guideliner:
+    device_type: guidewire_or_accessory
+    dims_mm:
+      height: 240.0
+      length: 265.0
+      thickness: 25.0
+    dims_confidence: low
+    dims_basis: 'height/thickness: thickness from photo_estimate_mm; length from px ratio; length = 1.1 x height'
+    mass_kg: 0.099
+    mass_estimate_g:
+      carton: 59
+      contents: 40
+      low: 59
+      high: 169
+  terumo_heartrail_ii_guiding_catheter:
+    device_type: guiding_catheter
+    dims_mm:
+      height: 1050.0
+      length: 150.0
+      thickness: 30.0
+    dims_confidence: very low
+    dims_basis: 'tall flat guiding-catheter box (photo: tall boxes standing in a bin); long edge assumed for a 100 cm catheter'
+    mass_kg: 0.209
+    mass_estimate_g:
+      carton: 149
+      contents: 60
+      low: 136
+      high: 321
+  terumo_navicross:
+    device_type: guidewire_or_accessory
+    dims_mm:
+      height: 250.0
+      length: 275.0
+      thickness: 28.0
+    dims_confidence: low
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.104
+    mass_estimate_g:
+      carton: 64
+      contents: 40
+      low: 63
+      high: 177
+  terumo_ryurei_balloon:
+    device_type: coronary_balloon_sc
+    dims_mm:
+      height: 215.0
+      length: 235.0
+      thickness: 14.5
+    dims_confidence: low
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.076
+    mass_estimate_g:
+      carton: 44
+      contents: 32
+      low: 47
+      high: 128
+  trireme_tri_wedge:
+    device_type: scoring_cutting_balloon
+    dims_mm:
+      height: 220.0
+      length: 240.0
+      thickness: 15.0
+    dims_confidence: medium
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.078
+    mass_estimate_g:
+      carton: 46
+      contents: 32
+      low: 48
+      high: 131
+  unknown_blue_des:
+    device_type: coronary_des
+    dims_mm:
+      height: 170.0
+      length: 185.0
+      thickness: 11.0
+    dims_confidence: medium
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.084
+    mass_estimate_g:
+      carton: 27
+      contents: 57
+      low: 48
+      high: 156
+  unknown_teal_boston_style:
+    device_type: coronary_des
+    dims_mm:
+      height: 165.0
+      length: 180.0
+      thickness: 11.0
+    dims_confidence: low
+    dims_basis: 'height/thickness: photo_estimate_mm; length = 1.1 x height'
+    mass_kg: 0.083
+    mass_estimate_g:
+      carton: 26
+      contents: 57
+      low: 47
+      high: 154

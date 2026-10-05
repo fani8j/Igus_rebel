@@ -1,0 +1,340 @@
+#usda 1.0
+(
+    defaultPrim = "avantigard_d_logo"
+    kilogramsPerUnit = 1
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "avantigard_d_logo" (
+    prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsMassAPI"]
+    assetInfo = {
+        asset identifier = @avantigard_d_logo.usda@
+        string name = "avantigard_d_logo"
+        string version = "1.0.0"
+    }
+    customData = {
+        string device_size = "4.00 x 31"
+        dictionary dims_mm = {
+            double height = 155
+            double length = 170
+            double thickness = 11
+        }
+        string generator_version = "1.0.0"
+        double mass_kg = 0.068
+        string mass_source = "estimate"
+        string product = "Unidentified carton, spine reads 'AVANTIGARD' with a blue D logo on black (maker not found)"
+    }
+    doc = "Unidentified carton, spine reads 'AVANTIGARD' with a blue D logo on black (maker not found) carton, box frame: origin at centre, Z up, X=height, Y=length, Z=thickness (+Z = front)."
+    kind = "component"
+)
+{
+    point3f physics:centerOfMass = (0, 0, 0)
+    float3 physics:diagonalInertia = (0.00016445233, 0.00013682734, 0.00029990834)
+    float physics:mass = 0.068
+    quatf physics:principalAxes = (1, 0, 0, 0)
+    int physxRigidBody:solverPositionIterationCount = 16
+    int physxRigidBody:solverVelocityIterationCount = 2
+
+    def Mesh "geom" (
+        prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "PhysxCollisionAPI", "MaterialBindingAPI"]
+    )
+    {
+        uniform bool doubleSided = 0
+        float3[] extent = [(-0.0775, -0.085, -0.0055), (0.0775, 0.085, 0.0055)]
+        int[] faceVertexCounts = [4, 4, 4, 4, 4, 4]
+        int[] faceVertexIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+        rel material:binding:physics = </avantigard_d_logo/Physics/cardboard> (
+            bindMaterialAs = "weakerThanDescendants"
+        )
+        normal3f[] normals = [(0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, -1), (0, 0, -1), (0, 0, -1), (0, 0, -1), (0, 1, 0), (0, 1, 0), (0, 1, 0), (0, 1, 0), (0, -1, 0), (0, -1, 0), (0, -1, 0), (0, -1, 0), (-1, 0, 0), (-1, 0, 0), (-1, 0, 0), (-1, 0, 0), (1, 0, 0), (1, 0, 0), (1, 0, 0), (1, 0, 0)] (
+            interpolation = "faceVarying"
+        )
+        uniform token orientation = "rightHanded"
+        uniform token physics:approximation = "boundingCube"
+        float physxCollision:contactOffset = 0.002
+        float physxCollision:restOffset = 0
+        point3f[] points = [(-0.0775, -0.085, 0.0055), (0.0775, -0.085, 0.0055), (0.0775, 0.085, 0.0055), (-0.0775, 0.085, 0.0055), (0.0775, -0.085, -0.0055), (-0.0775, -0.085, -0.0055), (-0.0775, 0.085, -0.0055), (0.0775, 0.085, -0.0055), (0.0775, 0.085, -0.0055), (-0.0775, 0.085, -0.0055), (-0.0775, 0.085, 0.0055), (0.0775, 0.085, 0.0055), (-0.0775, -0.085, -0.0055), (0.0775, -0.085, -0.0055), (0.0775, -0.085, 0.0055), (-0.0775, -0.085, 0.0055), (-0.0775, 0.085, -0.0055), (-0.0775, -0.085, -0.0055), (-0.0775, -0.085, 0.0055), (-0.0775, 0.085, 0.0055), (0.0775, -0.085, -0.0055), (0.0775, 0.085, -0.0055), (0.0775, 0.085, 0.0055), (0.0775, -0.085, 0.0055)]
+        texCoord2f[] primvars:st = [(0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1), (0, 0), (1, 0), (1, 1), (0, 1)] (
+            interpolation = "faceVarying"
+        )
+        uniform token subdivisionScheme = "none"
+        uniform token subsetFamily:materialBind:familyType = "partition"
+
+        def GeomSubset "front" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [0]
+            rel material:binding = </avantigard_d_logo/Looks/front>
+        }
+
+        def GeomSubset "back" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [1]
+            rel material:binding = </avantigard_d_logo/Looks/back>
+        }
+
+        def GeomSubset "top" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [2]
+            rel material:binding = </avantigard_d_logo/Looks/top>
+        }
+
+        def GeomSubset "bottom" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [3]
+            rel material:binding = </avantigard_d_logo/Looks/bottom>
+        }
+
+        def GeomSubset "left" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [4]
+            rel material:binding = </avantigard_d_logo/Looks/left>
+        }
+
+        def GeomSubset "right" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform token familyName = "materialBind"
+            int[] indices = [5]
+            rel material:binding = </avantigard_d_logo/Looks/right>
+        }
+    }
+
+    def Scope "Looks"
+    {
+        def Material "front"
+        {
+            token outputs:surface.connect = </avantigard_d_logo/Looks/front/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </avantigard_d_logo/Looks/front/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/avantigard_d_logo/front.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </avantigard_d_logo/Looks/front/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+
+        def Material "back"
+        {
+            token outputs:surface.connect = </avantigard_d_logo/Looks/back/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </avantigard_d_logo/Looks/back/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/avantigard_d_logo/back.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </avantigard_d_logo/Looks/back/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+
+        def Material "top"
+        {
+            token outputs:surface.connect = </avantigard_d_logo/Looks/top/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </avantigard_d_logo/Looks/top/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/avantigard_d_logo/top.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </avantigard_d_logo/Looks/top/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+
+        def Material "bottom"
+        {
+            token outputs:surface.connect = </avantigard_d_logo/Looks/bottom/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </avantigard_d_logo/Looks/bottom/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/avantigard_d_logo/bottom.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </avantigard_d_logo/Looks/bottom/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+
+        def Material "left"
+        {
+            token outputs:surface.connect = </avantigard_d_logo/Looks/left/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </avantigard_d_logo/Looks/left/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/avantigard_d_logo/left.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </avantigard_d_logo/Looks/left/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+
+        def Material "right"
+        {
+            token outputs:surface.connect = </avantigard_d_logo/Looks/right/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </avantigard_d_logo/Looks/right/diffuseTexture.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                int inputs:useSpecularWorkflow = 0
+                token outputs:surface
+            }
+
+            def Shader "stReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "diffuseTexture"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @../textures/avantigard_d_logo/right.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </avantigard_d_logo/Looks/right/stReader.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+        }
+    }
+
+    def Scope "Physics"
+    {
+        def Material "cardboard" (
+            prepend apiSchemas = ["PhysicsMaterialAPI", "PhysxMaterialAPI"]
+        )
+        {
+            float physics:dynamicFriction = 0.3
+            float physics:restitution = 0.05
+            float physics:staticFriction = 0.35
+            uniform token physxMaterial:frictionCombineMode = "average"
+            uniform token physxMaterial:restitutionCombineMode = "average"
+        }
+    }
+}
+

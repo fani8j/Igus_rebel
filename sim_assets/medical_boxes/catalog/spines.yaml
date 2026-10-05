@@ -1,0 +1,1677 @@
+generator: tools/catalog_spines.py
+dims_file_used: true
+skipped: {apt_conqueror_nc_pro: 'existing_asset: conqueror_nc_pro', bsci_agent_monorail_dcb: 'existing_asset: agent_monorail',
+  ivascular_angiolite_des: 'existing_asset: angiolite', orbusneich_scoreflex_green_variant: no corners_px, terumo_accuforce_nc: 'existing_asset:
+    accuforce', terumo_ultimaster_nagomi_des: 'existing_asset: ultimaster_nagomi'}
+families:
+  abbott_armada_35:
+    brand: Abbott
+    product: Armada 35 (OTW .035)
+    device_type: pta_balloon
+    source: photo
+    photo: hospital_3.jpg
+    rotation: ccw
+    corners_px:
+    - [2620.3, 1188.1]
+    - [2609.2, 1824.0]
+    - [2553.2, 1823.8]
+    - [2567.3, 1190.1]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: draft corners + edge snap
+    edge_fit_confidence: [2.36, 2.11, 2.52, 3.18]
+    mm_used: {spine_length: 190.0, thickness: 14.0, full_spine_length: 190.0, source: catalog/dims.yaml, px_aspect: 11.64}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: none
+    texture:
+      file: textures/abbott_armada_35/top.png
+      size_px: [760, 56]
+      px_per_mm: 4
+    processing:
+      native_px: [635, 55]
+      px_per_mm: 3.34
+      wb: label-stock (23% white px) gains(BGR)=[1.2300000190734863, 1.2300000190734863, 1.2300000190734863]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.194
+      sharpness: 3522.8
+    band_colors:
+      left_end_rgb: [72, 120, 180]
+      right_end_rgb: [54, 133, 216]
+      left_end_hex: '#4878B4'
+      right_end_hex: '#3685D8'
+      dominant_hex: ['#88B8C8', '#F8F8F8', '#080808']
+    grade: A
+    grade_reason: 3.3 px/mm
+  abbott_xience_skypoint:
+    brand: Abbott
+    product: Xience Skypoint
+    device_type: coronary_des
+    source: photo
+    photo: hospital_2.jpg
+    rotation: ccw
+    corners_px:
+    - [1693.7, 2964.0]
+    - [1683.7, 3400.8]
+    - [1644.7, 3399.9]
+    - [1655.7, 2963.2]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: draft corners + edge snap
+    edge_fit_confidence: [2.0, 1.83, 2.27, 2.23]
+    mm_used: {spine_length: 150.0, thickness: 13.0, full_spine_length: 150.0, source: catalog/dims.yaml, px_aspect: 11.35}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: none
+    texture:
+      file: textures/abbott_xience_skypoint/top.png
+      size_px: [600, 52]
+      px_per_mm: 4
+    processing:
+      native_px: [437, 38]
+      px_per_mm: 2.91
+      wb: label-stock (25% white px) gains(BGR)=[1.0099999904632568, 1.0299999713897705, 1.0299999713897705]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.115
+      sharpness: 716.8
+    band_colors:
+      left_end_rgb: [97, 148, 202]
+      right_end_rgb: [75, 141, 205]
+      left_end_hex: '#6194CA'
+      right_end_hex: '#4B8DCD'
+      dominant_hex: ['#E8E8E8', '#4888C8', '#C8C8C8']
+    grade: B
+    grade_reason: 2.9 px/mm; soft source photo (lap var 717)
+  apt_medical_tresfort_35:
+    brand: APT Medical
+    product: Tresfort 35 (OTW .035)
+    device_type: pta_balloon
+    source: photo
+    photo: hospital_3.jpg
+    rotation: ccw
+    corners_px:
+    - [72.3, 113.8]
+    - [109.0, 930.5]
+    - [59.1, 930.8]
+    - [16.5, 105.0]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: draft corners + edge snap
+    edge_fit_confidence: [1.64, 2.3, 2.7, 3.25]
+    mm_used: {spine_length: 245.0, thickness: 13.0, full_spine_length: 245.0, source: catalog/dims.yaml, px_aspect: 15.46}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: none
+    texture:
+      file: textures/apt_medical_tresfort_35/top.png
+      size_px: [980, 52]
+      px_per_mm: 4
+    processing:
+      native_px: [822, 53]
+      px_per_mm: 3.36
+      wb: label-stock (25% white px) gains(BGR)=[1.059999942779541, 1.0399999618530273, 1.0399999618530273]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.144
+      sharpness: 964.3
+    band_colors:
+      left_end_rgb: [123, 120, 109]
+      right_end_rgb: [236, 236, 234]
+      left_end_hex: '#7B786D'
+      right_end_hex: '#ECECEA'
+      dominant_hex: ['#E8E8E8', '#C8C8C8', '#787868']
+    grade: B
+    grade_reason: 3.4 px/mm; soft source photo (lap var 964)
+  avantigard_d_logo:
+    brand: AVANTIGARD (as read; logo is a blue 'D' on black)
+    product: AVANTIGARD
+    device_type: coronary_des
+    source: photo
+    photo: hospital_1.jpg
+    rotation: ccw
+    corners_px:
+    - [2223.0, 3296.0]
+    - [2208.7, 4003.1]
+    - [2165.7, 4005.1]
+    - [2174.9, 3296.0]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: draft corners + edge snap
+    edge_fit_confidence: [1.87, 2.09, 3.24, 2.93]
+    mm_used: {spine_length: 155.0, thickness: 11.0, full_spine_length: 155.0, source: catalog/dims.yaml, px_aspect: 15.54}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: none
+    texture:
+      file: textures/avantigard_d_logo/top.png
+      size_px: [620, 44]
+      px_per_mm: 4
+    processing:
+      native_px: [708, 46]
+      px_per_mm: 4.57
+      wb: label-stock (25% white px) gains(BGR)=[1.090000033378601, 1.059999942779541, 1.059999942779541]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.261
+      sharpness: 870.7
+    band_colors:
+      left_end_rgb: [0, 2, 2]
+      right_end_rgb: [54, 59, 60]
+      left_end_hex: '#000202'
+      right_end_hex: '#363B3C'
+      dominant_hex: ['#282828', '#080808', '#E8E8E8']
+    grade: B
+    grade_reason: 4.6 px/mm; soft source photo (lap var 871)
+  bard_conquest_pta:
+    brand: Bard
+    product: CONQUEST PTA Balloon Dilatation Catheter
+    device_type: pta_balloon
+    source: plain
+    photo: hospital_0.jpg
+    rotation: cw
+    note: the photo quad is the big FRONT face, not the spine; top.png is the plain base colour
+    plain_rgb: [31, 99, 168]
+    plain_hex: '#1F63A8'
+    mm_used: {spine_length: 850.0, thickness: 30.0, full_spine_length: 850.0, source: catalog/dims.yaml}
+    texture:
+      file: textures/bard_conquest_pta/top.png
+      size_px: [850, 30]
+      px_per_mm: 1
+    front_face_crop:
+      file: textures/bard_conquest_pta/front_photo_crop.png
+      size_px: [2048, 289]
+      px_per_mm: 2.409
+      photo_quad_tl_tr_br_bl:
+      - [2323.0, 1438.0]
+      - [2472.0, 1436.0]
+      - [2418.0, 2745.0]
+      - [2269.0, 2745.0]
+      orientation: image right = +X = photo top; image up = +Y = photo left
+      covers_height_mm: 850.0
+      full_height_mm: 850.0
+      face_length_mm: 120.0
+      placed_from: photo-top end (+X, image right edge)
+      stretch_along_height: 0.92
+      clipped_photo_bottom_mm: 119.9
+      remainder_fill: base
+      base_rgb: [31, 99, 168]
+      wb: label-stock (25% white px) gains(BGR)=[1.350000023841858, 1.3799999952316284, 1.399999976158142]
+    occlusion_notes: large blue FRONT face with hanger hole and label; logo QUEST runs bottom-to-top; the crop is the box
+      front, not a spine
+    grade: B
+    grade_reason: front face crop at 1.24 px/mm (source), covers 100% of the height
+  biosensors_chroma:
+    brand: Biosensors
+    product: CHROMA
+    device_type: coronary_des
+    source: photo
+    photo: hospital_1.jpg
+    rotation: ccw
+    corners_px:
+    - [1383.7, 3410.1]
+    - [1401.9, 3928.7]
+    - [1359.9, 3928.8]
+    - [1343.7, 3410.1]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: draft corners + edge snap
+    edge_fit_confidence: [1.49, 1.48, 2.99, 3.47]
+    mm_used: {spine_length: 120.0, thickness: 10.0, full_spine_length: 120.0, source: catalog/dims.yaml, px_aspect: 12.66}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: none
+    texture:
+      file: textures/biosensors_chroma/top.png
+      size_px: [480, 40]
+      px_per_mm: 4
+    processing:
+      native_px: [519, 41]
+      px_per_mm: 4.33
+      wb: label-stock (26% white px) gains(BGR)=[1.1299999952316284, 1.1399999856948853, 1.149999976158142]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.192
+      sharpness: 461.1
+    band_colors:
+      left_end_rgb: [182, 203, 219]
+      right_end_rgb: [40, 101, 179]
+      left_end_hex: '#B6CBDB'
+      right_end_hex: '#2865B3'
+      dominant_hex: ['#D8E8E8', '#F8F8F8', '#B8C8D8']
+    grade: B
+    grade_reason: 4.3 px/mm; soft source photo (lap var 461)
+  biotronik_orsiro_mission:
+    brand: Biotronik
+    product: Orsiro Mission
+    device_type: coronary_des
+    source: photo
+    photo: hospital_2.jpg
+    rotation: ccw
+    corners_px:
+    - [2496.9, 2333.1]
+    - [2507.5, 2821.9]
+    - [2468.4, 2821.9]
+    - [2458.6, 2333.1]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: manual quad, no snap
+    edge_fit_confidence: [9.0, 9.0, 9.0, 9.0]
+    mm_used: {spine_length: 165.0, thickness: 15.0, full_spine_length: 165.0, source: catalog/dims.yaml, px_aspect: 12.63}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: none
+    texture:
+      file: textures/biotronik_orsiro_mission/top.png
+      size_px: [660, 60]
+      px_per_mm: 4
+    processing:
+      native_px: [489, 39]
+      px_per_mm: 2.96
+      wb: label-stock (25% white px) gains(BGR)=[1.0099999904632568, 1.0, 0.9900000095367432]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.212
+      sharpness: 1359.2
+    band_colors:
+      left_end_rgb: [230, 233, 232]
+      right_end_rgb: [223, 225, 227]
+      left_end_hex: '#E6E9E8'
+      right_end_hex: '#DFE1E3'
+      dominant_hex: ['#E8E8E8', '#980838', '#C8C8C8']
+    grade: B
+    grade_reason: 3.0 px/mm
+  biotronik_passeo_18:
+    brand: Biotronik
+    product: Passeo-18
+    device_type: pta_balloon
+    source: photo
+    photo: hospital_3.jpg
+    rotation: ccw
+    corners_px:
+    - [1079.3, 1982.7]
+    - [1099.5, 2591.3]
+    - [1054.9, 2591.3]
+    - [1035.6, 1982.7]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: manual quad, no snap
+    edge_fit_confidence: [9.0, 9.0, 9.0, 9.0]
+    mm_used: {spine_length: 185.0, thickness: 13.0, full_spine_length: 185.0, source: catalog/dims.yaml, px_aspect: 13.79}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: tilted stack, neighbour edges close; corners picked by hand
+    texture:
+      file: textures/biotronik_passeo_18/top.png
+      size_px: [740, 52]
+      px_per_mm: 4
+    processing:
+      native_px: [609, 44]
+      px_per_mm: 3.29
+      wb: label-stock (25% white px) gains(BGR)=[1.0800000429153442, 1.059999942779541, 1.0499999523162842]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.399
+      sharpness: 4225.1
+    band_colors:
+      left_end_rgb: [163, 158, 149]
+      right_end_rgb: [237, 238, 233]
+      left_end_hex: '#A39E95'
+      right_end_hex: '#EDEEE9'
+      dominant_hex: ['#E8E8E8', '#080808', '#C8C8C8']
+    grade: A
+    grade_reason: 3.3 px/mm
+  biotronik_passeo_35_xeo:
+    brand: Biotronik
+    product: Passeo-35 Xeo
+    device_type: pta_balloon
+    source: photo
+    photo: hospital_3.jpg
+    rotation: ccw
+    corners_px:
+    - [1335.2, 1158.4]
+    - [1359.3, 1823.6]
+    - [1303.2, 1822.9]
+    - [1297.2, 1158.0]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: draft corners + edge snap
+    edge_fit_confidence: [2.19, 1.34, 3.52, 3.26]
+    mm_used: {spine_length: 200.0, thickness: 14.0, full_spine_length: 200.0, source: catalog/dims.yaml, px_aspect: 14.15}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: none
+    texture:
+      file: textures/biotronik_passeo_35_xeo/top.png
+      size_px: [800, 56]
+      px_per_mm: 4
+    processing:
+      native_px: [665, 47]
+      px_per_mm: 3.33
+      wb: label-stock (25% white px) gains(BGR)=[1.0499999523162842, 1.0299999713897705, 1.0299999713897705]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.111
+      sharpness: 4198.4
+    band_colors:
+      left_end_rgb: [175, 172, 162]
+      right_end_rgb: [247, 247, 247]
+      left_end_hex: '#AFACA2'
+      right_end_hex: '#F7F7F7'
+      dominant_hex: ['#F8F8F8', '#C8C8C8', '#381828']
+    grade: A
+    grade_reason: 3.3 px/mm
+  biotronik_pk_papyrus:
+    brand: Biotronik
+    product: PK Papyrus (covered coronary stent)
+    device_type: coronary_des
+    source: photo
+    photo: hospital_2.jpg
+    rotation: ccw
+    corners_px:
+    - [541.9, 2381.2]
+    - [595.0, 2877.3]
+    - [563.0, 2876.7]
+    - [508.8, 2381.6]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: manual quad + edge snap
+    edge_fit_confidence: [1.55, 1.74, 2.01, 3.36]
+    mm_used: {spine_length: 170.0, thickness: 12.0, full_spine_length: 170.0, source: catalog/dims.yaml, px_aspect: 15.3}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: lower carton of two stacked PK Papyrus; tilted
+    texture:
+      file: textures/biotronik_pk_papyrus/top.png
+      size_px: [680, 48]
+      px_per_mm: 4
+    processing:
+      native_px: [499, 33]
+      px_per_mm: 2.94
+      wb: label-stock (25% white px) gains(BGR)=[1.0199999809265137, 0.9900000095367432, 0.9900000095367432]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.139
+      sharpness: 1216.5
+    band_colors:
+      left_end_rgb: [227, 227, 227]
+      right_end_rgb: [224, 224, 224]
+      left_end_hex: '#E3E3E3'
+      right_end_hex: '#E0E0E0'
+      dominant_hex: ['#E8E8E8', '#C8C8C8', '#080808']
+    grade: B
+    grade_reason: 2.9 px/mm
+  biotronik_red_blue_unknown:
+    brand: Biotronik
+    product: unidentified red/white/blue line (BIOTRONIK on label; product name not legible)
+    device_type: coronary_balloon_sc
+    source: photo
+    photo: hospital_2.jpg
+    rotation: ccw
+    corners_px:
+    - [897.5, 3629.1]
+    - [904.6, 3980.9]
+    - [872.6, 3980.0]
+    - [865.5, 3629.1]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: draft corners + edge snap
+    edge_fit_confidence: [1.39, 1.34, 3.03, 2.87]
+    mm_used: {spine_length: 115.0, thickness: 9.0, full_spine_length: 115.0, source: catalog/dims.yaml, px_aspect: 10.98}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: none
+    texture:
+      file: textures/biotronik_red_blue_unknown/top.png
+      size_px: [460, 36]
+      px_per_mm: 4
+    processing:
+      native_px: [351, 32]
+      px_per_mm: 3.05
+      wb: label-stock (24% white px) gains(BGR)=[1.2100000381469727, 1.2100000381469727, 1.2000000476837158]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.334
+      sharpness: 737.2
+    band_colors:
+      left_end_rgb: [157, 47, 52]
+      right_end_rgb: [12, 74, 158]
+      left_end_hex: '#9D2F34'
+      right_end_hex: '#0C4A9E'
+      dominant_hex: ['#F8F8F8', '#888888', '#C8C8C8']
+    grade: B
+    grade_reason: 3.0 px/mm; soft source photo (lap var 737)
+  boston_scientific_mustang:
+    brand: Boston Scientific
+    product: MUSTANG OVER-THE-WIRE (.035)
+    device_type: pta_balloon
+    source: photo
+    photo: hospital_3.jpg
+    rotation: ccw
+    corners_px:
+    - [3005.6, 121.0]
+    - [2947.4, 892.0]
+    - [2902.5, 892.0]
+    - [2957.5, 121.0]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: manual quad, no snap
+    edge_fit_confidence: [9.0, 9.0, 9.0, 9.0]
+    mm_used: {spine_length: 230.0, thickness: 11.0, full_spine_length: 230.0, source: catalog/dims.yaml, px_aspect: 16.63}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: top box of a stack under the shelf lip; quad re-picked on 4x crops to cover the full spine thickness
+      (red BSC end band, MUSTANG panel, red 035 end band); the stack is tilted ~4 deg
+    texture:
+      file: textures/boston_scientific_mustang/top.png
+      size_px: [920, 44]
+      px_per_mm: 4
+    processing:
+      native_px: [773, 46]
+      px_per_mm: 3.36
+      wb: label-stock (25% white px) gains(BGR)=[1.309999942779541, 1.2899999618530273, 1.25]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.223
+      sharpness: 3870.9
+    band_colors:
+      left_end_rgb: [143, 66, 66]
+      right_end_rgb: [154, 20, 26]
+      left_end_hex: '#8F4242'
+      right_end_hex: '#9A141A'
+      dominant_hex: ['#E8E8E8', '#080808', '#980808']
+    grade: A
+    grade_reason: 3.4 px/mm
+  boston_scientific_synergy_xd:
+    brand: Boston Scientific
+    product: SYNERGY XD
+    device_type: coronary_des
+    source: photo
+    photo: hospital_2.jpg
+    rotation: ccw
+    corners_px:
+    - [1450.0, 3614.2]
+    - [1467.9, 4018.9]
+    - [1433.7, 4018.9]
+    - [1419.0, 3614.2]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: manual quad, no snap
+    edge_fit_confidence: [9.0, 9.0, 9.0, 9.0]
+    mm_used: {spine_length: 135.0, thickness: 12.0, full_spine_length: 135.0, source: catalog/dims.yaml, px_aspect: 12.42}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: none
+    texture:
+      file: textures/boston_scientific_synergy_xd/top.png
+      size_px: [540, 48]
+      px_per_mm: 4
+    processing:
+      native_px: [405, 33]
+      px_per_mm: 3.0
+      wb: label-stock (25% white px) gains(BGR)=[1.1100000143051147, 1.090000033378601, 1.0800000429153442]
+      flat_glare_area: 0.0081
+      fold_glare_frac: 0.13
+      sharpness: 883.1
+    band_colors:
+      left_end_rgb: [208, 115, 66]
+      right_end_rgb: [25, 101, 53]
+      left_end_hex: '#D07342'
+      right_end_hex: '#196535'
+      dominant_hex: ['#E8E8E8', '#C86838', '#A8A8A8']
+    grade: B
+    grade_reason: 3.0 px/mm; soft source photo (lap var 883)
+  boston_scientific_v18_control_wire:
+    brand: Boston Scientific
+    product: V-14 / V-18 Control Wire (short taper, straight tip shapeable)
+    device_type: guidewire_or_accessory
+    source: photo
+    photo: hospital_3.jpg
+    rotation: ccw
+    corners_px:
+    - [1932.9, 1895.1]
+    - [2080.6, 2668.6]
+    - [2034.4, 2669.8]
+    - [1900.7, 1892.6]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: manual quad + edge snap
+    edge_fit_confidence: [2.23, 1.43, 2.8, 2.44]
+    mm_used: {spine_length: 235.0, thickness: 13.0, full_spine_length: 235.0, source: catalog/dims.yaml, px_aspect: 20.07}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: second carton of the tilted V-18 stack (300 cm, lot 2027-08-27); the rough corners covered the neighbour
+      box
+    texture:
+      file: textures/boston_scientific_v18_control_wire/top.png
+      size_px: [940, 52]
+      px_per_mm: 4
+    processing:
+      native_px: [788, 39]
+      px_per_mm: 3.35
+      wb: label-stock (25% white px) gains(BGR)=[1.0399999618530273, 1.0299999713897705, 1.0399999618530273]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.218
+      sharpness: 3476.2
+    band_colors:
+      left_end_rgb: [12, 13, 16]
+      right_end_rgb: [239, 210, 39]
+      left_end_hex: '#0C0D10'
+      right_end_hex: '#EFD227'
+      dominant_hex: ['#E8E8E8', '#080808', '#282828']
+    grade: A
+    grade_reason: 3.4 px/mm
+  bsci_mach1_guiding_catheter:
+    brand: Boston Scientific
+    product: Mach1
+    device_type: guiding_catheter
+    source: plain
+    photo: hospital_0.jpg
+    rotation: cw
+    note: the photo quad is the big FRONT face, not the spine; top.png is the plain base colour
+    plain_rgb: [228, 230, 231]
+    plain_hex: '#E4E6E7'
+    mm_used: {spine_length: 1050.0, thickness: 30.0, full_spine_length: 1050.0, source: catalog/dims.yaml}
+    texture:
+      file: textures/bsci_mach1_guiding_catheter/top.png
+      size_px: [1050, 30]
+      px_per_mm: 1
+    front_face_crop:
+      file: textures/bsci_mach1_guiding_catheter/front_photo_crop.png
+      size_px: [1407, 293]
+      px_per_mm: 1.95
+      photo_quad_tl_tr_br_bl:
+      - [1679.0, 1426.0]
+      - [1988.0, 1424.0]
+      - [1956.0, 2834.0]
+      - [1680.0, 2834.0]
+      orientation: image right = +X = photo top; image up = +Y = photo left
+      covers_height_mm: 721.3
+      full_height_mm: 1050.0
+      face_length_mm: 150.0
+      placed_from: photo-top end (+X, image right edge)
+      stretch_along_height: 1.0
+      clipped_photo_bottom_mm: 0.0
+      remainder_fill: base
+      base_rgb: [228, 230, 231]
+      wb: label-stock (25% white px) gains(BGR)=[1.25, 1.25, 1.2699999809265137]
+    occlusion_notes: large white FRONT face of the long box (label near the top); the lower part is hidden by the bin rim
+    grade: B
+    grade_reason: front face crop at 1.95 px/mm (source), covers 69% of the height
+  bsci_nc_emerge_monorail:
+    brand: Boston Scientific
+    product: NC Emerge MONORAIL
+    device_type: coronary_balloon_nc
+    source: photo
+    photo: own_shelf.jpg
+    rotation: cw
+    corners_px:
+    - [173.4, 967.6]
+    - [68.5, 322.3]
+    - [125.1, 321.5]
+    - [217.9, 965.6]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: draft corners + edge snap
+    edge_fit_confidence: [2.43, 2.69, 2.11, 3.07]
+    mm_used: {spine_length: 235.0, thickness: 16.0, full_spine_length: 235.0, source: catalog/dims.yaml, px_aspect: 12.89}
+    photo_top_end: right
+    visible_fraction: 1.0
+    occlusion_notes: none
+    texture:
+      file: textures/bsci_nc_emerge_monorail/top.png
+      size_px: [940, 64]
+      px_per_mm: 4
+    processing:
+      native_px: [652, 51]
+      px_per_mm: 2.77
+      wb: label-stock (26% white px) gains(BGR)=[1.0800000429153442, 1.0700000524520874, 1.1100000143051147]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.062
+      sharpness: 2949.0
+    band_colors:
+      left_end_rgb: [72, 71, 64]
+      right_end_rgb: [35, 153, 77]
+      left_end_hex: '#484740'
+      right_end_hex: '#23994D'
+      dominant_hex: ['#E8E8E8', '#289848', '#282828']
+    grade: B
+    grade_reason: 2.8 px/mm
+  bsci_permanent_sled_bag_carton:
+    brand: Boston Scientific
+    product: Permanent Sled Bag (generic printed carton)
+    device_type: other
+    source: photo
+    photo: own_shelf.jpg
+    rotation: cw
+    corners_px:
+    - [666.2, 925.9]
+    - [675.4, 313.0]
+    - [733.6, 308.0]
+    - [716.1, 925.9]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: draft corners + edge snap
+    edge_fit_confidence: [3.01, 2.01, 2.58, 2.98]
+    mm_used: {spine_length: 220.0, thickness: 17.5, full_spine_length: 220.0, source: catalog/dims.yaml, px_aspect: 11.36}
+    photo_top_end: right
+    visible_fraction: 1.0
+    occlusion_notes: none
+    texture:
+      file: textures/bsci_permanent_sled_bag_carton/top.png
+      size_px: [880, 70]
+      px_per_mm: 4
+    processing:
+      native_px: [616, 54]
+      px_per_mm: 2.8
+      wb: label-stock (27% white px) gains(BGR)=[1.0800000429153442, 1.0700000524520874, 1.1200000047683716]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.138
+      sharpness: 2562.9
+    band_colors:
+      left_end_rgb: [41, 48, 85]
+      right_end_rgb: [21, 51, 115]
+      left_end_hex: '#293055'
+      right_end_hex: '#153373'
+      dominant_hex: ['#E8E8E8', '#183878', '#182848']
+    grade: B
+    grade_reason: 2.8 px/mm
+  bsci_wolverine_cutting_balloon:
+    brand: Boston Scientific
+    product: Wolverine Coronary Cutting Balloon MONORAIL
+    device_type: scoring_cutting_balloon
+    source: photo
+    photo: hospital_1.jpg
+    rotation: ccw
+    corners_px:
+    - [318.9, 2740.9]
+    - [385.4, 3303.8]
+    - [341.2, 3303.8]
+    - [273.8, 2740.9]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: manual quad, no snap
+    edge_fit_confidence: [9.0, 9.0, 9.0, 9.0]
+    mm_used: {spine_length: 140.0, thickness: 11.0, full_spine_length: 140.0, source: catalog/dims.yaml, px_aspect: 12.7}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: none
+    texture:
+      file: textures/bsci_wolverine_cutting_balloon/top.png
+      size_px: [560, 44]
+      px_per_mm: 4
+    processing:
+      native_px: [567, 45]
+      px_per_mm: 4.05
+      wb: label-stock (25% white px) gains(BGR)=[1.1799999475479126, 1.149999976158142, 1.159999966621399]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.28
+      sharpness: 782.4
+    band_colors:
+      left_end_rgb: [0, 127, 70]
+      right_end_rgb: [34, 140, 72]
+      left_end_hex: '#007F46'
+      right_end_hex: '#228C48'
+      dominant_hex: ['#E8E8E8', '#C8C8C8', '#289848']
+    grade: B
+    grade_reason: 4.0 px/mm; soft source photo (lap var 782)
+  elixir_desyne_x2:
+    brand: Elixir Medical
+    product: DESyne X2 (RX)
+    device_type: coronary_des
+    source: photo
+    photo: hospital_2.jpg
+    rotation: ccw
+    corners_px:
+    - [2819.8, 963.9]
+    - [2791.8, 1585.9]
+    - [2747.8, 1589.8]
+    - [2775.8, 963.1]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: draft corners + edge snap
+    edge_fit_confidence: [2.2, 2.08, 2.04, 2.31]
+    mm_used: {spine_length: 210.0, thickness: 13.0, full_spine_length: 210.0, source: catalog/dims.yaml, px_aspect: 14.17}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: none
+    texture:
+      file: textures/elixir_desyne_x2/top.png
+      size_px: [840, 52]
+      px_per_mm: 4
+    processing:
+      native_px: [625, 44]
+      px_per_mm: 2.98
+      wb: label-stock (25% white px) gains(BGR)=[1.0299999713897705, 1.0499999523162842, 1.0800000429153442]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.195
+      sharpness: 1937.3
+    band_colors:
+      left_end_rgb: [16, 43, 93]
+      right_end_rgb: [4, 79, 149]
+      left_end_hex: '#102B5D'
+      right_end_hex: '#044F95'
+      dominant_hex: ['#E8E8E8', '#080808', '#0848B8']
+    grade: B
+    grade_reason: 3.0 px/mm
+  ivascular_essential_pro_balloon:
+    brand: iVascular
+    product: essential pro
+    device_type: coronary_balloon_sc
+    source: redrawn
+    photo: hospital_4.jpg
+    rotation: ccw
+    corners_px:
+    - [2453.2, 2344.1]
+    - [2465.1, 3779.6]
+    - [2338.6, 3784.4]
+    - [2373.0, 2343.6]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: manual quad + edge snap
+    edge_fit_confidence: [1.12, 1.08, 2.55, 1.92]
+    mm_used: {spine_length: 220.0, thickness: 14.5, full_spine_length: 220.0, source: catalog/dims.yaml, px_aspect: 13.91}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: spine of the "4 mm / 30 mm" carton in a fanned stack; spine seen obliquely, edges ambiguous, printed
+      text is skewed
+    texture:
+      file: textures/ivascular_essential_pro_balloon/top.png
+      size_px: [880, 58]
+      px_per_mm: 4
+    processing:
+      native_px: [1438, 103]
+      px_per_mm: 6.54
+      wb: label-stock (23% white px) gains(BGR)=[1.100000023841858, 1.2899999618530273, 1.2100000381469727]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.209
+      sharpness: 1345.1
+    band_colors:
+      left_end_rgb: [216, 27, 115]
+      right_end_rgb: [216, 27, 115]
+      left_end_hex: '#D81B73'
+      right_end_hex: '#D81B73'
+      dominant_hex: ['#D81B73', '#B8B0E0']
+    grade: A
+    grade_reason: 'clean procedural redraw (photo spine unusable: spine of the "4 mm / 30 mm" carton in a fanned stack)'
+    photo_reference:
+      file: textures/ivascular_essential_pro_balloon/top_photo.png
+      size_px: [880, 58]
+      mm_covered: [220.0, 14.5]
+      note: warped photo spine kept for reference only
+    redraw:
+      size_text: 4 x 30 mm (REF BCDPR14N150400030)
+      maker_word: iVascular
+      palette: ['#D81B73', '#B8B0E0']
+      fonts: Liberation Sans / DejaVu Sans (system TTF)
+      layout: end band, label panel, product name, size boxes, small print; as seen in the photo
+  ivascular_oceanus_14_pro:
+    brand: iVascular
+    product: Oceanus 14 pro
+    device_type: pta_balloon
+    source: photo
+    photo: hospital_3.jpg
+    rotation: ccw
+    corners_px:
+    - [1183.3, 3404.8]
+    - [1154.4, 4029.4]
+    - [1109.1, 4023.0]
+    - [1126.9, 3403.4]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: manual quad + edge snap
+    edge_fit_confidence: [2.14, 1.68, 4.1, 2.57]
+    mm_used: {spine_length: 190.0, thickness: 15.0, full_spine_length: 190.0, source: catalog/dims.yaml, px_aspect: 12.18}
+    photo_top_end: left
+    visible_fraction: 0.93
+    occlusion_notes: bottom (iVascular) end cut by the photo edge; rough corners covered 3 cartons; cut off at the bottom
+      of the photo
+    texture:
+      file: textures/ivascular_oceanus_14_pro/top.png
+      size_px: [760, 60]
+      px_per_mm: 4
+    processing:
+      native_px: [623, 51]
+      px_per_mm: 3.53
+      wb: label-stock (25% white px) gains(BGR)=[1.2100000381469727, 1.25, 1.090000033378601]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.235
+      sharpness: 875.0
+    band_colors:
+      left_end_rgb: [6, 10, 45]
+      right_end_rgb: [89, 106, 148]
+      left_end_hex: '#060A2D'
+      right_end_hex: '#596A94'
+      dominant_hex: ['#E8E8E8', '#283878', '#080828']
+    grade: B
+    grade_reason: 3.5 px/mm; soft source photo (lap var 875); 93% visible
+  ivascular_oceanus_18:
+    brand: iVascular
+    product: Oceanus 18 (OTW)
+    device_type: pta_balloon
+    source: photo
+    photo: hospital_3.jpg
+    rotation: ccw
+    corners_px:
+    - [757.6, 1965.2]
+    - [768.5, 2597.0]
+    - [727.5, 2594.9]
+    - [714.6, 1965.1]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: draft corners + edge snap
+    edge_fit_confidence: [1.73, 1.86, 2.58, 2.5]
+    mm_used: {spine_length: 190.0, thickness: 13.0, full_spine_length: 190.0, source: catalog/dims.yaml, px_aspect: 15.0}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: none
+    texture:
+      file: textures/ivascular_oceanus_18/top.png
+      size_px: [760, 52]
+      px_per_mm: 4
+    processing:
+      native_px: [631, 42]
+      px_per_mm: 3.32
+      wb: label-stock (4% white px) gains(BGR)=[1.190000057220459, 1.25, 1.2000000476837158]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.191
+      sharpness: 5074.7
+    band_colors:
+      left_end_rgb: [27, 21, 60]
+      right_end_rgb: [36, 35, 107]
+      left_end_hex: '#1B153C'
+      right_end_hex: '#24236B'
+      dominant_hex: ['#E8A8A8', '#B88888', '#181848']
+    grade: A
+    grade_reason: 3.3 px/mm
+  ivascular_oceanus_35:
+    brand: iVascular
+    product: Oceanus 35 (OTW)
+    device_type: pta_balloon
+    source: photo
+    photo: hospital_3.jpg
+    rotation: ccw
+    corners_px:
+    - [816.0, 1128.9]
+    - [842.5, 1821.9]
+    - [788.8, 1821.9]
+    - [760.5, 1128.9]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: manual quad, no snap
+    edge_fit_confidence: [9.0, 9.0, 9.0, 9.0]
+    mm_used: {spine_length: 210.0, thickness: 15.0, full_spine_length: 210.0, source: catalog/dims.yaml, px_aspect: 12.7}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: none
+    texture:
+      file: textures/ivascular_oceanus_35/top.png
+      size_px: [840, 60]
+      px_per_mm: 4
+    processing:
+      native_px: [694, 55]
+      px_per_mm: 3.3
+      wb: label-stock (7% white px) gains(BGR)=[1.4500000476837158, 1.4500000476837158, 1.3899999856948853]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.402
+      sharpness: 3605.4
+    band_colors:
+      left_end_rgb: [74, 74, 117]
+      right_end_rgb: [67, 66, 172]
+      left_end_hex: '#4A4A75'
+      right_end_hex: '#4342AC'
+      dominant_hex: ['#C86878', '#F87898', '#4848A8']
+    grade: A
+    grade_reason: 3.3 px/mm
+  medalliance_selution_slr_dcb:
+    brand: MedAlliance
+    product: SELUTION SLR 014 PTCA BALLOON CATHETER
+    device_type: coronary_dcb
+    source: redrawn
+    photo: hospital_1.jpg
+    rotation: ccw
+    corners_px:
+    - [2302.9, 769.7]
+    - [2359.9, 1447.1]
+    - [2302.2, 1451.4]
+    - [2250.3, 779.0]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: draft corners + edge snap
+    edge_fit_confidence: [1.08, 1.03, 1.6, 2.34]
+    mm_used: {spine_length: 210.0, thickness: 13.5, full_spine_length: 210.0, source: catalog/dims.yaml, px_aspect: 12.17}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: stack tilted ~10 deg, diagonal printed design; rows overlap in the photo so neighbour print enters the
+      top and bottom edge
+    texture:
+      file: textures/medalliance_selution_slr_dcb/top.png
+      size_px: [840, 54]
+      px_per_mm: 4
+    processing:
+      native_px: [677, 56]
+      px_per_mm: 3.22
+      wb: label-stock (25% white px) gains(BGR)=[1.0299999713897705, 1.0299999713897705, 1.0299999713897705]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.26
+      sharpness: 5999.5
+    band_colors:
+      left_end_rgb: [232, 232, 230]
+      right_end_rgb: [229, 230, 229]
+      left_end_hex: '#E8E8E6'
+      right_end_hex: '#E5E6E5'
+      dominant_hex: ['#BCBAB7', '#E8E8E6']
+    grade: A
+    grade_reason: 'clean procedural redraw (photo spine unusable: stack tilted ~10 deg, diagonal printed design)'
+    photo_reference:
+      file: textures/medalliance_selution_slr_dcb/top_photo.png
+      size_px: [840, 54]
+      mm_covered: [210.0, 13.5]
+      note: warped photo spine kept for reference only
+    redraw:
+      size_text: 3.50 x 25 mm
+      maker_word: MedAlliance
+      palette: ['#BCBAB7', '#E8E8E6']
+      fonts: Liberation Sans / DejaVu Sans (system TTF)
+      layout: end band, label panel, product name, size boxes, small print; as seen in the photo
+  medtronic_amphirion_deep:
+    brand: Medtronic
+    product: Amphirion Deep (0.014 OTW PTA)
+    device_type: pta_balloon
+    source: photo
+    photo: hospital_3.jpg
+    rotation: cw
+    corners_px:
+    - [2023.9, 4032.0]
+    - [2050.3, 3435.8]
+    - [2095.1, 3435.8]
+    - [2068.7, 4032.0]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: manual quad, no snap
+    edge_fit_confidence: [9.0, 9.0, 9.0, 9.0]
+    mm_used: {spine_length: 190.0, thickness: 15.0, full_spine_length: 190.0, source: catalog/dims.yaml, px_aspect: 13.32}
+    photo_top_end: right
+    visible_fraction: 0.95
+    occlusion_notes: bottom (Medtronic) end cut by the photo edge; cut off at the bottom of the photo
+    texture:
+      file: textures/medtronic_amphirion_deep/top.png
+      size_px: [760, 60]
+      px_per_mm: 4
+    processing:
+      native_px: [597, 45]
+      px_per_mm: 3.31
+      wb: label-stock (25% white px) gains(BGR)=[1.090000033378601, 1.0299999713897705, 1.0199999809265137]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.236
+      sharpness: 1000.3
+    band_colors:
+      left_end_rgb: [70, 77, 92]
+      right_end_rgb: [125, 128, 124]
+      left_end_hex: '#464D5C'
+      right_end_hex: '#7D807C'
+      dominant_hex: ['#E8E8E8', '#384858', '#888888']
+    grade: B
+    grade_reason: 3.3 px/mm; 95% visible
+  medtronic_export_advance_edge:
+    brand: Medtronic
+    product: Export Advance (6F)
+    device_type: other
+    source: photo
+    photo: hospital_2.jpg
+    rotation: cw
+    corners_px:
+    - [2856.8, 4008.0]
+    - [2861.8, 3436.0]
+    - [2914.9, 3443.1]
+    - [2919.8, 4009.0]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: draft corners + edge snap
+    edge_fit_confidence: [1.67, 1.97, 1.84, 1.49]
+    mm_used: {spine_length: 220.0, thickness: 22.5, full_spine_length: 220.0, source: catalog/dims.yaml, px_aspect: 9.77}
+    photo_top_end: right
+    visible_fraction: 1.0
+    occlusion_notes: none
+    texture:
+      file: textures/medtronic_export_advance_edge/top.png
+      size_px: [880, 90]
+      px_per_mm: 4
+    processing:
+      native_px: [569, 58]
+      px_per_mm: 2.59
+      wb: label-stock (23% white px) gains(BGR)=[1.1399999856948853, 1.090000033378601, 1.1799999475479126]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.04
+      sharpness: 309.8
+    band_colors:
+      left_end_rgb: [113, 170, 2]
+      right_end_rgb: [37, 108, 84]
+      left_end_hex: '#71AA02'
+      right_end_hex: '#256C54'
+      dominant_hex: ['#F8F8F8', '#086848', '#98D808']
+    grade: B
+    grade_reason: 2.6 px/mm; blurry source photo (lap var 310)
+  medtronic_nc_euphora_edge:
+    brand: Medtronic
+    product: NC Euphora
+    device_type: coronary_balloon_nc
+    source: redrawn
+    photo: hospital_2.jpg
+    rotation: cw
+    corners_px:
+    - [2919.4, 3370.7]
+    - [2928.3, 2984.9]
+    - [2945.8, 2989.9]
+    - [2955.2, 3370.9]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: manual quad + edge snap
+    edge_fit_confidence: [1.38, 1.95, 1.89, 1.63]
+    mm_used: {spine_length: 220.0, thickness: 15.5, full_spine_length: 220.0, source: catalog/dims.yaml, px_aspect: 14.22}
+    photo_top_end: right
+    visible_fraction: 1.0
+    occlusion_notes: lower carton of a tilted, shadowed pair seen from above; perspective is strong
+    texture:
+      file: textures/medtronic_nc_euphora_edge/top.png
+      size_px: [880, 62]
+      px_per_mm: 4
+    processing:
+      native_px: [384, 27]
+      px_per_mm: 1.75
+      wb: label-stock (12% white px) gains(BGR)=[1.2400000095367432, 1.1799999475479126, 1.2999999523162842]
+      flat_glare_area: 0.0086
+      fold_glare_frac: 0.09
+      sharpness: 1055.4
+    band_colors:
+      left_end_rgb: [45, 176, 96]
+      right_end_rgb: [42, 168, 154]
+      left_end_hex: '#2DB060'
+      right_end_hex: '#2AA89A'
+      dominant_hex: ['#40B0D2', '#1A1A1A', '#A8E4C8', '#2AA89A']
+    grade: A
+    grade_reason: 'clean procedural redraw (photo spine unusable: lower carton of a tilted, shadowed pair seen from above)'
+    photo_reference:
+      file: textures/medtronic_nc_euphora_edge/top_photo.png
+      size_px: [880, 62]
+      mm_covered: [220.0, 15.5]
+      note: warped photo spine kept for reference only
+    redraw:
+      size_text: 3.5 x 20 (from research front image; none in inventory)
+      maker_word: Medtronic
+      palette: ['#40B0D2', '#1A1A1A', '#A8E4C8', '#2AA89A']
+      fonts: Liberation Sans / DejaVu Sans (system TTF)
+      layout: end band, label panel, product name, size boxes, small print; as seen in the photo
+  medtronic_pacific_plus:
+    brand: Medtronic
+    product: Pacific Plus (PTA, OTW, .018 / .014?)
+    device_type: pta_balloon
+    source: photo
+    photo: hospital_3.jpg
+    rotation: cw
+    corners_px:
+    - [718.5, 3328.0]
+    - [726.4, 2756.1]
+    - [775.4, 2757.1]
+    - [764.5, 3330.9]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: draft corners + edge snap
+    edge_fit_confidence: [2.24, 2.16, 2.91, 2.14]
+    mm_used: {spine_length: 175.0, thickness: 13.0, full_spine_length: 175.0, source: catalog/dims.yaml, px_aspect: 12.06}
+    photo_top_end: right
+    visible_fraction: 1.0
+    occlusion_notes: none
+    texture:
+      file: textures/medtronic_pacific_plus/top.png
+      size_px: [700, 52]
+      px_per_mm: 4
+    processing:
+      native_px: [573, 48]
+      px_per_mm: 3.27
+      wb: label-stock (23% white px) gains(BGR)=[1.149999976158142, 1.0800000429153442, 1.0700000524520874]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.209
+      sharpness: 1302.0
+    band_colors:
+      left_end_rgb: [89, 153, 84]
+      right_end_rgb: [152, 151, 74]
+      left_end_hex: '#599954'
+      right_end_hex: '#98974A'
+      dominant_hex: ['#D8D8D8', '#F8F8F8', '#389828']
+    grade: A
+    grade_reason: 3.3 px/mm
+  medtronic_prevail_dcb:
+    brand: Medtronic
+    product: Prevail RX DCB
+    device_type: coronary_dcb
+    source: photo
+    photo: hospital_4.jpg
+    rotation: cw
+    corners_px:
+    - [524.2, 3745.4]
+    - [447.9, 2548.6]
+    - [549.9, 2541.1]
+    - [630.0, 3741.6]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: draft corners + edge snap
+    edge_fit_confidence: [2.57, 3.1, 3.42, 3.28]
+    mm_used: {spine_length: 190.0, thickness: 14.0, full_spine_length: 190.0, source: catalog/dims.yaml, px_aspect: 11.54}
+    photo_top_end: right
+    visible_fraction: 1.0
+    occlusion_notes: none
+    texture:
+      file: textures/medtronic_prevail_dcb/top.png
+      size_px: [760, 56]
+      px_per_mm: 4
+    processing:
+      native_px: [1201, 104]
+      px_per_mm: 6.32
+      wb: label-stock (25% white px) gains(BGR)=[1.1399999856948853, 1.100000023841858, 1.0800000429153442]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.188
+      sharpness: 1541.2
+    band_colors:
+      left_end_rgb: [64, 66, 68]
+      right_end_rgb: [56, 55, 59]
+      left_end_hex: '#404244'
+      right_end_hex: '#38373B'
+      dominant_hex: ['#E8E8E8', '#080808', '#383838']
+    grade: A
+    grade_reason: 6.3 px/mm
+  medtronic_resolute_onyx:
+    brand: Medtronic
+    product: Resolute Onyx
+    device_type: coronary_des
+    source: photo
+    photo: hospital_2.jpg
+    rotation: cw
+    corners_px:
+    - [997.3, 2251.2]
+    - [1010.9, 1752.7]
+    - [1049.1, 1752.7]
+    - [1035.5, 2251.2]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: manual quad, no snap
+    edge_fit_confidence: [9.0, 9.0, 9.0, 9.0]
+    mm_used: {spine_length: 165.0, thickness: 11.5, full_spine_length: 165.0, source: catalog/dims.yaml, px_aspect: 13.05}
+    photo_top_end: right
+    visible_fraction: 1.0
+    occlusion_notes: none
+    texture:
+      file: textures/medtronic_resolute_onyx/top.png
+      size_px: [660, 46]
+      px_per_mm: 4
+    processing:
+      native_px: [499, 38]
+      px_per_mm: 3.02
+      wb: label-stock (4% white px) gains(BGR)=[1.0499999523162842, 0.9900000095367432, 0.9800000190734863]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.163
+      sharpness: 1626.4
+    band_colors:
+      left_end_rgb: [224, 198, 2]
+      right_end_rgb: [237, 224, 2]
+      left_end_hex: '#E0C602'
+      right_end_hex: '#EDE002'
+      dominant_hex: ['#E8D808', '#080808', '#988808']
+    grade: A
+    grade_reason: 3.0 px/mm
+  meril_nexgen_balloon:
+    brand: Meril
+    product: NEXGEN
+    device_type: coronary_des
+    source: redrawn
+    photo: hospital_1.jpg
+    rotation: ccw
+    corners_px:
+    - [1335.4, 2732.0]
+    - [1333.4, 3239.0]
+    - [1289.4, 3240.0]
+    - [1287.3, 2732.0]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: draft corners + edge snap
+    edge_fit_confidence: [1.36, 1.25, 2.88, 2.3]
+    mm_used: {spine_length: 120.0, thickness: 11.0, full_spine_length: 120.0, source: catalog/dims.yaml, px_aspect: 11.03}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: 'fanned stack seen from above: label band is a trapezoid and the spine edges are not parallel; printed
+      text is skewed'
+    texture:
+      file: textures/meril_nexgen_balloon/top.png
+      size_px: [480, 44]
+      px_per_mm: 4
+    processing:
+      native_px: [507, 46]
+      px_per_mm: 4.22
+      wb: label-stock (25% white px) gains(BGR)=[1.2200000286102295, 1.190000057220459, 1.1699999570846558]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.249
+      sharpness: 3336.8
+    band_colors:
+      left_end_rgb: [236, 237, 236]
+      right_end_rgb: [80, 95, 191]
+      left_end_hex: '#ECEDEC'
+      right_end_hex: '#505FBF'
+      dominant_hex: ['#9B1B30', '#ECEDEC', '#1F5FBF']
+    grade: A
+    grade_reason: 'clean procedural redraw (photo spine unusable: fanned stack seen from above: label band is a trapezoid
+      and the spine edges are not parallel)'
+    photo_reference:
+      file: textures/meril_nexgen_balloon/top_photo.png
+      size_px: [480, 44]
+      mm_covered: [120.0, 11.0]
+      note: warped photo spine kept for reference only
+    redraw:
+      size_text: 4.00 x 24
+      maker_word: Meril
+      palette: ['#9B1B30', '#ECEDEC', '#1F5FBF']
+      fonts: Liberation Sans / DejaVu Sans (system TTF)
+      layout: end band, label panel, product name, size boxes, small print; as seen in the photo
+  nse_alpha_scoring_balloon:
+    brand: NSE (full maker not read)
+    product: NSE ALPHA SCORING
+    device_type: scoring_cutting_balloon
+    source: photo
+    photo: hospital_1.jpg
+    rotation: cw
+    corners_px:
+    - [430.7, 4004.0]
+    - [405.3, 3494.7]
+    - [447.1, 3494.5]
+    - [470.7, 4006.1]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: manual quad + edge snap
+    edge_fit_confidence: [2.43, 2.0, 2.54, 4.05]
+    mm_used: {spine_length: 170.0, thickness: 13.5, full_spine_length: 170.0, source: catalog/dims.yaml, px_aspect: 12.49}
+    photo_top_end: right
+    visible_fraction: 1.0
+    occlusion_notes: carton lies on the shelf, spine strip seen at a grazing angle; left maroon end face excluded
+    texture:
+      file: textures/nse_alpha_scoring_balloon/top.png
+      size_px: [680, 54]
+      px_per_mm: 4
+    processing:
+      native_px: [511, 41]
+      px_per_mm: 3.01
+      wb: label-stock (25% white px) gains(BGR)=[1.190000057220459, 1.1799999475479126, 1.159999966621399]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.264
+      sharpness: 934.1
+    band_colors:
+      left_end_rgb: [121, 60, 80]
+      right_end_rgb: [221, 226, 226]
+      left_end_hex: '#793C50'
+      right_end_hex: '#DDE2E2'
+      dominant_hex: ['#E8E8E8', '#989898', '#683848']
+    grade: B
+    grade_reason: 3.0 px/mm; soft source photo (lap var 934)
+  orbusneich_combo_plus:
+    brand: OrbusNeich (inferred; brand not legible)
+    product: COMBO Plus (printed 'COMBO +' on spine top)
+    device_type: coronary_des
+    source: redrawn
+    photo: hospital_2.jpg
+    rotation: ccw
+    corners_px:
+    - [956.9, 1061.2]
+    - [1067.3, 1636.8]
+    - [1028.0, 1635.6]
+    - [921.6, 1058.3]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: manual quad + edge snap
+    edge_fit_confidence: [1.11, 1.05, 2.14, 1.72]
+    mm_used: {spine_length: 195.0, thickness: 13.5, full_spine_length: 195.0, source: catalog/dims.yaml, px_aspect: 15.69}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: tilted stack seen from above; row "3.0 / 33"; neighbour rows overlap the edges
+    texture:
+      file: textures/orbusneich_combo_plus/top.png
+      size_px: [780, 54]
+      px_per_mm: 4
+    processing:
+      native_px: [587, 37]
+      px_per_mm: 3.01
+      wb: label-stock (25% white px) gains(BGR)=[0.9599999785423279, 0.9599999785423279, 0.9800000190734863]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.209
+      sharpness: 1777.4
+    band_colors:
+      left_end_rgb: [27, 63, 154]
+      right_end_rgb: [27, 63, 154]
+      left_end_hex: '#1B3F9A'
+      right_end_hex: '#1B3F9A'
+      dominant_hex: ['#1B3F9A', '#F2F2F0']
+    grade: A
+    grade_reason: 'clean procedural redraw (photo spine unusable: tilted stack seen from above)'
+    photo_reference:
+      file: textures/orbusneich_combo_plus/top_photo.png
+      size_px: [780, 54]
+      mm_covered: [195.0, 13.5]
+      note: warped photo spine kept for reference only
+    redraw:
+      size_text: 3.0 x 33
+      maker_word: OrbusNeich (inferred)
+      palette: ['#1B3F9A', '#F2F2F0']
+      fonts: Liberation Sans / DejaVu Sans (system TTF)
+      layout: end band, label panel, product name, size boxes, small print; as seen in the photo
+  orbusneich_sapphire_3:
+    brand: OrbusNeich (inferred; spine shows Sapphire 3 only)
+    product: SAPPHIRE 3 PTCA Balloon
+    device_type: coronary_balloon_sc
+    source: redrawn
+    photo: own_shelf.jpg
+    rotation: cw
+    corners_px:
+    - [824.1, 897.9]
+    - [828.1, 272.0]
+    - [871.1, 270.9]
+    - [855.1, 898.8]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: draft corners + edge snap
+    edge_fit_confidence: [1.08, 1.29, 3.22, 2.79]
+    mm_used: {spine_length: 225.0, thickness: 12.0, full_spine_length: 225.0, source: catalog/dims.yaml, px_aspect: 16.93}
+    photo_top_end: right
+    visible_fraction: 1.0
+    occlusion_notes: top end hidden behind the folder; pale-blue left part may belong to the neighbouring Conqueror carton;
+      cut off at the top of the photo
+    texture:
+      file: textures/orbusneich_sapphire_3/top.png
+      size_px: [900, 48]
+      px_per_mm: 4
+    processing:
+      native_px: [627, 37]
+      px_per_mm: 3.1
+      wb: label-stock (18% white px) gains(BGR)=[1.1100000143051147, 1.100000023841858, 1.1299999952316284]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.143
+      sharpness: 3199.4
+    band_colors:
+      left_end_rgb: [228, 231, 232]
+      right_end_rgb: [228, 231, 232]
+      left_end_hex: '#E4E7E8'
+      right_end_hex: '#E4E7E8'
+      dominant_hex: ['#E4E7E8', '#1B1B1F', '#F26B3A']
+    grade: A
+    grade_reason: 'clean procedural redraw (photo spine unusable: top end hidden behind the folder)'
+    photo_reference:
+      file: textures/orbusneich_sapphire_3/top_photo.png
+      size_px: [810, 48]
+      mm_covered: [202.5, 12.0]
+      note: warped photo spine kept for reference only
+    redraw:
+      size_text: 3.0 x 15
+      maker_word: OrbusNeich (inferred)
+      palette: ['#E4E7E8', '#1B1B1F', '#F26B3A']
+      fonts: Liberation Sans / DejaVu Sans (system TTF)
+      layout: end band, label panel, product name, size boxes, small print; as seen in the photo
+  orbusneich_scoreflex:
+    brand: OrbusNeich (inferred; spine shows scoreflex only)
+    product: scoreflex
+    device_type: scoring_cutting_balloon
+    source: photo
+    photo: hospital_1.jpg
+    rotation: ccw
+    corners_px:
+    - [621.9, 3415.1]
+    - [639.0, 3922.0]
+    - [606.0, 3921.9]
+    - [587.7, 3413.0]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: draft corners + edge snap
+    edge_fit_confidence: [1.76, 1.68, 2.88, 2.92]
+    mm_used: {spine_length: 125.0, thickness: 9.0, full_spine_length: 125.0, source: catalog/dims.yaml, px_aspect: 15.11}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: none
+    texture:
+      file: textures/orbusneich_scoreflex/top.png
+      size_px: [500, 36]
+      px_per_mm: 4
+    processing:
+      native_px: [508, 34]
+      px_per_mm: 4.06
+      wb: label-stock (25% white px) gains(BGR)=[1.1799999475479126, 1.159999966621399, 1.149999976158142]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.068
+      sharpness: 299.4
+    band_colors:
+      left_end_rgb: [192, 190, 112]
+      right_end_rgb: [152, 147, 75]
+      left_end_hex: '#C0BE70'
+      right_end_hex: '#98934B'
+      dominant_hex: ['#E8E8E8', '#787878', '#A8A8A8']
+    grade: B
+    grade_reason: 4.1 px/mm; blurry source photo (lap var 299)
+  teleflex_guideliner:
+    brand: 'Teleflex / Vascular Solutions (as read: GuideLiner)'
+    product: GuideLiner
+    device_type: guidewire_or_accessory
+    source: photo
+    photo: hospital_1.jpg
+    rotation: cw
+    corners_px:
+    - [182.1, 4027.8]
+    - [139.2, 3407.5]
+    - [205.8, 3407.4]
+    - [244.3, 4030.5]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: draft corners + edge snap
+    edge_fit_confidence: [2.66, 2.42, 2.76, 2.02]
+    mm_used: {spine_length: 240.0, thickness: 25.0, full_spine_length: 240.0, source: catalog/dims.yaml, px_aspect: 9.67}
+    photo_top_end: right
+    visible_fraction: 0.95
+    occlusion_notes: 'white spine with 6F tag, GuideLiner logo, REF 5571 and LOT text (verified by eye on the stack: it is
+      the narrow labelled edge, not a plain large face); cut off at the bottom of the photo'
+    texture:
+      file: textures/teleflex_guideliner/top.png
+      size_px: [960, 100]
+      px_per_mm: 4
+    processing:
+      native_px: [623, 64]
+      px_per_mm: 2.73
+      wb: label-stock (25% white px) gains(BGR)=[1.1100000143051147, 1.0700000524520874, 1.0700000524520874]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.082
+      sharpness: 619.9
+    band_colors:
+      left_end_rgb: [202, 202, 199]
+      right_end_rgb: [225, 225, 225]
+      left_end_hex: '#CACAC7'
+      right_end_hex: '#E1E1E1'
+      dominant_hex: ['#E8E8E8', '#C8C8C8']
+    grade: B
+    grade_reason: 2.7 px/mm; soft source photo (lap var 620); 95% visible
+  terumo_heartrail_ii_guiding_catheter:
+    brand: Terumo
+    product: Heartrail II
+    device_type: guiding_catheter
+    source: plain
+    photo: hospital_0.jpg
+    rotation: cw
+    note: the photo quad is the big FRONT face, not the spine; top.png is the plain base colour
+    plain_rgb: [230, 232, 234]
+    plain_hex: '#E6E8EA'
+    mm_used: {spine_length: 1050.0, thickness: 30.0, full_spine_length: 1050.0, source: catalog/dims.yaml}
+    texture:
+      file: textures/terumo_heartrail_ii_guiding_catheter/top.png
+      size_px: [1050, 30]
+      px_per_mm: 1
+    front_face_crop:
+      file: textures/terumo_heartrail_ii_guiding_catheter/front_photo_crop.png
+      size_px: [1785, 293]
+      px_per_mm: 1.95
+      photo_quad_tl_tr_br_bl:
+      - [1132.0, 1384.0]
+      - [1376.0, 1384.0]
+      - [1383.0, 2836.0]
+      - [1152.0, 2836.0]
+      orientation: image right = +X = photo top; image up = +Y = photo left
+      covers_height_mm: 915.1
+      full_height_mm: 1050.0
+      face_length_mm: 150.0
+      placed_from: photo-top end (+X, image right edge)
+      stretch_along_height: 1.0
+      clipped_photo_bottom_mm: 0.0
+      remainder_fill: last_rows
+      base_rgb: [230, 232, 234]
+      wb: label-stock (23% white px) gains(BGR)=[1.190000057220459, 1.190000057220459, 1.2100000381469727]
+    occlusion_notes: large white FRONT face with green Heartrail II label near the top and a blue TERUMO band below; the lower
+      end is hidden by the bin rim
+    grade: B
+    grade_reason: front face crop at 1.59 px/mm (source), covers 87% of the height
+  terumo_navicross:
+    brand: Terumo
+    product: NaviCross (0.035 straight 90cm; 0.018 straight 90 and 135cm)
+    device_type: guidewire_or_accessory
+    source: photo
+    photo: hospital_3.jpg
+    rotation: none
+    corners_px:
+    - [398.4, 2693.3]
+    - [1214.1, 2720.5]
+    - [1218.3, 2780.4]
+    - [399.4, 2750.7]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: manual quad + edge snap
+    edge_fit_confidence: [2.77, 2.19, 3.08, 2.04]
+    mm_used: {spine_length: 250.0, thickness: 28.0, full_spine_length: 250.0, source: catalog/dims.yaml, px_aspect: 13.92}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: carton lies flat; the crop is its narrow long SIDE (NaviCross, size, barcode, TERUMO), i.e. the labelled
+      spine, not the large front face; confirmed by eye; text reads left to right
+    texture:
+      file: textures/terumo_navicross/top.png
+      size_px: [1000, 112]
+      px_per_mm: 4
+    processing:
+      native_px: [818, 59]
+      px_per_mm: 3.27
+      wb: label-stock (25% white px) gains(BGR)=[1.0499999523162842, 1.059999942779541, 1.0700000524520874]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.029
+      sharpness: 2025.2
+    band_colors:
+      left_end_rgb: [104, 130, 190]
+      right_end_rgb: [177, 197, 163]
+      left_end_hex: '#6882BE'
+      right_end_hex: '#B1C5A3'
+      dominant_hex: ['#6888C8', '#E8E8E8', '#B8C8A8']
+    grade: B
+    grade_reason: 3.3 px/mm; carton lies flat
+  terumo_ryurei_balloon:
+    brand: Terumo
+    product: Ryurei
+    device_type: coronary_balloon_sc
+    source: photo
+    photo: own_shelf.jpg
+    rotation: cw
+    corners_px:
+    - [716.0, 917.9]
+    - [733.2, 329.8]
+    - [789.2, 328.9]
+    - [750.9, 916.6]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: draft corners + edge snap
+    edge_fit_confidence: [1.78, 1.73, 2.06, 2.9]
+    mm_used: {spine_length: 215.0, thickness: 14.5, full_spine_length: 215.0, source: catalog/dims.yaml, px_aspect: 12.94}
+    photo_top_end: right
+    visible_fraction: 1.0
+    occlusion_notes: none
+    texture:
+      file: textures/terumo_ryurei_balloon/top.png
+      size_px: [860, 58]
+      px_per_mm: 4
+    processing:
+      native_px: [589, 45]
+      px_per_mm: 2.74
+      wb: label-stock (25% white px) gains(BGR)=[1.1200000047683716, 1.1100000143051147, 1.1399999856948853]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.138
+      sharpness: 3582.9
+    band_colors:
+      left_end_rgb: [165, 64, 62]
+      right_end_rgb: [199, 213, 189]
+      left_end_hex: '#A5403E'
+      right_end_hex: '#C7D5BD'
+      dominant_hex: ['#E8E8E8', '#C8D8B8', '#A83838']
+    grade: B
+    grade_reason: 2.7 px/mm
+  trireme_tri_wedge:
+    brand: Trireme Medical (inferred; brand not legible)
+    product: Tri-Wedge (.035 and .018 versions, OTW)
+    device_type: guidewire_or_accessory
+    source: photo
+    photo: hospital_3.jpg
+    rotation: ccw
+    corners_px:
+    - [308.9, 1084.2]
+    - [302.4, 1815.8]
+    - [279.9, 1815.8]
+    - [246.7, 1076.5]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: manual quad, no snap
+    edge_fit_confidence: [9.0, 9.0, 9.0, 9.0]
+    mm_used: {spine_length: 220.0, thickness: 15.0, full_spine_length: 220.0, source: catalog/dims.yaml, px_aspect: 17.28}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: none
+    texture:
+      file: textures/trireme_tri_wedge/top.png
+      size_px: [880, 60]
+      px_per_mm: 4
+    processing:
+      native_px: [736, 43]
+      px_per_mm: 3.35
+      wb: label-stock (25% white px) gains(BGR)=[1.2799999713897705, 1.2699999809265137, 1.2699999809265137]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.228
+      sharpness: 2605.5
+    band_colors:
+      left_end_rgb: [52, 28, 49]
+      right_end_rgb: [25, 24, 31]
+      left_end_hex: '#341C31'
+      right_end_hex: '#19181F'
+      dominant_hex: ['#181818', '#F8F8F8', '#D8D8D8']
+    grade: A
+    grade_reason: 3.4 px/mm
+  unknown_blue_des:
+    brand: unidentified (not legible)
+    product: '''DES'' (printed text on blue cap)'
+    device_type: coronary_des
+    source: photo
+    photo: hospital_2.jpg
+    rotation: ccw
+    corners_px:
+    - [1362.2, 2892.0]
+    - [1361.1, 3409.0]
+    - [1330.2, 3409.0]
+    - [1324.0, 2892.1]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: draft corners + edge snap
+    edge_fit_confidence: [1.68, 1.71, 2.19, 2.51]
+    mm_used: {spine_length: 170.0, thickness: 11.0, full_spine_length: 170.0, source: catalog/dims.yaml, px_aspect: 14.96}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: none
+    texture:
+      file: textures/unknown_blue_des/top.png
+      size_px: [680, 44]
+      px_per_mm: 4
+    processing:
+      native_px: [517, 35]
+      px_per_mm: 3.04
+      wb: label-stock (25% white px) gains(BGR)=[1.0199999809265137, 1.0199999809265137, 1.0299999713897705]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.284
+      sharpness: 1444.3
+    band_colors:
+      left_end_rgb: [32, 75, 110]
+      right_end_rgb: [60, 90, 120]
+      left_end_hex: '#204B6E'
+      right_end_hex: '#3C5A78'
+      dominant_hex: ['#F8F8F8', '#385878', '#787878']
+    grade: A
+    grade_reason: 3.0 px/mm
+  unknown_teal_boston_style:
+    brand: unidentified (layout matches the Boston Scientific orange box next to it; brand not legible)
+    product: teal / white / green box (name unreadable; vertical dark bar, black 'size' cell)
+    device_type: coronary_des
+    source: photo
+    photo: hospital_2.jpg
+    rotation: ccw
+    corners_px:
+    - [2370.2, 2892.0]
+    - [2371.3, 3402.9]
+    - [2334.2, 3399.0]
+    - [2337.3, 2892.0]
+    corners_order: output top-left, top-right, bottom-right, bottom-left, in photo pixels
+    corners_source: draft corners + edge snap
+    edge_fit_confidence: [1.32, 1.43, 2.84, 2.15]
+    mm_used: {spine_length: 165.0, thickness: 11.0, full_spine_length: 165.0, source: catalog/dims.yaml, px_aspect: 14.51}
+    photo_top_end: left
+    visible_fraction: 1.0
+    occlusion_notes: none
+    texture:
+      file: textures/unknown_teal_boston_style/top.png
+      size_px: [660, 44]
+      px_per_mm: 4
+    processing:
+      native_px: [509, 35]
+      px_per_mm: 3.08
+      wb: label-stock (25% white px) gains(BGR)=[1.0499999523162842, 1.0299999713897705, 1.0700000524520874]
+      flat_glare_area: 0.0
+      fold_glare_frac: 0.066
+      sharpness: 565.8
+    band_colors:
+      left_end_rgb: [1, 63, 48]
+      right_end_rgb: [36, 128, 65]
+      left_end_hex: '#013F30'
+      right_end_hex: '#248041'
+      dominant_hex: ['#E8E8E8', '#084838', '#58D8B8']
+    grade: B
+    grade_reason: 3.1 px/mm; soft source photo (lap var 566)

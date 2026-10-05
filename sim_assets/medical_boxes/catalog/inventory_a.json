@@ -1,0 +1,1472 @@
+{
+ "families": [
+  {
+   "family_id": "bsci_agent_monorail_dcb",
+   "brand": "Boston Scientific",
+   "product": "Agent MONORAIL",
+   "device_type": "coronary_dcb",
+   "photos": [
+    "own_shelf",
+    "hospital_1",
+    "hospital_4"
+   ],
+   "exemplar": {
+    "photo": "own_shelf.jpg",
+    "corners_px": [
+     [
+      446,
+      306
+     ],
+     [
+      498,
+      308
+     ],
+     [
+      522,
+      933
+     ],
+     [
+      481,
+      933
+     ]
+    ],
+    "spine_long_px": 627,
+    "spine_short_px": 47,
+    "which_end_up": "image top: green MR cap above cyan band | image bottom: blue Boston Scientific wordmark (text runs bottom-to-top in this photo)",
+    "overlay_check": "/tmp/claude-1000/-home-farhan-orca-workspaces-igus-rebel-ros2-box-3d/764b4161-9fc9-4241-aa09-dd604d3df61c/scratchpad/inv_a/ov_own_agent.png",
+    "note": "Most frontal, unoccluded; in hospital_4 the same carton has Boston Scientific at the TOP (text runs top-to-bottom) - the two photos are rotated 180 deg from each other"
+   },
+   "sizes_seen": [
+    "4.00 x 30",
+    "4.00 x 20",
+    "4.00 x 15",
+    "3.50 x 30",
+    "3.50 x 20",
+    "3.50 x 15",
+    "3.00 x 30",
+    "3.00 x 20",
+    "3.00 x 15",
+    "2.75 x 30",
+    "2.50 x 30",
+    "2.50 x 20",
+    "2.50 x 15",
+    "2.25 x 20",
+    "2.00 x ?"
+   ],
+   "colors": [
+    "#1e78c8 (blue Boston Scientific band)",
+    "#e8eaec (white body)",
+    "#2aa24a (green MR end)",
+    "#202020 (MONORAIL bar)"
+   ],
+   "carton_notes": "MEASURED carton 15x230x250. hospital_4: 2 shelf rows, cartons lean about 17 deg, a few have red-white Chinese priority stickers on the green end. hospital_1 top row shows only the green ends of 'Agent DEB' (label 50805 Agent DEB). Dates e.g. 2026-10-09.",
+   "scale_refs": {
+    "own_shelf": {
+     "self": "measured carton Agent: spine 626 px long, 46 px wide"
+    },
+    "hospital_4": {
+     "Agent_monorail": "spine ~1476 px long (carton 4.00/20, corners in h4 overlay), horizontal pitch ~118 px per carton => ~6.4 px/mm along spine, ~7.7 px/mm across"
+    }
+   },
+   "estimated_dims_mm": {
+    "thickness": 15,
+    "spine_length": 230,
+    "confidence": "measured (given)"
+   }
+  },
+  {
+   "family_id": "medtronic_prevail_dcb",
+   "brand": "Medtronic",
+   "product": "Prevail RX DCB",
+   "device_type": "coronary_dcb",
+   "photos": [
+    "hospital_1",
+    "hospital_4"
+   ],
+   "exemplar": {
+    "photo": "hospital_4.jpg",
+    "corners_px": [
+     [
+      458,
+      2546
+     ],
+     [
+      566,
+      2538
+     ],
+     [
+      609,
+      3754
+     ],
+     [
+      515,
+      3754
+     ]
+    ],
+    "spine_long_px": 1213,
+    "spine_short_px": 101,
+    "which_end_up": "image top: dark grey top flap with barcode strip | image bottom: black 'Medtronic' wordmark on dark grey (Prevail text runs bottom-to-top)",
+    "overlay_check": "/tmp/claude-1000/-home-farhan-orca-workspaces-igus-rebel-ros2-box-3d/764b4161-9fc9-4241-aa09-dd604d3df61c/scratchpad/inv_a/ov_h4_prev.png",
+    "note": "Carton 3.5/25; leans ~5 deg; grey/black carton with white label panel and big barcode"
+   },
+   "sizes_seen": [
+    "4.0 x 30",
+    "4.0 x 20",
+    "3.5 x 30",
+    "3.5 x 25",
+    "3.5 x 20",
+    "3.0 x 30",
+    "3.0 x 25",
+    "3.0 x 20",
+    "2.75 x 25",
+    "2.75 x 20",
+    "2.5 x 30",
+    "2.5 x 25",
+    "2.25 x 25",
+    "2.25 x 20",
+    "2.0 x 30",
+    "2.0 x 20"
+   ],
+   "colors": [
+    "#4a4d52 (dark grey)",
+    "#d8d8d6 (light grey flap)",
+    "#f2f2f0 (white label)",
+    "#111 (size box)"
+   ],
+   "carton_notes": "Two rows of ~16-20 cartons; two leftmost in hospital_4 have a red dot on bottom. Thinner/shorter than Agent next to it; flap tops are light grey. Leaning ~5 deg right.",
+   "scale_refs": {
+    "hospital_4": {
+     "Agent_monorail_same_photo": "Agent spine 1476 px vs Prevail 1208 px; Agent pitch ~118 px, Prevail pitch ~105 px (different shelf rows: depth not identical)"
+    }
+   },
+   "estimated_dims_mm": {
+    "thickness": "13-15",
+    "spine_length": "185-200 (nominal 190)",
+    "confidence": "low-medium (transferred from Agent in hospital_4; different shelf)"
+   }
+  },
+  {
+   "family_id": "ivascular_essential_pro_balloon",
+   "brand": "iVascular",
+   "product": "essential pro",
+   "device_type": "coronary_balloon_sc",
+   "photos": [
+    "hospital_1",
+    "hospital_4",
+    "own_shelf"
+   ],
+   "exemplar": {
+    "photo": "hospital_4.jpg",
+    "corners_px": [
+     [
+      2200,
+      2349
+     ],
+     [
+      2314,
+      2346
+     ],
+     [
+      2577,
+      3772
+     ],
+     [
+      2429,
+      3753
+     ]
+    ],
+    "spine_long_px": 1436,
+    "spine_short_px": 132,
+    "which_end_up": "image top: magenta cap with white circular CARDIO logo | image bottom: magenta 'iVascular' wordmark",
+    "overlay_check": "/tmp/claude-1000/-home-farhan-orca-workspaces-igus-rebel-ros2-box-3d/764b4161-9fc9-4241-aa09-dd604d3df61c/scratchpad/inv_a/ov_h4_ess.png",
+    "note": "Carton REF BCDPRI4NI50400030 (4 x 30), clear and fairly frontal; lavender middle band, magenta caps"
+   },
+   "sizes_seen": [
+    "4 x 40 (REF BCDPRI4NI50400040)",
+    "4 x 30 (..400030)",
+    "4 x 25 (..400025)",
+    "3.5 x 40 (..350040)",
+    "3 x 40 (..300040)",
+    "3 x 30 (..300030)",
+    "3 x 25 (..300025)",
+    "2.75 x 30 (..275030)",
+    "2.75 x 25 (..275025)",
+    "2.5 x 40 (..250040)",
+    "2.5 x 30 (..250030)",
+    "2.5 x 25 (..250025)",
+    "2 x 40 (..200040)",
+    "2 x 30 (..200030)",
+    "2 x 25 (..200025)"
+   ],
+   "colors": [
+    "#d81b73 (magenta)",
+    "#b8b0e0 (lavender)"
+   ],
+   "carton_notes": "Many identical cartons on hospital_1 shelf 1 (about 17) and hospital_4. In own_shelf only a partial purple-labelled carton (BCDPRI4NI50300040, 3 x 40) is visible far left behind the Angiolite, with the magenta bottom 'iVascular' partly hidden by a black binder. Type SC vs NC not printed on spine (spine says BALLOON); classification uncertain.",
+   "scale_refs": {
+    "hospital_4": {
+     "Agent_monorail": "essential pro spine ~1422 px vs Agent 1476 px; pitch ~114 px vs 118 px (same photo, lower shelf)"
+    }
+   },
+   "estimated_dims_mm": {
+    "thickness": "14-15",
+    "spine_length": "215-225",
+    "confidence": "low-medium"
+   }
+  },
+  {
+   "family_id": "ivascular_angiolite_des",
+   "brand": "iVascular",
+   "product": "angiolite",
+   "device_type": "coronary_des",
+   "photos": [
+    "own_shelf"
+   ],
+   "exemplar": {
+    "photo": "own_shelf.jpg",
+    "corners_px": [
+     [
+      387,
+      285
+     ],
+     [
+      441,
+      287
+     ],
+     [
+      479,
+      939
+     ],
+     [
+      433,
+      939
+     ]
+    ],
+    "spine_long_px": 654,
+    "spine_short_px": 50,
+    "which_end_up": "image top: magenta cap with 'iVascular' wordmark | image bottom: magenta cap with CARDIO circular logo",
+    "overlay_check": "/tmp/claude-1000/-home-farhan-orca-workspaces-igus-rebel-ros2-box-3d/764b4161-9fc9-4241-aa09-dd604d3df61c/scratchpad/inv_a/ov_own_angio.png",
+    "note": "MEASURED carton; teal body; carton 4 mm x 19 mm"
+   },
+   "sizes_seen": [
+    "4 x 19 (REF SCCDSRI4150400019, LOT 2512587, exp 2028-09-21)",
+    "2.5 x 29 (REF SCCDSRI4150250029, LOT 251631)",
+    "2.5 x 40 (partly hidden, far left)"
+   ],
+   "colors": [
+    "#d81b73 (magenta)",
+    "#6fc9b5 (teal)"
+   ],
+   "carton_notes": "MEASURED carton 16x240x250. Two cartons leaning at far left (2.5/29 and a second behind it, plus magenta cartons stacked behind).",
+   "scale_refs": {
+    "own_shelf": {
+     "Angiolite": "spine 654 px, ~50 px wide"
+    }
+   },
+   "estimated_dims_mm": {
+    "thickness": 16,
+    "spine_length": 240,
+    "confidence": "measured (given)"
+   }
+  },
+  {
+   "family_id": "bsci_nc_emerge_monorail",
+   "brand": "Boston Scientific",
+   "product": "NC Emerge MONORAIL",
+   "device_type": "coronary_balloon_nc",
+   "photos": [
+    "own_shelf"
+   ],
+   "exemplar": {
+    "photo": "own_shelf.jpg",
+    "corners_px": [
+     [
+      70,
+      322
+     ],
+     [
+      122,
+      324
+     ],
+     [
+      207,
+      956
+     ],
+     [
+      163,
+      956
+     ]
+    ],
+    "spine_long_px": 639,
+    "spine_short_px": 48,
+    "which_end_up": "image top: green 'MR' cap | image bottom: black 'Boston Scientific' wordmark band",
+    "overlay_check": "/tmp/claude-1000/-home-farhan-orca-workspaces-igus-rebel-ros2-box-3d/764b4161-9fc9-4241-aa09-dd604d3df61c/scratchpad/inv_a/ov_own_emerge.png",
+    "note": "Leaning ~8 deg against the Angiolite; only one carton, 5.50 x 12"
+   },
+   "sizes_seen": [
+    "5.50 x 12"
+   ],
+   "colors": [
+    "#2aa24a (green)",
+    "#e8eaec (white)",
+    "#1a1a1a (black bottom)"
+   ],
+   "carton_notes": "Single carton, leans noticeably. Text 'NC Emerge MONORAIL' runs bottom-to-top. Not in hospital photos.",
+   "scale_refs": {
+    "own_shelf": {
+     "scale_note": "own_shelf, same row/depth: px per mm along spine = 2.74 (Agent 626px/230, Angiolite 654/240, Accuforce 606/220, Nagomi 706/250, Conqueror 619/230; range 2.69-2.82); across thickness ~3.0 px/mm (horizontal width of leaning spine, avg of top and bottom edge)"
+    }
+   },
+   "estimated_dims_mm": {
+    "thickness": "16 (15-17)",
+    "spine_length": "234 (225-245)",
+    "confidence": "medium (same row as 5 measured cartons)"
+   }
+  },
+  {
+   "family_id": "terumo_accuforce_nc",
+   "brand": "Terumo",
+   "product": "Accuforce",
+   "device_type": "coronary_balloon_nc",
+   "photos": [
+    "own_shelf"
+   ],
+   "exemplar": {
+    "photo": "own_shelf.jpg",
+    "corners_px": [
+     [
+      237,
+      349
+     ],
+     [
+      286,
+      350
+     ],
+     [
+      338,
+      952
+     ],
+     [
+      293,
+      955
+     ]
+    ],
+    "spine_long_px": 606,
+    "spine_short_px": 47,
+    "which_end_up": "image top: navy cap with 'Accuforce' wordmark (this carton) - other Accuforce cartons have TERUMO logo on top | image bottom: navy cap with TERUMO logo",
+    "overlay_check": "/tmp/claude-1000/-home-farhan-orca-workspaces-igus-rebel-ros2-box-3d/764b4161-9fc9-4241-aa09-dd604d3df61c/scratchpad/inv_a/ov_own_accu.png",
+    "note": "MEASURED carton; this exemplar is the 2.5-12 carton"
+   },
+   "sizes_seen": [
+    "2.5 x 12 (REF DC-RM2612HHW, LOT 261014)",
+    "2.75 x 20 (REF DC-RM2720HHW, LOT 261023)",
+    "3.5 x 15 (REF DC-RM3615HHW, LOT 260226)"
+   ],
+   "colors": [
+    "#1f2a6b (navy)",
+    "#eceeed (white)"
+   ],
+   "carton_notes": "MEASURED carton 16x220x250. Three cartons; the third has Accuforce at top / TERUMO at bottom, the first two have TERUMO on top / Accuforce at bottom - the cap layout differs between cartons.",
+   "scale_refs": {
+    "own_shelf": {
+     "Accuforce": "spine 606 px, ~47 px wide"
+    }
+   },
+   "estimated_dims_mm": {
+    "thickness": 16,
+    "spine_length": 220,
+    "confidence": "measured (given)"
+   }
+  },
+  {
+   "family_id": "terumo_ultimaster_nagomi_des",
+   "brand": "Terumo",
+   "product": "Ultimaster Nagomi",
+   "device_type": "coronary_des",
+   "photos": [
+    "own_shelf"
+   ],
+   "exemplar": {
+    "photo": "own_shelf.jpg",
+    "corners_px": [
+     [
+      331,
+      243
+     ],
+     [
+      382,
+      244
+     ],
+     [
+      430,
+      943
+     ],
+     [
+      390,
+      953
+     ]
+    ],
+    "spine_long_px": 707,
+    "spine_short_px": 46,
+    "which_end_up": "image top: green cap with 'Ultimaster Nagomi' text | image bottom: green band with red/green TERUMO logo",
+    "overlay_check": "/tmp/claude-1000/-home-farhan-orca-workspaces-igus-rebel-ros2-box-3d/764b4161-9fc9-4241-aa09-dd604d3df61c/scratchpad/inv_a/ov_own_nag.png",
+    "note": "MEASURED carton; this is the 3.0 x 24"
+   },
+   "sizes_seen": [
+    "2.75 x 33 (REF DE-RS2733ASM, LOT 250725, exp 2027-06-30)",
+    "3.0 x 24 (REF DE-RS3024ASM, LOT 260206, exp 2028-01-31)"
+   ],
+   "colors": [
+    "#2a9a50 (green)",
+    "#e8ecec (white)",
+    "#a9d4b4 (pale green bottom)"
+   ],
+   "carton_notes": "MEASURED carton 16x250x295. Two cartons, the tallest in the row.",
+   "scale_refs": {
+    "own_shelf": {
+     "Nagomi": "spine 706 px, ~46 px wide"
+    }
+   },
+   "estimated_dims_mm": {
+    "thickness": 16,
+    "spine_length": 250,
+    "confidence": "measured (given)"
+   }
+  },
+  {
+   "family_id": "terumo_ryurei_balloon",
+   "brand": "Terumo",
+   "product": "Ryurei",
+   "device_type": "coronary_balloon_sc",
+   "photos": [
+    "own_shelf"
+   ],
+   "exemplar": {
+    "photo": "own_shelf.jpg",
+    "corners_px": [
+     [
+      739,
+      328
+     ],
+     [
+      790,
+      329
+     ],
+     [
+      758,
+      912
+     ],
+     [
+      720,
+      912
+     ]
+    ],
+    "spine_long_px": 584,
+    "spine_short_px": 45,
+    "which_end_up": "image top: pale green band with red/green TERUMO logo | image bottom: red band with white 'Ryurei' wordmark",
+    "overlay_check": "/tmp/claude-1000/-home-farhan-orca-workspaces-igus-rebel-ros2-box-3d/764b4161-9fc9-4241-aa09-dd604d3df61c/scratchpad/inv_a/ov_own_ryu.png",
+    "note": "Single carton 2.0 x 10; slightly shorter than the Accuforce next to it"
+   },
+   "sizes_seen": [
+    "2.0 x 10 (REF DC-RR2010HHW, LOT 260116, exp 2028-12-31)"
+   ],
+   "colors": [
+    "#c9d8c0 (pale green)",
+    "#d0202a (red)",
+    "#eceeed (white)"
+   ],
+   "carton_notes": "Single carton, lean ~3 deg right.",
+   "scale_refs": {
+    "own_shelf": {
+     "scale_note": "own_shelf, same row/depth: px per mm along spine = 2.74 (Agent 626px/230, Angiolite 654/240, Accuforce 606/220, Nagomi 706/250, Conqueror 619/230; range 2.69-2.82); across thickness ~3.0 px/mm (horizontal width of leaning spine, avg of top and bottom edge)"
+    }
+   },
+   "estimated_dims_mm": {
+    "thickness": "14-15",
+    "spine_length": "213 (205-220)",
+    "confidence": "medium"
+   }
+  },
+  {
+   "family_id": "apt_conqueror_nc_pro",
+   "brand": "APT Medical",
+   "product": "CONQUEROR NC Pro",
+   "device_type": "coronary_balloon_nc",
+   "photos": [
+    "own_shelf"
+   ],
+   "exemplar": {
+    "photo": "own_shelf.jpg",
+    "corners_px": [
+     [
+      798,
+      290
+     ],
+     [
+      834,
+      290
+     ],
+     [
+      795,
+      908
+     ],
+     [
+      757,
+      908
+     ]
+    ],
+    "spine_long_px": 619,
+    "spine_short_px": 37,
+    "which_end_up": "image top: pale blue cap (yellow 'Lollipop' sticker lower on the spine) | image bottom: pale blue with APT Medical logo",
+    "overlay_check": "/tmp/claude-1000/-home-farhan-orca-workspaces-igus-rebel-ros2-box-3d/764b4161-9fc9-4241-aa09-dd604d3df61c/scratchpad/inv_a/ov_own_conq.png",
+    "note": "MEASURED carton; this is the 4.00 x 8"
+   },
+   "sizes_seen": [
+    "4.00 x 8",
+    "3.50 x 15"
+   ],
+   "colors": [
+    "#bfe0ee (pale blue)",
+    "#f6ee9a (yellow sticker)"
+   ],
+   "carton_notes": "MEASURED carton 12x230x250. Two cartons, both with a yellow 'Lollipop' sticker (apparently a distributor sticker). Top half partly hidden behind a pale folder.",
+   "scale_refs": {
+    "own_shelf": {
+     "Conqueror": "spine 619 px, ~37 px wide"
+    }
+   },
+   "estimated_dims_mm": {
+    "thickness": 12,
+    "spine_length": 230,
+    "confidence": "measured (given)"
+   }
+  },
+  {
+   "family_id": "orbusneich_sapphire_3",
+   "brand": "OrbusNeich (inferred; spine shows Sapphire 3 only)",
+   "product": "SAPPHIRE 3 PTCA Balloon",
+   "device_type": "coronary_balloon_sc",
+   "photos": [
+    "own_shelf"
+   ],
+   "exemplar": {
+    "photo": "own_shelf.jpg",
+    "corners_px": [
+     [
+      834,
+      273
+     ],
+     [
+      875,
+      273
+     ],
+     [
+      863,
+      899
+     ],
+     [
+      832,
+      899
+     ]
+    ],
+    "spine_long_px": 626,
+    "spine_short_px": 36,
+    "which_end_up": "image top: pale/white top (hidden behind folder; yellow Lollipop sticker lower) | image bottom: black band with orange '3' and 'SAPPHIRE'",
+    "overlay_check": "/tmp/claude-1000/-home-farhan-orca-workspaces-igus-rebel-ros2-box-3d/764b4161-9fc9-4241-aa09-dd604d3df61c/scratchpad/inv_a/ov_own_sapph.png",
+    "note": "LOW confidence: top end occluded"
+   },
+   "sizes_seen": [
+    "3.0 x 15"
+   ],
+   "colors": [
+    "#e8ecee (pale)",
+    "#1b1b1f (black)",
+    "#f26b3a (orange 3)"
+   ],
+   "carton_notes": "One carton at the right end; also a pale carton beyond it with an olive-yellow bottom (2027-11-07, FA2510297) that could not be identified (maybe a Scoreflex-type).",
+   "scale_refs": {
+    "own_shelf": {
+     "scale_note": "own_shelf, same row/depth: px per mm along spine = 2.74 (Agent 626px/230, Angiolite 654/240, Accuforce 606/220, Nagomi 706/250, Conqueror 619/230; range 2.69-2.82); across thickness ~3.0 px/mm (horizontal width of leaning spine, avg of top and bottom edge)"
+    }
+   },
+   "estimated_dims_mm": {
+    "thickness": "12 (11-14)",
+    "spine_length": "225 (215-235)",
+    "confidence": "low"
+   }
+  },
+  {
+   "family_id": "bsci_permanent_sled_bag_carton",
+   "brand": "Boston Scientific",
+   "product": "Permanent Sled Bag (generic printed carton)",
+   "device_type": "other",
+   "photos": [
+    "own_shelf"
+   ],
+   "exemplar": {
+    "photo": "own_shelf.jpg",
+    "corners_px": [
+     [
+      678,
+      316
+     ],
+     [
+      734,
+      318
+     ],
+     [
+      720,
+      918
+     ],
+     [
+      670,
+      918
+     ]
+    ],
+    "spine_long_px": 601,
+    "spine_short_px": 53,
+    "which_end_up": "image top: plain navy | image bottom: navy Boston Scientific wordmark",
+    "overlay_check": "/tmp/claude-1000/-home-farhan-orca-workspaces-igus-rebel-ros2-box-3d/764b4161-9fc9-4241-aa09-dd604d3df61c/scratchpad/inv_a/ov_own_sled.png",
+    "note": "Fourth of four identical cartons, clearest"
+   },
+   "sizes_seen": [],
+   "colors": [
+    "#142a78 (navy)",
+    "#eceeed (white)"
+   ],
+   "carton_notes": "Four identical cartons with only 'Permanent Sled Bag' printed (dates 2029-03-24, 2029-04-26, 2029-03-10, 2029-03-12); product inside unknown (likely a stent sled). Visibly thicker than Agent (50-56 px vs 46 px).",
+   "scale_refs": {
+    "own_shelf": {
+     "scale_note": "own_shelf, same row/depth: px per mm along spine = 2.74 (Agent 626px/230, Angiolite 654/240, Accuforce 606/220, Nagomi 706/250, Conqueror 619/230; range 2.69-2.82); across thickness ~3.0 px/mm (horizontal width of leaning spine, avg of top and bottom edge)"
+    }
+   },
+   "estimated_dims_mm": {
+    "thickness": "17-18",
+    "spine_length": "219 (210-228)",
+    "confidence": "medium"
+   }
+  },
+  {
+   "family_id": "medalliance_selution_slr_dcb",
+   "brand": "MedAlliance",
+   "product": "SELUTION SLR 014 PTCA BALLOON CATHETER",
+   "device_type": "coronary_dcb",
+   "photos": [
+    "hospital_1"
+   ],
+   "exemplar": {
+    "photo": "hospital_1.jpg",
+    "corners_px": [
+     [
+      2250,
+      771
+     ],
+     [
+      2299,
+      756
+     ],
+     [
+      2362,
+      1456
+     ],
+     [
+      2307,
+      1458
+     ]
+    ],
+    "spine_long_px": 696,
+    "spine_short_px": 53,
+    "which_end_up": "image top: white top flap, MedAlliance sunburst logo | image bottom: plain white",
+    "overlay_check": "/tmp/claude-1000/-home-farhan-orca-workspaces-igus-rebel-ros2-box-3d/764b4161-9fc9-4241-aa09-dd604d3df61c/scratchpad/inv_a/ov_h1_sel.png",
+    "note": "Carton 3.50 x 25; leans ~8 deg; white-on-white so edges are low contrast; polygon starts at the MedAlliance logo end"
+   },
+   "sizes_seen": [
+    "4.00 x 20",
+    "3.50 x 40",
+    "3.50 x 30",
+    "3.50 x 25",
+    "3.50 x 20",
+    "3.00 x 40",
+    "3.00 x 30",
+    "3.00 x 25",
+    "3.00 x 20",
+    "2.75 x 40",
+    "2.75 x 30",
+    "2.75 x 20",
+    "2.50 x 40",
+    "2.50 x 30",
+    "2.50 x 20"
+   ],
+   "colors": [
+    "#e4e4e2 (white)",
+    "#111 (size box)"
+   ],
+   "carton_notes": "About 18 cartons, all white, lean strongly. Size reading from compressed view; some lengths may be off by one entry.",
+   "scale_refs": {
+    "hospital_1": {
+     "iVascular_essential_pro_same_row": "Selution ~690-880 px long, pitch ~61 px vs essential pro ~66 px"
+    }
+   },
+   "estimated_dims_mm": {
+    "thickness": "13-14",
+    "spine_length": "205-220",
+    "confidence": "low (relative to essential pro, itself estimated)"
+   }
+  },
+  {
+   "family_id": "bsci_wolverine_cutting_balloon",
+   "brand": "Boston Scientific",
+   "product": "Wolverine Coronary Cutting Balloon MONORAIL",
+   "device_type": "scoring_cutting_balloon",
+   "photos": [
+    "hospital_1"
+   ],
+   "exemplar": {
+    "photo": "hospital_1.jpg",
+    "corners_px": [
+     [
+      309,
+      2743
+     ],
+     [
+      356,
+      2741
+     ],
+     [
+      390,
+      3304
+     ],
+     [
+      342,
+      3306
+     ]
+    ],
+    "spine_long_px": 564,
+    "spine_short_px": 48,
+    "which_end_up": "image top: green cap | image bottom: green 'MR' band",
+    "overlay_check": "/tmp/claude-1000/-home-farhan-orca-workspaces-igus-rebel-ros2-box-3d/764b4161-9fc9-4241-aa09-dd604d3df61c/scratchpad/inv_a/ov_h1_wol.png",
+    "note": "Carton 3.25 x 10; lean ~5 deg"
+   },
+   "sizes_seen": [
+    "4.00 x 10",
+    "3.75 x 10",
+    "3.50 x 15",
+    "3.50 x 10",
+    "3.25 x 10",
+    "3.00 x 15",
+    "3.00 x 10",
+    "2.75 x 10",
+    "2.50 x 15",
+    "2.50 x 10",
+    "2.25 x 10",
+    "2.00 x 10"
+   ],
+   "colors": [
+    "#22a24a (green)",
+    "#ecedec (white)"
+   ],
+   "carton_notes": "About 25 cartons, shelf label 50882 wolverin cutting balloon. Bottom shelf-front shorter than Agent row.",
+   "scale_refs": {
+    "hospital_1": {
+     "note": "no measured carton in frame; row is on lower shelf, closer to camera"
+    }
+   },
+   "estimated_dims_mm": {
+    "thickness": "10-12",
+    "spine_length": "120-160 (nominal 140)",
+    "confidence": "low"
+   }
+  },
+  {
+   "family_id": "meril_nexgen_balloon",
+   "brand": "Meril",
+   "product": "NEXGEN",
+   "device_type": "coronary_des",
+   "photos": [
+    "hospital_1"
+   ],
+   "exemplar": {
+    "photo": "hospital_1.jpg",
+    "corners_px": [
+     [
+      1283,
+      2735
+     ],
+     [
+      1326,
+      2736
+     ],
+     [
+      1331,
+      3239
+     ],
+     [
+      1289,
+      3240
+     ]
+    ],
+    "spine_long_px": 504,
+    "spine_short_px": 43,
+    "which_end_up": "image top: white 'NEXGEN' wordmark area | image bottom: dark red end with blue 'Meril' logo",
+    "overlay_check": "/tmp/claude-1000/-home-farhan-orca-workspaces-igus-rebel-ros2-box-3d/764b4161-9fc9-4241-aa09-dd604d3df61c/scratchpad/inv_a/ov_h1_nex.png",
+    "note": "Carton 4.00 x 24. Dimensions given as D x L; classed as DES (sirolimus); could be a stent - no explicit text"
+   },
+   "sizes_seen": [
+    "4.50 x 29",
+    "4.50 x 16",
+    "4.00 x 40",
+    "4.00 x 32",
+    "4.00 x 29",
+    "4.00 x 24",
+    "4.00 x 19",
+    "4.00 x 16",
+    "4.00 x 13",
+    "3.50 x 40",
+    "3.50 x 32",
+    "3.50 x 29",
+    "3.50 x 24",
+    "3.50 x 19",
+    "3.50 x 16",
+    "3.50 x 13",
+    "3.00 x 40",
+    "3.00 x 32",
+    "3.00 x 29",
+    "3.00 x 24",
+    "3.00 x 19",
+    "3.00 x 16",
+    "3.00 x 13",
+    "2.75 x 40",
+    "2.75 x 32",
+    "2.75 x 29",
+    "2.75 x 24",
+    "2.75 x 19",
+    "2.75 x 16",
+    "2.75 x 13",
+    "2.50 x 40",
+    "2.50 x 32",
+    "2.50 x 29",
+    "2.50 x 24",
+    "2.50 x 19",
+    "2.50 x 16",
+    "2.50 x 13",
+    "2.25 x 40",
+    "2.25 x 24"
+   ],
+   "colors": [
+    "#9b1b30 (dark red)",
+    "#ecedec (white)",
+    "#1f5fbf (blue Meril tag)"
+   ],
+   "carton_notes": "Two shelves-full (about 40 cartons) on bottom-left-centre of hospital_1; almost frontal, little lean.",
+   "scale_refs": {
+    "hospital_1": {
+     "note": "no measured carton in frame"
+    }
+   },
+   "estimated_dims_mm": {
+    "thickness": "10-12",
+    "spine_length": "110-140 (nominal 120)",
+    "confidence": "low"
+   }
+  },
+  {
+   "family_id": "orbusneich_scoreflex",
+   "brand": "OrbusNeich (inferred; spine shows scoreflex only)",
+   "product": "scoreflex",
+   "device_type": "scoring_cutting_balloon",
+   "photos": [
+    "hospital_1"
+   ],
+   "exemplar": {
+    "photo": "hospital_1.jpg",
+    "corners_px": [
+     [
+      588,
+      3418
+     ],
+     [
+      624,
+      3416
+     ],
+     [
+      638,
+      3920
+     ],
+     [
+      602,
+      3921
+     ]
+    ],
+    "spine_long_px": 504,
+    "spine_short_px": 36,
+    "which_end_up": "image top: olive-yellow cap | image bottom: olive-yellow band",
+    "overlay_check": "/tmp/claude-1000/-home-farhan-orca-workspaces-igus-rebel-ros2-box-3d/764b4161-9fc9-4241-aa09-dd604d3df61c/scratchpad/inv_a/ov_h1_scor.png",
+    "note": "grey/white spine with olive ends; carton roughly 2.5 x 15 range"
+   },
+   "sizes_seen": [
+    "4.0 x 15",
+    "3.5 x 15",
+    "3.0 x 20",
+    "3.0 x 15",
+    "3.0 x 10",
+    "2.5 x 15",
+    "2.5 x 10",
+    "2.0 x 20",
+    "2.0 x 10"
+   ],
+   "colors": [
+    "#b4b04a (olive)",
+    "#8a8c8c (grey band)",
+    "#f0f0ee (white)"
+   ],
+   "carton_notes": "Thin cartons (about 35 px pitch). A second variant with a dark green band and circular badge ('scoreflex' + small icon, sizes 3.5/15, 2.0/15) sits at the right end - probably a different scoreflex sub-line (NC/TRIO).",
+   "scale_refs": {
+    "hospital_1": {
+     "note": "no measured carton in frame"
+    }
+   },
+   "estimated_dims_mm": {
+    "thickness": "8-10",
+    "spine_length": "110-140",
+    "confidence": "low"
+   }
+  },
+  {
+   "family_id": "orbusneich_scoreflex_green_variant",
+   "brand": "OrbusNeich (inferred)",
+   "product": "scoreflex (dark green variant with circle badge)",
+   "device_type": "scoring_cutting_balloon",
+   "photos": [
+    "hospital_1"
+   ],
+   "exemplar": {
+    "photo": null,
+    "corners_px": null,
+    "spine_long_px": null,
+    "spine_short_px": null,
+    "which_end_up": null,
+    "note": "Only 2-3 cartons, partly hidden at right of scoreflex row; see crop h1_D1.png"
+   },
+   "sizes_seen": [
+    "3.5 x 15",
+    "2.0 x 15"
+   ],
+   "colors": [
+    "#1e4a3f (dark teal)",
+    "#f0f0ee (white)",
+    "#e6c8c8 (pink bottom)"
+   ],
+   "carton_notes": "Low confidence; may be same family as scoreflex.",
+   "scale_refs": {},
+   "estimated_dims_mm": {
+    "thickness": "8-10",
+    "spine_length": "110-140",
+    "confidence": "very low"
+   }
+  },
+  {
+   "family_id": "biosensors_chroma",
+   "brand": "Biosensors",
+   "product": "CHROMA",
+   "device_type": "coronary_des",
+   "photos": [
+    "hospital_1"
+   ],
+   "exemplar": {
+    "photo": "hospital_1.jpg",
+    "corners_px": [
+     [
+      1346,
+      3416
+     ],
+     [
+      1387,
+      3416
+     ],
+     [
+      1394,
+      3929
+     ],
+     [
+      1354,
+      3929
+     ]
+    ],
+    "spine_long_px": 513,
+    "spine_short_px": 40,
+    "which_end_up": "image top: light blue cap with 'CHROMA' text | image bottom: blue band with Biosensors logo",
+    "overlay_check": "/tmp/claude-1000/-home-farhan-orca-workspaces-igus-rebel-ros2-box-3d/764b4161-9fc9-4241-aa09-dd604d3df61c/scratchpad/inv_a/ov_h1_chroma.png",
+    "note": "Carton 3.0 x 24; nearly frontal"
+   },
+   "sizes_seen": [
+    "4.0 x 29",
+    "4.0 x 19",
+    "4.0 x 14",
+    "3.5 x 36",
+    "3.5 x 29",
+    "3.5 x 24",
+    "3.5 x 19",
+    "3.5 x 14",
+    "3.0 x 36",
+    "3.0 x 33",
+    "3.0 x 29",
+    "3.0 x 24",
+    "3.0 x 19",
+    "3.0 x 14",
+    "2.75 x 33",
+    "2.75 x 29",
+    "2.75 x 24",
+    "2.75 x 19",
+    "2.5 x 36",
+    "2.5 x 33",
+    "2.5 x 29",
+    "2.5 x 24",
+    "2.5 x 19",
+    "2.5 x 14"
+   ],
+   "colors": [
+    "#bcd4ee (light blue)",
+    "#f2f2f0 (white)",
+    "#1b62c9 (blue bottom)"
+   ],
+   "carton_notes": "About 22 cartons plus 3 loose cartons lying flat on top (4.0 x 29/14/19). Device type not printed on spine: sizes suggest a stent (DES).",
+   "scale_refs": {
+    "hospital_1": {
+     "note": "no measured carton in frame"
+    }
+   },
+   "estimated_dims_mm": {
+    "thickness": "9-11",
+    "spine_length": "110-140 (nominal 120)",
+    "confidence": "low"
+   }
+  },
+  {
+   "family_id": "avantigard_d_logo",
+   "brand": "AVANTIGARD (as read; logo is a blue 'D' on black)",
+   "product": "AVANTIGARD",
+   "device_type": "coronary_des",
+   "photos": [
+    "hospital_1"
+   ],
+   "exemplar": {
+    "photo": "hospital_1.jpg",
+    "corners_px": [
+     [
+      2173,
+      3308
+     ],
+     [
+      2225,
+      3308
+     ],
+     [
+      2204,
+      4001
+     ],
+     [
+      2158,
+      4001
+     ]
+    ],
+    "spine_long_px": 693,
+    "spine_short_px": 49,
+    "which_end_up": "image top: black cap with 'AVANTIGARD' wordmark | image bottom: black band with 'AVANTIGARD' wordmark",
+    "overlay_check": "/tmp/claude-1000/-home-farhan-orca-workspaces-igus-rebel-ros2-box-3d/764b4161-9fc9-4241-aa09-dd604d3df61c/scratchpad/inv_a/ov_h1_avant.png",
+    "note": "Carton 3.50 x 25; leans ~7 deg right at top"
+   },
+   "sizes_seen": [
+    "4.00 x 31",
+    "4.00 x 25",
+    "4.00 x 20",
+    "4.00 x 16",
+    "3.50 x 31",
+    "3.50 x 25",
+    "3.50 x 20",
+    "3.50 x 16",
+    "3.00 x 25",
+    "3.00 x 20",
+    "3.00 x 16",
+    "2.75 x 25",
+    "2.75 x 20",
+    "2.75 x 16",
+    "2.50 x 25",
+    "2.50 x 20",
+    "2.50 x 16"
+   ],
+   "colors": [
+    "#0d0d10 (black)",
+    "#f4f4f2 (white)",
+    "#2d8fd6 (blue D)"
+   ],
+   "carton_notes": "About 20 cartons at bottom shelf right end. Type not printed; sizes suggest coronary stent (low confidence). Taller than Chroma beside it.",
+   "scale_refs": {
+    "hospital_1": {
+     "note": "no measured carton in frame"
+    }
+   },
+   "estimated_dims_mm": {
+    "thickness": "10-12",
+    "spine_length": "140-170 (nominal 155)",
+    "confidence": "low"
+   }
+  },
+  {
+   "family_id": "teleflex_guideliner",
+   "brand": "Teleflex / Vascular Solutions (as read: GuideLiner)",
+   "product": "GuideLiner",
+   "device_type": "guidewire_or_accessory",
+   "photos": [
+    "hospital_1"
+   ],
+   "exemplar": {
+    "photo": "hospital_1.jpg",
+    "corners_px": [
+     [
+      146,
+      3407
+     ],
+     [
+      214,
+      3396
+     ],
+     [
+      236,
+      4029
+     ],
+     [
+      179,
+      4029
+     ]
+    ],
+    "spine_long_px": 628,
+    "spine_short_px": 63,
+    "which_end_up": "image top: white, no cap | image bottom: white",
+    "overlay_check": "/tmp/claude-1000/-home-farhan-orca-workspaces-igus-rebel-ros2-box-3d/764b4161-9fc9-4241-aa09-dd604d3df61c/scratchpad/inv_a/ov_h1_guide.png",
+    "note": "Carton 6F (REF 5571, LOT 73A2600730); low-contrast white; whole-carton polygon incl. top flap"
+   },
+   "sizes_seen": [
+    "6F (REF 5571)",
+    "5.5F (REF 5570)"
+   ],
+   "colors": [
+    "#f4f4f2 (white)",
+    "#2a9a50 (6F tag)",
+    "#222 (5.5F tag)"
+   ],
+   "carton_notes": "Five wide cartons at bottom left (3 x 6F, 2 x 5.5F); thickness is large (about 85 display px); appear to be the wide face turned toward the camera.",
+   "scale_refs": {
+    "hospital_1": {
+     "note": "no measured carton in frame"
+    }
+   },
+   "estimated_dims_mm": {
+    "thickness": "20-30",
+    "spine_length": "unknown (>=150)",
+    "confidence": "very low"
+   }
+  },
+  {
+   "family_id": "nse_alpha_scoring_balloon",
+   "brand": "NSE (full maker not read)",
+   "product": "NSE ALPHA SCORING",
+   "device_type": "scoring_cutting_balloon",
+   "photos": [
+    "hospital_1"
+   ],
+   "exemplar": {
+    "photo": "hospital_1.jpg",
+    "corners_px": [
+     [
+      413,
+      3475
+     ],
+     [
+      486,
+      3423
+     ],
+     [
+      493,
+      4004
+     ],
+     [
+      429,
+      4007
+     ]
+    ],
+    "spine_long_px": 557,
+    "spine_short_px": 77,
+    "which_end_up": "image top: maroon cap with 'NSE ALPHA' text | image bottom: maroon with NSE logo",
+    "overlay_check": "/tmp/claude-1000/-home-farhan-orca-workspaces-igus-rebel-ros2-box-3d/764b4161-9fc9-4241-aa09-dd604d3df61c/scratchpad/inv_a/ov_h1_nse.png",
+    "note": "Single carton, 2.75 x 13, leaning against the shelf corner"
+   },
+   "sizes_seen": [
+    "2.75 x 13"
+   ],
+   "colors": [
+    "#6a1a3c (maroon)",
+    "#c2307a (magenta SCORING tag)",
+    "#f2f2f0 (white)"
+   ],
+   "carton_notes": "Single carton; heavily tilted. Low confidence on corners.",
+   "scale_refs": {},
+   "estimated_dims_mm": {
+    "thickness": "12-15",
+    "spine_length": "unknown",
+    "confidence": "very low"
+   }
+  },
+  {
+   "family_id": "white_guidewire_pouches",
+   "brand": "Various (shelf labels: Runthrough NS / Extension intermediate / Extra Floppy / Hypercoat / Grand Slam / Fielder XT-A, XT-R, FC / Sion blue, black, ES / Gaia First, Second, Third / Conquest Pro)",
+   "product": "guidewire pouches (no printed text visible)",
+   "device_type": "guidewire_or_accessory",
+   "photos": [
+    "hospital_1"
+   ],
+   "exemplar": {
+    "photo": null,
+    "corners_px": null,
+    "spine_long_px": null,
+    "spine_short_px": null,
+    "which_end_up": null,
+    "note": "Pouches are floppy white envelopes with punched hanger holes, no spines; corners meaningless"
+   },
+   "sizes_seen": [],
+   "colors": [
+    "#f4f4f2 (white)",
+    "#a9b3c0 (grey-blue pouch variant at far left)"
+   ],
+   "carton_notes": "POUCHES not cartons. Whole shelf 2 of hospital_1 (about 80-100 pouches in labelled groups). Hand-written group labels on the shelf front.",
+   "scale_refs": {},
+   "estimated_dims_mm": {
+    "thickness": "2-6 (floppy)",
+    "spine_length": "~250-300",
+    "confidence": "very low"
+   }
+  },
+  {
+   "family_id": "anyreach_boxes",
+   "brand": "Anyreach (hand label only)",
+   "product": "Anyreach 1.0 / 0.6",
+   "device_type": "guidewire_or_accessory",
+   "photos": [
+    "hospital_1"
+   ],
+   "exemplar": {
+    "photo": null,
+    "corners_px": null,
+    "spine_long_px": null,
+    "spine_short_px": null,
+    "which_end_up": null,
+    "note": "Two white boxes behind pouches, only tops visible; label 'Anyreach 1.0' and 'Anyreach 0.6' hand-written"
+   },
+   "sizes_seen": [
+    "1.0",
+    "0.6"
+   ],
+   "colors": [
+    "#f4f4f2 (white)"
+   ],
+   "carton_notes": "Partially occluded by pouches. Crop: h1_B1.png",
+   "scale_refs": {},
+   "estimated_dims_mm": {
+    "thickness": "unknown",
+    "spine_length": "unknown",
+    "confidence": "very low"
+   }
+  },
+  {
+   "family_id": "bbraun_sequent_please_neo_dcb",
+   "brand": "B. Braun (shelf label 'SeQuent please Neo')",
+   "product": "SeQuent Please NEO DCB (label only; not read from spine)",
+   "device_type": "coronary_dcb",
+   "photos": [
+    "hospital_1"
+   ],
+   "exemplar": {
+    "photo": null,
+    "corners_px": null,
+    "spine_long_px": null,
+    "spine_short_px": null,
+    "which_end_up": null,
+    "note": "Top-right of hospital_1, tilted white cartons with barcodes; spines not legible; identified only from handwritten shelf label 55176"
+   },
+   "sizes_seen": [],
+   "colors": [
+    "#f0f0ee (white)"
+   ],
+   "carton_notes": "Low confidence. A blue carton with 'SC' partly visible beside it. Crop: h1_T2.png. A paper note 'Elutax 3 (DCB) 5080323' also hangs on the shelf (Elutax 3 cartons not visible).",
+   "scale_refs": {},
+   "estimated_dims_mm": {
+    "thickness": "unknown",
+    "spine_length": "unknown",
+    "confidence": "very low"
+   }
+  },
+  {
+   "family_id": "terumo_heartrail_ii_guiding_catheter",
+   "brand": "Terumo",
+   "product": "Heartrail II",
+   "device_type": "guiding_catheter",
+   "photos": [
+    "hospital_0"
+   ],
+   "exemplar": {
+    "photo": "hospital_0.jpg",
+    "corners_px": [
+     [
+      1127,
+      1380
+     ],
+     [
+      1373,
+      1380
+     ],
+     [
+      1373,
+      2801
+     ],
+     [
+      1143,
+      2801
+     ]
+    ],
+    "spine_long_px": 1421,
+    "spine_short_px": 238,
+    "which_end_up": "image top: green TERUMO/Heartrail II label ('Open here' tab above) | image bottom: blue band with big TERUMO logo",
+    "overlay_check": "/tmp/claude-1000/-home-farhan-orca-workspaces-igus-rebel-ros2-box-3d/764b4161-9fc9-4241-aa09-dd604d3df61c/scratchpad/inv_a/ov_h0_heart.png",
+    "note": "JR-3.5 6F; the visible large face (box lies/stands tall like a book, label face to camera). Bottom of box hidden by the bin rim so spine_long is only a lower bound"
+   },
+   "sizes_seen": [
+    "BL-3.0 6F (GC-F6BL300N)",
+    "IL-3.5 Ikari 6F (GC-F6IL350N)",
+    "JR-3.5 6F (GC-F6JR350N)",
+    "JR-3.5 7F (GC-F7JR350N, orange label)"
+   ],
+   "colors": [
+    "#2a9a50 (6F label)",
+    "#e8742a (7F label)",
+    "#3c64a8 (blue band)",
+    "#f2f2f0 (white)"
+   ],
+   "carton_notes": "Stacks of 10+ boxes per slot, 4 slots. Very tall boxes, one stack partly obscured by a handwritten sheet. Right-hand bin has more white Heartrail II boxes (also 'Fr 6' green label).",
+   "scale_refs": {
+    "hospital_0": {
+     "note": "no measured cartons; a spirit level lies in the right bin (typically ~600 mm) and guiding catheters are 100 cm long, so box length ~1000+ mm"
+    }
+   },
+   "estimated_dims_mm": {
+    "thickness": "15-25 (stack of boxes ~27 px each vs face width ~250 px)",
+    "spine_length": "~1000-1100 (est. from 100 cm catheter)",
+    "face_width": "~130-150",
+    "confidence": "very low"
+   }
+  },
+  {
+   "family_id": "bsci_mach1_guiding_catheter",
+   "brand": "Boston Scientific",
+   "product": "Mach1",
+   "device_type": "guiding_catheter",
+   "photos": [
+    "hospital_0"
+   ],
+   "exemplar": {
+    "photo": "hospital_0.jpg",
+    "corners_px": [
+     [
+      1682,
+      1427
+     ],
+     [
+      1979,
+      1418
+     ],
+     [
+      1953,
+      2791
+     ],
+     [
+      1652,
+      2800
+     ]
+    ],
+    "spine_long_px": 1373,
+    "spine_short_px": 299,
+    "which_end_up": "image top: blue Boston Scientific / 7F label near top | image bottom: bottom of box hidden by bin rim",
+    "overlay_check": "/tmp/claude-1000/-home-farhan-orca-workspaces-igus-rebel-ros2-box-3d/764b4161-9fc9-4241-aa09-dd604d3df61c/scratchpad/inv_a/ov_h0_mach.png",
+    "note": "JL3.5 7F, REF H749 34357661 0, LOT 60719764, exp 2029-04-08; note white box to the right is the unprinted back of another box (EC REP text)"
+   },
+   "sizes_seen": [
+    "JL3.5 7F",
+    "MP1 7F (smaller box in right bin)"
+   ],
+   "colors": [
+    "#f2f2f0 (white)",
+    "#1e3a8a (BSC blue label)",
+    "#f1a04a (7F badge)"
+   ],
+   "carton_notes": "White tall boxes in 2-3 stacks. A short Mach1 MP1 carton sits in the back right.",
+   "scale_refs": {},
+   "estimated_dims_mm": {
+    "thickness": "15-25",
+    "spine_length": "~1000",
+    "confidence": "very low"
+   }
+  },
+  {
+   "family_id": "bard_conquest_pta",
+   "brand": "Bard",
+   "product": "CONQUEST PTA Balloon Dilatation Catheter",
+   "device_type": "pta_balloon",
+   "photos": [
+    "hospital_0"
+   ],
+   "exemplar": {
+    "photo": "hospital_0.jpg",
+    "corners_px": [
+     [
+      2322,
+      1450
+     ],
+     [
+      2471,
+      1444
+     ],
+     [
+      2465,
+      2744
+     ],
+     [
+      2276,
+      2744
+     ]
+    ],
+    "spine_long_px": 1297,
+    "spine_short_px": 169,
+    "which_end_up": "image top: blue box with hanger tab | image bottom: blue 'QUEST strength redefined' (CON-QUEST)",
+    "overlay_check": "/tmp/claude-1000/-home-farhan-orca-workspaces-igus-rebel-ros2-box-3d/764b4161-9fc9-4241-aa09-dd604d3df61c/scratchpad/inv_a/ov_h0_conq.png",
+    "note": "6mm x 20mm, 75 cm shaft, .035, 6F, REF CQ7562, exp 2028-04-30; leans back, occluded by neighbours"
+   },
+   "sizes_seen": [
+    "6mm x 20mm"
+   ],
+   "colors": [
+    "#1a6bb5 (blue)",
+    "#e8e8e6 (white label)"
+   ],
+   "carton_notes": "Blue tall box; several narrower copies behind; may have smaller sizes in the same slot.",
+   "scale_refs": {},
+   "estimated_dims_mm": {
+    "thickness": "20-30",
+    "spine_length": "~750-900 (75 cm catheter)",
+    "confidence": "very low"
+   }
+  }
+ ],
+ "notes": "Photos: orientation differs - own_shelf spines read bottom-to-top (logos at the image bottom), hospital_1/4 spines read top-to-bottom for the Agent (logo at the image top). Corners are in original full-res pixels (own_shelf 960x1280, hospital 3024x4032), ordered TL, TR, BR, BL of the visible spine face (hospital cartons lean 5-17 degrees, so the quads are parallelograms). Each exemplar has an overlay check image in the scratch dir (overlay_check). Estimated precision about +/-10-20 px own_shelf, +/-20-40 px hospital. Spine_long_px = mean of left and right edge lengths; spine_short_px = mean of top and bottom edge lengths (horizontal width of the leaning spine, includes some foreshortening). Scale on own_shelf: 2.74 px/mm along the spine from the 5 measured cartons (range 2.69-2.82) and ~3.0 px/mm across. Hospital estimates are transferred from the Agent in hospital_4 or by relative pitch/length and are low confidence because shelves sit at different depths. hospital_1 contains Agent only as the green ends of the top row (label 50805 Agent DEB) - no usable scale. hospital_0 has no measured carton; dims are inferred from catheter length (100 cm Heartrail, 75 cm Conquest). Not catalogued: hospital_0 right bin small boxes (partly Heartrail II 6F), top-right white boxes, a paper note 'Elutax 3 (DCB) 5080323' in hospital_1, and unlabelled items behind the shelf in own_shelf (white pouches, blue towel). Classification doubts: iVascular essential pro (SC vs NC), Meril NEXGEN, Chroma and AVANTIGARD (assumed DES from sizes), Sapphire 3 (SC vs NC).",
+ "scale_own_shelf_px_per_mm": {
+  "along_spine": 2.74,
+  "thickness": 3.0
+ }
+}

@@ -1,0 +1,591 @@
+{
+ "families": {
+  "biotronik_orsiro_mission": {
+   "maker": "Biotronik (Vascular Intervention business acquired by Teleflex, effective 2025-07-01)",
+   "product": "Orsiro Mission sirolimus-eluting coronary stent system (ultrathin strut, hybrid DES with proBIO + BIOlute PLLA)",
+   "device_type": "coronary DES",
+   "generation_notes": "Orsiro Mission is the current-generation Orsiro (new delivery system, 140 cm, 2.7F/2.9F distal shaft, RBP 16 atm). Older plain 'Orsiro' (Orsiro, magenta carton too) is the previous delivery system.",
+   "sizes": {
+    "diameters_mm": [
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.5,
+     4.0,
+     4.5,
+     5.0
+    ],
+    "lengths_mm": [
+     9,
+     13,
+     15,
+     18,
+     22,
+     26,
+     30,
+     35,
+     40
+    ],
+    "matrix_notes": "2.25 mm: 9-30; 2.5/2.75/3.0/3.5/4.0 mm: 9-40 (all 9 lengths); 4.5 and 5.0 mm: 9-30. Inventory sizes 2.25-4.0 x 15-40 are consistent.",
+    "shaft_lengths_cm": [
+     140
+    ],
+    "other": "Fast exchange, 0.014\" wire, 5F guide (2.25-4.0) / 6F (4.5-5.0), distal shaft 2.7F (2.25-3.0) / 2.9F (3.5-5.0), NP 10 atm (11 for 4.5-5.0), RBP 16 atm. Some sizes may be market-specific.",
+    "sources": [
+     "https://irc.teleflex.com/orsiro-mission/",
+     "https://www.dicardiology.com/content/biotronik-introduces-expanded-maximum-diameter-dimensions-orsiro-mission-des"
+    ]
+   },
+   "ref_scheme": "6-digit Biotronik REF; sequential per length within a diameter (45392x-45397x for 2.25-4.0; 47369x for 4.5-5.0). Older Orsiro REFs are 4017xx/4046xx.",
+   "example_refs": [
+    "453925 (2.25x9)",
+    "453930 (4.0x9)",
+    "453978 (4.0x40)",
+    "473694 (4.5x9)",
+    "473707 (5.0x30)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no published unit-carton dimensions/weight located; only photo estimates in the inventory)",
+    "sources": []
+   },
+   "images": [
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/biotronik_orsiro_mission/medicalecart_orsiro_404676_3.5x40.jpg",
+     "url": "https://cdn10.bigcommerce.com/s-x81fqsb/products/4980/images/7175/BIOTRONIK_404676_Orsiro_Sirolimus_Eluting_Coronary_Stent_System_3.5_mm_x_40_mm_Box_of_01__58077.1593569854.1280.1280.jpg?c=2",
+     "shows": "Straight-on carton face (US-labelled, plain Orsiro not Mission, REF 404676): white square carton, magenta header band with 'Orsiro' and size box, BIOTRONIK logo bottom right. Square-ish face, not the thin spine.",
+     "size_variant": "3.5 x 40 (older Orsiro, same artwork family)",
+     "watermark": false
+    }
+   ],
+   "colors": [
+    "#C8104E",
+    "#FFFFFF",
+    "#1A1A1A"
+   ],
+   "inventory_corrections": "None; identification confirmed. Product is the current Orsiro Mission. Carton shown in the only photo found is the older Orsiro label (US), square face.",
+   "confidence": "high"
+  },
+  "biotronik_pk_papyrus": {
+   "maker": "Biotronik (now Teleflex)",
+   "product": "PK Papyrus covered coronary stent system",
+   "device_type": "coronary covered stent (electrospun polyurethane cover on CoCr stent); NOT a DES",
+   "generation_notes": "Single generation. US: Humanitarian Device Exemption for coronary perforations.",
+   "sizes": {
+    "diameters_mm": [
+     2.5,
+     3.0,
+     3.5,
+     4.0,
+     4.5,
+     5.0
+    ],
+    "lengths_mm": [
+     15,
+     20,
+     26
+    ],
+    "matrix_notes": "2.5: 15,20 only; 3.0-5.0: 15,20,26. Inventory 3.0x15 and 2.5x20 are valid combinations.",
+    "shaft_lengths_cm": [
+     140
+    ],
+    "other": "0.014\" wire; 5F guide (2.5-4.0), 6F (4.5-5.0); NP 8 atm (2.5-3.5) / 7 atm (4.0-5.0); RBP 16 / 14 atm.",
+    "sources": [
+     "https://irc.teleflex.com/pk-papyrus/"
+    ]
+   },
+   "ref_scheme": "6-digit Biotronik REF 4348xx-4349xx",
+   "example_refs": [
+    "434887 (2.5x15)",
+    "434893 (2.5x20)",
+    "434899 (3.0x26)",
+    "434903 (5.0x26)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no published unit-carton dimensions/weight located; only photo estimates in the inventory)",
+    "sources": []
+   },
+   "images": [],
+   "colors": [
+    "#7A9A2B",
+    "#FFFFFF",
+    "#1A1A1A"
+   ],
+   "inventory_corrections": "device_type should be covered stent, not DES. No carton photo found.",
+   "confidence": "medium"
+  },
+  "biotronik_passeo_35_xeo": {
+   "maker": "Biotronik (now Teleflex)",
+   "product": "Passeo-35 Xeo PTA balloon catheter (0.035\", OTW)",
+   "device_type": "PTA balloon (peripheral, controlled-compliance SCP)",
+   "generation_notes": "Xeo is the newer generation; plain Passeo-35 / Passeo-35 HP is the older line (3-10 mm). Xeo CE-marked c.2020.",
+   "sizes": {
+    "diameters_mm": [
+     3.0,
+     4.0,
+     5.0,
+     6.0,
+     7.0,
+     8.0,
+     9.0,
+     10.0,
+     12.0
+    ],
+    "lengths_mm": [
+     20,
+     40,
+     60,
+     80,
+     100,
+     120,
+     150,
+     170,
+     200,
+     250
+    ],
+    "matrix_notes": "Shaft 5F for 3-7 mm, 6F for 8-10, 7F for 12. 90 cm: 3.0 in 20-80; 4.0 20-120; 5.0/6.0 20-150,200,250; 7.0 20-100; 8-10 mm 20-100; 12.0 40-100. 130 cm: full matrix for 3-7 mm (20-250); 8.0 20-120; 9/10 20-120 (120 pre-order); 12.0 40-120. 170 cm (pre-order only): 4-7 mm partial, 8-10 mm 20-80. Inventory '10 x 40 / 90' etc. valid.",
+    "shaft_lengths_cm": [
+     90,
+     130,
+     170
+    ],
+    "other": "NP 9 atm (3-9 mm), 8 atm (10, 12 mm); RBP 21/20/19/16/15/14/12/11/10 atm for 3/4/5/6/7/8/9/10/12 mm. Shaft 5.1-5.4F.",
+    "sources": [
+     "https://irc.teleflex.com/passeo-35-xeo/"
+    ]
+   },
+   "ref_scheme": "6-digit REF 428777-428997; 90 cm 4287xx-4288xx, 130 cm 428851-428924, 170 cm 428927-428997",
+   "example_refs": [
+    "428777 (3.0x20, 90 cm)",
+    "428851 (3.0x20, 130 cm)",
+    "428855 (7.0x20, 130 cm)",
+    "428920 (3.0x250, 130 cm)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no published unit-carton dimensions/weight located; only photo estimates in the inventory)",
+    "sources": []
+   },
+   "images": [],
+   "colors": [
+    "#6B1F3A",
+    "#FFFFFF",
+    "#1A1A1A"
+   ],
+   "inventory_corrections": "None. Note the old Passeo-35 (non-Xeo) 80/90/130 cm table also exists (REF 3592xx/3572xx/3832xx) but its range stops at 10 mm.",
+   "confidence": "high"
+  },
+  "biotronik_passeo_18": {
+   "maker": "Biotronik (now Teleflex)",
+   "product": "Passeo-18 PTA balloon catheter (0.018\", OTW)",
+   "device_type": "PTA balloon (peripheral, controlled-compliance SCP)",
+   "generation_notes": "Standard plain balloon; Passeo-18 Lux is the paclitaxel-coated DCB version of the same platform (different carton art). Passeo-14 is the 0.014\" sibling.",
+   "sizes": {
+    "diameters_mm": [
+     2.0,
+     2.5,
+     3.0,
+     3.5,
+     4.0,
+     5.0,
+     6.0,
+     7.0
+    ],
+    "lengths_mm": [
+     20,
+     40,
+     60,
+     80,
+     120,
+     150,
+     170,
+     200
+    ],
+    "matrix_notes": "Full 8 x 8 matrix at 90 cm antegrade with few gaps: 6.0 mm only up to 80/200 via 5F variants; 7.0 mm 20,40,60 (4F), 80-200 (5F). 4F for up to 6x80 and 7x20-60; 5F for larger. Retrograde (130 cm; 2.0 mm is 150 cm) same matrix. Inventory 6x80/130, 3x150/130, 2x200/150 all valid.",
+    "shaft_lengths_cm": [
+     90,
+     130,
+     150
+    ],
+    "other": "Shaft 3.8F (3.9F for 6-7 mm x 170-200). NP 6 atm, RBP 12-15 atm, 4F/5F sheath. 150 cm only for 2.0 mm.",
+    "sources": [
+     "https://irc.teleflex.com/passeo-18/",
+     "http://biotronik.cdn.mediamid.com/cdn_bio_doc/bio28459/38825/bio28459.pdf"
+    ]
+   },
+   "ref_scheme": "6-digit REF 357451-357515, 366098-366137, 376272-376303",
+   "example_refs": [
+    "357510 (4.0x120, 130 cm)",
+    "357451 (2.5x20, 90 cm)",
+    "366098 (2.0x20, 90 cm)",
+    "376283 (7.0x200, 90 cm)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no published unit-carton dimensions/weight located; only photo estimates in the inventory)",
+    "sources": []
+   },
+   "images": [
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/biotronik_passeo_18/pouch_label_not_carton_4x120_130.jpg",
+     "url": "https://cdn10.bigcommerce.com/s-x81fqsb/products/4858/images/6839/BIOTRONIK_357510_Passeo-18_OTW_PTA_Balloon_Catheter__04383.1585095148.1280.1280.jpg?c=2",
+     "shows": "Sterile POUCH with label (white), NOT the carton; shows Biotronik label layout and logo. Useful only for typography.",
+     "size_variant": "4.0 x 120 / 130 cm",
+     "watermark": false
+    }
+   ],
+   "colors": [
+    "#B1262E",
+    "#FFFFFF"
+   ],
+   "inventory_corrections": "None.",
+   "confidence": "high"
+  },
+  "biotronik_red_blue_unknown": {
+   "maker": "Biotronik (assumed)",
+   "product": "UNIDENTIFIED",
+   "device_type": "unknown (inventory guess: balloon; seen sizes read like stent lengths)",
+   "generation_notes": "Not Pantera LEO (its carton has a gold/orange band and 'NC' box, see image). Not Orsiro/Orsiro Mission (magenta). Not Passeo (maroon/red band, PTA). Pantera LEO and Pantera Pro sizes do not match the seen 2.25/2.75 and 14/19/23-33/38 mm lengths (LEO: 8,12,15,20,30; Pantera Pro: 6-30; Pantera Lux DCB: 10-30).",
+   "sizes": {
+    "diameters_mm": [],
+    "lengths_mm": [],
+    "matrix_notes": "Not determinable. Seen sizes (2.25-3.5 x 14/19/23-33/38) do not match any Biotronik coronary range found. Lengths 14/19/24/29/33/36 resemble Biosensors Chroma; 15/18/23/28/33/38 resemble COMBO Plus, so the box may be misattributed or a non-Biotronik red/blue carton, or a Biotronik market-specific stent (e.g. PRO-Kinetic Energy, lengths 9-35, red/blue not verified).",
+    "shaft_lengths_cm": [],
+    "other": "For reference, Pantera LEO (NC, 2.0-5.0 mm x 8/12/15/20/30, 145 cm, REF 366991-367045) and Pantera Pro (1.25-4.0 x 6-30, 140 cm, REF 393289+) are documented but not matched.",
+    "sources": [
+     "https://irc.teleflex.com/pantera-leo/",
+     "https://irc.teleflex.com/pantera-pro/"
+    ]
+   },
+   "ref_scheme": "n/a",
+   "example_refs": [],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no published unit-carton dimensions/weight located; only photo estimates in the inventory)",
+    "sources": []
+   },
+   "images": [
+    {
+     "file": "/media/farhan/My Passport/igus_nvidia/medical_boxes_research/biotronik_red_blue_unknown/medicalecart_pantera_leo_367039.jpg",
+     "url": "https://cdn10.bigcommerce.com/s-x81fqsb/products/5004/images/7225/BIOTRONIK_367039_Pantera_LEO_Fast-Exchange_PTCA_Catheter_3.0_mm_x_30_mm__69832.1593848533.1280.1280.jpg?c=2",
+     "shows": "Pantera LEO NC carton back face (US label, 3.0x30): white with ORANGE header, BIOTRONIK logo; shown to document that Pantera LEO is NOT the red/blue box.",
+     "size_variant": "3.0 x 30",
+     "watermark": false
+    }
+   ],
+   "colors": [
+    "#C8202C",
+    "#FFFFFF",
+    "#1F5FD0"
+   ],
+   "inventory_corrections": "Keep as unidentified; the 'Pantera' guess is not supported. Needs a closer look at the source photo (name text) to resolve.",
+   "confidence": "low"
+  },
+  "orbusneich_combo_plus": {
+   "maker": "OrbusNeich",
+   "product": "COMBO Plus Dual Therapy Stent (sirolimus-eluting + anti-CD34 antibody)",
+   "device_type": "coronary DES (dual-therapy)",
+   "generation_notes": "COMBO Plus is the current generation of COMBO (2019+); not approved in the USA.",
+   "sizes": {
+    "diameters_mm": [
+     2.5,
+     2.75,
+     3.0,
+     3.5,
+     4.0
+    ],
+    "lengths_mm": [
+     9,
+     13,
+     15,
+     18,
+     23,
+     28,
+     33,
+     38
+    ],
+    "matrix_notes": "2.5 and 2.75 mm: 9-33 (no 38); 3.0, 3.5, 4.0 mm: 9-38. Inventory 3.5x15, 2.75x15 etc. valid. (Inventory '2.5 x 23/33' valid.)",
+    "shaft_lengths_cm": [
+     138
+    ],
+    "other": "Rapid exchange, 5F, 0.014\", NP 9 atm, RBP 16 atm, sirolimus 5.0 ug/mm.",
+    "sources": [
+     "https://orbusneich.com/product/combo-plus-dual-therapy-des/",
+     "https://orbusneich.com/wp-content/uploads/2025/12/G-70-0589-Rev06-COMBO-Plus-Brochure.pdf"
+    ]
+   },
+   "ref_scheme": "DDD-LL2-11 : diameter x100 (225,227,230,235,240) then length digits then '2-11' (e.g. 9 mm = 092-11, 38 mm = 382-11)",
+   "example_refs": [
+    "225-092-11 (2.25x9, listed in the brochure)",
+    "230-382-11 (3.0x38)",
+    "240-382-11 (4.0x38)",
+    "235-152-11 (3.5x15)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no published unit-carton dimensions/weight located; only photo estimates in the inventory)",
+    "sources": []
+   },
+   "images": [],
+   "colors": [
+    "#1B3F9A",
+    "#FFFFFF"
+   ],
+   "inventory_corrections": "Brand OrbusNeich CONFIRMED (COMBO is an OrbusNeich product). The brochure ordering table also lists 2.25 mm (225-xxx) for a CE/NL variant, but the web size table starts at 2.5 mm; 2.25 mm may be regional. No carton photo found.",
+   "confidence": "high"
+  },
+  "orbusneich_sapphire_3": {
+   "maker": "OrbusNeich",
+   "product": "Sapphire 3 PTCA balloon catheter",
+   "device_type": "semi-compliant PTCA balloon (coronary)",
+   "generation_notes": "Sapphire 3 is the current Sapphire line (Sapphire II PRO earlier); not approved in the USA.",
+   "sizes": {
+    "diameters_mm": [
+     1.5,
+     1.75,
+     2.0,
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.25,
+     3.5,
+     4.0
+    ],
+    "lengths_mm": [
+     10,
+     12,
+     15,
+     20,
+     30
+    ],
+    "matrix_notes": "10 and 15, 20 mm for all diameters; 12 mm for 1.5, 2.0, 2.5, 3.0 only; 30 mm for 2.5, 3.0, 3.5 only; 1.75/2.25/2.75/3.25/4.0 have 10/15/20 only. (Separate 0.85-1.25 mm line: lengths 5,8,10,15, 145 cm.) Inventory 3.0x15 valid.",
+    "shaft_lengths_cm": [
+     140
+    ],
+    "other": "RX, 5F guide, 0.014\", NP 6 atm, RBP 14 atm (16 for 1.5 mm), Pebax balloon.",
+    "sources": [
+     "https://orbusneich.com/product/sapphire-3/"
+    ]
+   },
+   "ref_scheme": "Sapphire II PRO/3 style: DDD-LLX-NUJ, diameter x100 then length digits (e.g. 220-103-5UJ = 2.0 x 10 for Sapphire II PRO); exact Sapphire 3 REF table not retrieved",
+   "example_refs": [
+    "220-103-5UJ (Sapphire II PRO 2.0x10, pattern reference only)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no published unit-carton dimensions/weight located; only photo estimates in the inventory)",
+    "sources": []
+   },
+   "images": [],
+   "colors": [
+    "#e8ecee",
+    "#1b1b1f",
+    "#f26b3a"
+   ],
+   "inventory_corrections": "Brand OrbusNeich CONFIRMED. Device is a semi-compliant PTCA balloon (not NC).",
+   "confidence": "medium"
+  },
+  "orbusneich_scoreflex": {
+   "maker": "OrbusNeich (distributed in US by Abbott as Scoreflex NC)",
+   "product": "Scoreflex dual-wire scoring PTCA balloon (semi-compliant)",
+   "device_type": "scoring/cutting balloon (coronary)",
+   "generation_notes": "Original Scoreflex is semi-compliant (nylon, NP 6, RBP 16). Newer Scoreflex NC is non-compliant (NP 12 atm); Scoreflex TRIO is a three-wire variant. Scoreflex original not approved in the USA.",
+   "sizes": {
+    "diameters_mm": [
+     2.0,
+     2.5,
+     3.0,
+     3.5,
+     4.0
+    ],
+    "lengths_mm": [
+     10,
+     15,
+     20
+    ],
+    "matrix_notes": "Full 5 x 3 matrix. Inventory also lists 2.0x20, 2.5x10/15, 3.0x10/15/20, 3.5x15, 4.0x15, all valid.",
+    "shaft_lengths_cm": [
+     139
+    ],
+    "other": "RX, 5F, 0.014\", 0.011\" integral nitinol scoring wire.",
+    "sources": [
+     "https://orbusneich.com/product/scoreflex/",
+     "https://orbusneich.com/wp-content/uploads/2020/05/G-70-0515-Rev03-Scoreflex-Brochure-NL.pdf"
+    ]
+   },
+   "ref_scheme": "DDD-LL3-1: diameter x100 /10 then length digits (e.g. 620-103-1 = 2.0 x 10; 640-203-1 = 4.0 x 20); NC variant uses 620-104-1U style",
+   "example_refs": [
+    "620-103-1 (2.0x10)",
+    "620-153-1 (2.0x15)",
+    "630-203-1 (3.0x20)",
+    "640-203-1 (4.0x20)"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no published unit-carton dimensions/weight located; only photo estimates in the inventory)",
+    "sources": []
+   },
+   "images": [],
+   "colors": [
+    "#b4b04a",
+    "#8a8c8c",
+    "#f0f0ee"
+   ],
+   "inventory_corrections": "Brand OrbusNeich CONFIRMED (Scoreflex is an OrbusNeich trademark).",
+   "confidence": "medium"
+  },
+  "orbusneich_scoreflex_green_variant": {
+   "maker": "OrbusNeich",
+   "product": "Probably Scoreflex NC (non-compliant) or Scoreflex TRIO; not confirmed from carton colours",
+   "device_type": "scoring balloon (coronary)",
+   "generation_notes": "A different carton colour from the olive original suggests the NC or TRIO sub-line, but colour-to-product mapping was not verified.",
+   "sizes": {
+    "diameters_mm": [
+     1.75,
+     2.0,
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.5,
+     4.0
+    ],
+    "lengths_mm": [
+     10,
+     15,
+     20
+    ],
+    "matrix_notes": "Scoreflex NC: full 8 x 3 matrix. Scoreflex TRIO: 1.75-4.0 x 10-20. Inventory 3.5x15 and 2.0x15 valid.",
+    "shaft_lengths_cm": [
+     139
+    ],
+    "other": "Scoreflex NC: nylon, non-compliant, NP 12 atm, 2 markers on integral wire, 5F, 0.014\".",
+    "sources": [
+     "https://orbusneich.com/wp-content/uploads/2022/03/G-70-1197-Rev01-EN-6280.A-Scoreflex-NC-Brochure-US-Co-brand-V13-copy.pdf",
+     "https://orbusneich.com/wp-content/uploads/2025/03/G-10-0492-Rev-03-Scoreflex-TRIO-Summary-of-Safety-and-Clinical-Performance-ONBV.pdf"
+    ]
+   },
+   "ref_scheme": "Scoreflex NC: DDD-LL4-1U (e.g. 620-104-1U = 2.0x10, 640-204-1U = 4.0x20); TRIO: 6DD00LL11 style (632001011 = 2.0x10)",
+   "example_refs": [
+    "620-104-1U",
+    "635-154-1U",
+    "632001011",
+    "634002011"
+   ],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no published unit-carton dimensions/weight located; only photo estimates in the inventory)",
+    "sources": []
+   },
+   "images": [],
+   "colors": [
+    "#1e4a3f",
+    "#f0f0ee",
+    "#e6c8c8"
+   ],
+   "inventory_corrections": "Brand OrbusNeich CONFIRMED; sub-line (NC vs TRIO) unresolved.",
+   "confidence": "low"
+  },
+  "elixir_desyne_x2": {
+   "maker": "Elixir Medical",
+   "product": "DESyne X2 Novolimus Eluting Coronary Stent System",
+   "device_type": "coronary DES (novolimus, durable methacrylate polymer, CoCr L-605, 81 um)",
+   "generation_notes": "DESyne X2 is the current DESyne generation (CE only; not FDA).",
+   "sizes": {
+    "diameters_mm": [
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.5,
+     4.0
+    ],
+    "lengths_mm": [],
+    "matrix_notes": "Diameters from Elixir tech spec (PMN470 Rev F). Length list NOT confirmed from a primary source: a secondary search summary says 14-38 mm, and the seen inventory lengths are 18,23,28,33,38. Do not rely on lengths beyond the inventory.",
+    "shaft_lengths_cm": [
+     140
+    ],
+    "other": "RX, 5F guide (min ID 0.058\"), 0.014\", NP 9 atm, RBP 16 atm, novolimus 5 ug/mm.",
+    "sources": [
+     "https://elixirmedical.com/wp-content/uploads/2024/12/PMN470-RevF-DESyne-X2-Technical-Specifications-September-2024-2.pdf"
+    ]
+   },
+   "ref_scheme": "not found",
+   "example_refs": [],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no published unit-carton dimensions/weight located; only photo estimates in the inventory)",
+    "sources": []
+   },
+   "images": [],
+   "colors": [
+    "#1E5DB5",
+    "#8DC63F",
+    "#FFFFFF",
+    "#2AA9B8"
+   ],
+   "inventory_corrections": "None. Maker Elixir Medical confirmed; it is not OrbusNeich.",
+   "confidence": "medium"
+  },
+  "biosensors_chroma": {
+   "maker": "Biosensors International",
+   "product": "Chroma cobalt-chromium stent (CE 2013, launched 2014)",
+   "device_type": "CORONARY BARE-METAL STENT (BMS), not a DES",
+   "generation_notes": "Single generation; hybrid straight/S-link design, strut 84/88 um.",
+   "sizes": {
+    "diameters_mm": [
+     2.25,
+     2.75,
+     3.0,
+     3.5,
+     4.0
+    ],
+    "lengths_mm": [
+     9,
+     14,
+     19,
+     24,
+     29,
+     33,
+     36
+    ],
+    "matrix_notes": "From search summaries of the Biosensors product data, not a primary table (Biosensors site blocked): diameters 2.25-4.0, lengths 9,14,19,24,29,33,36. Inventory shows 2.5 mm too, which could not be verified. Low confidence on the exact matrix.",
+    "shaft_lengths_cm": [],
+    "other": "No primary sizing table retrieved.",
+    "sources": [
+     "https://www.biosensors.com/intl/sites/default/files/pdfs/newsroom/press/chroma_launch_release_19.5.14.pdf (launch release: BMS, CoCr)",
+     "https://www.medicalexpo.com/prod/biosensors-international/product-75768-632793.html (blocked; seen via search snippet)"
+    ]
+   },
+   "ref_scheme": "not found",
+   "example_refs": [],
+   "carton": {
+    "dims_mm": null,
+    "weight_g": null,
+    "basis": "not found (no published unit-carton dimensions/weight located; only photo estimates in the inventory)",
+    "sources": []
+   },
+   "images": [],
+   "colors": [
+    "#bcd4ee",
+    "#f2f2f0",
+    "#1b62c9"
+   ],
+   "inventory_corrections": "device_type should be coronary BMS (bare metal), not DES.",
+   "confidence": "medium"
+  }
+ }
+}

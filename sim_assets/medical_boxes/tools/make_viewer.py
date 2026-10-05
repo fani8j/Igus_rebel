@@ -9,6 +9,10 @@ the check results.
 
     "$PY" tools/verify_usd.py --json /tmp/verify.json
     "$PY" tools/make_viewer.py --verify-json /tmp/verify.json
+
+Catalogue page (about 45 families, no cabinet, size matrices from catalog/sizes.yaml):
+    "$PY" tools/make_viewer.py --catalog --boxes-yaml catalog/catalog_boxes.yaml --usd-dir catalog/usd \
+        --sizes-yaml catalog/sizes.yaml --verify-json /tmp/catverify.json --out catalog/catalog_viewer.html
 """
 import argparse
 import base64
@@ -16,6 +20,7 @@ import json
 import os
 
 import cv2
+import numpy as np
 import yaml
 from pxr import Usd, UsdGeom, UsdShade
 
@@ -57,7 +62,27 @@ def texture_kind(desc):
     return "plain"
 
 
-def read_box(name, spec, usd_dir):
+def photo_crop(img, corners, max_side=520):
+    """Context crop of the exemplar photo around the spine quad, with the quad outlined.
+    The setup photos show a whole shelf, so catalogue pages crop to the box of interest."""
+    pts = np.array(corners, float)
+    lo, hi = pts.min(0), pts.max(0)
+    c = (lo + hi) / 2
+    half = max((hi - lo).max() * 0.85, 240.0)
+    h, w = img.shape[:2]
+    x0, x1 = int(max(0, c[0] - half)), int(min(w, c[0] + half))
+    y0, y1 = int(max(0, c[1] - half)), int(min(h, c[1] + half))
+    out = img.copy()
+    cv2.polylines(out, [pts.round().astype(np.int32).reshape(-1, 1, 2)], True, (255, 200, 0),
+                  max(2, int(half / 120)), cv2.LINE_AA)
+    return out[y0:y1, x0:x1], max_side
+
+
+def is_flat(img, tol=3.0):
+    return float(img.reshape(-1, img.shape[-1]).std(0).max()) < tol
+
+
+def read_box(name, spec, usd_dir, tex_max=1024, catalog=False):
     stage = Usd.Stage.Open(os.path.join(usd_dir, name + ".usda"))
     root = stage.GetDefaultPrim()
     mesh = UsdGeom.Mesh(root.GetChild("geom"))
@@ -78,7 +103,11 @@ def read_box(name, spec, usd_dir):
         img = cv2.imread(tex_path, cv2.IMREAD_COLOR)
         small = max(img.shape[:2]) <= 300
         key = "%s/%s" % (name, fname)
-        textures[key] = data_uri(img, 1024, png=small or fname == "top")
+        if catalog and fname != "top" and is_flat(img):
+            mean = img.reshape(-1, 3).mean(0).round().astype(np.uint8)  # plain colour: no resolution needed
+            textures[key] = data_uri(np.tile(mean, (2, 2, 1)), 8, png=True)
+        else:
+            textures[key] = data_uri(img, tex_max, png=small or fname == "top")
         faces.append({
             "name": fname,
             "points": [pts[fvi[fi * 4 + k]] for k in range(4)],
@@ -91,7 +120,10 @@ def read_box(name, spec, usd_dir):
     faces.sort(key=lambda f: FACE_ORDER.index(f["name"]))
     cd = root.GetCustomData()
     photo = cv2.imread(os.path.join(ROOT, spec["photo"]), cv2.IMREAD_COLOR)
-    return {
+    photo_max = 720
+    if catalog and spec.get("photo_corners_px"):
+        photo, photo_max = photo_crop(photo, spec["photo_corners_px"])
+    box = {
         "name": name,
         "product": spec["product"],
         "label": spec.get("label", name),
@@ -104,10 +136,14 @@ def read_box(name, spec, usd_dir):
         "mass_kg": round(float(mass), 4),
         "mass_source": spec.get("mass_source", ""),
         "evidence": spec.get("evidence", ""),
-        "photo": data_uri(photo, 720),
+        "photo": data_uri(photo, photo_max),
         "photoFile": spec["photo"],
         "faces": faces,
-    }, textures
+    }
+    for k in ("device_type", "dims_confidence", "ref_example"):  # catalogue-only fields
+        if k in spec:
+            box[k] = spec[k]
+    return box, textures
 
 
 def read_cabinet(path):
@@ -139,6 +175,52 @@ def read_cabinet(path):
     return {"cubes": cubes, "cartons": cartons, "file": os.path.relpath(path, ROOT)}
 
 
+def read_sizes(path, names):
+    """Compact per-box size data from catalog/sizes.yaml (only the boxes shown on the page)."""
+    fams = yaml.safe_load(open(path))["families"]
+    out = {}
+    for n in names:
+        e = fams.get(n)
+        if not e:
+            continue
+        av = e["availability"]
+        out[n] = {
+            "sku": e["sku_count"], "kind": e["sku_count_kind"], "note": e.get("sku_count_note", ""),
+            "dia": e["diameters_mm"], "len": e["lengths_mm"], "shaft": e["shaft_lengths_cm"],
+            "avail": av["kind"], "fields": av.get("combination_fields") or [],
+            "combos": av.get("combinations") or [], "basis": av.get("basis", ""),
+            "rules": av.get("matrix_notes", ""), "incomplete": e.get("incomplete_reason", "") if e.get("incomplete") else "",
+            "conf": e["confidence"], "other": e.get("other", ""), "refScheme": e["ref_scheme"],
+            "exampleRefs": e["example_refs"], "sources": e["sources"], "seen": e["sizes_seen_on_shelf"],
+        }
+    return out
+
+
+CATALOG_META = {
+    "title": "Medical Carton Catalogue",
+    "intro": "Estimated cartons for the catheter, balloon, stent and guidewire families seen on the hospital shelf photos, "
+             "built as USD assets for Isaac Sim, with each family's catalogued size range. Geometry, face textures, mass "
+             "and verifier results are read back from the generated .usda files.",
+    "dimLabel": "Estimated mm",
+    "evidenceLabel": "Evidence",
+    "estimated": True,
+    "source": [
+        "Dimensions are ESTIMATES: spine length and thickness are measured on the shelf photos and scaled against the "
+        "five caliper-measured cartons; carton length is 1.1 x spine length. No manufacturer or regulator database "
+        "publishes unit-carton dimensions or weights. The confidence of each estimate is shown on the sheet.",
+        "Mass is board (outer area x 1.2 x 320 g/m2) plus typical contents for the device type. Replace it in "
+        "catalog_boxes.yaml with a scale reading when a real carton is weighed.",
+    ],
+    "open": [
+        "File > Open sim_assets/medical_boxes/catalog/usd/medical_boxes_scene.usda and press Play. The scene lays all "
+        "cartons out in a grid (tall guiding-catheter cartons set the row depth). To use one carton, add a reference to "
+        "catalog/usd/<box>.usda and keep catalog/textures/ next to catalog/usd/.",
+        "The labelled spine is the +Y face. Only the spine is textured from photos; other faces are plain colour until "
+        "operator photos exist.",
+    ],
+}
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--boxes-yaml", default=os.path.join(ROOT, "boxes.yaml"))
@@ -147,18 +229,30 @@ def main():
     ap.add_argument("--shelf-json", default=None, help="verify_shelf.py --json output, shown with the cabinet")
     ap.add_argument("--template", default=os.path.join(HERE, "viewer_template.html"))
     ap.add_argument("--out", default=os.path.join(ROOT, "viewer.html"))
+    ap.add_argument("--sizes-yaml", default=None, help="catalog/sizes.yaml: adds a size matrix and SKU count to each sheet")
+    ap.add_argument("--catalog", action="store_true",
+                    help="catalogue page: filterable grouped box strip, estimate wording, cropped exemplar photos, no cabinet")
+    ap.add_argument("--tex-max", type=int, default=None,
+                    help="longest side of embedded textures in px (default 1024; 768 with --catalog)")
     a = ap.parse_args()
+    if a.tex_max is None:
+        a.tex_max = 768 if a.catalog else 1024
     cfg = yaml.safe_load(open(a.boxes_yaml))
     boxes, textures = [], {}
     for name, spec in cfg["boxes"].items():
-        b, t = read_box(name, spec, os.path.abspath(a.usd_dir))
+        b, t = read_box(name, spec, os.path.abspath(a.usd_dir), a.tex_max, a.catalog)
         boxes.append(b)
         textures.update(t)
     checks = json.load(open(a.verify_json))
     data = {"boxes": boxes, "textures": textures, "checks": checks,
             "physicsMaterial": cfg["physics_material"],
-            "cabinet": read_cabinet(os.path.join(os.path.abspath(a.usd_dir), "medicine_cabinet_filled.usda"))}
+            "cabinet": None if a.catalog else
+            read_cabinet(os.path.join(os.path.abspath(a.usd_dir), "medicine_cabinet_filled.usda"))}
     data["shelfChecks"] = json.load(open(a.shelf_json)) if a.shelf_json and os.path.exists(a.shelf_json) else []
+    if a.sizes_yaml:
+        data["sizes"] = read_sizes(a.sizes_yaml, [b["name"] for b in boxes])
+    if a.catalog:
+        data["meta"] = CATALOG_META
     html = open(a.template).read().replace("/*__DATA__*/null", json.dumps(data, separators=(",", ":")))
     with open(a.out, "w") as f:
         f.write(html)

@@ -1,0 +1,1678 @@
+{
+ "families": [
+  {
+   "family_id": "terumo_ultimaster_nagomi",
+   "brand": "Terumo",
+   "product": "Ultimaster (Nagomi, text on top end illegible; green with TERUMO logo bottom)",
+   "device_type": "coronary_des",
+   "photos": [
+    "hospital_2"
+   ],
+   "exemplar": {
+    "photo": "hospital_2",
+    "corners_px": [
+     [
+      2143,
+      0
+     ],
+     [
+      2195,
+      0
+     ],
+     [
+      2300,
+      745
+     ],
+     [
+      2237,
+      755
+     ]
+    ],
+    "spine_long_px": 757,
+    "spine_short_px": 58,
+    "which_end_up": "top: green cap with small vertical text (illegible); bottom: TERUMO logo on light green",
+    "note": "corner accuracy about +/-15 px; "
+   },
+   "sizes_seen": [
+    "4.5 x 15",
+    "4.0 x 50",
+    "4.0 x 33",
+    "4.0 x 18",
+    "4.0 x 15",
+    "3.5 x 50",
+    "3.5 x 44",
+    "3.5 x 38",
+    "3.5 x 33",
+    "3.5 x 28",
+    "3.5 x 24",
+    "3.5 x 21",
+    "3.5 x 15",
+    "3.0 x 50",
+    "3.0 x 44",
+    "3.0 x 38",
+    "3.0 x 33",
+    "3.0 x 28",
+    "3.0 x 24",
+    "3.0 x 21",
+    "3.0 x 18",
+    "3.0 x 15",
+    "2.75 x 50",
+    "2.75 x 44",
+    "2.75 x 38",
+    "2.75 x 33",
+    "2.75 x 28",
+    "2.75 x 24",
+    "2.75 x 21",
+    "2.75 x 18",
+    "2.75 x 15",
+    "2.5 x 50",
+    "2.5 x 44",
+    "2.5 x 38",
+    "2.5 x 33",
+    "2.5 x 28"
+   ],
+   "colors": [
+    "#2E9E4F",
+    "#F2F2F2",
+    "#A5D9B8"
+   ],
+   "carton_notes": "Top shelf, ~100 boxes standing upright spine-out, tight; leftmost group leans, rightmost 5-6 boxes lie angled in the right corner. Top of boxes touches the image top edge so top of spine is clipped by frame (exemplar top y approx 0). Red dot and yellow/pink stickers on some. Product name only legible as TERUMO.",
+   "scale_refs": "H2: shelf rows are ~3.0 px/mm along spine length, anchored on Terumo Ultimaster Nagomi (250 mm = ~757 px for exemplar) and assumed same depth for rows below; thickness calibrated 3.4 px/mm (exemplar 58 px for 16 mm). No shelf height in mm known. Same family as the measured Ultimaster Nagomi 16x250x295 (green Terumo, same layout) - presumed identical, not confirmed from legible product name.",
+   "estimated_dims_mm": {
+    "spine_length": 250,
+    "thickness": 16,
+    "confidence": "high (reference)",
+    "basis": "given measurement; exemplar px ratio 757 x 58 consistent"
+   },
+   "confidence": "medium (family identity presumed from colour/logo; sizes read clearly)"
+  },
+  {
+   "family_id": "orbusneich_combo_plus",
+   "brand": "OrbusNeich (inferred; brand not legible)",
+   "product": "COMBO Plus (printed 'COMBO +' on spine top)",
+   "device_type": "coronary_des",
+   "photos": [
+    "hospital_2"
+   ],
+   "exemplar": {
+    "photo": "hospital_2",
+    "corners_px": [
+     [
+      902,
+      1062
+     ],
+     [
+      948,
+      1062
+     ],
+     [
+      1062,
+      1625
+     ],
+     [
+      1016,
+      1628
+     ]
+    ],
+    "spine_long_px": 576,
+    "spine_short_px": 46,
+    "which_end_up": "top: blue cap, then vertical text 'COMBO+' reading downward",
+    "note": "corner accuracy about +/-15 px; "
+   },
+   "sizes_seen": [
+    "4.0 x 38",
+    "4.0 x 33",
+    "4.0 x 23",
+    "4.0 x 18",
+    "3.5 x 38",
+    "3.5 x 33",
+    "3.5 x 28",
+    "3.5 x 23",
+    "3.5 x 18",
+    "3.5 x 15",
+    "3.0 x 38",
+    "3.0 x 33",
+    "3.0 x 28",
+    "3.0 x 23",
+    "3.0 x 18",
+    "3.0 x 15",
+    "2.75 x 28",
+    "2.75 x 18",
+    "2.75 x 15",
+    "2.5 x 33",
+    "2.5 x 23"
+   ],
+   "colors": [
+    "#1B3F9A",
+    "#FFFFFF"
+   ],
+   "carton_notes": "Second shelf, left half, boxes lean strongly rightwards (~13 deg off vertical) as a packed row; spine very similar in layout to DESyne X2 (probably same maker family OrbusNeich/Elixir). Red dots, Chinese 'use first' stickers.",
+   "scale_refs": "H2: shelf rows are ~3.0 px/mm along spine length, anchored on Terumo Ultimaster Nagomi (250 mm = ~757 px for exemplar) and assumed same depth for rows below; thickness calibrated 3.4 px/mm (exemplar 58 px for 16 mm). No shelf height in mm known. Tilted ~13 deg so true length is slightly longer than measured.",
+   "estimated_dims_mm": {
+    "spine_length": 195,
+    "thickness": 13.5,
+    "confidence": "low-medium",
+    "basis": "exemplar 576 px /3.0 plus tilt correction ~2%"
+   },
+   "confidence": "low-medium (brand guessed)"
+  },
+  {
+   "family_id": "elixir_desyne_x2",
+   "brand": "Elixir Medical",
+   "product": "DESyne X2 (RX)",
+   "device_type": "coronary_des",
+   "photos": [
+    "hospital_2"
+   ],
+   "exemplar": {
+    "photo": "hospital_2",
+    "corners_px": [
+     [
+      2773,
+      962
+     ],
+     [
+      2821,
+      964
+     ],
+     [
+      2793,
+      1586
+     ],
+     [
+      2752,
+      1590
+     ]
+    ],
+    "spine_long_px": 625,
+    "spine_short_px": 45,
+    "which_end_up": "top: blue cap with 'Elixir' (reads downward), green RX band, then 'DESyne X2'; bottom: blue with teal chevrons",
+    "note": "corner accuracy about +/-15 px; "
+   },
+   "sizes_seen": [
+    "3.0 x 33",
+    "3.0 x 28",
+    "3.0 x 23",
+    "3.0 x 18",
+    "2.75 x 38",
+    "2.75 x 33",
+    "2.75 x 28",
+    "2.75 x 18",
+    "2.5 x 38",
+    "2.5 x 33",
+    "2.5 x 28",
+    "2.5 x 23",
+    "2.5 x 18"
+   ],
+   "colors": [
+    "#1E5DB5",
+    "#8DC63F",
+    "#FFFFFF",
+    "#2AA9B8"
+   ],
+   "carton_notes": "Second shelf, right half; boxes lean rightwards ~8-10 deg; the last two boxes at the right end stand upright (exemplar is rightmost box). A wider box (white side face, carton side visible) next to it.",
+   "scale_refs": "H2: shelf rows are ~3.0 px/mm along spine length, anchored on Terumo Ultimaster Nagomi (250 mm = ~757 px for exemplar) and assumed same depth for rows below; thickness calibrated 3.4 px/mm (exemplar 58 px for 16 mm). No shelf height in mm known. ",
+   "estimated_dims_mm": {
+    "spine_length": 210,
+    "thickness": 13,
+    "confidence": "low-medium",
+    "basis": "625 px/3.0; 45 px/3.4"
+   },
+   "confidence": "medium"
+  },
+  {
+   "family_id": "medtronic_resolute_onyx",
+   "brand": "Medtronic",
+   "product": "Resolute Onyx",
+   "device_type": "coronary_des",
+   "photos": [
+    "hospital_2"
+   ],
+   "exemplar": {
+    "photo": "hospital_2",
+    "corners_px": [
+     [
+      1012,
+      1758
+     ],
+     [
+      1050,
+      1756
+     ],
+     [
+      1050,
+      2248
+     ],
+     [
+      1011,
+      2250
+     ]
+    ],
+    "spine_long_px": 492,
+    "spine_short_px": 39,
+    "which_end_up": "top: yellow with barcode label; bottom: 'Medtronic' printed reading upward on yellow",
+    "note": "corner accuracy about +/-15 px; "
+   },
+   "sizes_seen": [
+    "diameters printed 4.5/4.0/3.5/3.0/2.75/2.5/2.25/2.0 with lengths 12-38 mm; individual (dia x len) pairs not legible at this resolution"
+   ],
+   "colors": [
+    "#FFE600",
+    "#1A1A1A",
+    "#2ECC71"
+   ],
+   "carton_notes": "Third shelf, ~65 boxes upright and tightly packed, plus 1-2 boxes laid flat on top of the row and one leaning at far left. Spine label cells small: diameter cell (white), length cell (beige).",
+   "scale_refs": "H2: shelf rows are ~3.0 px/mm along spine length, anchored on Terumo Ultimaster Nagomi (250 mm = ~757 px for exemplar) and assumed same depth for rows below; thickness calibrated 3.4 px/mm (exemplar 58 px for 16 mm). No shelf height in mm known. ",
+   "estimated_dims_mm": {
+    "spine_length": 165,
+    "thickness": 11.5,
+    "confidence": "medium",
+    "basis": "492 px/3.0; 39 px/3.4"
+   },
+   "confidence": "medium"
+  },
+  {
+   "family_id": "biotronik_orsiro_mission",
+   "brand": "Biotronik",
+   "product": "Orsiro Mission",
+   "device_type": "coronary_des",
+   "photos": [
+    "hospital_2"
+   ],
+   "exemplar": {
+    "photo": "hospital_2",
+    "corners_px": [
+     [
+      2450,
+      2330
+     ],
+     [
+      2500,
+      2330
+     ],
+     [
+      2500,
+      2820
+     ],
+     [
+      2450,
+      2825
+     ]
+    ],
+    "spine_long_px": 492,
+    "spine_short_px": 50,
+    "which_end_up": "top: white cap; magenta band with 'Orsiro Mission' reading downward; bottom: white with BIOTRONIK logo and QR",
+    "note": "corner accuracy about +/-15 px; "
+   },
+   "sizes_seen": [
+    "4.0 x 40",
+    "4.0 x 35",
+    "4.0 x 30",
+    "4.0 x 26",
+    "4.0 x 22",
+    "4.0 x 18",
+    "3.5 x 40",
+    "3.5 x 30",
+    "3.5 x 26",
+    "3.5 x 22",
+    "3.5 x 18",
+    "3.5 x 15",
+    "3.0 x 40",
+    "3.0 x 35",
+    "3.0 x 30",
+    "3.0 x 26",
+    "3.0 x 22",
+    "3.0 x 18",
+    "3.0 x 15",
+    "2.75 x 40",
+    "2.75 x 35",
+    "2.75 x 30",
+    "2.75 x 26",
+    "2.75 x 22",
+    "2.75 x 18",
+    "2.75 x 15",
+    "2.5 x 40",
+    "2.5 x 35",
+    "2.5 x 30",
+    "2.5 x 26",
+    "2.5 x 22",
+    "2.5 x 18",
+    "2.5 x 15",
+    "2.25 x 40",
+    "2.25 x 35",
+    "2.25 x 30",
+    "2.25 x 26",
+    "2.25 x 22",
+    "2.25 x 18"
+   ],
+   "colors": [
+    "#C8104E",
+    "#FFFFFF",
+    "#1A1A1A"
+   ],
+   "carton_notes": "Fourth shelf, ~70 boxes; left half leans strongly rightwards, right half upright. Four boxes lie flat on top of the left part (white-labelled long face with BIOTRONIK, 2.5/35, 2.5/40, 3.0/30). Note: spine has a wide white cap (~17% of height).",
+   "scale_refs": "H2: shelf rows are ~3.0 px/mm along spine length, anchored on Terumo Ultimaster Nagomi (250 mm = ~757 px for exemplar) and assumed same depth for rows below; thickness calibrated 3.4 px/mm (exemplar 58 px for 16 mm). No shelf height in mm known. ",
+   "estimated_dims_mm": {
+    "spine_length": 165,
+    "thickness": 15,
+    "confidence": "medium",
+    "basis": "492 px/3.0; 50 px/3.4 (thickness may include slight side view)"
+   },
+   "confidence": "medium-high"
+  },
+  {
+   "family_id": "biotronik_pk_papyrus",
+   "brand": "Biotronik",
+   "product": "PK Papyrus (covered coronary stent)",
+   "device_type": "coronary_des",
+   "photos": [
+    "hospital_2"
+   ],
+   "exemplar": {
+    "photo": "hospital_2",
+    "corners_px": [
+     [
+      548,
+      2365
+     ],
+     [
+      585,
+      2375
+     ],
+     [
+      588,
+      2870
+     ],
+     [
+      550,
+      2875
+     ]
+    ],
+    "spine_long_px": 503,
+    "spine_short_px": 38,
+    "which_end_up": "top: white cap then green band reading 'PK Papyrus'",
+    "note": "corner accuracy about +/-15 px; "
+   },
+   "sizes_seen": [
+    "3.0 x 15",
+    "2.5 x 20"
+   ],
+   "colors": [
+    "#7A9A2B",
+    "#FFFFFF",
+    "#1A1A1A"
+   ],
+   "carton_notes": "Fourth shelf, far left; only 2-3 boxes visible, partially occluded by neighbouring Orsiro; olive green band, further one yellow/green box behind.",
+   "scale_refs": "H2: shelf rows are ~3.0 px/mm along spine length, anchored on Terumo Ultimaster Nagomi (250 mm = ~757 px for exemplar) and assumed same depth for rows below; thickness calibrated 3.4 px/mm (exemplar 58 px for 16 mm). No shelf height in mm known. ",
+   "estimated_dims_mm": {
+    "spine_length": 168,
+    "thickness": 12,
+    "confidence": "low",
+    "basis": "503 px/3.0"
+   },
+   "confidence": "low (partial, text small)"
+  },
+  {
+   "family_id": "unknown_blue_des",
+   "brand": "unidentified (not legible)",
+   "product": "'DES' (printed text on blue cap)",
+   "device_type": "coronary_des",
+   "photos": [
+    "hospital_2"
+   ],
+   "exemplar": {
+    "photo": "hospital_2",
+    "corners_px": [
+     [
+      1330,
+      2902
+     ],
+     [
+      1367,
+      2902
+     ],
+     [
+      1367,
+      3405
+     ],
+     [
+      1330,
+      3407
+     ]
+    ],
+    "spine_long_px": 504,
+    "spine_short_px": 37,
+    "which_end_up": "top: dark blue cap with 'DES' reading downward; bottom: blue with fine pattern",
+    "note": "corner accuracy about +/-15 px; "
+   },
+   "sizes_seen": [
+    "sizes in small cells with icon; not legible (e.g. 3.0/2.75/2.5 families)"
+   ],
+   "colors": [
+    "#1F5FA0",
+    "#FFFFFF"
+   ],
+   "carton_notes": "Fifth shelf, ~25 boxes upright left; first two lean left. Brand not legible; 'DES' only.",
+   "scale_refs": "H2: shelf rows are ~3.0 px/mm along spine length, anchored on Terumo Ultimaster Nagomi (250 mm = ~757 px for exemplar) and assumed same depth for rows below; thickness calibrated 3.4 px/mm (exemplar 58 px for 16 mm). No shelf height in mm known. ",
+   "estimated_dims_mm": {
+    "spine_length": 168,
+    "thickness": 11,
+    "confidence": "low",
+    "basis": "504 px/3.0; 37 px/3.4"
+   },
+   "confidence": "low (brand unknown)"
+  },
+  {
+   "family_id": "abbott_xience_skypoint",
+   "brand": "Abbott",
+   "product": "Xience Skypoint",
+   "device_type": "coronary_des",
+   "photos": [
+    "hospital_2"
+   ],
+   "exemplar": {
+    "photo": "hospital_2",
+    "corners_px": [
+     [
+      1648,
+      2965
+     ],
+     [
+      1692,
+      2965
+     ],
+     [
+      1692,
+      3400
+     ],
+     [
+      1648,
+      3400
+     ]
+    ],
+    "spine_long_px": 435,
+    "spine_short_px": 44,
+    "which_end_up": "top: blue cap with Abbott 'a' logo; green stripe; then 'Xience Skypoint' reading downward; bottom blue",
+    "note": "corner accuracy about +/-15 px; "
+   },
+   "sizes_seen": [
+    "3.5 x 38",
+    "3.0 x 38",
+    "3.0 x 38",
+    "3.0 x 33",
+    "3.0 x 28",
+    "3.0 x 28",
+    "2.75 x 48",
+    "2.75 x 48",
+    "2.75 x 38",
+    "2.75 x 28",
+    "2.5 x 48",
+    "2.5 x 48",
+    "2.5 x 38",
+    "2.5 x 33",
+    "2.5 x 23",
+    "2.5 x 23",
+    "2.5 x 18"
+   ],
+   "colors": [
+    "#2E86D1",
+    "#FFFFFF",
+    "#6BBF4E",
+    "#F2C230"
+   ],
+   "carton_notes": "Fifth shelf middle; 3 columns of boxes upright; two more boxes lie flat on the top of the row. Yellow highlighter marks on some.",
+   "scale_refs": "H2: shelf rows are ~3.0 px/mm along spine length, anchored on Terumo Ultimaster Nagomi (250 mm = ~757 px for exemplar) and assumed same depth for rows below; thickness calibrated 3.4 px/mm (exemplar 58 px for 16 mm). No shelf height in mm known. Top part of the spine near the shelf above, measured length may be slightly under.",
+   "estimated_dims_mm": {
+    "spine_length": 150,
+    "thickness": 13,
+    "confidence": "low-medium",
+    "basis": "435 px/3.0 (+top)"
+   },
+   "confidence": "medium"
+  },
+  {
+   "family_id": "unknown_teal_boston_style",
+   "brand": "unidentified (layout matches the Boston Scientific orange box next to it; brand not legible)",
+   "product": "teal / white / green box (name unreadable; vertical dark bar, black 'size' cell)",
+   "device_type": "coronary_des",
+   "photos": [
+    "hospital_2"
+   ],
+   "exemplar": {
+    "photo": "hospital_2",
+    "corners_px": [
+     [
+      2338,
+      2902
+     ],
+     [
+      2375,
+      2902
+     ],
+     [
+      2372,
+      3395
+     ],
+     [
+      2334,
+      3397
+     ]
+    ],
+    "spine_long_px": 494,
+    "spine_short_px": 38,
+    "which_end_up": "top: teal cap; bottom: dark green block",
+    "note": "corner accuracy about +/-15 px; "
+   },
+   "sizes_seen": [
+    "only cell '3.0/ ...' faintly legible; unknown"
+   ],
+   "colors": [
+    "#3CC8A6",
+    "#FFFFFF",
+    "#1E9E4A"
+   ],
+   "carton_notes": "Fifth shelf right end and sixth shelf right end; two boxes lean into the corner at the right. Same layout as the orange Synergy boxes (likely another Boston Scientific variant e.g. Synergy Megatron / other coating).",
+   "scale_refs": "H2: shelf rows are ~3.0 px/mm along spine length, anchored on Terumo Ultimaster Nagomi (250 mm = ~757 px for exemplar) and assumed same depth for rows below; thickness calibrated 3.4 px/mm (exemplar 58 px for 16 mm). No shelf height in mm known. ",
+   "estimated_dims_mm": {
+    "spine_length": 165,
+    "thickness": 11,
+    "confidence": "low",
+    "basis": "494 px/3.0"
+   },
+   "confidence": "low (identity unknown)"
+  },
+  {
+   "family_id": "boston_scientific_synergy_xd",
+   "brand": "Boston Scientific",
+   "product": "SYNERGY XD",
+   "device_type": "coronary_des",
+   "photos": [
+    "hospital_2"
+   ],
+   "exemplar": {
+    "photo": "hospital_2",
+    "corners_px": [
+     [
+      1416,
+      3625
+     ],
+     [
+      1455,
+      3625
+     ],
+     [
+      1462,
+      4015
+     ],
+     [
+      1420,
+      4015
+     ]
+    ],
+    "spine_long_px": 390,
+    "spine_short_px": 40,
+    "which_end_up": "top: orange cap with wave pattern; bottom: green block with MR marking",
+    "note": "corner accuracy about +/-15 px; "
+   },
+   "sizes_seen": [
+    "sizes in black cells, illegible; four SYNERGY XD boxes lie flat on top of the rows with labels '4.0 .. 80'"
+   ],
+   "colors": [
+    "#F58220",
+    "#FFFFFF",
+    "#1E9E4A"
+   ],
+   "carton_notes": "Sixth (bottom) shelf: two big blocks (~45 boxes) of upright boxes, flat boxes stacked on top. Name on spine is tiny vertical text; flat boxes read 'SYNERGY XD'.",
+   "scale_refs": "H2: shelf rows are ~3.0 px/mm along spine length, anchored on Terumo Ultimaster Nagomi (250 mm = ~757 px for exemplar) and assumed same depth for rows below; thickness calibrated 3.4 px/mm (exemplar 58 px for 16 mm). No shelf height in mm known. ",
+   "estimated_dims_mm": {
+    "spine_length": 135,
+    "thickness": 12,
+    "confidence": "low",
+    "basis": "390 px/3.0 measured from orange cap to green end ~400 px"
+   },
+   "confidence": "medium (name read from lying boxes)"
+  },
+  {
+   "family_id": "biotronik_red_blue_unknown",
+   "brand": "Biotronik",
+   "product": "unidentified red/white/blue line (BIOTRONIK on label; product name not legible)",
+   "device_type": "coronary_balloon_sc",
+   "photos": [
+    "hospital_2"
+   ],
+   "exemplar": {
+    "photo": "hospital_2",
+    "corners_px": [
+     [
+      872,
+      3632
+     ],
+     [
+      902,
+      3632
+     ],
+     [
+      902,
+      3980
+     ],
+     [
+      872,
+      3980
+     ]
+    ],
+    "spine_long_px": 348,
+    "spine_short_px": 30,
+    "which_end_up": "top: red cap; bottom: blue block",
+    "note": "corner accuracy about +/-15 px; "
+   },
+   "sizes_seen": [
+    "3.5 x 14",
+    "3.5 x 19",
+    "3.5 x 33",
+    "3.5 x 38 (lying boxes)",
+    "3.0 x ..",
+    "2.75 x 23..33",
+    "2.5 x ..",
+    "2.25 .."
+   ],
+   "colors": [
+    "#C8202C",
+    "#FFFFFF",
+    "#1F5FD0"
+   ],
+   "carton_notes": "Sixth shelf left; roughly 15 upright boxes plus 4 lying boxes on top (blue ends visible) - possibly balloon line such as Pantera, unconfirmed. Device type is a guess.",
+   "scale_refs": "H2: shelf rows are ~3.0 px/mm along spine length, anchored on Terumo Ultimaster Nagomi (250 mm = ~757 px for exemplar) and assumed same depth for rows below; thickness calibrated 3.4 px/mm (exemplar 58 px for 16 mm). No shelf height in mm known. ",
+   "estimated_dims_mm": {
+    "spine_length": 115,
+    "thickness": 9,
+    "confidence": "low",
+    "basis": "348 px/3.0 (measured white+red part only; blue base adds ~2 mm?)"
+   },
+   "confidence": "low"
+  },
+  {
+   "family_id": "medtronic_export_advance_edge",
+   "brand": "Medtronic",
+   "product": "Export Advance (6F)",
+   "device_type": "other",
+   "photos": [
+    "hospital_2"
+   ],
+   "exemplar": {
+    "photo": "hospital_2",
+    "corners_px": [
+     [
+      2861,
+      3437
+     ],
+     [
+      2921,
+      3437
+     ],
+     [
+      2921,
+      4010
+     ],
+     [
+      2861,
+      4010
+     ]
+    ],
+    "spine_long_px": 573,
+    "spine_short_px": 60,
+    "which_end_up": "top: green cap with 'Medtronic' (reads upward); bottom: lime green with 'Export Advance 6F'",
+    "note": "approximate, very low confidence, box mostly cut by image edge"
+   },
+   "sizes_seen": [
+    "6F"
+   ],
+   "colors": [
+    "#2F8F4F",
+    "#8CC63F",
+    "#FFFFFF"
+   ],
+   "carton_notes": "In the neighbouring cabinet at the right edge of the frame (x>2850), bottom: only two boxes visible, partly cut off.",
+   "scale_refs": "no scale ref",
+   "estimated_dims_mm": {
+    "spine_length": null,
+    "thickness": null,
+    "confidence": "none",
+    "basis": "partial"
+   },
+   "confidence": "low (partial, out of target cabinet)"
+  },
+  {
+   "family_id": "medtronic_nc_euphora_edge",
+   "brand": "Medtronic",
+   "product": "NC Euphora",
+   "device_type": "coronary_balloon_nc",
+   "photos": [
+    "hospital_2"
+   ],
+   "exemplar": {
+    "photo": "hospital_2",
+    "corners_px": [
+     [
+      2921,
+      2993
+     ],
+     [
+      2980,
+      3000
+     ],
+     [
+      2985,
+      3340
+     ],
+     [
+      2925,
+      3340
+     ]
+    ],
+    "spine_long_px": 347,
+    "spine_short_px": 58,
+    "which_end_up": "teal cap at top, black label with 'NC Euphora' below",
+    "note": "approximate, very low confidence"
+   },
+   "sizes_seen": [],
+   "colors": [
+    "#4CC3A8",
+    "#FFFFFF",
+    "#1A1A1A"
+   ],
+   "carton_notes": "Neighbouring cabinet, right edge x>2850, y 2993-3340, two leaning boxes, only partially visible. Name read as 'NC Euphora' on black label (low legibility).",
+   "scale_refs": "no scale ref",
+   "estimated_dims_mm": {
+    "spine_length": null,
+    "thickness": null,
+    "confidence": "none",
+    "basis": "partial"
+   },
+   "confidence": "low"
+  },
+  {
+   "family_id": "boston_scientific_mustang",
+   "brand": "Boston Scientific",
+   "product": "MUSTANG OVER-THE-WIRE (.035)",
+   "device_type": "pta_balloon",
+   "photos": [
+    "hospital_3"
+   ],
+   "exemplar": {
+    "photo": "hospital_3",
+    "corners_px": [
+     [
+      2960,
+      123
+     ],
+     [
+      2998,
+      121
+     ],
+     [
+      2977,
+      887
+     ],
+     [
+      2935,
+      887
+     ]
+    ],
+    "spine_long_px": 765,
+    "spine_short_px": 40,
+    "which_end_up": "top: red cap with 'Boston Scientific' reading downward; bottom: red with '035'",
+    "note": "corner accuracy about +/-15 px; "
+   },
+   "sizes_seen": [
+    "12.0 x 20 / 135cm (7F)",
+    "10.0 x 20 / 135cm (6F)",
+    "9.0 x 20 / 135 (6F)",
+    "9.0 x 40 / 135",
+    "8.0 x 40 / 135",
+    "8.0 x 80 / 135",
+    "7.0 x 40 / 135",
+    "7.0 x 80 / 135",
+    "6.0 x 40 / 135",
+    "6.0 x 80 / 135",
+    "5.0 x 40 / 135",
+    "5.0 x 80 / 135",
+    "4.0 x 40 / 135",
+    "4.0 x 80 / 135",
+    "12.0 x 40 / 75 (7F)",
+    "10.0 x 20 / 75",
+    "9.0 x 20 / 75",
+    "9.0 x 40 / 75",
+    "8.0 x 20 / 75",
+    "8.0 x 40 / 75",
+    "8.0 x 80 / 75",
+    "7.0 x 20 / 75",
+    "7.0 x 40 / 75",
+    "7.0 x 60 / 75",
+    "6.0 x 40 / 75",
+    "6.0 x 60 / 75",
+    "6.0 x 20 / 75",
+    "5.0 x 20 / 75",
+    "5.0 x 40 / 75",
+    "5.0 x 60 / 75",
+    "5.0 x 80 / 75",
+    "4.0 x 20 / 75",
+    "4.0 x 40 / 75",
+    "4.0 x 60 / 75",
+    "3.0 x 20 / 75",
+    "3.0 x 40 / 75"
+   ],
+   "colors": [
+    "#D9202A",
+    "#FFFFFF",
+    "#1A1A1A"
+   ],
+   "carton_notes": "Top shelf: ~30 boxes in the right group, ~14 in left group; boxes lean rightwards ~10 deg, packed tight; rightmost 4 boxes in the right group are nearly upright (exemplar). Some have Chinese stickers; one wrapped bag 'separator' (white). Sizes read from white label: dia x length (mm) / catheter length (cm).",
+   "scale_refs": "H3: no measured box in photo. Cabinet interior appears ~12% wider in frame than H2, so ~3.3 px/mm length and ~3.6 px/mm thickness assumed; carried over from H2 calibration, not independently verified. ",
+   "estimated_dims_mm": {
+    "spine_length": 232,
+    "thickness": 11,
+    "confidence": "low-medium",
+    "basis": "765 px/3.3"
+   },
+   "confidence": "medium"
+  },
+  {
+   "family_id": "apt_medical_tresfort_35",
+   "brand": "APT Medical",
+   "product": "Tresfort 35 (OTW .035)",
+   "device_type": "pta_balloon",
+   "photos": [
+    "hospital_3"
+   ],
+   "exemplar": {
+    "photo": "hospital_3",
+    "corners_px": [
+     [
+      18,
+      108
+     ],
+     [
+      70,
+      122
+     ],
+     [
+      98,
+      922
+     ],
+     [
+      55,
+      922
+     ]
+    ],
+    "spine_long_px": 808,
+    "spine_short_px": 48,
+    "which_end_up": "top: APT Medical logo; orange/blue band with 'Tresfort 35'; bottom white",
+    "note": "corner accuracy about +/-15 px; "
+   },
+   "sizes_seen": [
+    "5.0 x 80 / 75cm (5F)",
+    "6.0 x 80 / 75cm (5F)",
+    "7.0 x 80 / 75cm (5F)"
+   ],
+   "colors": [
+    "#FFFFFF",
+    "#F0902A",
+    "#1F3A8A"
+   ],
+   "carton_notes": "Top shelf, far left; only 3 white boxes leaning towards left wall, leaning heavily; exact corners hard because boxes lean in two directions.",
+   "scale_refs": "H3: no measured box in photo. Cabinet interior appears ~12% wider in frame than H2, so ~3.3 px/mm length and ~3.6 px/mm thickness assumed; carried over from H2 calibration, not independently verified. ",
+   "estimated_dims_mm": {
+    "spine_length": 245,
+    "thickness": 13,
+    "confidence": "low",
+    "basis": "808 px/3.3 (includes lean)"
+   },
+   "confidence": "medium"
+  },
+  {
+   "family_id": "abbott_armada_35",
+   "brand": "Abbott",
+   "product": "Armada 35 (OTW .035)",
+   "device_type": "pta_balloon",
+   "photos": [
+    "hospital_3"
+   ],
+   "exemplar": {
+    "photo": "hospital_3",
+    "corners_px": [
+     [
+      2562,
+      1195
+     ],
+     [
+      2612,
+      1195
+     ],
+     [
+      2612,
+      1822
+     ],
+     [
+      2560,
+      1822
+     ]
+    ],
+    "spine_long_px": 627,
+    "spine_short_px": 51,
+    "which_end_up": "top: Abbott 'a' logo on blue; OTW yellow/orange cell; then 'Armada 35' reading downward; bottom blue",
+    "note": "corner accuracy about +/-15 px; "
+   },
+   "sizes_seen": [
+    "14.0 x 40 / 80 and /135",
+    "12.0 x 40 / 80 and /135",
+    "10.0 x 40 / 80",
+    "9.0 x 40 / 80",
+    "8.0 x 40 / 80",
+    "8.0 x 80 / 80",
+    "7.0 x 40 / 80",
+    "7.0 x 60 / 80",
+    "7.0 x 80 / 80",
+    "6.0 x 40 / 80",
+    "6.0 x 60 / 80",
+    "6.0 x 80 / 80",
+    "6.0 x 40 / 135",
+    "6.0 x 80 / 135",
+    "5.0 x 40 / 80",
+    "5.0 x 80 / 80",
+    "5.0 x 40 / 135",
+    "5.0 x 80 / 135",
+    "5.0 x 120 / 135",
+    "4.0 x 40 / 80",
+    "4.0 x 60 / 80",
+    "4.0 x 120 / 135"
+   ],
+   "colors": [
+    "#4FA3DA",
+    "#FFFFFF",
+    "#C58FD6",
+    "#F2C230"
+   ],
+   "carton_notes": "Second shelf right + third block: two versions: plain light-blue spine (80 cm shaft) and a newer version with a purple '.035' band (135 cm shaft). Two boxes lie flat on top (12.0 and 14.0 x 40 x 80). Chinese '隔板' dividers between groups.",
+   "scale_refs": "H3: no measured box in photo. Cabinet interior appears ~12% wider in frame than H2, so ~3.3 px/mm length and ~3.6 px/mm thickness assumed; carried over from H2 calibration, not independently verified. ",
+   "estimated_dims_mm": {
+    "spine_length": 190,
+    "thickness": 14,
+    "confidence": "medium",
+    "basis": "627 px/3.3; 51 px/3.6"
+   },
+   "confidence": "high"
+  },
+  {
+   "family_id": "ivascular_oceanus_35",
+   "brand": "iVascular",
+   "product": "Oceanus 35 (OTW)",
+   "device_type": "pta_balloon",
+   "photos": [
+    "hospital_3"
+   ],
+   "exemplar": {
+    "photo": "hospital_3",
+    "corners_px": [
+     [
+      757,
+      1128
+     ],
+     [
+      810,
+      1130
+     ],
+     [
+      818,
+      1818
+     ],
+     [
+      762,
+      1820
+     ]
+    ],
+    "spine_long_px": 690,
+    "spine_short_px": 55,
+    "which_end_up": "top: dark blue cap with circular logo; pink band 'oceanus 35'; bottom: dark blue with 'iVascular'",
+    "note": "corner accuracy about +/-15 px; "
+   },
+   "sizes_seen": [
+    "8 x 40 / 80 (BPPC3508000040)",
+    "7 x 80 / 80 (BPPC3507000080)",
+    "6 x 200 / 140 (BPPC3506000200)",
+    "6 x 120 / 140 (BPPC35140600120)",
+    "5 x 150 / 140",
+    "5 x 120 / 140",
+    "6 x 40 / 80 (BPPC3508060040)",
+    "5 x 40 / 80 (BPPC3508050040)",
+    "5 x 40 / 80"
+   ],
+   "colors": [
+    "#EC6C93",
+    "#2B3A9A",
+    "#FFFFFF"
+   ],
+   "carton_notes": "Second shelf left-middle, 9 boxes upright, packed; left of them black Tri-Wedge boxes.",
+   "scale_refs": "H3: no measured box in photo. Cabinet interior appears ~12% wider in frame than H2, so ~3.3 px/mm length and ~3.6 px/mm thickness assumed; carried over from H2 calibration, not independently verified. ",
+   "estimated_dims_mm": {
+    "spine_length": 210,
+    "thickness": 15,
+    "confidence": "medium",
+    "basis": "690 px/3.3; 55 px/3.6"
+   },
+   "confidence": "high"
+  },
+  {
+   "family_id": "biotronik_passeo_35_xeo",
+   "brand": "Biotronik",
+   "product": "Passeo-35 Xeo",
+   "device_type": "pta_balloon",
+   "photos": [
+    "hospital_3"
+   ],
+   "exemplar": {
+    "photo": "hospital_3",
+    "corners_px": [
+     [
+      1295,
+      1158
+     ],
+     [
+      1345,
+      1158
+     ],
+     [
+      1348,
+      1822
+     ],
+     [
+      1296,
+      1822
+     ]
+    ],
+    "spine_long_px": 664,
+    "spine_short_px": 51,
+    "which_end_up": "top: white cap, then maroon band 'Passeo-35 Xeo' reading downward; bottom: white with BIOTRONIK logo",
+    "note": "corner accuracy about +/-15 px; "
+   },
+   "sizes_seen": [
+    "10 x 40 / 90",
+    "8 x 80 / 90",
+    "8 x 60 / 90",
+    "8 x 40 / 90",
+    "7 x 80 / 90",
+    "7 x 60 / 90",
+    "7 x 40 / 90",
+    "7 x 40 / 90",
+    "6 x 80 / 90",
+    "6 x 40 / 90",
+    "5 x 40 / 90",
+    "5 x 40 / 90",
+    "4 x 40 / 90"
+   ],
+   "colors": [
+    "#6B1F3A",
+    "#FFFFFF",
+    "#1A1A1A"
+   ],
+   "carton_notes": "Second shelf middle; 13 boxes upright, clean. Wide white top cap and bottom.",
+   "scale_refs": "H3: no measured box in photo. Cabinet interior appears ~12% wider in frame than H2, so ~3.3 px/mm length and ~3.6 px/mm thickness assumed; carried over from H2 calibration, not independently verified. ",
+   "estimated_dims_mm": {
+    "spine_length": 200,
+    "thickness": 14,
+    "confidence": "medium",
+    "basis": "664 px/3.3; 51 px/3.6"
+   },
+   "confidence": "high"
+  },
+  {
+   "family_id": "trireme_tri_wedge",
+   "brand": "Trireme Medical (inferred; brand not legible)",
+   "product": "Tri-Wedge (.035 and .018 versions, OTW)",
+   "device_type": "guidewire_or_accessory",
+   "photos": [
+    "hospital_3"
+   ],
+   "exemplar": {
+    "photo": "hospital_3",
+    "corners_px": [
+     [
+      248,
+      1088
+     ],
+     [
+      320,
+      1092
+     ],
+     [
+      315,
+      1818
+     ],
+     [
+      280,
+      1818
+     ]
+    ],
+    "spine_long_px": 728,
+    "spine_short_px": 54,
+    "which_end_up": "top: black/purple; vertical white label with 'Tri-Wedge'",
+    "note": "corner accuracy about +/-15 px; "
+   },
+   "sizes_seen": [
+    ".035: 6.0 x 60 / 75cm (6F)",
+    ".035: 6.0 x 40 / 75 (6F)",
+    ".035: 7.0 x 40 / 75 (7F)",
+    ".018: 7.0 x 40 / 150cm (6F)",
+    ".018: 6.0 x 60 / 150 (5F)",
+    ".018: 4.0 x 60 / 150 (5F)",
+    ".018: 3.0 x 60 / 150 (5F)",
+    ".018: 7.0 x 60 / 90cm (6F)",
+    ".018: 6.0 x 40 / 90 (6F)",
+    ".018: 8.0 x 60 / 90 (6F)",
+    ".018: 6.0 x 60 / 90",
+    ".018: 5.0 x 60 / 90 (5F)",
+    ".018: 5.0 x 40 / 90"
+   ],
+   "colors": [
+    "#2A1C33",
+    "#FFFFFF"
+   ],
+   "carton_notes": "Black box with purple sheen; boxes thin and leaning. Appear in three places: second-shelf left (.035), fourth shelf both sides (.018). Device is a plain-balloon/wedge catheter; type guessed. Hard to see cardboard edges.",
+   "scale_refs": "H3: no measured box in photo. Cabinet interior appears ~12% wider in frame than H2, so ~3.3 px/mm length and ~3.6 px/mm thickness assumed; carried over from H2 calibration, not independently verified. ",
+   "estimated_dims_mm": {
+    "spine_length": 220,
+    "thickness": 15,
+    "confidence": "low",
+    "basis": "728 px/3.3; boxes dark so edge unclear"
+   },
+   "confidence": "low-medium"
+  },
+  {
+   "family_id": "ivascular_oceanus_18",
+   "brand": "iVascular",
+   "product": "Oceanus 18 (OTW)",
+   "device_type": "pta_balloon",
+   "photos": [
+    "hospital_3"
+   ],
+   "exemplar": {
+    "photo": "hospital_3",
+    "corners_px": [
+     [
+      720,
+      1965
+     ],
+     [
+      768,
+      1965
+     ],
+     [
+      770,
+      2600
+     ],
+     [
+      722,
+      2600
+     ]
+    ],
+    "spine_long_px": 635,
+    "spine_short_px": 48,
+    "which_end_up": "top: dark blue cap with logo; pink band 'oceanus 18'; bottom navy 'iVascular'",
+    "note": "corner accuracy about +/-15 px; "
+   },
+   "sizes_seen": [
+    "6 x 120 / 140",
+    "6 x 60 / 140",
+    "6 x 40 / 140",
+    "5 x 120 / 140",
+    "5 x 80 / 140",
+    "5 x 60 / 140",
+    "5 x 40 / 140",
+    "4 x 120 / 150",
+    "4 x 80 / 150",
+    "3 x 120 / 150",
+    "3 x 80 / 150",
+    "2.5 x 120 / 150",
+    "2.5 x 80 / 150"
+   ],
+   "colors": [
+    "#EC9AB3",
+    "#2B3A9A",
+    "#FFFFFF"
+   ],
+   "carton_notes": "Third shelf left (~13 upright boxes plus one leaning box showing the large 'Oceanus 18' face on its side). Chinese 'use first' stickers.",
+   "scale_refs": "H3: no measured box in photo. Cabinet interior appears ~12% wider in frame than H2, so ~3.3 px/mm length and ~3.6 px/mm thickness assumed; carried over from H2 calibration, not independently verified. ",
+   "estimated_dims_mm": {
+    "spine_length": 192,
+    "thickness": 13,
+    "confidence": "medium",
+    "basis": "635 px/3.3; 48 px/3.6"
+   },
+   "confidence": "high"
+  },
+  {
+   "family_id": "biotronik_passeo_18",
+   "brand": "Biotronik",
+   "product": "Passeo-18",
+   "device_type": "pta_balloon",
+   "photos": [
+    "hospital_3"
+   ],
+   "exemplar": {
+    "photo": "hospital_3",
+    "corners_px": [
+     [
+      1034,
+      1982
+     ],
+     [
+      1080,
+      1982
+     ],
+     [
+      1082,
+      2592
+     ],
+     [
+      1036,
+      2592
+     ]
+    ],
+    "spine_long_px": 610,
+    "spine_short_px": 46,
+    "which_end_up": "top: white cap, red band 'Passeo-18'; bottom white with BIOTRONIK",
+    "note": "corner accuracy about +/-15 px; "
+   },
+   "sizes_seen": [
+    "6 x 80 / 130",
+    "5 x 80 / 130",
+    "3 x 150 / 130",
+    "3 x 120 / 130",
+    "2.5 x 200 / 130",
+    "2.5 x 150 / 130",
+    "2.5 x 120 / 130",
+    "2 x 200 / 150",
+    "2 x 150 / 150"
+   ],
+   "colors": [
+    "#B1262E",
+    "#FFFFFF"
+   ],
+   "carton_notes": "Third shelf, right of Oceanus 18: ~9 boxes, the left two lean.",
+   "scale_refs": "H3: no measured box in photo. Cabinet interior appears ~12% wider in frame than H2, so ~3.3 px/mm length and ~3.6 px/mm thickness assumed; carried over from H2 calibration, not independently verified. ",
+   "estimated_dims_mm": {
+    "spine_length": 185,
+    "thickness": 13,
+    "confidence": "medium",
+    "basis": "610 px/3.3"
+   },
+   "confidence": "high"
+  },
+  {
+   "family_id": "boston_scientific_v18_control_wire",
+   "brand": "Boston Scientific",
+   "product": "V-14 / V-18 Control Wire (short taper, straight tip shapeable)",
+   "device_type": "guidewire_or_accessory",
+   "photos": [
+    "hospital_3"
+   ],
+   "exemplar": {
+    "photo": "hospital_3",
+    "corners_px": [
+     [
+      1938,
+      1908
+     ],
+     [
+      1981,
+      1908
+     ],
+     [
+      2100,
+      2672
+     ],
+     [
+      2050,
+      2672
+     ]
+    ],
+    "spine_long_px": 773,
+    "spine_short_px": 46,
+    "which_end_up": "top: black cap with 'Boston Scientific'; white label reads 'V-18 Control Wire'; bottom: yellow (018) or magenta (014) cap",
+    "note": "corner accuracy about +/-15 px; "
+   },
+   "sizes_seen": [
+    "V-14 0.014in x 300cm",
+    "V-18 0.018in x 300cm",
+    "V-18 0.018in x 200cm"
+   ],
+   "colors": [
+    "#1A1A1A",
+    "#FFFFFF",
+    "#FFD500",
+    "#D9007E"
+   ],
+   "carton_notes": "Third shelf right, just left of a wall of white paper pouches; about 9 slim boxes leaning heavily right (~10-12 deg). Bottom caps: 2 magenta (014), 5 yellow (018).",
+   "scale_refs": "H3: no measured box in photo. Cabinet interior appears ~12% wider in frame than H2, so ~3.3 px/mm length and ~3.6 px/mm thickness assumed; carried over from H2 calibration, not independently verified. ",
+   "estimated_dims_mm": {
+    "spine_length": 235,
+    "thickness": 13,
+    "confidence": "low",
+    "basis": "773 px/3.3, tilted"
+   },
+   "confidence": "medium"
+  },
+  {
+   "family_id": "generic_paper_pouches",
+   "brand": "various (Cook CXI visible in handwriting; others unlabeled)",
+   "product": "white paper pouches / envelopes (hung with punch holes)",
+   "device_type": "other",
+   "photos": [
+    "hospital_3"
+   ],
+   "exemplar": null,
+   "sizes_seen": [
+    "handwritten: 'CXI 2.6F 90cm 0.018'"
+   ],
+   "colors": [
+    "#F2F2F2"
+   ],
+   "carton_notes": "POUCHES, not cartons: ~50 flat paper envelopes in two groups (third shelf left and large block on right, plus bottom-left). Do not model as boxes. Some with kraft envelope and handwriting.",
+   "scale_refs": "none",
+   "estimated_dims_mm": {
+    "spine_length": null,
+    "thickness": null,
+    "confidence": "none",
+    "basis": "pouch"
+   },
+   "confidence": "high (that they are pouches)"
+  },
+  {
+   "family_id": "terumo_navicross",
+   "brand": "Terumo",
+   "product": "NaviCross (0.035 straight 90cm; 0.018 straight 90 and 135cm)",
+   "device_type": "guidewire_or_accessory",
+   "photos": [
+    "hospital_3"
+   ],
+   "exemplar": {
+    "photo": "hospital_3",
+    "corners_px": [
+     [
+      400,
+      2658
+     ],
+     [
+      1240,
+      2678
+     ],
+     [
+      1220,
+      2755
+     ],
+     [
+      400,
+      2750
+     ]
+    ],
+    "spine_long_px": 86,
+    "spine_short_px": 830,
+    "which_end_up": "spine reads left to right: 'NaviCross' (blue) then TERUMO logo at right end (box lying flat)",
+    "note": "corner accuracy about +/-15 px; "
+   },
+   "sizes_seen": [
+    "0.035 straight 90 cm",
+    "0.018 straight 135 cm",
+    "0.018 straight 90 cm"
+   ],
+   "colors": [
+    "#3F78C8",
+    "#B7D8CC",
+    "#FFFFFF"
+   ],
+   "carton_notes": "Three long boxes lying flat on tops of other rows (third shelf top, fourth shelf top, fifth shelf top). The marked exemplar is the 0.018 x 135 cm box on top of Tri-Wedge/Pacific Plus (fourth shelf). Box lying means spine is horizontal; spine-long about 830 px.",
+   "scale_refs": "H3: no measured box in photo. Cabinet interior appears ~12% wider in frame than H2, so ~3.3 px/mm length and ~3.6 px/mm thickness assumed; carried over from H2 calibration, not independently verified. ",
+   "estimated_dims_mm": {
+    "spine_length": 250,
+    "thickness": 28,
+    "confidence": "low",
+    "basis": "830 px/3.3",
+    "note": "thickness is the height of box lying flat: ~95 px/3.6 = 26 mm, perspective unknown"
+   },
+   "confidence": "medium"
+  },
+  {
+   "family_id": "medtronic_pacific_plus",
+   "brand": "Medtronic",
+   "product": "Pacific Plus (PTA, OTW, .018 / .014?)",
+   "device_type": "pta_balloon",
+   "photos": [
+    "hospital_3"
+   ],
+   "exemplar": {
+    "photo": "hospital_3",
+    "corners_px": [
+     [
+      722,
+      2755
+     ],
+     [
+      770,
+      2755
+     ],
+     [
+      770,
+      3332
+     ],
+     [
+      722,
+      3332
+     ]
+    ],
+    "spine_long_px": 577,
+    "spine_short_px": 48,
+    "which_end_up": "top: yellow cap '.018\"' with green 'PTA' cell; bottom: green block 'Medtronic'",
+    "note": "corner accuracy about +/-15 px; "
+   },
+   "sizes_seen": [
+    "4.0 x 200 / 150cm (.018, 130cm?)",
+    "4.0 x 150",
+    "4.0 x 120",
+    "4.0 x 80",
+    "4.0 x 40 (all x 150)",
+    "3.0 x 120 / 130",
+    "3.0 x 80 / 130",
+    "3.0 x 40 / 130",
+    "2.5 x 120 / 130",
+    "2.5 x 80 / 130",
+    "2.5 x 40 / 130",
+    "2.0 x 150 / 130",
+    "2.0 x 120 / 130",
+    "2.0 x 80 / 130",
+    "2.0 x 40 / 130",
+    "7.0 x 40 / 90",
+    "7.0 x 60 / 90",
+    "7.0 x 80 / 90",
+    "6.0 x 40 / 90",
+    "6.0 x 80 / 90",
+    "6.0 x 100 / 90",
+    "6.0 x 120 / 90",
+    "5.0 x 40 / 90",
+    "5.0 x 80 / 90",
+    "5.0 x 120 / 90",
+    "5.0 x 200 / 90",
+    "5.0 x 250 / 90",
+    "4.0 x 40 / 90",
+    "4.0 x 80 / 90",
+    "4.0 x 100 / 90",
+    "4.0 x 120 / 90",
+    "4.0 x 150 / 90",
+    "3.0 x 40 / 90",
+    "3.0 x 120 / 90",
+    "2.5 x 40 / 90",
+    "2.5 x 80 / 90",
+    "2.5 x 150 / 90",
+    "2.0 x 40 / 90",
+    "2.0 x 80 / 90",
+    "2.0 x 160 / 90"
+   ],
+   "colors": [
+    "#FFFFFF",
+    "#6BBF3B",
+    "#F2C230"
+   ],
+   "carton_notes": "Fourth shelf middle (~13 boxes) and right (~8) plus bottom-shelf left group leaning ~10 deg (~14 boxes). Several shaft lengths (90, 130, 150 cm). Sizes read from rows; some may be misread.",
+   "scale_refs": "H3: no measured box in photo. Cabinet interior appears ~12% wider in frame than H2, so ~3.3 px/mm length and ~3.6 px/mm thickness assumed; carried over from H2 calibration, not independently verified. ",
+   "estimated_dims_mm": {
+    "spine_length": 175,
+    "thickness": 13,
+    "confidence": "medium",
+    "basis": "577 px/3.3; 48 px/3.6"
+   },
+   "confidence": "high"
+  },
+  {
+   "family_id": "medtronic_amphirion_deep",
+   "brand": "Medtronic",
+   "product": "Amphirion Deep (0.014 OTW PTA)",
+   "device_type": "pta_balloon",
+   "photos": [
+    "hospital_3"
+   ],
+   "exemplar": {
+    "photo": "hospital_3",
+    "corners_px": [
+     [
+      2040,
+      3435
+     ],
+     [
+      2095,
+      3435
+     ],
+     [
+      2090,
+      4032
+     ],
+     [
+      2035,
+      4032
+     ]
+    ],
+    "spine_long_px": 597,
+    "spine_short_px": 55,
+    "which_end_up": "top: navy cap; white body 'Amphirion Deep'; bottom: 'Medtronic' (partly cut by frame)",
+    "note": "corner accuracy about +/-15 px; "
+   },
+   "sizes_seen": [
+    "4.0 x 120 / 150",
+    "4.0 x 80 / 150",
+    "4.0 x 40 / 150",
+    "3.0 x 120 / 150",
+    "3.0 x 80",
+    "3.0 x 40",
+    "2.5 x 150",
+    "2.5 x 120",
+    "2.5 x 80",
+    "2.5 x 40",
+    "2.0 x 150",
+    "2.0 x 120",
+    "2.0 x 80",
+    "2.0 x 40"
+   ],
+   "colors": [
+    "#1F3A5F",
+    "#FFFFFF"
+   ],
+   "carton_notes": "Bottom shelf right half (~16 boxes), bottom ends cut by the photo edge; the right-most box leans away. Navy cap.",
+   "scale_refs": "H3: no measured box in photo. Cabinet interior appears ~12% wider in frame than H2, so ~3.3 px/mm length and ~3.6 px/mm thickness assumed; carried over from H2 calibration, not independently verified. ",
+   "estimated_dims_mm": {
+    "spine_length": ">=190 (bottom cut by frame)",
+    "thickness": 15,
+    "confidence": "low",
+    "basis": "597 px visible /3.3; true length likely 190-200"
+   },
+   "confidence": "medium"
+  },
+  {
+   "family_id": "ivascular_oceanus_14_pro",
+   "brand": "iVascular",
+   "product": "Oceanus 14 pro",
+   "device_type": "pta_balloon",
+   "photos": [
+    "hospital_3"
+   ],
+   "exemplar": {
+    "photo": "hospital_3",
+    "corners_px": [
+     [
+      1125,
+      3410
+     ],
+     [
+      1190,
+      3410
+     ],
+     [
+      1195,
+      4032
+     ],
+     [
+      1125,
+      4032
+     ]
+    ],
+    "spine_long_px": 622,
+    "spine_short_px": 68,
+    "which_end_up": "top: navy cap with logo; pink band 'oceanus 14 pro'; bottom navy 'iVascular'",
+    "note": "corner accuracy about +/-15 px; "
+   },
+   "sizes_seen": [
+    "4 x 80 / 150",
+    "4 x 40 / 150",
+    "3.5 x 80 / 150",
+    "3.5 x 40 / 150",
+    "3 x 80 / 150",
+    "3 x 40 / 150",
+    "2 x 40 / 150"
+   ],
+   "colors": [
+    "#F2B6C8",
+    "#2B3A9A"
+   ],
+   "carton_notes": "Bottom shelf, middle (~8 boxes) between Pacific Plus and Amphirion; bottoms cut by the frame edge.",
+   "scale_refs": "H3: no measured box in photo. Cabinet interior appears ~12% wider in frame than H2, so ~3.3 px/mm length and ~3.6 px/mm thickness assumed; carried over from H2 calibration, not independently verified. ",
+   "estimated_dims_mm": {
+    "spine_length": ">=190",
+    "thickness": 15,
+    "confidence": "low",
+    "basis": "622 px visible / 3.3"
+   },
+   "confidence": "medium"
+  },
+  {
+   "family_id": "unknown_bottom_yellow_green",
+   "brand": "unidentified",
+   "product": "yellow-green box with black '.018' cell, bottom-shelf (hospital_3 y>3900), also yellow 018 boxes seen under pouch shelf",
+   "device_type": "guidewire_or_accessory",
+   "photos": [
+    "hospital_3"
+   ],
+   "exemplar": null,
+   "sizes_seen": [],
+   "colors": [
+    "#E8D83A",
+    "#2F9E4F"
+   ],
+   "carton_notes": "At the bottom edge of the frame; mostly cut off. See h3_r3b.png bottom right (yellow '018' ends).",
+   "scale_refs": "none",
+   "estimated_dims_mm": {
+    "spine_length": null,
+    "thickness": null,
+    "confidence": "none",
+    "basis": "cut"
+   },
+   "confidence": "very low"
+  }
+ ],
+ "notes": "Scale assumptions: H2 3.0 px/mm length and 3.4 px/mm thickness calibrated on the top-row Terumo boxes against the known Ultimaster Nagomi (250x16 mm). H3 has no reference carton; scale is carried over (3.3 px/mm length, 3.6 thickness) assuming similar camera distance and slightly wider cabinet; all H3 mm are rough (+/-20%). Corner points drawn by eye on 1:1 crops, +/-15 px; tilted boxes are leaning cartons (angles 8-13 deg in several rows). Size lists were read from small print and are not guaranteed; exemplar choice favoured clean upright boxes. Crops with annotated overlays in the scratch dir inv_b. Pouches (white paper) are listed under generic_paper_pouches. Cartons stand upright with spine facing camera except marked lying boxes. The brand names for COMBO Plus (OrbusNeich) and Tri-Wedge (Trireme) are inferred; neither brand is legible. Unidentified: teal/green/white box in H2 (crop inv_b/h2_teal.png), DES blue (inv_b/h2_des.png), Biotronik red/blue (inv_b/h2_red.png)."
+}
