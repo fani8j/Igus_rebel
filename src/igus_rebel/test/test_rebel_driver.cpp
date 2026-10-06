@@ -10,11 +10,13 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -266,6 +268,29 @@ std::array<double, 6> ParseJog(const std::string & aliveJogBody)
   return jog;
 }
 
+// HardwareInfo as the URDF's ros2_control tag for the "rebel" protocol yields it: six joints with
+// a velocity command interface and position + velocity state interfaces. `prefix` is prepended
+// to joint1..joint6 (dual-arm cell: arm_left_ / arm_right_).
+hardware_interface::HardwareInfo MakeInfo(
+  const std::string & componentName = "rebel_arm_controller", const std::string & prefix = "")
+{
+  hardware_interface::HardwareInfo info;
+  info.name = componentName;
+  for (int i = 1; i <= 6; ++i) {
+    hardware_interface::ComponentInfo joint;
+    joint.name = prefix + "joint" + std::to_string(i);
+    hardware_interface::InterfaceInfo velocity;
+    velocity.name = hardware_interface::HW_IF_VELOCITY;
+    hardware_interface::InterfaceInfo position;
+    position.name = hardware_interface::HW_IF_POSITION;
+    joint.command_interfaces.push_back(velocity);
+    joint.state_interfaces.push_back(position);
+    joint.state_interfaces.push_back(velocity);
+    info.joints.push_back(joint);
+  }
+  return info;
+}
+
 const std::vector<std::string> kStartupSequence = {
   "SetActive true", "Reset", "Enable", "MotionTypeJoint", "Override 100.0"};
 
@@ -275,8 +300,8 @@ protected:
   void StartDriver(FakeCriServer & server)
   {
     rebel = std::make_unique<Igus::Rebel>("127.0.0.1", server.port());
-    hardware_interface::HardwareInfo info;
-    info.name = "rebel_arm_controller";  // matches the ros2_control tag name in the URDF
+    // component name matches the ros2_control tag name in the URDF
+    const auto info = MakeInfo("rebel_arm_controller");
     ASSERT_EQ(rebel->on_init(info), CallbackReturn::SUCCESS);
     states = rebel->export_state_interfaces();
     commands = rebel->export_command_interfaces();
@@ -889,7 +914,7 @@ TEST(RebelDriverInit, FailsWhenNoStatusArrives)
   Igus::Rebel rebel("127.0.0.1", server.port());
 
   const auto start = Clock::now();
-  EXPECT_EQ(rebel.on_init(hardware_interface::HardwareInfo{}), CallbackReturn::ERROR);
+  EXPECT_EQ(rebel.on_init(MakeInfo()), CallbackReturn::ERROR);
   const auto elapsed = Clock::now() - start;
   EXPECT_GE(elapsed, Igus::Safety::kFirstStatusTimeout - 100ms);
   EXPECT_LT(elapsed, Igus::Safety::kFirstStatusTimeout + 2500ms);
@@ -919,7 +944,7 @@ TEST(RebelDriverInit, HardwareParametersOverrideTarget)
   FakeCriServer server;
   // Constructed with an unused port; the hardware parameters must redirect it.
   Igus::Rebel rebel("10.255.255.1", 1);
-  hardware_interface::HardwareInfo info;
+  auto info = MakeInfo();
   info.hardware_parameters["robot_ip"] = "127.0.0.1";
   info.hardware_parameters["robot_port"] = std::to_string(server.port());
   ASSERT_EQ(rebel.on_init(info), CallbackReturn::SUCCESS);
@@ -935,7 +960,7 @@ TEST(RebelDriverInit, RejectsInvalidTargetParameters)
     {"robot_port", "70000"}, {"robot_port", "39x"}})
   {
     Igus::Rebel rebel("127.0.0.1", 1);
-    hardware_interface::HardwareInfo info;
+    auto info = MakeInfo();
     info.hardware_parameters[bad.first] = bad.second;
     const auto start = Clock::now();
     EXPECT_EQ(rebel.on_init(info), CallbackReturn::ERROR) << bad.first << "=" << bad.second;
@@ -949,8 +974,248 @@ TEST(RebelDriverInit, FailsWhenConnectionIsRefused)
   Igus::Rebel rebel("127.0.0.1", closedPort.port());
 
   const auto start = Clock::now();
-  EXPECT_EQ(rebel.on_init(hardware_interface::HardwareInfo{}), CallbackReturn::ERROR);
+  EXPECT_EQ(rebel.on_init(MakeInfo()), CallbackReturn::ERROR);
   EXPECT_LT(Clock::now() - start, Igus::Safety::kFirstStatusTimeout + 2500ms);
+}
+
+TEST(RebelDriverInit, DefaultsKeepSingleArmNames)
+{
+  FakeCriServer server;
+  Igus::Rebel rebel("127.0.0.1", server.port());
+  ASSERT_EQ(rebel.on_init(MakeInfo()), CallbackReturn::SUCCESS);
+  const auto states = rebel.export_state_interfaces();
+  const auto commands = rebel.export_command_interfaces();
+  ASSERT_EQ(states.size(), 12u);
+  ASSERT_EQ(commands.size(), 6u);
+  for (std::size_t i = 0; i < 6; ++i) {
+    const std::string joint = "joint" + std::to_string(i + 1);
+    EXPECT_EQ(states[2 * i].get_name(), joint + "/position");
+    EXPECT_EQ(states[2 * i + 1].get_name(), joint + "/velocity");
+    EXPECT_EQ(commands[i].get_name(), joint + "/velocity");
+  }
+  rebel.Stop();
+}
+
+TEST(RebelDriverInit, RejectsWrongJointDescriptionBeforeConnecting)
+{
+  const auto expectRejected = [](
+    const std::string & what, const std::function<void(hardware_interface::HardwareInfo &)> & edit)
+    {
+      FakeCriServer server;
+      Igus::Rebel rebel("127.0.0.1", server.port());
+      auto info = MakeInfo();
+      edit(info);
+      const auto start = Clock::now();
+      EXPECT_EQ(rebel.on_init(info), CallbackReturn::ERROR) << what;
+      EXPECT_LT(Clock::now() - start, 500ms) << what << ": must fail before connecting";
+      std::this_thread::sleep_for(100ms);
+      EXPECT_EQ(server.Connections(), 0u) << what << ": must not have connected";
+    };
+  expectRejected("no joints", [](auto & info) {info.joints.clear();});
+  expectRejected("five joints", [](auto & info) {info.joints.pop_back();});
+  expectRejected(
+    "seven joints", [](auto & info) {
+      auto extra = info.joints.back();
+      extra.name = "joint7";
+      info.joints.push_back(extra);
+    });
+  expectRejected(
+    "joints out of CRI order", [](auto & info) {std::swap(info.joints[0], info.joints[1]);});
+  expectRejected(
+    "duplicate joint name", [](auto & info) {info.joints[5].name = info.joints[4].name;});
+  expectRejected(
+    "position command interface",
+    [](auto & info) {info.joints[2].command_interfaces[0].name = "position";});
+  expectRejected(
+    "missing command interface", [](auto & info) {info.joints[2].command_interfaces.clear();});
+  expectRejected(
+    "missing velocity state", [](auto & info) {info.joints[3].state_interfaces.pop_back();});
+  expectRejected(
+    "extra state interface",
+    [](auto & info) {
+      hardware_interface::InterfaceInfo effort;
+      effort.name = "effort";
+      info.joints[3].state_interfaces.push_back(effort);
+    });
+  expectRejected(
+    "invalid node name", [](auto & info) {info.hardware_parameters["node_name"] = "bad name";});
+  expectRejected(
+    "invalid digital output service",
+    [](auto & info) {info.hardware_parameters["digital_output_service"] = "bad service";});
+}
+
+// Two Igus/Rebel instances in one controller_manager (dual-arm cell): prefixed joints, one fake
+// controller each, distinct node names.
+class RebelDualArmTest : public ::testing::Test
+{
+protected:
+  struct Arm
+  {
+    std::unique_ptr<FakeCriServer> server;
+    std::unique_ptr<Igus::Rebel> rebel;
+    std::vector<hardware_interface::StateInterface> states;
+    std::vector<hardware_interface::CommandInterface> commands;
+  };
+
+  void StartArm(Arm & arm, const std::string & side, bool explicitDigitalOutput = true)
+  {
+    arm.server = std::make_unique<FakeCriServer>();
+    arm.rebel = std::make_unique<Igus::Rebel>("10.255.255.1", 1);
+    auto info = MakeInfo("arm_" + side + "_controller", "arm_" + side + "_");
+    info.hardware_parameters["robot_ip"] = "127.0.0.1";
+    info.hardware_parameters["robot_port"] = std::to_string(arm.server->port());
+    info.hardware_parameters["node_name"] = "igus_rebel_" + side;
+    if (explicitDigitalOutput) {
+      info.hardware_parameters["digital_output_service"] = "set_digital_output_" + side;
+    }
+    info.hardware_parameters["trajectory_controller_name"] = "arm_" + side + "_jtc";
+    ASSERT_EQ(arm.rebel->on_init(info), CallbackReturn::SUCCESS);
+    arm.states = arm.rebel->export_state_interfaces();
+    arm.commands = arm.rebel->export_command_interfaces();
+  }
+
+  rclcpp::Time now{0, 0, RCL_STEADY_TIME};
+  rclcpp::Duration period{0, 10000000};
+};
+
+TEST_F(RebelDualArmTest, TwoPrefixedInstancesRunIndependently)
+{
+  Arm left;
+  Arm right;
+  StartArm(left, "left");
+  ASSERT_NE(left.rebel, nullptr);
+  // The two arms report different poses so that mixed-up state would be visible.
+  StartArm(right, "right");
+  ASSERT_NE(right.rebel, nullptr);
+  ASSERT_NE(left.server->port(), right.server->port());
+
+  // Interface names are the prefixed joint names.
+  for (const std::string side : {"left", "right"}) {
+    Arm & arm = side == "left" ? left : right;
+    ASSERT_EQ(arm.states.size(), 12u);
+    ASSERT_EQ(arm.commands.size(), 6u);
+    for (std::size_t i = 0; i < 6; ++i) {
+      const std::string joint = "arm_" + side + "_joint" + std::to_string(i + 1);
+      EXPECT_EQ(arm.states[2 * i].get_name(), joint + "/position");
+      EXPECT_EQ(arm.states[2 * i + 1].get_name(), joint + "/velocity");
+      EXPECT_EQ(arm.commands[i].get_name(), joint + "/velocity");
+    }
+  }
+
+  // Both ran their own start-up sequence against their own server.
+  ASSERT_TRUE(WaitFor([&]() {return left.server->Commands().size() >= 5;}, 2000ms));
+  ASSERT_TRUE(WaitFor([&]() {return right.server->Commands().size() >= 5;}, 2000ms));
+  EXPECT_EQ(left.server->Commands(), kStartupSequence);
+  EXPECT_EQ(right.server->Commands(), kStartupSequence);
+  EXPECT_EQ(left.rebel->read(now, period), return_type::OK);
+  EXPECT_EQ(right.rebel->read(now, period), return_type::OK);
+
+  // A jog command on the left arm reaches only the left server.
+  const auto jogStart = Clock::now();
+  for (int i = 0; i < 20; ++i) {
+    left.commands.at(0).set_value(0.1);
+    ASSERT_EQ(left.rebel->write(now, period), return_type::OK);
+    ASSERT_EQ(right.rebel->write(now, period), return_type::OK);
+    std::this_thread::sleep_for(10ms);
+  }
+  const auto leftJogs = left.server->AliveJogs(jogStart + 100ms);
+  ASSERT_FALSE(leftJogs.empty());
+  EXPECT_GT(ParseJog(leftJogs.back().body)[0], 5.0);
+  EXPECT_TRUE(AnyNonZeroJog(*left.server, jogStart + 100ms));
+  EXPECT_FALSE(AnyNonZeroJog(*right.server, jogStart));
+
+  // Independent stale-STATUS handling: the left STATUS stream stops, only left latches.
+  left.server->SetSendStatus(false);
+  ASSERT_TRUE(
+    WaitFor(
+      [&]() {
+        left.rebel->write(now, period);
+        return left.rebel->read(now, period) == return_type::ERROR;
+      }, 2500ms));
+  EXPECT_EQ(left.rebel->on_error(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_TRUE(left.rebel->HardwareErrorLatched());
+  EXPECT_FALSE(right.rebel->HardwareErrorLatched());
+  EXPECT_EQ(right.rebel->read(now, period), return_type::OK);
+  EXPECT_FALSE(right.rebel->StatusHoldActive());
+  EXPECT_FALSE(right.rebel->StatusCoastActive());
+
+  // The right arm keeps accepting jog while the left one is zeroed.
+  right.commands.at(1).set_value(0.1);
+  const auto rightStart = Clock::now();
+  for (int i = 0; i < 20; ++i) {
+    right.commands.at(1).set_value(0.1);
+    ASSERT_EQ(right.rebel->write(now, period), return_type::OK);
+    std::this_thread::sleep_for(10ms);
+  }
+  EXPECT_TRUE(AnyNonZeroJog(*right.server, rightStart + 100ms));
+  EXPECT_FALSE(AnyNonZeroJog(*left.server, Clock::now() - 100ms));
+
+  // Digital output goes to the right server only.
+  auto request = std::make_shared<igus_rebel_msgs::srv::SetDigitalOutput::Request>();
+  auto response = std::make_shared<igus_rebel_msgs::srv::SetDigitalOutput::Response>();
+  request->output.output = 2;
+  request->output.is_on = true;
+  right.rebel->dio_callback(request, response);
+  EXPECT_TRUE(response->success);
+  ASSERT_TRUE(WaitFor([&]() {return right.server->Commands().back() == "DOUT 2 true";}, 1000ms));
+  const auto leftCommands = left.server->Commands();
+  EXPECT_EQ(
+    std::count(leftCommands.begin(), leftCommands.end(), std::string("DOUT 2 true")), 0);
+
+  // Stopping one instance does not disturb the other.
+  left.rebel->Stop();
+  EXPECT_EQ(right.rebel->read(now, period), return_type::OK);
+  right.rebel->Stop();
+}
+
+TEST_F(RebelDualArmTest, ServiceAndNodeNamesFollowParameters)
+{
+  Arm left;
+  Arm right;
+  StartArm(left, "left");
+  ASSERT_NE(left.rebel, nullptr);
+  StartArm(right, "right");
+  ASSERT_NE(right.rebel, nullptr);
+
+  // Two nodes with distinct names exist in this process's context, each with its own services.
+  auto probe = std::make_shared<rclcpp::Node>("dual_arm_probe");
+  EXPECT_TRUE(
+    WaitFor(
+      [&]() {
+        const auto names = probe->get_service_names_and_types();
+        return names.count("/igus_rebel_left/reset_and_enable") == 1 &&
+        names.count("/igus_rebel_right/reset_and_enable") == 1 &&
+        names.count("/set_digital_output_left") == 1 &&
+        names.count("/set_digital_output_right") == 1;
+      }, 3000ms));
+  const auto names = probe->get_service_names_and_types();
+  EXPECT_EQ(names.count("/igus_rebel/reset_and_enable"), 0u);
+  EXPECT_EQ(names.count("/set_digital_output"), 0u);
+  left.rebel->Stop();
+  right.rebel->Stop();
+}
+
+TEST_F(RebelDualArmTest, RenamedNodesDefaultToPrivateDigitalOutputService)
+{
+  Arm left;
+  Arm right;
+  StartArm(left, "left", false);
+  ASSERT_NE(left.rebel, nullptr);
+  StartArm(right, "right", false);
+  ASSERT_NE(right.rebel, nullptr);
+
+  // Without digital_output_service, a renamed node must not advertise the global service.
+  auto probe = std::make_shared<rclcpp::Node>("dual_arm_private_probe");
+  EXPECT_TRUE(
+    WaitFor(
+      [&]() {
+        const auto names = probe->get_service_names_and_types();
+        return names.count("/igus_rebel_left/set_digital_output") == 1 &&
+        names.count("/igus_rebel_right/set_digital_output") == 1;
+      }, 3000ms));
+  EXPECT_EQ(probe->get_service_names_and_types().count("/set_digital_output"), 0u);
+  left.rebel->Stop();
+  right.rebel->Stop();
 }
 
 TEST(RebelSocketTest, SendFailsFastWhileDisconnectedAndStopIsBounded)

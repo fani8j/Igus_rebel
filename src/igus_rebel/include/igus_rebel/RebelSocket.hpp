@@ -37,7 +37,11 @@ public:
   static constexpr std::chrono::milliseconds kReconnectDelay{100};
   static constexpr std::size_t kMaxUnprocessedMessages = 25;
 
-  RebelSocket(const std::string & ip, const int & port);
+  // `logger` lets several sockets (one per arm) be told apart in the log; the default keeps the
+  // historical "igus_rebel" logger.
+  RebelSocket(
+    const std::string & ip, const int & port,
+    const rclcpp::Logger & logger = rclcpp::get_logger("igus_rebel"));
   ~RebelSocket();
 
   RebelSocket(const RebelSocket &) = delete;

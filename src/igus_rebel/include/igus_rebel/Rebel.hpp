@@ -30,6 +30,14 @@ namespace Igus
 {
 class Rebel : public SystemInterface
 {
+public:
+  // Defaults of the optional hardware parameters node_name, digital_output_service and
+  // trajectory_controller_name.
+  static constexpr const char * kDefaultNodeName = "igus_rebel";
+  static constexpr const char * kDefaultDigitalOutputService = "set_digital_output";
+  static constexpr const char * kDefaultTrajectoryControllerName =
+    "rebel_arm_trajectory_controller";
+
 private:
   // Latest valid STATUS, written by the message thread and read by read()/on_init.
   struct JointSnapshot
@@ -71,6 +79,15 @@ private:
   // text so the operator has the exact commands to run.
   std::atomic<bool> hardwareErrorLatched_{false};
   std::string componentName_;
+  // Optional hardware parameters (see on_init); the defaults reproduce the single-arm names.
+  // Two Igus/Rebel instances in one controller_manager need distinct node_name values (and
+  // distinct digital_output_service names, or a service that only one of them provides).
+  std::string nodeName_ = kDefaultNodeName;
+  std::string digitalOutputService_ = kDefaultDigitalOutputService;
+  std::string trajectoryControllerName_ = kDefaultTrajectoryControllerName;
+  // Names of the six joints exactly as given in the ros2_control tag (info_.joints), in CRI
+  // joint order 1..6. Used for the exported state/command interfaces.
+  std::array<std::string, 6> jointNames_;
 
   // Serialises the start-up command sequence: OnConnected() runs on the socket thread (reconnect),
   // in on_activate() and from the reset_and_enable service (executor thread).
@@ -144,12 +161,16 @@ private:
   void ZeroJog();
   void HandleMessage(const std::string &);
 
+  // on_init helper: exactly six joints in CRI order with the interfaces this driver exports.
+  bool ValidateJoints(const HardwareInfo & hardware_info);
+
   // Function to react to specific status values, to display warnings, error messages, etc.
   void ProcessStatus(const CriMessages::Status &);
 
 public:
-  const std::vector<std::string> JOINT_NAME = {
-    "joint1", "joint2", "joint3", "joint4", "joint5", "joint6"};
+  // Joint names of the exported interfaces come from the ros2_control tag (info_.joints), so
+  // prefixed names (arm_left_joint1 ...) work; see JointNames().
+  const std::array<std::string, 6> & JointNames() const {return jointNames_;}
 
   // pi / 180
   const double degToRad = Safety::kDegToRad;

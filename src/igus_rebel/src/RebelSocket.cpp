@@ -26,10 +26,10 @@ timeval ToTimeval(std::chrono::milliseconds duration)
 }
 }  // namespace
 
-RebelSocket::RebelSocket(const std::string & ip, const int & port)
+RebelSocket::RebelSocket(const std::string & ip, const int & port, const rclcpp::Logger & logger)
 : ip(ip),
   port(port),
-  logger(rclcpp::get_logger("igus_rebel"))
+  logger(logger)
 {
 }
 

@@ -474,6 +474,66 @@ void Rebel::ProcessStatus(const CriMessages::Status & status)
   lastErrorJoints = currentErrorJoints;
 }
 
+bool Rebel::ValidateJoints(const HardwareInfo & hardware_info)
+{
+  const auto & joints = hardware_info.joints;
+  if (joints.size() != 6) {
+    RCLCPP_FATAL(
+      logger_,
+      "Hardware component '%s' must declare exactly 6 joints (joint1..joint6 in CRI order, "
+      "optionally prefixed), got %zu",
+      componentName_.c_str(), joints.size());
+    return false;
+  }
+  for (std::size_t i = 0; i < joints.size(); ++i) {
+    const auto & joint = joints[i];
+    const std::string suffix = "joint" + std::to_string(i + 1);
+    const bool orderOk = joint.name.size() >= suffix.size() &&
+      joint.name.compare(joint.name.size() - suffix.size(), suffix.size(), suffix) == 0;
+    if (!orderOk) {
+      RCLCPP_FATAL(
+        logger_,
+        "Hardware component '%s': joint #%zu is '%s' but must be '%s' (optionally prefixed): "
+        "the joints must be listed in CRI order 1..6 or commands would reach the wrong joint",
+        componentName_.c_str(), i + 1, joint.name.c_str(), suffix.c_str());
+      return false;
+    }
+    for (std::size_t j = 0; j < i; ++j) {
+      if (joints[j].name == joint.name) {
+        RCLCPP_FATAL(
+          logger_, "Hardware component '%s': duplicate joint name '%s'",
+          componentName_.c_str(), joint.name.c_str());
+        return false;
+      }
+    }
+    if (joint.command_interfaces.size() != 1 ||
+      joint.command_interfaces[0].name != hardware_interface::HW_IF_VELOCITY)
+    {
+      RCLCPP_FATAL(
+        logger_,
+        "Hardware component '%s': joint '%s' must have exactly one command interface "
+        "('velocity')",
+        componentName_.c_str(), joint.name.c_str());
+      return false;
+    }
+    bool havePosition = false;
+    bool haveVelocity = false;
+    for (const auto & state : joint.state_interfaces) {
+      havePosition = havePosition || state.name == hardware_interface::HW_IF_POSITION;
+      haveVelocity = haveVelocity || state.name == hardware_interface::HW_IF_VELOCITY;
+    }
+    if (joint.state_interfaces.size() != 2 || !havePosition || !haveVelocity) {
+      RCLCPP_FATAL(
+        logger_,
+        "Hardware component '%s': joint '%s' must have exactly the state interfaces "
+        "'position' and 'velocity'",
+        componentName_.c_str(), joint.name.c_str());
+      return false;
+    }
+  }
+  return true;
+}
+
 //
 // public functions
 //
@@ -481,6 +541,12 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
 {
   if (SystemInterface::on_init(hardware_info) != CallbackReturn::SUCCESS) {
     return CallbackReturn::ERROR;
+  }
+
+  // Per-component logger so that several arms in one controller_manager can be told apart.
+  componentName_ = hardware_info.name;
+  if (!componentName_.empty()) {
+    logger_ = rclcpp::get_logger("igus_rebel").get_child(componentName_);
   }
 
   const auto & params = hardware_info.hardware_parameters;
@@ -513,7 +579,35 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
   }
   RCLCPP_INFO(logger_, "CRI controller target %s:%d", ip.c_str(), port);
 
-  componentName_ = hardware_info.name;
+  // Optional naming parameters; the defaults are the single-arm names.
+  const auto readName = [&params](const char * key, std::string & target) {
+      const auto it = params.find(key);
+      if (it != params.end() && !it->second.empty()) {
+        target = it->second;
+      }
+    };
+  nodeName_ = kDefaultNodeName;
+  digitalOutputService_ = kDefaultDigitalOutputService;
+  trajectoryControllerName_ = kDefaultTrajectoryControllerName;
+  readName("node_name", nodeName_);
+  // A renamed node (one of several arms) defaults to a node-private service so two arms never
+  // both advertise the global /set_digital_output.
+  if (nodeName_ != kDefaultNodeName) {
+    digitalOutputService_ = std::string("~/") + kDefaultDigitalOutputService;
+  }
+  readName("digital_output_service", digitalOutputService_);
+  readName("trajectory_controller_name", trajectoryControllerName_);
+
+  // Validate the ros2_control description before anything is started: the interfaces are
+  // exported by joint position (info_.joints[i] <-> CRI joint i + 1), so a wrong count or
+  // order would send commands to the wrong joint.
+  if (!ValidateJoints(hardware_info)) {
+    return CallbackReturn::ERROR;
+  }
+  for (std::size_t i = 0; i < 6; ++i) {
+    jointNames_[i] = hardware_info.joints[i].name;
+  }
+
   ZeroJog();
   lastWriteNs = 0;
   current_ccnt = 1;
@@ -538,24 +632,36 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
   gapCount_ = 0;
   gapMaxMs_ = 0.0;
 
-  node_ = std::make_shared<rclcpp::Node>("igus_rebel");
-  reset_enable_srv_ = node_->create_service<std_srvs::srv::Trigger>(
-    "~/reset_and_enable",
-    [this](
-      const std::shared_ptr<std_srvs::srv::Trigger::Request>,
-      std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
-      response->success = ResetAndEnable(response->message);
-    });
-  digital_output_srv_ = node_->create_service<igus_rebel_msgs::srv::SetDigitalOutput>(
-    "set_digital_output",
-    std::bind(&Rebel::dio_callback, this, std::placeholders::_1, std::placeholders::_2));
+  try {
+    node_ = std::make_shared<rclcpp::Node>(nodeName_);
+    reset_enable_srv_ = node_->create_service<std_srvs::srv::Trigger>(
+      "~/reset_and_enable",
+      [this](
+        const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+        std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+        response->success = ResetAndEnable(response->message);
+      });
+    digital_output_srv_ = node_->create_service<igus_rebel_msgs::srv::SetDigitalOutput>(
+      digitalOutputService_,
+      std::bind(&Rebel::dio_callback, this, std::placeholders::_1, std::placeholders::_2));
+  } catch (const std::exception & error) {
+    RCLCPP_FATAL(
+      logger_, "Cannot create ROS node '%s' or its services ('%s'): %s", nodeName_.c_str(),
+      digitalOutputService_.c_str(), error.what());
+    digital_output_srv_.reset();
+    reset_enable_srv_.reset();
+    node_.reset();
+    return CallbackReturn::ERROR;
+  }
+
+  // The socket exists before the executor starts, so service callbacks never see it unset.
+  rebelSocket = std::make_shared<RebelSocket>(ip, port, logger_);
+  rebelSocket->SetConnectedCallback([this](bool reconnect) {OnConnected(reconnect);});
+
   // Service callbacks run on their own executor thread instead of inside write().
   executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
   executor_->add_node(node_);
   executorThread = std::thread([this]() {executor_->spin();});
-
-  rebelSocket = std::make_shared<RebelSocket>(ip, port);
-  rebelSocket->SetConnectedCallback([this](bool reconnect) {OnConnected(reconnect);});
 
   Start();
 
@@ -676,11 +782,11 @@ CallbackReturn Rebel::on_activate(const rclcpp_lifecycle::State &)
       logger_,
       "Hardware component '%s' recovered from a latched error: re-sent SetActive, Reset, "
       "Enable, MotionTypeJoint and Override with jog held at zero. This driver does NOT "
-      "restart the controllers claiming this hardware (e.g. 'rebel_arm_trajectory_controller' "
+      "restart the controllers claiming this hardware (e.g. '%s' "
       "in this workspace) -- switch them too, e.g. "
       "'ros2 control switch_controllers --deactivate <controller> --activate <controller>', "
       "so they resample the current joint state instead of continuing a stale trajectory.",
-      componentName_.c_str());
+      componentName_.c_str(), trajectoryControllerName_.c_str());
   }
 
   return CallbackReturn::SUCCESS;
@@ -712,9 +818,10 @@ CallbackReturn Rebel::on_error(const rclcpp_lifecycle::State &)
     "'ros2 control set_hardware_component_state %s inactive' then "
     "'ros2 control set_hardware_component_state %s active' (the latter is refused unless "
     "STATUS is fresh); also cycle the controllers claiming this hardware (e.g. "
-    "'ros2 control switch_controllers --deactivate rebel_arm_trajectory_controller --activate "
-    "rebel_arm_trajectory_controller') so they do not resume from a stale setpoint.",
-    componentName_.c_str(), componentName_.c_str(), componentName_.c_str());
+    "'ros2 control switch_controllers --deactivate %s --activate "
+    "%s') so they do not resume from a stale setpoint.",
+    componentName_.c_str(), componentName_.c_str(), componentName_.c_str(),
+    trajectoryControllerName_.c_str(), trajectoryControllerName_.c_str());
   return CallbackReturn::SUCCESS;
 }
 
@@ -725,10 +832,10 @@ std::vector<StateInterface> Rebel::export_state_interfaces()
   for (int i = 0; i < 6; ++i) {
     state_interfaces.emplace_back(
       StateInterface(
-        JOINT_NAME[i], hardware_interface::HW_IF_POSITION, &pos[i]));
+        jointNames_[i], hardware_interface::HW_IF_POSITION, &pos[i]));
     state_interfaces.emplace_back(
       StateInterface(
-        JOINT_NAME[i], hardware_interface::HW_IF_VELOCITY, &vel[i]));
+        jointNames_[i], hardware_interface::HW_IF_VELOCITY, &vel[i]));
   }
 
   return state_interfaces;
@@ -741,7 +848,7 @@ std::vector<CommandInterface> Rebel::export_command_interfaces()
   for (int i = 0; i < 6; ++i) {
     command_interfaces.emplace_back(
       CommandInterface(
-        JOINT_NAME[i], hardware_interface::HW_IF_VELOCITY, &vel_cmd[i]));
+        jointNames_[i], hardware_interface::HW_IF_VELOCITY, &vel_cmd[i]));
   }
 
   return command_interfaces;
@@ -769,8 +876,8 @@ return_type Rebel::read(const rclcpp::Time &, const rclcpp::Duration &)
       logger_, throttleClock_, 10000,
       "Robot drives disabled (STATUS reports 'Motor not enabled', joint mask 0x%02x) while the "
       "connection is healthy: the arm will not move. Call "
-      "'ros2 service call /igus_rebel/reset_and_enable std_srvs/srv/Trigger' to re-enable.",
-      disabledMask);
+      "'ros2 service call /%s/reset_and_enable std_srvs/srv/Trigger' to re-enable.",
+      disabledMask, nodeName_.c_str());
   }
 
   JointSnapshot latest;
