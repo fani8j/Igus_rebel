@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+import os
+
+# Small images: one worker thread each is faster and far cheaper than a pool per core (measured 2026-10-02:
+# 66 threads / 70% CPU -> 12 threads / 45% CPU, identical output). Must be set before numpy/cv2 import.
+for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "OPENCV_FOR_THREADS_NUM"):
+    os.environ.setdefault(_var, "1")
+
 import statistics
 import time
 
@@ -20,7 +27,8 @@ from std_srvs.srv import Trigger
 
 from . import core_path  # noqa: F401  -- core must be on sys.path before imports
 from .conversions import observation_to_msg, stamp_to_s
-from .fast_frame import RoiCanvas
+from .fast_frame import PartialRoiDecoder, RoiCanvas
+from . import jpeg_window
 from precision_box_detector.side_tape.backends.classical import ClassicalBackend
 from precision_box_detector.side_tape.config import load_config
 from precision_box_detector.side_tape.geometry import (derotate_image, line_from_points,
@@ -41,6 +49,23 @@ class SideTapePerception(Node):
         # Smooth live view: half-size JPEG overlay on <debug topic>/compressed (0 = off).
         self.declare_parameter("debug_jpeg_rate_hz", 15.0)
         self.declare_parameter("debug_jpeg_scale", 0.5)
+        self.declare_parameter("cv_threads", 1)  # OpenCV worker threads (0 = OpenCV default)
+        cv2.setNumThreads(int(self.get_parameter("cv_threads").value))
+        # Opt-in: JPEG decode + 180-degree de-rotation on the GPU (nvJPEG via torchvision); falls back to the CPU
+        # path if CUDA/torchvision is unavailable or a decode fails.
+        self.declare_parameter("gpu_decode", False)
+        self._gpu = None
+        if bool(self.get_parameter("gpu_decode").value):
+            try:
+                import torch
+                from torchvision.io import decode_jpeg
+                torch.set_num_threads(1)
+                if not torch.cuda.is_available():
+                    raise RuntimeError("CUDA not available")
+                self._gpu = (torch, decode_jpeg)
+                self.get_logger().info(f"gpu_decode: nvJPEG on {torch.cuda.get_device_name(0)}")
+            except Exception as exc:  # noqa: BLE001 - any import/CUDA problem -> CPU path
+                self.get_logger().warning(f"gpu_decode unavailable ({exc}); using the CPU decoder")
         # Raw 1280x720 frames over DDS arrive at ~2-8 Hz (measured); the JPEG
         # image_transport topic arrives at ~28 Hz and decodes in ~3 ms.
         self.declare_parameter("use_compressed", True)
@@ -49,6 +74,25 @@ class SideTapePerception(Node):
         self.declare_parameter("fast_decode", False)
         self._fast_decode = bool(self.get_parameter("fast_decode").value)
         self._canvas = None
+        # Opt-in (needs fast_decode + compressed input): libjpeg-turbo windowed decode of only the raw pixels
+        # that map to the tracker ROI (bit-identical to cv2.imdecode inside the ROI, checked by
+        # check_partial_decode). Debug-view frames add a half-size IMREAD_REDUCED_COLOR_2 decode for the
+        # overlay; the full-size decode is then only needed for the 1 Hz raw debug Image. Falls back to
+        # cv2.imdecode per frame on any problem.
+        self.declare_parameter("partial_decode", False)
+        self._partial = None
+        self._partial_fallbacks = 0
+        if bool(self.get_parameter("partial_decode").value):
+            decoder, why = jpeg_window.load_decoder_or_reason()
+            if not self._fast_decode or self._gpu is not None or not bool(self.get_parameter("use_compressed").value):
+                self.get_logger().warning("partial_decode needs fast_decode, no gpu_decode and use_compressed; disabled")
+            elif decoder is None:
+                self.get_logger().warning(f"partial_decode unavailable ({why}); using cv2.imdecode")
+            else:
+                self._canvas = RoiCanvas(self.cfg.camera.width, self.cfg.camera.height,
+                                         self.cfg.camera.rotate_180, 3)
+                self._partial = PartialRoiDecoder(decoder, self._canvas)
+                self.get_logger().info(f"partial_decode: windowed JPEG decode via {decoder.path}")
         debug_rate = float(self.get_parameter("debug_rate_hz").value)
         if debug_rate < 0:
             raise ValueError("debug_rate_hz must be >= 0")
@@ -145,12 +189,61 @@ class SideTapePerception(Node):
         response.message = "tracker reset"
         return response
 
+    def _decode_gpu(self, data):
+        """JPEG bytes -> de-rotated BGR uint8 numpy image, decoded and rotated on the GPU."""
+        torch, decode_jpeg = self._gpu
+        t = decode_jpeg(torch.frombuffer(bytearray(data), dtype=torch.uint8), device="cuda")  # 3xHxW RGB
+        if self.cfg.camera.rotate_180:
+            t = torch.flip(t, dims=(1, 2))
+        return t.flip(0).permute(1, 2, 0).contiguous().cpu().numpy()  # RGB->BGR, HWC
+
     def _on_compressed(self, msg):
-        image = cv2.imdecode(np.frombuffer(msg.data, np.uint8), cv2.IMREAD_COLOR)
+        if self._gpu is not None:
+            try:
+                self._process(self._decode_gpu(msg.data), msg.header, derotated=True)
+                return
+            except Exception as exc:  # noqa: BLE001 - fall back to the CPU decoder for this frame
+                self.get_logger().warning(f"gpu decode failed ({exc}); CPU fallback", throttle_duration_sec=5.0)
+        data = np.frombuffer(msg.data, np.uint8)
+        if self._partial is not None and self._on_compressed_partial(data, msg):
+            return
+        image = cv2.imdecode(data, cv2.IMREAD_COLOR)
         if image is None:
             self.get_logger().error(f"JPEG decode failed ({msg.format})", throttle_duration_sec=5.0)
             return
         self._process(image, msg.header)
+
+    def _on_compressed_partial(self, data, msg):
+        """Windowed decode for frames that only need the tracker ROI. True if the frame was processed.
+
+        The tracker still gets exactly the full-resolution ROI pixels. Frames that need the full-size image
+        (raw debug Image due, or a non-half JPEG scale) and any decode problem return False -> normal path.
+        """
+        t_now = time.monotonic()
+        raw_due = self.debug_period is not None and t_now - self._last_debug_s >= self.debug_period
+        jpeg_due = self.jpeg_period is not None and t_now - self._last_jpeg_s >= self.jpeg_period
+        half_ok = abs(self.jpeg_scale - 0.5) < 1e-9
+        if raw_due or (jpeg_due and not half_ok):
+            return False
+        roi = self._tracker_roi()
+        if roi is None:
+            return False
+        image = self._partial.decode_roi(data, roi)
+        if image is None:
+            self._partial_fallbacks += 1
+            self.get_logger().warning(f"partial decode failed (status {self._partial.last_status}); full decode",
+                                      throttle_duration_sec=5.0)
+            return False
+        small = None
+        if jpeg_due:  # half-size view for the overlay only; never given to the tracker
+            small = cv2.imdecode(data, cv2.IMREAD_REDUCED_COLOR_2)
+            if small is not None:
+                if (small.shape[1], small.shape[0]) != (self.cfg.camera.width // 2, self.cfg.camera.height // 2):
+                    small = None
+                elif self.cfg.camera.rotate_180:
+                    small = small[::-1, ::-1]
+        self._process(image, msg.header, roi_ready=True, small=small)
+        return True
 
     def _on_image(self, msg):
         try:
@@ -160,7 +253,7 @@ class SideTapePerception(Node):
             return
         self._process(image, msg.header)
 
-    def _process(self, image, header):
+    def _process(self, image, header, derotated=False, roi_ready=False, small=None):
         h, w = image.shape[:2]
         if (w, h) != (self.cfg.camera.width, self.cfg.camera.height):
             self.get_logger().error(
@@ -169,9 +262,14 @@ class SideTapePerception(Node):
                 throttle_duration_sec=5.0)
             return
         full_frame = True
-        if self._fast_decode:
-            debug_due = (self.debug_period is not None
-                         and time.monotonic() - self._last_debug_s >= self.debug_period)
+        if derotated:
+            pass  # already de-rotated (GPU path)
+        elif roi_ready:
+            full_frame = False  # partial decode: only the ROI window of this canvas is valid
+        elif self._fast_decode:
+            t_now = time.monotonic()
+            debug_due = ((self.debug_period is not None and t_now - self._last_debug_s >= self.debug_period)
+                         or (self.jpeg_period is not None and t_now - self._last_jpeg_s >= self.jpeg_period))
             roi = None if debug_due else self._tracker_roi()
             if roi is None:
                 image = derotate_image(image, self.cfg.camera.rotate_180)
@@ -198,6 +296,9 @@ class SideTapePerception(Node):
         now = time.monotonic()
         raw_due = self.debug_period is not None and now - self._last_debug_s >= self.debug_period
         jpeg_due = self.jpeg_period is not None and now - self._last_jpeg_s >= self.jpeg_period
+        if small is not None and jpeg_due:
+            self._publish_small_overlay(small, obs, header)
+            self._last_jpeg_s = now
         if full_frame and (raw_due or jpeg_due):
             center = (lookahead_center(self.cfg.tip, self.cfg.J, self.cfg.detector.lookahead_mm)
                       if self._mode == "cut" else self.cfg.tip)
@@ -225,6 +326,27 @@ class SideTapePerception(Node):
                     jmsg.data = buf.tobytes()
                     self.debug_jpeg_pub.publish(jmsg)
                 self._last_jpeg_s = now
+
+    def _overlay_roi(self):
+        center = (lookahead_center(self.cfg.tip, self.cfg.J, self.cfg.detector.lookahead_mm)
+                  if self._mode == "cut" else self.cfg.tip)
+        return roi_around(center, self.cfg.detector.roi_half_w, self.cfg.detector.roi_half_h,
+                          self.cfg.camera.width, self.cfg.camera.height)
+
+    def _publish_small_overlay(self, small, obs, header):
+        """Half-size overlay JPEG from a reduced decode (``small`` is already de-rotated, 0.5 scale)."""
+        overlay = draw_overlay(small, obs, self.cfg, roi=self._overlay_roi(), seed=self._seed_line,
+                               offset_mm=self.tracker.effective_offset_mm, scale=0.5)
+        if self._provisional:
+            cv2.putText(overlay, "UNCALIBRATED PREVIEW (no J) - e_lat not meaningful", (10, 350),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
+        ok, buf = cv2.imencode(".jpg", overlay, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        if ok:
+            jmsg = CompressedImage()
+            jmsg.header = header
+            jmsg.format = "jpeg"
+            jmsg.data = buf.tobytes()
+            self.debug_jpeg_pub.publish(jmsg)
 
     def _tracker_roi(self):
         """The ROI the tracker will hand the backend this frame (None if it cannot be built)."""

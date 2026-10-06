@@ -8,6 +8,8 @@ setup(
     name=package_name,
     version="0.1.0",
     packages=[package_name],
+    # C source for the opt-in partial_decode helper; compiled on first use (see side_tape_ros/jpeg_window.py).
+    package_data={package_name: ["jpeg_window.c", "build_jpeg_window.sh"]},
     data_files=[
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
         ("share/" + package_name, ["package.xml"]),

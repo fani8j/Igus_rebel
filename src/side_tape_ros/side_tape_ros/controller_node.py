@@ -19,6 +19,11 @@ chain (TF, observation, axis signs) has been checked in preview.
 
 from __future__ import annotations
 
+import os
+
+for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):  # tiny numpy work: no thread pool
+    os.environ.setdefault(_var, "1")
+
 import time
 
 import signal

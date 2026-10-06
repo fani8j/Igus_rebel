@@ -27,7 +27,9 @@ def generate_launch_description():
                               description="Optional SIDE_TAPE_CORE directory"),
         OpaqueFunction(function=set_core),
         Node(package="side_tape_ros", executable="perception_node", name="side_tape_perception",
-             parameters=[{"config_path": config}]),
+             # fast_decode: ROI-only de-rotation (bit-identical, verified on 18k frames incl. seam mode);
+             # full-size debug image at 1 Hz (smooth view: /side_tape/debug_image/compressed, 15 Hz).
+             parameters=[{"config_path": config, "fast_decode": True, "debug_rate_hz": 1.0}]),
         Node(package="side_tape_ros", executable="controller_node", name="side_tape_controller",
              condition=IfCondition(use_controller),
              parameters=[{"config_path": config, "dry_run": dry_run}]),

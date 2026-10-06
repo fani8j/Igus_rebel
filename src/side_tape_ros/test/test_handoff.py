@@ -22,6 +22,13 @@ def rec_path(tmp_path):
         pytest.skip("example hand-off record not present")
     dst = tmp_path / "h.json"
     shutil.copy(EXAMPLE, dst)
+    # The live record's status changes with the robot (active/retracted/...): tests start from 'active'.
+    d = json.loads(dst.read_text()); d["status"] = "active"
+    lp = d.get("left_parallel_orientation") or {}
+    lp.update({"tilt_deg": -5.0, "pitch_deg": 5.0, "yaw_deg": 0.0, "rotation_from_f0_deg": 7.07,
+               "max_abs_angle_deg": 5.0, "max_allowed_deg": 10.0})
+    d["left_parallel_orientation"] = lp
+    dst.write_text(json.dumps(d))
     return dst
 
 
