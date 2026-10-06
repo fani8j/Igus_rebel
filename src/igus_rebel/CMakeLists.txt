@@ -35,6 +35,7 @@ ament_target_dependencies(${PROJECT_NAME}_cri rclcpp)
 # Add hardware interface shared library
 add_library(${PROJECT_NAME} SHARED
   src/Rebel.cpp
+  src/FaultGroup.cpp
 )
 target_link_libraries(${PROJECT_NAME} ${PROJECT_NAME}_cri)
 ament_target_dependencies(${PROJECT_NAME}

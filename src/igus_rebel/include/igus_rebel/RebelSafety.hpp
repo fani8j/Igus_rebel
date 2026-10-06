@@ -60,6 +60,24 @@ constexpr std::chrono::milliseconds kFirstStatusTimeout{5000};
 // updates the velocity; limits the error from arrival jitter to roughly 0.6x-1.5x.
 constexpr std::chrono::milliseconds kMinVelocityInterval{15};
 
+// Fault groups: a STATUS drive/kinematics error only counts as "stopped by a fault" once this
+// instance was armed, i.e. it saw a fully clean STATUS at least this long after the start-up
+// sequence (SetActive/Reset/Enable) was sent. Keeps the normal disabled state before the first
+// enable, and the transient while Reset/Enable are processed, from tripping the group.
+constexpr std::chrono::milliseconds kFaultArmSettleTime{500};
+
+// Fault groups: does this CRI kinematics state count as "the controller stopped this arm"?
+// This is the ONE place that decides. It is deliberately strict for bring-up: every state other
+// than NO_ERROR trips the group (also JOINT_LIMIT_MIN/MAX, singularities, virtual-box limits).
+// Candidates to whitelist later, once the real behaviour is known, because a tool that merely
+// touches a joint limit or virtual box may still be recoverable by jogging away:
+// JOINT_LIMIT_MIN, JOINT_LIMIT_MAX (and possibly TOOL_AT_VIRTUAL_BOX_LIMIT_1..6). A state that
+// is not tripping is treated as clean STATUS for arming and for clearing a root-cause fault.
+inline bool IsGroupTrippingKinstate(CriMessages::Kinstate kinstate)
+{
+  return kinstate != CriMessages::Kinstate::NO_ERROR;
+}
+
 // Velocity override requested at start-up and the tolerance for the STATUS check.
 constexpr float kExpectedOverridePercent = 100.0f;
 constexpr float kOverrideTolerancePercent = 0.5f;

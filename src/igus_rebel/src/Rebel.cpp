@@ -3,7 +3,9 @@
 #include <arpa/inet.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <cstdio>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -68,6 +70,148 @@ void Rebel::ZeroJog()
   }
 }
 
+void Rebel::LatchHardwareError(const std::string & reason)
+{
+  // Latch first, then zero: write() re-checks the latch after storing a command.
+  const bool wasLatched = hardwareErrorLatched_.exchange(true);
+  ZeroJog();
+  if (wasLatched || !faultMember_) {
+    // Already latched (by an earlier root cause, or by a peer): not a new root-cause fault.
+    return;
+  }
+  const std::size_t stopped = ReportRootFault(faultMember_, reason);
+  RCLCPP_ERROR(
+    logger_,
+    "Fault group '%s': component '%s' faulted (%s); stopped %zu other group member(s). This "
+    "component is latched as well (jog zero, read() returns ERROR). %s",
+    faultGroup_.c_str(), componentName_.c_str(), reason.c_str(), stopped,
+    FaultGroupRecoveryHint().c_str());
+}
+
+void Rebel::OnPeerFault(const std::string & originName, const std::string & reason)
+{
+  if (stopping) {
+    return;
+  }
+  // Latch first, then zero (see LatchHardwareError). Takes no lock: it may run on any thread
+  // that reports a fault, including the message thread of the peer.
+  const bool wasLatched = hardwareErrorLatched_.exchange(true);
+  ZeroJog();
+  lastWriteNs = 0;
+  if (wasLatched) {
+    return;
+  }
+  RCLCPP_ERROR(
+    logger_,
+    "Hardware component '%s' stopped because fault-group member '%s' faulted: %s. Jog forced to "
+    "zero and latched; recover '%s' FIRST, then this component: for each, "
+    "'ros2 control set_hardware_component_state <component> inactive' then '... active' "
+    "(refused unless STATUS is fresh, and refused here while '%s' is still faulted), then cycle "
+    "the controllers ('%s').",
+    componentName_.c_str(), originName.c_str(), reason.c_str(), originName.c_str(),
+    originName.c_str(), trajectoryControllerName_.c_str());
+}
+
+std::string Rebel::FaultGroupRecoveryHint() const
+{
+  if (!faultMember_) {
+    return "";
+  }
+  return "Fault group '" + faultGroup_ + "' recovery order: recover the member that faulted "
+         "first (the root cause) before the others. A member's activation is refused while "
+         "another member holds an un-recovered root-cause fault. Every latched member "
+         "(including the root cause) recovers the same way: 'ros2 control "
+         "set_hardware_component_state <component> inactive' then 'active', then cycle its "
+         "controllers; the reset_and_enable service alone is NOT the recovery path in a fault "
+         "group (it is refused while latched). The root cause counts as recovered after "
+         "500 ms of continuous enabled, clean STATUS. A root-cause member that cannot recover "
+         "(for example a persistent kinematics error) blocks its peers until the stack is "
+         "relaunched without fault_group.";
+}
+
+void Rebel::CheckFaultGroupStatus(
+  CriMessages::Kinstate kinstate, const std::array<int, 16> & errorJoints)
+{
+  if (!faultMember_ || stopping) {
+    return;
+  }
+  // Any known per-joint error bit of joints 1-6 (over-temperature, supply/e-stop, motor not
+  // enabled, communication watchdog, position lag, encoder, over-current, driver) or any CRI
+  // kinematics error state means the controller stopped this arm.
+  constexpr int kKnownJointErrorBits = 0xFF;
+  std::string jointText;
+  for (std::size_t i = 0; i < 6; ++i) {
+    const int bits = errorJoints.at(i) & kKnownJointErrorBits;
+    if (bits != 0) {
+      char buffer[40];
+      std::snprintf(buffer, sizeof(buffer), "joint %zu error bits 0x%02x", i + 1, bits);
+      jointText += (jointText.empty() ? "" : ", ") + std::string(buffer);
+      const std::string described = CriMessages::DescribeJointErrorBits(bits);
+      if (!described.empty()) {
+        jointText += " [" + described + "]";
+      }
+    }
+  }
+  const bool kinError = Safety::IsGroupTrippingKinstate(kinstate);
+  const auto nowTime = Safety::SteadyClock::now();
+  const std::int64_t nowNs = ToNs(nowTime);
+  const bool gap = lastCheckedStatusNs_ != 0 &&
+    nowTime - FromNs(lastCheckedStatusNs_) > Safety::kStatusStaleTimeout;
+  lastCheckedStatusNs_ = nowNs;
+
+  if (jointText.empty() && !kinError) {
+    // Track the start of the current clean run: restarted by any non-clean STATUS (below), by
+    // OnConnected and by a STATUS gap (a run with missing STATUS is not continuous).
+    std::int64_t cleanSince = cleanSinceNs_.load();
+    if (cleanSince == 0 || gap) {
+      cleanSince = nowNs;
+      cleanSinceNs_ = cleanSince;
+    }
+    const bool cleanLongEnough = nowTime - FromNs(cleanSince) >= Safety::kFaultArmSettleTime;
+    if (!faultArmed_) {
+      const std::int64_t connectedAt = connectedAtNs_.load();
+      if (cleanLongEnough && connectedAt != 0 &&
+        nowTime - FromNs(connectedAt) >= Safety::kFaultArmSettleTime)
+      {
+        faultArmed_ = true;
+        RCLCPP_INFO(
+          logger_, "Fault group '%s': drives enabled and STATUS clean; monitoring armed",
+          faultGroup_.c_str());
+      }
+    }
+    if (faultArmed_ && cleanLongEnough && !hardwareErrorLatched_ &&
+      faultMember_->HasRootFault() && faultMember_->ClearRootFault())
+    {
+      RCLCPP_WARN(
+        logger_,
+        "Fault group '%s': '%s' is enabled with clean STATUS again; its root-cause fault is "
+        "cleared, other members may now be recovered.",
+        faultGroup_.c_str(), componentName_.c_str());
+    }
+    return;
+  }
+
+  cleanSinceNs_ = 0;  // a non-clean STATUS ends the clean run
+  // Not armed (normal disabled state before the first enable, or a start-up sequence still
+  // being processed) or already latched (then this is not a new root cause): ignore.
+  if (!faultArmed_ || hardwareErrorLatched_) {
+    return;
+  }
+  faultArmed_ = false;
+  std::string reason = "robot controller reports a stop after the arm was enabled: ";
+  if (!jointText.empty()) {
+    reason += jointText;
+  }
+  if (kinError) {
+    reason += (jointText.empty() ? "" : "; ") +
+      std::string("kinematics error [") + CriMessages::KinstateToString(kinstate) + "]";
+  }
+  // Fail closed: this arm is latched too (jog zero, read() ERROR), so its own controller
+  // cannot resume an old trajectory after a reset_and_enable while the peers are down. It
+  // recovers like every other latch (inactive -> active, then cycle the controllers).
+  LatchHardwareError(reason);
+}
+
 void Rebel::AliveThreadFunction()
 {
   bool announced = false;
@@ -87,7 +231,12 @@ void Rebel::AliveThreadFunction()
         FromNs(lastWriteNs.load()), now, Safety::kCommandWatchdogTimeout);
 
       std::array<float, 6> currentJog{};
-      if (!stale) {
+      // Transmit-boundary inhibit: never send a non-zero jog while latched or held, even if a
+      // write() stored one just before the latch/hold took effect. A STATUS coast (not latched,
+      // not held) keeps sending the frozen jog.
+      const bool inhibited = hardwareErrorLatched_.load() || holdJogZero_.load() ||
+        statusHold_.load();
+      if (!stale && !inhibited) {
         for (std::size_t i = 0; i < currentJog.size(); ++i) {
           currentJog[i] = jog[i].load();
         }
@@ -377,6 +526,10 @@ void Rebel::OnConnected(bool reconnect)
   // after Enable, as in the original driver.
   aliveTransmit = false;
   ZeroJog();
+  // Drive state is in flux until the sequence below took effect: do not monitor it meanwhile.
+  faultArmed_ = false;
+  connectedAtNs_ = 0;
+  cleanSinceNs_ = 0;
   {
     std::lock_guard<std::mutex> lock(commandsLock);
     unacknowledgedCommands.clear();
@@ -414,6 +567,7 @@ void Rebel::OnConnected(bool reconnect)
       "Reconnected to ReBeL: re-sent SetActive, Reset, Enable, MotionTypeJoint and Override");
   }
   RCLCPP_INFO(logger_, "Rebel now controlled by velocity control.");
+  connectedAtNs_ = ToNs(Safety::SteadyClock::now());
 }
 
 void Rebel::ProcessStatus(const CriMessages::Status & status)
@@ -469,6 +623,7 @@ void Rebel::ProcessStatus(const CriMessages::Status & status)
     }
   }
   drivesDisabledMask_.store(disabledMask);
+  CheckFaultGroupStatus(currentKinstate, currentErrorJoints);
 
   lastKinstate = currentKinstate;
   lastErrorJoints = currentErrorJoints;
@@ -597,6 +752,18 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
   }
   readName("digital_output_service", digitalOutputService_);
   readName("trajectory_controller_name", trajectoryControllerName_);
+  std::string faultGroup;
+  readName("fault_group", faultGroup);
+  const bool validGroup = std::all_of(
+    faultGroup.begin(), faultGroup.end(), [](unsigned char c) {
+      return std::isalnum(c) != 0 || c == '_' || c == '.' || c == '-';
+    });
+  if (!validGroup) {
+    RCLCPP_FATAL(
+      logger_, "Invalid fault_group '%s' (allowed: letters, digits, '_', '.', '-')",
+      faultGroup.c_str());
+    return CallbackReturn::ERROR;
+  }
 
   // Validate the ros2_control description before anything is started: the interfaces are
   // exported by joint position (info_.joints[i] <-> CRI joint i + 1), so a wrong count or
@@ -618,6 +785,25 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
   stopping = false;
   stopped = false;
   hardwareErrorLatched_ = false;
+
+  // The member exists before the message thread starts; it joins the group at the end of a
+  // successful on_init (before that no peer can see or call it).
+  if (faultMember_) {
+    LeaveFaultGroup(faultMember_);
+    faultMember_.reset();
+  }
+  faultGroup_ = faultGroup;
+  faultArmed_ = false;
+  connectedAtNs_ = 0;
+  cleanSinceNs_ = 0;
+  lastCheckedStatusNs_ = 0;
+  if (!faultGroup_.empty()) {
+    faultMember_ = std::make_shared<FaultGroupMember>(
+      faultGroup_, componentName_.empty() ? nodeName_ : componentName_,
+      [this](const std::string & origin, const std::string & reason) {
+        OnPeerFault(origin, reason);
+      });
+  }
 
   drivesDisabledMask_ = 0;
   holdJogZero_ = false;
@@ -702,6 +888,17 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
     first.positionRad[2] / degToRad, first.positionRad[3] / degToRad,
     first.positionRad[4] / degToRad, first.positionRad[5] / degToRad, first.overridePercent);
 
+  if (faultMember_ && JoinFaultGroup(faultMember_)) {
+    RCLCPP_INFO(
+      logger_, "Joined fault group '%s' (%zu member(s)): a fault of any member stops the others",
+      faultGroup_.c_str(), FaultGroupSize(faultGroup_));
+    BlockingFault blocking;
+    if (FindBlockingRootFault(faultMember_, blocking)) {
+      // A peer is already faulted: start latched; activation follows the recovery rules.
+      OnPeerFault(blocking.member, blocking.reason);
+    }
+  }
+
   return CallbackReturn::SUCCESS;
 }
 
@@ -721,8 +918,9 @@ CallbackReturn Rebel::on_configure(const rclcpp_lifecycle::State &)
       logger_,
       "Hardware component '%s' configured (still latched from a prior error); jog held at "
       "zero. Recover with 'ros2 control set_hardware_component_state %s active' -- refused "
-      "unless STATUS is fresh.",
-      componentName_.c_str(), componentName_.c_str());
+      "unless STATUS is fresh.%s%s",
+      componentName_.c_str(), componentName_.c_str(), faultMember_ ? " " : "",
+      FaultGroupRecoveryHint().c_str());
   }
   return CallbackReturn::SUCCESS;
 }
@@ -736,6 +934,21 @@ CallbackReturn Rebel::on_activate(const rclcpp_lifecycle::State &)
   lastWriteNs = 0;
 
   if (hardwareErrorLatched_) {
+    BlockingFault blocking;
+    if (faultMember_ && FindBlockingRootFault(faultMember_, blocking)) {
+      RCLCPP_ERROR(
+        logger_,
+        "Refusing to activate hardware component '%s': fault-group '%s' member '%s' still "
+        "holds an un-recovered root-cause fault (%s). Recover '%s' first ('ros2 control "
+        "set_hardware_component_state %s inactive' then 'active'; reset_and_enable alone is not "
+        "enough); a recovered member counts as healthy "
+        "after %lld ms of enabled, clean STATUS, so retry shortly after. Then retry this "
+        "component.",
+        componentName_.c_str(), faultGroup_.c_str(), blocking.member.c_str(),
+        blocking.reason.c_str(), blocking.member.c_str(), blocking.member.c_str(),
+        static_cast<long long>(Safety::kFaultArmSettleTime.count()));
+      return CallbackReturn::FAILURE;
+    }
     JointSnapshot latest;
     {
       std::lock_guard<std::mutex> lock(snapshotLock);
@@ -809,7 +1022,7 @@ CallbackReturn Rebel::on_error(const rclcpp_lifecycle::State &)
   // thread sends zero from now on (the stale-command watchdog would do so after 50 ms).
   // The latch is fail-closed: it is never cleared here or by any automatic retry, only by
   // on_activate() after an operator-driven lifecycle reset confirms STATUS is fresh again.
-  hardwareErrorLatched_ = true;
+  LatchHardwareError("on_error() was called for this component (read()/write() reported ERROR)");
   ZeroJog();
   lastWriteNs = 0;
   RCLCPP_ERROR(
@@ -819,9 +1032,10 @@ CallbackReturn Rebel::on_error(const rclcpp_lifecycle::State &)
     "'ros2 control set_hardware_component_state %s active' (the latter is refused unless "
     "STATUS is fresh); also cycle the controllers claiming this hardware (e.g. "
     "'ros2 control switch_controllers --deactivate %s --activate "
-    "%s') so they do not resume from a stale setpoint.",
+    "%s') so they do not resume from a stale setpoint.%s%s",
     componentName_.c_str(), componentName_.c_str(), componentName_.c_str(),
-    trajectoryControllerName_.c_str(), trajectoryControllerName_.c_str());
+    trajectoryControllerName_.c_str(), trajectoryControllerName_.c_str(),
+    faultMember_ ? " " : "", FaultGroupRecoveryHint().c_str());
   return CallbackReturn::SUCCESS;
 }
 
@@ -865,8 +1079,9 @@ return_type Rebel::read(const rclcpp::Time &, const rclcpp::Duration &)
       logger_, throttleClock_, 1000,
       "Hardware error latched on component '%s': read() returns ERROR until an operator "
       "recovers it ('ros2 control set_hardware_component_state %s inactive' then "
-      "'... active'; the latter is refused unless STATUS is fresh).",
-      componentName_.c_str(), componentName_.c_str());
+      "'... active'; the latter is refused unless STATUS is fresh).%s%s",
+      componentName_.c_str(), componentName_.c_str(), faultMember_ ? " " : "",
+      FaultGroupRecoveryHint().c_str());
     return return_type::ERROR;
   }
 
@@ -889,14 +1104,15 @@ return_type Rebel::read(const rclcpp::Time &, const rclcpp::Duration &)
   const auto now = Safety::SteadyClock::now();
   const std::string recovery =
     "Recover with 'ros2 control set_hardware_component_state " + componentName_ +
-    " inactive' then '... active' (refused unless STATUS is fresh).";
+    " inactive' then '... active' (refused unless STATUS is fresh)." +
+    (faultMember_ ? " " + FaultGroupRecoveryHint() : std::string());
 
   if (rebelSocket->ConnectionCount() != initialConnectionCount) {
     // The connection dropped and was re-established (OnConnected re-enabled the robot).
     // Do not let the controllers resume motion on their own: fail closed. An operator
     // lifecycle reset resumes control after checking the robot.
     ZeroJog();
-    hardwareErrorLatched_ = true;
+    LatchHardwareError("connection to the ReBeL was re-established after a drop");
     statusHold_ = false;
     statusCoast_ = false;
     RCLCPP_ERROR_THROTTLE(
@@ -916,12 +1132,18 @@ return_type Rebel::read(const rclcpp::Time &, const rclcpp::Duration &)
   if (health == Safety::StatusHealth::Latch) {
     // Returning ERROR makes ros2_control call on_error() and stop calling read()/write()
     // for this component. Latch here too so fail-closed does not depend on on_error().
-    ZeroJog();
-    hardwareErrorLatched_ = true;
-    statusHold_ = false;
-    statusCoast_ = false;
     const double ageMs = latest.sequence == 0 ?
       -1.0 : std::chrono::duration<double, std::milli>(age).count();
+    ZeroJog();
+    {
+      char buffer[96];
+      std::snprintf(
+        buffer, sizeof(buffer), "no valid STATUS for %.0f ms (latch limit %lld ms)", ageMs,
+        static_cast<long long>(Safety::kStatusLatchTimeout.count()));
+      LatchHardwareError(buffer);
+    }
+    statusHold_ = false;
+    statusCoast_ = false;
     RCLCPP_ERROR_THROTTLE(
       logger_, throttleClock_, 1000,
       "No valid STATUS from ReBeL for %.0f ms (latch limit %lld ms): read() returns ERROR and "
@@ -981,7 +1203,14 @@ return_type Rebel::read(const rclcpp::Time &, const rclcpp::Duration &)
       std::chrono::duration_cast<std::chrono::nanoseconds>(Safety::kHoldMotionLookback));
     if (!Safety::GapResumeAllowed(gapTier, motion)) {
       ZeroJog();
-      hardwareErrorLatched_ = true;
+      {
+        char buffer[112];
+        std::snprintf(
+          buffer, sizeof(buffer), "STATUS resumed after a %.0f ms gap (%s)", gapMs,
+          gapTier == Safety::StatusHealth::Latch ? "beyond the latch limit" :
+          "motion was commanded during the hold");
+        LatchHardwareError(buffer);
+      }
       statusHold_ = false;
       statusCoast_ = false;
       if (gapTier == Safety::StatusHealth::Latch) {
@@ -1066,16 +1295,21 @@ return_type Rebel::write(const rclcpp::Time &, const rclcpp::Duration &)
       lastMovingNs_.store(ToNs(Safety::SteadyClock::now()));
     }
   }
+  // Decide the inhibit BEFORE storing so a non-zero jog is never published while latched/held.
+  const bool inhibited = holdJogZero_ || statusHold_ || hardwareErrorLatched_;
   for (std::size_t i = 0; i < 6; ++i) {
     const Safety::JogCommand command = Safety::JogPercentFromVelocity(vel_cmd[i]);
     nonFinite = nonFinite || command.nonFinite;
     saturated = saturated || command.saturated;
-    if (!statusCoast_) {
+    if (inhibited) {
+      jog[i].store(0.0f);
+    } else if (!statusCoast_) {
       jog[i].store(command.percent);  // frozen during a STATUS coast (last jog keeps going)
     }
   }
-  if (holdJogZero_ || statusHold_) {
-    // Checked after the store so a concurrent ResetAndEnable() can never be overtaken.
+  if (holdJogZero_ || statusHold_ || hardwareErrorLatched_) {
+    // Re-checked after the store so a concurrent ResetAndEnable() or a latch set by another thread
+    // (fault-group stop, message thread) can never be overtaken.
     ZeroJog();
   }
   lastWriteNs = ToNs(Safety::SteadyClock::now());
@@ -1184,6 +1418,13 @@ void Rebel::Stop()
     return;
   }
   stopping = true;
+
+  // Leave the fault group before anything is shut down: waits for a peer callback that is
+  // running, after which this instance is never called back, and the Disable below (drives
+  // reporting 'Motor not enabled') cannot count as a fault.
+  if (faultMember_) {
+    LeaveFaultGroup(faultMember_);
+  }
 
   // Service callbacks must not send commands while shutting down.
   if (executor_) {

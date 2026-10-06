@@ -22,6 +22,7 @@
 
 #include "igus_rebel/RebelSocket.hpp"
 #include "igus_rebel/CriMessages.hpp"
+#include "igus_rebel/FaultGroup.hpp"
 #include "igus_rebel/RebelSafety.hpp"
 
 using namespace hardware_interface;
@@ -85,6 +86,23 @@ private:
   std::string nodeName_ = kDefaultNodeName;
   std::string digitalOutputService_ = kDefaultDigitalOutputService;
   std::string trajectoryControllerName_ = kDefaultTrajectoryControllerName;
+  // Optional hardware parameter fault_group: Rebel instances in one process with the same group
+  // name stop together (see FaultGroup.hpp). Empty = not in a group = no change in behaviour.
+  // faultMember_ is created before the message thread starts (so it can be read there without
+  // synchronisation) but only registered with the group at the end of a successful on_init.
+  std::string faultGroup_;
+  FaultGroupMemberPtr faultMember_;
+  // Message thread (ProcessStatus) and OnConnected: drive/kinematics errors only count as a
+  // fault after a clean STATUS kFaultArmSettleTime after the last start-up sequence.
+  std::atomic<bool> faultArmed_{false};
+  // steady ns when OnConnected() finished its start-up sequence; 0 = not (yet) connected.
+  std::atomic<std::int64_t> connectedAtNs_{0};
+  // steady ns of the start of the current uninterrupted run of clean STATUS messages (no drive
+  // error, Kinstate not tripping, no STATUS gap longer than kStatusStaleTimeout); 0 = no clean
+  // run in progress. Arming and the root-cause clear both require kFaultArmSettleTime of it.
+  std::atomic<std::int64_t> cleanSinceNs_{0};
+  // steady ns of the last STATUS processed by CheckFaultGroupStatus (message thread only).
+  std::int64_t lastCheckedStatusNs_{0};
   // Names of the six joints exactly as given in the ros2_control tag (info_.joints), in CRI
   // joint order 1..6. Used for the exported state/command interfaces.
   std::array<std::string, 6> jointNames_;
@@ -159,6 +177,15 @@ private:
   bool Command(const std::string &);
   void OnConnected(bool reconnect);
   void ZeroJog();
+  // Latches the hardware error. If it was not latched yet and this instance is in a fault group,
+  // this is a root-cause fault and every other member is stopped.
+  void LatchHardwareError(const std::string & reason);
+  // Fault-group callback: another member faulted. Zero jog and latch; never takes a lock.
+  void OnPeerFault(const std::string & originName, const std::string & reason);
+  // ProcessStatus helper: drive/kinematics error state after the arm was active and enabled.
+  void CheckFaultGroupStatus(
+    CriMessages::Kinstate kinstate, const std::array<int, 16> & errorJoints);
+  std::string FaultGroupRecoveryHint() const;
   void HandleMessage(const std::string &);
 
   // on_init helper: exactly six joints in CRI order with the interfaces this driver exports.
@@ -200,6 +227,10 @@ public:
   bool StatusHoldActive() const {return statusHold_.load();}
   bool StatusCoastActive() const {return statusCoast_.load();}
   bool HardwareErrorLatched() const {return hardwareErrorLatched_.load();}
+  // Fault groups: drive/kinematics errors are only monitored once armed (see RebelSafety.hpp),
+  // and this instance blocks the recovery of its peers while it holds a root-cause fault.
+  bool FaultMonitorArmed() const {return faultArmed_.load();}
+  bool FaultGroupRootCause() const {return faultMember_ && faultMember_->HasRootFault();}
 
   // Interaction with hardware for ROS2
   CallbackReturn on_init(const HardwareInfo & hardware_info) override;
