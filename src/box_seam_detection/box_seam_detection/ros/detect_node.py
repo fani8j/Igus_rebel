@@ -91,7 +91,7 @@ class DetectNode(Node):
         p("extrinsic_required", False)
         p("use_tf", True)
         p("warm_daemon", True)
-        p("overlay_glob", "*overlay*.png")
+        p("overlay_glob", "autolabel_v2_overlays/*_autolabel_v2.png")
         p("status_period_s", 2.0)
 
         gp = lambda n: self.get_parameter(n).value  # noqa: E731
@@ -207,14 +207,18 @@ class DetectNode(Node):
         snap = getattr(res, "snapshot", None)
         if res.success and isinstance(snap, dict) and snap:
             self.markers_pub.publish(markers_mod.snapshot_markers(snap, self.get_clock().now().to_msg()))
+        overlay = getattr(res, "overlay_path", None)
         pdir = getattr(res, "pipeline_dir", None)
-        if pdir:
+        if overlay and Path(overlay).is_file():
+            self._publish_overlay(Path(overlay).parent, Path(overlay))
+        elif pdir:
             self._publish_overlay(Path(pdir))
 
-    def _publish_overlay(self, pdir: Path):
+    def _publish_overlay(self, pdir: Path, path: Path | None = None):
         try:
             import cv2
-            files = sorted(pdir.glob("**/" + str(self._gp("overlay_glob"))), key=lambda f: f.stat().st_mtime)
+            files = ([path] if path is not None else
+                     sorted(pdir.glob("**/" + str(self._gp("overlay_glob"))), key=lambda f: f.stat().st_mtime))
             if not files:
                 return
             img = cv2.imread(str(files[-1]), cv2.IMREAD_COLOR)

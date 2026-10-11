@@ -36,5 +36,5 @@ box_seam_detector:
     snapshot_path: /home/farhan/Igus_rebel/outputs/seam_3d_base_link.json    # box_h_cut_snapshot/v1 for the executor
     # ---- node ------------------------------------------------------------------------------------------------
     warm_daemon: true               # ensure the SAM3 daemon at start (readiness in ~/status)
-    overlay_glob: "*overlay*.png"   # newest match under the pipeline dir is published on ~/overlay
+    overlay_glob: "autolabel_v2_overlays/*_autolabel_v2.png"   # fallback when the result has no overlay_path; newest match under the pipeline dir
     status_period_s: 2.0            # ~/status refresh (also published on every state change)
