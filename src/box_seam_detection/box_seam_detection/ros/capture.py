@@ -28,6 +28,10 @@ class CaptureTimeout(cloud.CaptureError):
     pass
 
 
+class CaptureAborted(cloud.CaptureError):
+    pass
+
+
 @dataclasses.dataclass
 class FrameSet:
     color: Any
@@ -130,12 +134,14 @@ class SceneCapture:
             return {"counts": dict(self._counts), "last_stamp_ns": dict(self._last_stamp_ns),
                     "have_camera_info": self._info is not None}
 
-    def grab(self, after_ns: int, timeout_s: float) -> tuple[FrameSet, Any]:
+    def grab(self, after_ns: int, timeout_s: float, abort: Callable[[], bool] | None = None) -> tuple[FrameSet, Any]:
         """First synced set with colour AND depth stamp > after_ns + margin, plus the latest CameraInfo."""
         threshold = int(after_ns) + self.margin_ns
         deadline = time.monotonic() + max(float(timeout_s), 0.0)
         with self._cond:
             while True:
+                if abort is not None and abort():
+                    raise CaptureAborted("capture wait aborted (cancel / shutdown)")
                 for i, fs in enumerate(self._sets):
                     if fs.color_stamp_ns > threshold and fs.depth_stamp_ns > threshold and self._info is not None:
                         for _ in range(i + 1):
@@ -144,7 +150,7 @@ class SceneCapture:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     break
-                self._cond.wait(min(remaining, 0.25))
+                self._cond.wait(min(remaining, 0.1))
             d = {"counts": dict(self._counts), "last_stamp_ns": dict(self._last_stamp_ns),
                  "have_camera_info": self._info is not None}
         raise CaptureTimeout(
@@ -201,9 +207,10 @@ class SceneCapture:
         return self.files_cls(capture_id=cid, image_path=Path(image_path), pcd_path=Path(pcd_path),
                               manifest_path=Path(mpath), stamp_ns=fs.color_stamp_ns)
 
-    def capture(self, after_ns: int | None = None, timeout_s: float = 10.0) -> Any:
+    def capture(self, after_ns: int | None = None, timeout_s: float = 10.0,
+                abort: Callable[[], bool] | None = None) -> Any:
         """grab a fresh set (after_ns defaults to now) and write rgb/pcd/manifest; returns files_cls(...)."""
         if after_ns is None:
             after_ns = self.now_ns()
-        fs, info = self.grab(after_ns, timeout_s)
+        fs, info = self.grab(after_ns, timeout_s, abort)
         return self.write_capture(fs, info)

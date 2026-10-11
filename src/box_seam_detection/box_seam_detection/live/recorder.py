@@ -529,9 +529,11 @@ from pathlib import Path  # noqa: E402
 
 DEFAULT_RGB_TOPIC = "/camera/color/image_raw"
 DEFAULT_POINTCLOUD_TOPIC = "/camera/depth_registered/points"
-_SAVED_IMAGE_RE = re.compile(r"已儲存影像:\s*(\S+\.png)")
-_SAVED_PCD_RE = re.compile(r"已儲存點雲:\s*(\S+\.pcd)")
-_SAVED_MANIFEST_RE = re.compile(r"已儲存 capture manifest:\s*(\S+\.json)")
+# Paths may contain spaces (e.g. outputs on "/media/<user>/My Passport/..."): match up to
+# the extension at the end of the log line (the PCD line continues with " (N 點...)").
+_SAVED_IMAGE_RE = re.compile(r"已儲存影像:\s*(.+?\.png)\s*$", re.M)
+_SAVED_PCD_RE = re.compile(r"已儲存點雲:\s*(.+?\.pcd)(?=\s+\(|\s*$)", re.M)
+_SAVED_MANIFEST_RE = re.compile(r"已儲存 capture manifest:\s*(.+?\.json)\s*$", re.M)
 
 
 class RecorderTimeout(RuntimeError):

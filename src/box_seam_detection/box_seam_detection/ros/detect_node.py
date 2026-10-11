@@ -8,10 +8,17 @@ the node module imports (and tests can inject a fake) without them. See DESIGN.m
 
 from __future__ import annotations
 
+import os
+
+# Must run before anything imports numpy (sensor_msgs does): same BLAS pin as the CLI detector.
+if "OPENBLAS_NUM_THREADS" not in os.environ:
+    os.environ["OPENBLAS_NUM_THREADS"] = "1"
+    os.environ.setdefault("AUTOLABEL_V2_BLAS_PINNED", "1")
+
 import dataclasses
 import importlib
+import inspect
 import json
-import os
 import threading
 import time
 from pathlib import Path
@@ -30,7 +37,7 @@ from visualization_msgs.msg import MarkerArray
 from compal_box_msgs.action import DetectBox
 
 from . import markers as markers_mod
-from .capture import SceneCapture
+from .capture import CaptureAborted, SceneCapture
 
 DEFAULT_SNAPSHOT = "/home/farhan/Igus_rebel/outputs/seam_3d_base_link.json"
 DEFAULT_OUTPUT_ROOT = "/home/farhan/Igus_rebel/outputs/rgbd_captures"
@@ -48,13 +55,22 @@ def _import_orchestrator():
     return importlib.import_module("box_seam_detection.live.orchestrator")
 
 
+def _cut_permission_text(cp) -> str:
+    """allowed | blocked | overridden (blocked but allow_cut_blocked used) | n/a."""
+    if not isinstance(cp, dict):
+        return "n/a"
+    if cp.get("override") or cp.get("overridden"):
+        return "overridden"
+    return str(cp.get("status", "n/a"))
+
+
 def _result_summary(res: Any) -> dict:
     cp = getattr(res, "cut_permission", None)
     snap = getattr(res, "snapshot", None) or {}
     return {
         "success": bool(res.success), "status": str(res.status), "reason": str(res.reason or ""),
         "reasons": [str(r) for r in (res.reasons or [])],
-        "cut_permission": str((cp or {}).get("status", "n/a")) if isinstance(cp, dict) else "n/a",
+        "cut_permission": _cut_permission_text(cp),
         "snapshot_id": str(snap.get("snapshot_id", "")) if isinstance(snap, dict) else "",
         "snapshot_path": str(res.snapshot_path or ""),
         "capture_id": str(res.capture_id or ""), "seam_status": str(res.seam_status or ""),
@@ -100,8 +116,20 @@ class DetectNode(Node):
         if self.capture_source not in ("node", "recorder"):
             raise ValueError("capture_source must be 'node' or 'recorder'")
         self.output_root = Path(str(gp("output_root"))).expanduser()
-        self.snapshot_path = Path(str(gp("snapshot_path"))).expanduser()
+        sp = str(gp("snapshot_path")).strip()
+        self.snapshot_path: Path | None = Path(sp).expanduser() if sp else None  # empty = never publish
 
+        for name in ("sync_slop_s", "capture_timeout_s", "status_period_s"):
+            if float(gp(name)) <= 0:
+                raise ValueError(f"parameter {name} must be > 0")
+        if int(gp("sync_queue_size")) < 1:
+            raise ValueError("parameter sync_queue_size must be >= 1")
+        if float(gp("capture_margin_s")) < 0:
+            raise ValueError("parameter capture_margin_s must be >= 0")
+        if bool(self.get_parameter("use_sim_time").value):
+            self.get_logger().warn("use_sim_time=true: capture freshness uses the node (sim) clock; camera stamps "
+                                   "must be on the same clock or every capture times out")
+        self._shutdown = threading.Event()
         self._lock = threading.Lock()
         self._busy = False
         self._cancel = False
@@ -136,7 +164,7 @@ class DetectNode(Node):
         else:
             self._daemon = {"ready": False, "state": "disabled", "error": ""}
         self.get_logger().info(
-            f"box_seam_detector ready: action ~/detect_box, capture_source={self.capture_source}, snapshot={self.snapshot_path}")
+            f"box_seam_detector ready: action ~/detect_box, capture_source={self.capture_source}, snapshot={self.snapshot_path or '(none: not published)'}")
 
     # ------------------------------------------------------------------ helpers
     def _files_cls(self):
@@ -175,7 +203,7 @@ class DetectNode(Node):
         vals = {k: self._gp(k) for k in self.DETECT_PARAMS}
         vals["rect_tol_mm"] = None if float(vals["rect_tol_mm"]) < 0 else float(vals["rect_tol_mm"])
         vals["output_root"] = self.output_root
-        vals["snapshot_path"] = self.snapshot_path
+        vals["snapshot_path"] = self.snapshot_path  # None = no publish
         if goal is not None:
             if int(goal.max_attempts) > 0:
                 vals["max_attempts"] = int(goal.max_attempts)
@@ -192,7 +220,7 @@ class DetectNode(Node):
         with self._lock:
             d = {"state": "busy" if self._busy else "idle", "progress": dict(self._progress),
                  "last_result": self._last_result, "daemon": dict(self._daemon),
-                 "capture_source": self.capture_source, "snapshot_path": str(self.snapshot_path)}
+                 "capture_source": self.capture_source, "snapshot_path": str(self.snapshot_path or "")}
         d["camera"] = self.capture.diagnostics() if self.capture is not None else None
         d["stamp_ns"] = time.time_ns()
         return d
@@ -220,6 +248,7 @@ class DetectNode(Node):
             files = ([path] if path is not None else
                      sorted(pdir.glob("**/" + str(self._gp("overlay_glob"))), key=lambda f: f.stat().st_mtime))
             if not files:
+                self.overlay_pub.publish(self._empty_overlay())
                 return
             img = cv2.imread(str(files[-1]), cv2.IMREAD_COLOR)
             if img is None:
@@ -249,6 +278,20 @@ class DetectNode(Node):
             self._cancel = True
         return CancelResponse.ACCEPT
 
+    def _aborting(self) -> bool:
+        """abort_check for run_detection: goal cancel requested or node shutting down."""
+        return bool(self._cancel) or self._shutdown.is_set()
+
+    @staticmethod
+    def _empty_overlay():
+        m = Image()
+        m.encoding = "bgr8"  # 0x0 image = cleared
+        return m
+
+    def destroy_node(self):
+        self._shutdown.set()
+        return super().destroy_node()
+
     def _set_progress(self, stage: str, attempt: int, message: str, goal_handle=None):
         with self._lock:
             self._progress = {"stage": stage, "attempt": int(attempt), "message": message}
@@ -269,7 +312,8 @@ class DetectNode(Node):
                 if self._cancel:
                     raise DetectionCancelled("cancelled before capture")
                 self._set_progress("capture", attempt, "waiting for a fresh frame")
-                files = self.capture.capture(after_ns=self.capture.now_ns(), timeout_s=timeout)
+                files = self.capture.capture(after_ns=self.capture.now_ns(), timeout_s=timeout,
+                                             abort=self._aborting)
                 self._set_progress("capture", attempt, f"captured {files.capture_id}")
                 return files
             return next_capture
@@ -288,7 +332,7 @@ class DetectNode(Node):
         return next_capture
 
     def _fail_closed_snapshot_removal(self, dry_run: bool):
-        if dry_run:
+        if dry_run or self.snapshot_path is None:
             return
         try:
             self.snapshot_path.unlink()
@@ -304,6 +348,9 @@ class DetectNode(Node):
         res = None
         error = ""
         cancelled = False
+        cancelled_exc = False
+        eff_dry = bool(goal_handle.request.dry_run) or bool(self._gp("dry_run"))
+        self.overlay_pub.publish(self._empty_overlay())  # never show an old box as current
         try:
             self.markers_pub.publish(markers_mod.clear_markers())
             cfg = self.build_config(goal_handle.request)
@@ -312,20 +359,27 @@ class DetectNode(Node):
             def progress(stage: str, attempt: int, message: str):
                 self._set_progress(stage, attempt, message, goal_handle)
 
-            res = self._orch().run_detection(self._make_next_capture(), cfg, progress)
-        except DetectionCancelled as exc:
+            kwargs = {}
+            run = self._orch().run_detection
+            if "abort_check" in inspect.signature(run).parameters:
+                kwargs["abort_check"] = self._aborting
+            res = run(self._make_next_capture(), cfg, progress, **kwargs)
+        except (DetectionCancelled, CaptureAborted) as exc:
             error = f"cancelled: {exc}"
-            self._fail_closed_snapshot_removal(bool(goal_handle.request.dry_run))
+            cancelled_exc = True
+            self._fail_closed_snapshot_removal(eff_dry)
         except Exception as exc:  # noqa: BLE001 - every failure is reported as status=error
             error = f"{type(exc).__name__}: {exc}"
             self.get_logger().error(f"detection failed: {error}")
-            self._fail_closed_snapshot_removal(bool(goal_handle.request.dry_run))
+            self._fail_closed_snapshot_removal(eff_dry)
         try:
             if res is not None:
                 summary = _result_summary(res)
-                self._publish_outputs(res)
+                if not self._shutdown.is_set():
+                    self._publish_outputs(res)
             else:
-                summary = {"success": False, "status": "error", "reason": error, "reasons": ["node_exception"],
+                summary = {"success": False, "status": "cancelled" if cancelled_exc else "error", "reason": error,
+                           "reasons": ["cancelled"] if cancelled_exc else ["node_exception"],
                            "cut_permission": "n/a", "snapshot_id": "", "snapshot_path": "", "capture_id": "",
                            "seam_status": "", "attempts": 0, "elapsed_s": 0.0, "finished_at_ns": time.time_ns()}
             result.success = bool(summary["success"])
@@ -342,15 +396,18 @@ class DetectNode(Node):
             with self._lock:
                 self._last_result = summary
                 self._progress = {"stage": "idle", "attempt": 0, "message": ""}
-                cancelled = self._cancel and not summary["success"]
+                # a cancel that arrives after the snapshot was published leaves the goal SUCCEEDED
+                cancelled = (summary["status"] == "cancelled" or (self._cancel and not summary["success"]))
         finally:
             with self._lock:
                 self._busy = False
                 self._cancel = False
             self._goal_handle = None
             self.publish_status()
-        if cancelled:
+        if cancelled and goal_handle.is_cancel_requested:
             goal_handle.canceled()
+        elif cancelled:
+            goal_handle.abort()  # aborted by node shutdown, not by a client cancel
         elif result.success or result.status in ("accepted", "rejected", "blocked"):
             goal_handle.succeed()  # the action completed; result.success says whether a snapshot was produced
         else:
@@ -368,9 +425,16 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
+        node._shutdown.set()  # abort_check -> the worker stops at its next check
+        t0 = time.monotonic()
+        while node._busy and time.monotonic() - t0 < 10.0:
+            time.sleep(0.1)
+        stuck = node._busy
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
+        if stuck:  # a detection is still inside a long call: do not keep the process alive for it
+            os._exit(0)
 
 
 if __name__ == "__main__":

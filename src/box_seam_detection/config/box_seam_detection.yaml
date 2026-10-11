@@ -13,6 +13,8 @@ box_seam_detector:
     camera_info_topic: /camera/color/camera_info
     sync_slop_s: 0.04               # ApproximateTime slop colour<->depth (15 fps = 66 ms apart)
     sync_queue_size: 10
+    # NOTE use_sim_time: freshness compares camera stamps with the NODE clock; leave use_sim_time false with a
+    # real/host-stamped camera (all of sync_slop_s, capture_timeout_s, status_period_s must be > 0).
     capture_margin_s: 0.0           # a frame must be stamped later than request time + this (host clock)
     capture_timeout_s: 10.0         # wait for a fresh synced frame per attempt
     driver_parent_frame: camera_link   # driver extrinsic camera_link -> colour optical frame (tf2) written to the manifest
@@ -33,6 +35,7 @@ box_seam_detector:
     driver_extrinsic: recorded      # base_link = calib o driver extrinsic (recorded constant or the manifest value)
     target_frame: base_link
     side_seed: true
+    # snapshot_path: "" = never publish a snapshot file (detect and report only)
     snapshot_path: /home/farhan/Igus_rebel/outputs/seam_3d_base_link.json    # box_h_cut_snapshot/v1 for the executor
     # ---- node ------------------------------------------------------------------------------------------------
     warm_daemon: true               # ensure the SAM3 daemon at start (readiness in ~/status)

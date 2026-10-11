@@ -322,8 +322,46 @@ def driver_extrinsic_from_manifest(manifest_path, expected_parent, expected_chil
     return {**block, "translation": translation, "quaternion_xyzw": quaternion}
 
 
+DRIVER_EXTRINSIC_POLICIES = ("refuse", "warn", "use_manifest")
+
+
+def compare_driver_block_to_constant(driver_block):
+    """(translation diff m, rotation diff deg) between a manifest driver_extrinsic block and the
+    recorded constant (rotation compared as rotations, so q and -q agree)."""
+    rec = RECORDED_DRIVER_EXTRINSIC
+    return transform_difference(
+        transform_matrix(rec["translation"], rec["quaternion_xyzw"]),
+        transform_matrix(driver_block["translation"], driver_block["quaternion_xyzw"]))
+
+
+def driver_extrinsic_check(driver_block, policy="refuse"):
+    """Decide what to do with a manifest driver_extrinsic block.
+
+    Returns the comparison dict {translation_diff_m, rotation_diff_deg, tolerance_m, tolerance_deg,
+    exceeds_tolerance, policy, used}. Raises ValueError("driver_extrinsic_mismatch(...)") when the block
+    differs from the recorded constant by > 1 mm / 0.1 deg and ``policy`` is ``refuse`` (fail closed).
+    ``warn`` and ``use_manifest`` use the manifest block (``warn`` also logs)."""
+    if policy not in DRIVER_EXTRINSIC_POLICIES:
+        raise ValueError(f"unknown driver_extrinsic_policy {policy!r}")
+    dt, dr = compare_driver_block_to_constant(driver_block)
+    exceeds = dt > LIVE_TF_MISMATCH_TRANSLATION_M or dr > LIVE_TF_MISMATCH_ROTATION_DEG
+    info = {"translation_diff_m": dt, "rotation_diff_deg": dr,
+            "tolerance_m": LIVE_TF_MISMATCH_TRANSLATION_M, "tolerance_deg": LIVE_TF_MISMATCH_ROTATION_DEG,
+            "exceeds_tolerance": bool(exceeds), "policy": policy, "used": "manifest"}
+    if exceeds and policy == "refuse":
+        raise ValueError(
+            f"driver_extrinsic_mismatch(translation={dt * 1000:.3f}mm, rotation={dr:.4f}deg; manifest "
+            f"{driver_block.get('source')} vs recorded constant, limit {LIVE_TF_MISMATCH_TRANSLATION_M * 1000:g}mm/"
+            f"{LIVE_TF_MISMATCH_ROTATION_DEG:g}deg; policy=refuse)")
+    if exceeds and policy == "warn":
+        print(f"WARNING: driver_extrinsic_mismatch(translation={dt * 1000:.3f}mm, rotation={dr:.4f}deg) "
+              f"- using the manifest block (policy=warn)", file=sys.stderr)
+    return info
+
+
 def resolve_camera_to_base(calib_file, driver_extrinsic, target_frame, source_frame, stamp_ns,
-                           timeout_sec=5.0, tf_provider=None, log=None, driver_block=None):
+                           timeout_sec=5.0, tf_provider=None, log=None, driver_block=None,
+                           driver_policy="refuse"):
     """Compose target_frame <- source_frame = T_calib @ T_driver.
 
     driver_extrinsic: "tf" (live lookup tracking_frame <- source_frame through
@@ -339,8 +377,11 @@ def resolve_camera_to_base(calib_file, driver_extrinsic, target_frame, source_fr
             f"calibration robot_base_frame {calibration['robot_base_frame']!r} != target frame {target_frame!r}")
     tracking_frame = calibration["tracking_base_frame"]
     live_full = None
+    driver_comparison = None
     if driver_extrinsic == "recorded":
         recorded = driver_block if driver_block is not None else RECORDED_DRIVER_EXTRINSIC
+        if driver_block is not None:
+            driver_comparison = driver_extrinsic_check(driver_block, driver_policy)   # may refuse
         if recorded["parent_frame"] != tracking_frame or recorded["child_frame"] != source_frame:
             raise ValueError(
                 f"recorded driver extrinsic is {recorded['parent_frame']} <- {recorded['child_frame']}, "
@@ -404,6 +445,7 @@ def resolve_camera_to_base(calib_file, driver_extrinsic, target_frame, source_fr
     if driver_extrinsic == "recorded" and driver_block is not None:
         block["source"]["driver_extrinsic_origin"] = "capture_manifest"
         block["source"]["driver_extrinsic_manifest_source"] = driver_block.get("source")
+        block["source"]["driver_extrinsic_comparison"] = driver_comparison
     return composed, block
 
 
@@ -550,6 +592,12 @@ def main(argv=None):
         help="camera_link <- optical source: live TF lookup (default) or the recorded constant "
              "(offline replay, no ROS required)",
     )
+    parser.add_argument(
+        "--driver-extrinsic-policy", choices=DRIVER_EXTRINSIC_POLICIES, default="refuse",
+        help="--driver-extrinsic recorded with a driver_extrinsic block in the capture manifest: refuse "
+             "(default) when it differs from the recorded constant by > 1 mm / 0.1 deg, warn = use the "
+             "manifest block and log, use_manifest = use it silently",
+    )
     parser.add_argument("--output-json", help="Optional transformed base-frame geometry JSON")
     parser.add_argument(
         "--planner-output-json",
@@ -587,7 +635,7 @@ def main(argv=None):
         matrix, transform_block = resolve_camera_to_base(
             args.calib_file, args.driver_extrinsic, args.target_frame, source_frame,
             capture["image_stamp_ns"], timeout_sec=args.timeout, tf_provider=tf_provider,
-            driver_block=driver_block,
+            driver_block=driver_block, driver_policy=args.driver_extrinsic_policy,
         )
         results, target_normal = transform_results(source_results, source_frame, args.target_frame,
                                                    matrix, camera_normal)

@@ -318,17 +318,40 @@ def test_r6_flags_outside_soft_range_but_never_rejects(det, rot, outside):
     assert out["prior_deg"] == 83.0 and out["soft_range_deg"] == 45.0
 
 
-def test_r6_plane_frame_angle_without_calibration(det):
+def test_r6_plane_frame_angle_without_calibration(det, tmp_path, capsys):
     rec = base._record((0.0, 0.0))
     seam = det.published_seam_line(rec)
     manifest = {"camera_info": {"k": base.K, "d": base.D, "distortion_model": "plumb_bob"}}
-    det._CAM_TO_BASE_CACHE[det.SEAM_DIRECTION_CALIB] = None
-    try:
-        out = det.compute_seam_direction(rec, seam, manifest)
-    finally:
-        det._CAM_TO_BASE_CACHE.pop(det.SEAM_DIRECTION_CALIB, None)
+    missing = tmp_path / "absent.calib"
+    out = det.compute_seam_direction(rec, seam, manifest, calib_file=str(missing))
     assert out["available"] is True and out["base_link_angle_deg"] is None
+    assert out["reason"].startswith("calibration_unavailable")
     assert out["seam_direction_outside_soft_range"] is False
+    err = capsys.readouterr().err
+    assert "seam-direction calibration unavailable" in err and str(missing) in err and "UNKNOWN" in err
+
+
+def test_r6_uses_the_configured_calibration_file(det, tmp_path):
+    """The soft prior uses the SAME calib file as the snapshot transform (not a hard-coded path)."""
+    import math
+    rec = base._record((0.0, 0.0))
+    seam = det.published_seam_line(rec)
+    manifest = {"camera_info": {"k": base.K, "d": base.D, "distortion_model": "plumb_bob"}}
+
+    def calib(name, qz, qw):
+        path = tmp_path / name
+        path.write_text(
+            "parameters:\n  name: t\n  calibration_type: eye_on_base\n  robot_base_frame: base_link\n"
+            "  tracking_base_frame: camera_link\ntransform:\n  translation: {x: 0.0, y: 0.0, z: 0.5}\n"
+            f"  rotation: {{x: 0.0, y: 0.0, z: {qz!r}, w: {qw!r}}}\n", encoding="utf-8")
+        return str(path)
+
+    s = math.sqrt(0.5)
+    a = det.compute_seam_direction(rec, seam, manifest, calib_file=calib("a.calib", 0.0, 1.0))
+    b = det.compute_seam_direction(rec, seam, manifest, calib_file=calib("b.calib", s, s))   # +90 deg about z
+    assert a["base_link_calib_file"].endswith("a.calib") and b["base_link_calib_file"].endswith("b.calib")
+    diff = (b["base_link_angle_deg"] - a["base_link_angle_deg"]) % 180.0
+    assert abs(diff - 90.0) < 1e-6
 
 
 def test_r6_no_seam_is_unavailable_not_an_error(det):

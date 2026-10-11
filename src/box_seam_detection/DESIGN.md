@@ -105,3 +105,38 @@ Safety rules (fail closed):
 - ros: node tests with fake publishers built from saved captures (PCD re-projected to an aligned depth image), the
   produced snapshot identical to the CLI on the same capture (modulo stamps/ids), fail-closed behaviour, mock H-cut
   planning with the produced snapshot (isolated domain, mock_hardware, plan only).
+
+## How to run the e2e check
+
+Node + replayed saved captures + real detection (SAM3), no robot, no camera driver. Tests live in `test/e2e/` and are
+skipped unless `BOX_SEAM_E2E=1` (they need the GPU/SAM3 conda env and the saved captures under
+`/home/farhan/Igus_rebel/outputs/rgbd_captures/captures`, override with `BOX_SEAM_E2E_CAPTURES`).
+
+```bash
+cd <workspace>; source /opt/ros/humble/setup.bash
+colcon build --packages-select compal_box_msgs box_seam_detection --symlink-install && source install/setup.bash
+BOX_SEAM_E2E=1 BOX_SEAM_E2E_SCRATCH=/some/scratch/dir \
+  python3 -m pytest src/box_seam_detection/test/e2e -v -s        # ~3 min, 11 tests
+```
+
+- Isolation: every spawned process gets `ROS_DOMAIN_ID=87` (override `BOX_SEAM_E2E_DOMAIN`, never the robot's domain 11),
+  `ROS_LOCALHOST_ONLY=1`, and the SHM-only FastDDS profile `test/e2e/fastdds_shm_only.xml` (no network sockets).
+  Without that profile loopback UDP (`ROS_LOCALHOST_ONLY=1`, `net.core.rmem_max` 208 KB) drops most 4-6 MB image
+  messages and the node reports `CaptureTimeout`; it is a test-environment effect, not a node defect.
+- The node writes `snap.json` and `out/` only inside the scratch dir (`snapshot_path` / `output_root` parameters);
+  the real executor snapshot `/home/farhan/Igus_rebel/outputs/seam_3d_base_link.json` is never touched.
+- What is checked: accepted captures (small box x2, high-yaw R2) -> success, `cut_permission` allowed, executor-parser
+  port (`e2e_lib.executor_snapshot_problems`, mirrors `box_h_cut_executor.cpp` parse + validate + side seed),
+  `acquisition_stamp_ns` is a replayed colour-image stamp, feedback stages, status topic busy -> idle, markers, overlay;
+  node snapshot vs `box_seam_detect --from-image ... --driver-extrinsic recorded` (tolerance `BOX_SEAM_E2E_TOL_MM`,
+  default 1 mm; seen 0 / 0.06 / 0.44 mm, caused only by the node rebuilding the cloud from a 16UC1 depth image,
+  <= 5e-7 m per point, amplified by discrete fit decisions; the CLI run on the node's own capture is identical);
+  rejected / blocked captures remove a previously written snapshot; a second goal while busy is rejected; a stopped
+  camera gives `status=error` (CaptureTimeout, goal ABORTED), no snapshot, and the node recovers afterwards.
+- Manual: `python3 -m box_seam_detection.ros.fake_camera <manifest.json>` + `ros2 run box_seam_detection
+  box_seam_detector_node --ros-args -p snapshot_path:=... -p output_root:=...` (same env as above), then
+  `ros2 action send_goal /box_seam_detector/detect_box compal_box_msgs/action/DetectBox "{max_attempts: 1}" --feedback`.
+- Mock H-cut planning with the produced snapshot (plan only): launch per the workspace CLAUDE.md "Running in mock"
+  (`hardware_protocol:=mock_hardware`, `run_box_h_cut_executor:=true`, camera static TFs from HANDOFF.md), then
+  `ros2 param set /box_h_cut_executor external_snapshot_file <scratch>/snap.json` (fresh stamp, max age 240 s) and
+  call `/box_h_cut_executor/plan_h_cut`. Keep `execution_enabled` false.

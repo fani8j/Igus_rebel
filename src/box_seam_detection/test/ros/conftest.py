@@ -4,6 +4,10 @@ import os
 os.environ["ROS_DOMAIN_ID"] = "87"
 os.environ["ROS_LOCALHOST_ONLY"] = "1"
 
+_SHM = os.path.join(os.path.dirname(__file__), "..", "e2e", "fastdds_shm_only.xml")
+if os.path.exists(_SHM):  # loopback UDP drops multi-MB images under ROS_LOCALHOST_ONLY on Humble
+    os.environ["FASTRTPS_DEFAULT_PROFILES_FILE"] = os.path.abspath(_SHM)
+
 import threading  # noqa: E402
 
 import pytest  # noqa: E402

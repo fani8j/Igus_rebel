@@ -120,17 +120,25 @@ class DetectConfig:
     average_rate_hz: float = 5.0
     rgb_topic: str = "/camera/color/image_raw"
     pointcloud_topic: str = "/camera/depth_registered/points"
+    # a manifest driver_extrinsic block (node captures) that differs from the recorded constant by
+    # > 1 mm / 0.1 deg: refuse (default, fail closed) | warn (use the manifest, log) | use_manifest
+    driver_extrinsic_policy: str = "refuse"
+
+    def __post_init__(self):
+        # "" / "." (Path("")) from a caller means "no snapshot path": never publish to Path('.')
+        if self.snapshot_path is not None and str(self.snapshot_path).strip() in ("", "."):
+            self.snapshot_path = None
 
 
 @dataclass
 class DetectResult:
     success: bool
-    status: str                     # accepted | rejected | blocked | error
+    status: str                     # accepted | rejected | blocked | error | cancelled
     reason: str = ""
     reasons: list = field(default_factory=list)
     cut_permission: Optional[dict] = None
     snapshot: Optional[dict] = None
-    snapshot_path: Optional[str] = None
+    snapshot_path: Optional[str] = None   # ONLY the file published at cfg.snapshot_path, else None
     capture_id: Optional[str] = None
     seam_status: Optional[str] = None
     attempts: list = field(default_factory=list)
@@ -139,6 +147,10 @@ class DetectResult:
     # additive (not in DESIGN.md): CLI exit code and the contract overlay png of the accepted/last attempt
     exit_code: int = 0
     overlay_path: Optional[str] = None
+    staged_snapshot_path: Optional[str] = None   # the finished snapshot in the pipeline dir (always, if built)
+    # "allowed" | "overridden" (blocked cut accepted via allow_cut_blocked; cut_permission then has
+    # status "blocked" + override "allow_cut_blocked") | "blocked" | "" (not evaluated)
+    cut_summary: str = ""
 
 
 class DetectionAbort(Exception):
@@ -166,9 +178,11 @@ class CaptureRejected(Exception):
 
 
 # _SAVED_*_RE: output of the recorder subprocess
-_SAVED_IMAGE_RE = re.compile(r"已儲存影像:\s*(\S+\.png)")
-_SAVED_PCD_RE = re.compile(r"已儲存點雲:\s*(\S+\.pcd)")
-_SAVED_MANIFEST_RE = re.compile(r"已儲存 capture manifest:\s*(\S+\.json)")
+# Paths may contain spaces (e.g. outputs on "/media/<user>/My Passport/..."): match up to
+# the extension at the end of the log line (the PCD line continues with " (N 點...)").
+_SAVED_IMAGE_RE = re.compile(r"已儲存影像:\s*(.+?\.png)\s*$", re.M)
+_SAVED_PCD_RE = re.compile(r"已儲存點雲:\s*(.+?\.pcd)(?=\s+\(|\s*$)", re.M)
+_SAVED_MANIFEST_RE = re.compile(r"已儲存 capture manifest:\s*(.+?\.json)\s*$", re.M)
 
 
 
@@ -1355,6 +1369,7 @@ def run_autolabel_v2_attempt(cfg, image_path, pcd_path, manifest_path, manifest,
         "--work-dir", str(pipeline_dir),
         "--overlay-dir", str(overlay_dir),
         "--sam3-python", str(cfg.sam3_python),
+        "--calib-file", str(Path(cfg.calib_file or DEFAULT_CALIB_FILE).expanduser()),
     ]
     if cfg.allow_needs_review:
         argv.append("--allow-needs-review")
@@ -1409,6 +1424,8 @@ def _validate_cfg(cfg):
         raise DetectionAbort(2, "sam3_daemon / autolabel_v2_server must be auto|on|off")
     if cfg.driver_extrinsic not in ("recorded", "tf"):
         raise DetectionAbort(2, "driver_extrinsic must be recorded|tf")
+    if cfg.driver_extrinsic_policy not in ("refuse", "warn", "use_manifest"):
+        raise DetectionAbort(2, "driver_extrinsic_policy must be refuse|warn|use_manifest")
 
 
 def _manifest_averaging(manifest):
@@ -1427,17 +1444,22 @@ def _load_json_object(path):
 
 
 def run_detection(next_capture: Callable[[int], CaptureFiles], cfg: DetectConfig,
-                  progress: Optional[Callable[[str, int, str], None]] = None) -> DetectResult:
+                  progress: Optional[Callable[[str, int, str], None]] = None,
+                  *, abort_check: Optional[Callable[[], bool]] = None) -> DetectResult:
     """Capture (via ``next_capture(attempt)``) -> detect -> base_link snapshot (see the module docstring).
 
     Returns a DetectResult; never sys.exit()s. Exceptions raised by ``next_capture`` propagate (the
     detector server is stopped first; the snapshot was already removed unless dry_run).
+
+    ``abort_check`` (cancel / shutdown state of the caller): polled before every attempt and immediately
+    before the snapshot is published; True -> status "cancelled", nothing is published (the snapshot
+    removed at the start stays removed).
     """
     t0 = time.monotonic()
     ctx = {"attempts": [], "pipeline_dir": None, "capture_id": None, "overlay": None,
            "capture_exc": None, "last_reject": None}
     try:
-        result = _run_detection(next_capture, cfg, progress, ctx)
+        result = _run_detection(next_capture, cfg, progress, ctx, abort_check)
     except DetectionAbort as abort:
         reject = ctx.get("last_reject") or {}
         result = DetectResult(
@@ -1446,6 +1468,7 @@ def run_detection(next_capture: Callable[[int], CaptureFiles], cfg: DetectConfig
             cut_permission=abort.cut_permission, capture_id=ctx["capture_id"],
             attempts=list(ctx["attempts"]), pipeline_dir=ctx["pipeline_dir"],
             exit_code=abort.exit_code,
+            cut_summary=("blocked" if abort.status == "blocked" else ""),
             overlay_path=(str(ctx["overlay"]) if ctx["overlay"] is not None
                           and Path(ctx["overlay"]).is_file() else None))
         if result.cut_permission is None and isinstance(reject.get("cut_permission"), dict):
@@ -1466,7 +1489,7 @@ def run_detection(next_capture: Callable[[int], CaptureFiles], cfg: DetectConfig
     return result
 
 
-def _run_detection(next_capture, cfg, progress, ctx):
+def _run_detection(next_capture, cfg, progress, ctx, abort_check=None):
     def say(stage, attempt, message=""):
         if progress is not None:
             try:
@@ -1475,7 +1498,17 @@ def _run_detection(next_capture, cfg, progress, ctx):
                 pass
 
     _validate_cfg(cfg)
-    final_target = Path(cfg.snapshot_path).expanduser().resolve() if cfg.snapshot_path else None
+    def cancelled():
+        if abort_check is None:
+            return False
+        try:
+            return bool(abort_check())
+        except Exception:  # noqa: BLE001 — a broken hook must fail closed
+            return True
+
+    final_target = (Path(cfg.snapshot_path).expanduser().resolve()
+                    if cfg.snapshot_path is not None and str(cfg.snapshot_path).strip() not in ("", ".")
+                    else None)
     publish = final_target is not None and not cfg.dry_run
     if publish:
         # Safety rule 1: nothing older than this run may stay at the planner path.
@@ -1582,6 +1615,8 @@ def _run_detection(next_capture, cfg, progress, ctx):
 
     while True:
         attempt += 1
+        if cancelled():
+            raise DetectionAbort(1, f"cancelled before attempt {attempt}", status="cancelled")
         say("capture", attempt, "")
         try:
             files = _capture(attempt)
@@ -1748,11 +1783,24 @@ def _run_detection(next_capture, cfg, progress, ctx):
         print(f"query_depth 沒有提交 {camera_geometry_path}", file=sys.stderr)
         raise DetectionAbort(1, f"query_depth produced no {camera_geometry_path}")
     say("base_link", attempt, "camera -> base_link")
+    if cfg.driver_extrinsic == "recorded":
+        # clear fail-closed reason BEFORE the transform step (the step itself enforces it too)
+        from . import base_link as _base_link  # noqa: PLC0415
+        try:
+            block = _base_link.driver_extrinsic_from_manifest(
+                manifest_path, _base_link.RECORDED_DRIVER_EXTRINSIC["parent_frame"],
+                manifest["pointcloud"]["header"]["frame_id"])
+            if block is not None:
+                _base_link.driver_extrinsic_check(block, cfg.driver_extrinsic_policy)
+        except ValueError as error:
+            print(f"driver extrinsic check failed: {error}", file=sys.stderr)
+            raise DetectionAbort(1, str(error), reasons=[str(error)]) from error
     convert_argv = ["--json", str(camera_geometry_path), "--target-frame", cfg.target_frame,
                     "--timeout", str(cfg.tf_timeout), "--output-json", str(base_points_path),
                     "--planner-output-json", str(staged_snapshot_path),
                     "--calib-file", str(Path(cfg.calib_file).expanduser()),
-                    "--driver-extrinsic", cfg.driver_extrinsic]
+                    "--driver-extrinsic", cfg.driver_extrinsic,
+                    "--driver-extrinsic-policy", cfg.driver_extrinsic_policy]
     run_script_step(cfg, "4/5 轉換 base_link 並提交 canonical planner snapshot",
                     "base_link", convert_argv, inprocess_ok=cfg.driver_extrinsic == "recorded")
     say("snapshot", attempt, "side cutting points + provenance")
@@ -1777,7 +1825,8 @@ def _run_detection(next_capture, cfg, progress, ctx):
         # 步驟 6：其 contract 角點命名保證 seam_start/seam_end 落在 left/right 邊上；失敗時 fail closed：
         # 暫存 snapshot 移到 <snapshot>.side_seed_rejected（planner 路徑不再有檔案），非零退出。
         say("side_seed", attempt, "side-tape seed")
-        quarantine_for = final_target if final_target is not None else Path(staged_snapshot_path)
+        # dry run: never touch <snapshot>.side_seed_rejected next to the production path
+        quarantine_for = final_target if publish else Path(staged_snapshot_path)
         run_side_face_seed(staged_snapshot_path, cfg, seam_json_path,
                            quarantine_path=side_seed_rejected_path(quarantine_for))
         print(f"→ side_tape_seed/v1.1 已加入 planner snapshot: {staged_snapshot_path}")
@@ -1786,6 +1835,8 @@ def _run_detection(next_capture, cfg, progress, ctx):
     except (OSError, ValueError) as error:
         raise DetectionAbort(1, f"cannot re-read the finished snapshot: {error}") from error
     published = Path(staged_snapshot_path)
+    if cancelled():
+        raise DetectionAbort(1, "cancelled before publish", status="cancelled")
     if publish:
         try:
             _write_json_atomically(final_target, snapshot)      # atomic same-directory replace
@@ -1799,7 +1850,10 @@ def _run_detection(next_capture, cfg, progress, ctx):
     overlay = result["overlay_png"]
     return DetectResult(
         success=True, status="accepted", reason="", reasons=[], cut_permission=cut_permission,
-        snapshot=snapshot, snapshot_path=str(published), capture_id=manifest["capture_id"],
+        snapshot=snapshot, snapshot_path=str(final_target) if publish else None,
+        staged_snapshot_path=str(staged_snapshot_path),
+        cut_summary="overridden" if cut_permission.get("override") else "allowed",
+        capture_id=manifest["capture_id"],
         seam_status=seam_doc.get("seam_status"), attempts=list(attempts),
         pipeline_dir=str(pipeline_dir), exit_code=0,
         overlay_path=str(overlay) if Path(overlay).is_file() else None)
@@ -1839,6 +1893,10 @@ def _build_parser():
     parser.add_argument("--driver-extrinsic", choices=("tf", "recorded"), default=None,
                         help="camera_link->optical source: tf (default; needs ROS, runs the base_link step in "
                              "its own process) or recorded (manifest block, else the recorded constant)")
+    parser.add_argument("--driver-extrinsic-policy", choices=("refuse", "warn", "use_manifest"),
+                        default="refuse",
+                        help="manifest driver_extrinsic block differing from the recorded constant by > 1 mm / "
+                             "0.1 deg: refuse (default), warn (use + log) or use_manifest")
     parser.add_argument("--tf-timeout", type=float, default=5.0)
     parser.add_argument("--downstream-inprocess", choices=("on", "off"), default="on",
                         help="on (default): depth query / base_link (recorded only) / side seed run in this "
@@ -1907,7 +1965,8 @@ def config_from_args(args):
                           else DEFAULT_AVERAGE_MAX_DIFF),
         average_rate_hz=(args.average_rate_hz if args.average_rate_hz is not None
                          else DEFAULT_AVERAGE_RATE_HZ),
-        rgb_topic=args.rgb_topic, pointcloud_topic=args.pointcloud_topic)
+        rgb_topic=args.rgb_topic, pointcloud_topic=args.pointcloud_topic,
+        driver_extrinsic_policy=args.driver_extrinsic_policy)
 
 
 def _check_cli_args(parser, args):

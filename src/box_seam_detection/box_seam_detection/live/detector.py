@@ -1850,27 +1850,48 @@ SEAM_DIRECTION_CALIB = "/home/farhan/.ros2/easy_handeye2/calibrations/rebel_hand
 _CAM_TO_BASE_CACHE = {}
 
 
-def _camera_to_base_matrix(calib_file: str = SEAM_DIRECTION_CALIB):
+def _camera_to_base_matrix(calib_file=None, manifest=None):
     """base_link <- camera_color_optical_frame = hand-eye calibration composed
-    with the recorded driver extrinsic (no ROS; camera_point_to_base_link.py is
-    imported read-only). Cached; None when unavailable."""
-    if calib_file in _CAM_TO_BASE_CACHE:
-        return _CAM_TO_BASE_CACHE[calib_file]
+    with the driver extrinsic (the manifest's driver_extrinsic block when it has one, else the
+    recorded constant; no ROS). ``calib_file`` is the SAME file the snapshot transform uses
+    (default SEAM_DIRECTION_CALIB). Cached per (file, mtime, extrinsic); None when unavailable --
+    then the seam direction is "unknown" (a clearly logged condition, never silent)."""
+    calib_file = os.path.expanduser(str(calib_file or SEAM_DIRECTION_CALIB))
+    try:
+        mtime = os.stat(calib_file).st_mtime_ns
+    except OSError:
+        mtime = None
+    block = (manifest or {}).get("driver_extrinsic") if isinstance(manifest, dict) else None
+    block_key = None
+    if isinstance(block, dict):
+        try:
+            block_key = (tuple(block["translation"]), tuple(block["quaternion_xyzw"]))
+        except (KeyError, TypeError):
+            block = None
+    key = (calib_file, mtime, block_key)
+    if key in _CAM_TO_BASE_CACHE:
+        return _CAM_TO_BASE_CACHE[key]
     matrix = None
     try:
         from . import base_link as c2b  # noqa: PLC0415
 
         calibration = c2b.load_handeye_calibration(calib_file)
         recorded = c2b.RECORDED_DRIVER_EXTRINSIC
+        if block_key is not None:
+            recorded = {"translation": block["translation"], "quaternion_xyzw": block["quaternion_xyzw"]}
         driver = c2b.transform_matrix(recorded["translation"], recorded["quaternion_xyzw"])
         matrix = calibration["matrix"] @ driver
-    except Exception:  # noqa: BLE001 - optional estimate
+    except Exception as error:  # noqa: BLE001 - optional estimate
         matrix = None
-    _CAM_TO_BASE_CACHE[calib_file] = matrix
+        _say(f"WARNING: seam-direction calibration unavailable ({calib_file}: "
+             f"{type(error).__name__}: {error}); the seam direction is UNKNOWN for this capture "
+             f"(a geometry-axis seam is then sent to review)")
+    _CAM_TO_BASE_CACHE[key] = matrix
     return matrix
 
 
-def compute_seam_direction(record: dict, seam, manifest: dict, camera_to_base=None) -> dict:
+def compute_seam_direction(record: dict, seam, manifest: dict, camera_to_base=None,
+                           calib_file=None) -> dict:
     """Seam direction in the camera's top-plane frame and (approximately, from
     the hand-eye calibration + recorded driver extrinsic) in base_link.
 
@@ -1911,7 +1932,7 @@ def compute_seam_direction(record: dict, seam, manifest: dict, camera_to_base=No
         out["plane_frame_angle_deg"] = round(
             math.degrees(math.atan2(float(v @ e2), float(v @ e1))) % 180.0, 2)
         out["direction_camera"] = [round(float(c), 5) for c in v]
-        matrix = _camera_to_base_matrix() if camera_to_base is None else camera_to_base
+        matrix = _camera_to_base_matrix(calib_file, manifest) if camera_to_base is None else camera_to_base
         if matrix is None:
             out["base_link_angle_deg"] = None
             out["reason"] = "calibration_unavailable(plane-frame angle only)"
@@ -1923,6 +1944,7 @@ def compute_seam_direction(record: dict, seam, manifest: dict, camera_to_base=No
                     "seam_direction_outside_soft_range":
                         bool(abs(offset) > SEAM_DIRECTION_SOFT_RANGE_DEG),
                     "base_link_source": "calib(rebel_handeye_h_v2)+recorded_driver_extrinsic",
+                    "base_link_calib_file": os.path.expanduser(str(calib_file or SEAM_DIRECTION_CALIB)),
                     "note": "approximate; soft prior, flag only (never rejects)"})
     except Exception as error:  # noqa: BLE001 - optional, never fail the detection
         out["available"] = False
@@ -2314,6 +2336,9 @@ def _parse_args(argv=None):
                              "library is box_seam_detection.core")
     parser.add_argument("--sam3-python", default=DEFAULT_SAM3_PYTHON,
                         help="SAM3 worker interpreter (book_grasping env)")
+    parser.add_argument("--calib-file", default=None,
+                        help="hand-eye calibration used for the seam-direction soft prior (the same "
+                             "file as the snapshot transform; default rebel_handeye_h_v2.calib)")
     parser.add_argument("--sam3-timeout", type=int, default=300,
                         help="per-image SAM3 query timeout in seconds")
     parser.add_argument("--debug", action="store_true")
@@ -2606,7 +2631,7 @@ def run_request(args, sam3) -> dict:
                 profile=box_profile)
         timing["depth_edge"] = depth_edge.get("time_s")
         record["depth_edge"] = depth_edge
-        seam_direction = compute_seam_direction(record, seam, manifest)
+        seam_direction = compute_seam_direction(record, seam, manifest, calib_file=getattr(args, "calib_file", None))
         record["seam_direction"] = seam_direction
         try:
             write_json_atomically(record_path, record)
@@ -2625,7 +2650,7 @@ def run_request(args, sam3) -> dict:
                 raise
             if rect_repair is not None:
                 record["rect_repair"] = rect_repair
-                seam_direction = compute_seam_direction(record, seam, manifest)
+                seam_direction = compute_seam_direction(record, seam, manifest, calib_file=getattr(args, "calib_file", None))
                 record["seam_direction"] = seam_direction
                 try:
                     write_json_atomically(record_path, record)
@@ -2640,7 +2665,7 @@ def run_request(args, sam3) -> dict:
             record, seam, seam_geometry = geometry_seam(
                 record, seam_reject, est_cfg, box_profile)
             record["seam_geometry"] = seam_geometry
-            seam_direction = compute_seam_direction(record, seam, manifest)
+            seam_direction = compute_seam_direction(record, seam, manifest, calib_file=getattr(args, "calib_file", None))
             record["seam_direction"] = seam_direction
         elif ((record.get("seam") or {}).get("estimate") or {}).get(
                 "axis_source") == "geometry_class":
@@ -2792,7 +2817,7 @@ _REQUEST_VALUE_FLAGS = {
     "overlay_dir": "--overlay-dir", "edge_tol_px": "--edge-tol-px",
     "rect_tol_mm": "--rect-tol-mm", "rect_max_corner_dev_deg": "--rect-max-corner-dev-deg",
     "autolabel_repo": "--autolabel-repo",
-    "sam3_python": "--sam3-python", "sam3_timeout": "--sam3-timeout",
+    "sam3_python": "--sam3-python", "sam3_timeout": "--sam3-timeout", "calib_file": "--calib-file",
 }
 _REQUEST_SWITCHES = {"allow_needs_review": "--allow-needs-review",
                      "allow_cut_blocked": "--allow-cut-blocked",

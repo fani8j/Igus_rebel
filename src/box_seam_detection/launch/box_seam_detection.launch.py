@@ -22,6 +22,7 @@ def generate_launch_description():
             executable="box_seam_detector_node",
             name="box_seam_detector",
             output="screen",
+            additional_env={"OPENBLAS_NUM_THREADS": "1", "AUTOLABEL_V2_BLAS_PINNED": "1"},
             parameters=[
                 LaunchConfiguration("params_file"),
                 {

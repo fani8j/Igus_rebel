@@ -188,7 +188,8 @@ def test_dry_run_never_touches_the_snapshot_path(tmp_path, monkeypatch):
     result = orch.run_detection(lambda attempt: files, cfg)
     assert result.success and result.snapshot["cut_permission"] == ALLOWED
     assert json.loads(snapshot.read_text(encoding="utf-8")) == {"keep": 1}
-    assert result.snapshot_path != str(snapshot) and Path(result.snapshot_path).is_file()
+    assert result.snapshot_path is None                        # nothing was written to snapshot_path
+    assert Path(result.staged_snapshot_path).is_file()
 
 
 def test_stamp_mismatch_between_capture_files_and_manifest_is_refused(tmp_path, monkeypatch):
@@ -209,8 +210,9 @@ def test_cli_without_planner_output_keeps_the_snapshot_in_the_pipeline_dir(tmp_p
     cfg, files, _ = _setup(tmp_path, monkeypatch)
     cfg.snapshot_path = None
     result = orch.run_detection(lambda attempt: files, cfg)
-    assert result.success and Path(result.snapshot_path).parent == Path(result.pipeline_dir)
-    assert Path(result.snapshot_path).name == "planner_snapshot.json"
+    assert result.success and result.snapshot_path is None
+    assert Path(result.staged_snapshot_path).parent == Path(result.pipeline_dir)
+    assert Path(result.staged_snapshot_path).name == "planner_snapshot.json"
 
 
 def test_recorder_wrapper_parses_the_recorder_output(tmp_path):
@@ -246,3 +248,173 @@ def test_capture_once_returns_capture_files(tmp_path, monkeypatch):
     monkeypatch.setattr(rec.subprocess, "run", lambda cmd, **k: _Timeout())
     with pytest.raises(rec.RecorderTimeout):
         rec.capture_once(tmp_path, 1, 5.0, echo=False)
+
+
+# ----------------------------------------------------------------- review fixes
+
+def test_abort_check_before_each_attempt_and_before_publish(tmp_path, monkeypatch):
+    cfg, files, snapshot = _setup(tmp_path, monkeypatch)
+    _stale(snapshot)
+    # (a) cancelled before the first attempt: nothing captured, the stale snapshot stays removed
+    called = []
+    result = orch.run_detection(lambda attempt: called.append(attempt) or files, cfg,
+                                abort_check=lambda: True)
+    assert not result.success and result.status == "cancelled" and called == []
+    assert not snapshot.exists() and not orch.side_seed_rejected_path(snapshot).exists()
+    # (b) cancelled immediately before publishing: the finished staged snapshot exists, nothing published
+    polls = []
+
+    def check():
+        polls.append(1)
+        return len(polls) >= 2           # 1st poll (before attempt 1) False, 2nd (before publish) True
+
+    result = orch.run_detection(lambda attempt: files, cfg, abort_check=check)
+    assert result.status == "cancelled" and not result.success
+    assert result.reason == "cancelled before publish" and len(polls) == 2
+    assert not snapshot.exists()
+    # (c) no hook: unchanged behaviour; a raising hook fails closed
+    assert orch.run_detection(lambda attempt: files, cfg).success
+    snapshot.unlink()
+
+    def broken():
+        raise RuntimeError("x")
+
+    assert orch.run_detection(lambda attempt: files, cfg, abort_check=broken).status == "cancelled"
+    assert not snapshot.exists()
+
+
+def test_dry_run_seed_failure_quarantines_only_in_the_pipeline_dir(tmp_path, monkeypatch):
+    cfg, files, snapshot = _setup(tmp_path, monkeypatch, seed_exit=1)
+    cfg.dry_run = True
+    production_quarantine = orch.side_seed_rejected_path(snapshot)
+    production_quarantine.write_text('{"production": true}', encoding="utf-8")
+    snapshot.write_text('{"keep": 1}', encoding="utf-8")
+    result = orch.run_detection(lambda attempt: files, cfg)
+    assert not result.success and result.snapshot_path is None
+    assert json.loads(production_quarantine.read_text(encoding="utf-8")) == {"production": True}
+    assert json.loads(snapshot.read_text(encoding="utf-8")) == {"keep": 1}
+    inside = list(Path(result.pipeline_dir).glob("*.side_seed_rejected"))
+    assert len(inside) == 1
+
+
+def test_override_is_explicit_in_the_result(tmp_path, monkeypatch):
+    cfg, files, snapshot = _setup(tmp_path, monkeypatch, cut_permission=BLOCKED)
+    cfg.allow_cut_blocked = True
+    result = orch.run_detection(lambda attempt: files, cfg)
+    assert result.success and result.cut_summary == "overridden"
+    assert result.cut_permission["status"] == "blocked"
+    assert result.cut_permission["override"] == "allow_cut_blocked"
+    cfg2, files2, snapshot2 = _setup(tmp_path / "b", monkeypatch)
+    assert orch.run_detection(lambda attempt: files2, cfg2).cut_summary == "allowed"
+    cfg3, files3, _ = _setup(tmp_path / "c", monkeypatch, cut_permission=BLOCKED)
+    assert orch.run_detection(lambda attempt: files3, cfg3).cut_summary == "blocked"
+
+
+@pytest.mark.parametrize("empty", ["", Path(""), "  "])
+def test_empty_snapshot_path_means_no_publish(tmp_path, monkeypatch, empty):
+    cfg, files, snapshot = _setup(tmp_path, monkeypatch)
+    cfg.snapshot_path = empty
+    cfg.__post_init__()
+    assert cfg.snapshot_path is None
+    assert orch.DetectConfig(snapshot_path="").snapshot_path is None
+    result = orch.run_detection(lambda attempt: files, cfg)
+    assert result.success and result.snapshot_path is None and Path(result.staged_snapshot_path).is_file()
+    assert not Path(".").joinpath("seam_3d_base_link.json").exists()
+
+
+def _manifest_with_extrinsic(files, **overrides):
+    manifest = json.loads(Path(files.manifest_path).read_text(encoding="utf-8"))
+    base = importlib.import_module("box_seam_detection.live.base_link")
+    rec = base.RECORDED_DRIVER_EXTRINSIC
+    block = {"parent_frame": "camera_link", "child_frame": "camera_color_optical_frame",
+             "translation": list(rec["translation"]),
+             "quaternion_xyzw": [-v for v in rec["quaternion_xyzw"]],     # opposite sign: same rotation
+             "source": "tf_live", "stamp_ns": 1000, **overrides}
+    manifest["driver_extrinsic"] = block
+    Path(files.manifest_path).write_text(json.dumps(manifest), encoding="utf-8")
+
+
+def test_driver_extrinsic_matching_the_constant_is_accepted(tmp_path, monkeypatch):
+    cfg, files, snapshot = _setup(tmp_path, monkeypatch)
+    _manifest_with_extrinsic(files)
+    assert orch.run_detection(lambda attempt: files, cfg).success
+
+
+@pytest.mark.parametrize("policy, ok", [("refuse", False), ("warn", True), ("use_manifest", True)])
+def test_driver_extrinsic_mismatch_policy(tmp_path, monkeypatch, capsys, policy, ok):
+    cfg, files, snapshot = _setup(tmp_path, monkeypatch)
+    base = importlib.import_module("box_seam_detection.live.base_link")
+    t = list(base.RECORDED_DRIVER_EXTRINSIC["translation"])
+    t[0] += 0.002                                                          # 2 mm off
+    _manifest_with_extrinsic(files, translation=t)
+    cfg.driver_extrinsic_policy = policy
+    _stale(snapshot)
+    result = orch.run_detection(lambda attempt: files, cfg)
+    assert result.success is ok
+    if not ok:
+        assert result.status == "error" and "driver_extrinsic_mismatch(" in result.reason
+        assert not snapshot.exists()
+    else:
+        assert snapshot.exists()
+        assert ("driver_extrinsic_mismatch" in capsys.readouterr().err) == (policy == "warn")
+
+
+def test_driver_extrinsic_rotation_mismatch_is_refused(tmp_path, monkeypatch):
+    cfg, files, snapshot = _setup(tmp_path, monkeypatch)
+    base = importlib.import_module("box_seam_detection.live.base_link")
+    import math
+    rec = base.RECORDED_DRIVER_EXTRINSIC["quaternion_xyzw"]
+    half = math.radians(0.3) / 2                                           # 0.3 deg about z on top
+    q = base.rotation_matrix_to_quaternion(
+        base.quaternion_to_rotation_matrix(0, 0, math.sin(half), math.cos(half))
+        @ base.quaternion_to_rotation_matrix(*rec))
+    _manifest_with_extrinsic(files, quaternion_xyzw=list(q))
+    result = orch.run_detection(lambda attempt: files, cfg)
+    assert not result.success and "driver_extrinsic_mismatch(" in result.reason
+
+
+def test_base_link_records_which_extrinsic_was_used_and_the_difference(tmp_path):
+    import math
+    import numpy as np
+    base = importlib.import_module("box_seam_detection.live.base_link")
+    s = math.sqrt(0.5)
+    calib = tmp_path / "t.calib"
+    calib.write_text(
+        "parameters:\n  name: t\n  calibration_type: eye_on_base\n  robot_base_frame: base_link\n"
+        "  tracking_base_frame: camera_link\ntransform:\n  translation: {x: 0.5, y: 0.0, z: 0.2}\n"
+        f"  rotation: {{x: 0.0, y: 0.0, z: {s!r}, w: {s!r}}}\n", encoding="utf-8")
+    rec = base.RECORDED_DRIVER_EXTRINSIC
+    block = {"parent_frame": "camera_link", "child_frame": "camera_color_optical_frame",
+             "translation": [rec["translation"][0] + 0.0005, *rec["translation"][1:]],
+             "quaternion_xyzw": list(rec["quaternion_xyzw"]), "source": "tf_live"}
+    _, out = base.resolve_camera_to_base(calib, "recorded", "base_link", "camera_color_optical_frame", 1,
+                                         driver_block=block)
+    cmp = out["source"]["driver_extrinsic_comparison"]
+    assert cmp["used"] == "manifest" and cmp["policy"] == "refuse" and cmp["exceeds_tolerance"] is False
+    assert cmp["translation_diff_m"] == pytest.approx(0.0005, abs=1e-9) and cmp["rotation_diff_deg"] < 1e-6
+    block["translation"][0] += 0.002
+    with pytest.raises(ValueError, match="driver_extrinsic_mismatch"):
+        base.resolve_camera_to_base(calib, "recorded", "base_link", "camera_color_optical_frame", 1,
+                                    driver_block=block)
+    _, out = base.resolve_camera_to_base(calib, "recorded", "base_link", "camera_color_optical_frame", 1,
+                                         driver_block=block, driver_policy="use_manifest")
+    assert out["source"]["driver_extrinsic_comparison"]["exceeds_tolerance"] is True
+    # no block -> no comparison key, constant used (today's captures)
+    _, out = base.resolve_camera_to_base(calib, "recorded", "base_link", "camera_color_optical_frame", 1)
+    assert "driver_extrinsic_comparison" not in out["source"]
+
+
+def test_detector_gets_the_configured_calibration_file(tmp_path, monkeypatch):
+    cfg, files, snapshot = _setup(tmp_path, monkeypatch)
+    seen = []
+    inner = orch.run_step
+
+    def spy(title, cmd, capture=False, check=True):
+        if "autolabel_v2" in title:
+            seen.append(cmd)
+        return inner(title, cmd, capture, check)
+
+    monkeypatch.setattr(orch, "run_step", spy)
+    assert orch.run_detection(lambda attempt: files, cfg).success
+    cmd = seen[0]
+    assert cmd[cmd.index("--calib-file") + 1] == str(Path(cfg.calib_file).expanduser())

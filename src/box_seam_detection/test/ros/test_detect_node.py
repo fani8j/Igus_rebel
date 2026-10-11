@@ -71,8 +71,9 @@ def make_fake_orchestrator():
     orch.calls = []
     orch.behaviour = lambda next_capture, cfg, progress: DetectResult()
 
-    def run_detection(next_capture, cfg, progress=None):
+    def run_detection(next_capture, cfg, progress=None, abort_check=None):
         orch.calls.append(cfg)
+        orch.abort_check = abort_check
         return orch.behaviour(next_capture, cfg, progress)
 
     orch.run_detection = run_detection
@@ -241,3 +242,92 @@ def test_recorder_source_without_live_recorder_reports_error(tmp_path, spinner):
     h.orch.behaviour = lambda nc, cfg, pr: (nc(1), h.orch.DetectResult())[1]
     _, res, _ = h.run()
     assert res.result.status == "error"
+
+
+def test_cancel_during_detection_no_snapshot(harness):
+    harness.snap.write_text("{}")
+    started = threading.Event()
+
+    def cancellable(nc, cfg, pr):
+        started.set()
+        for _ in range(200):
+            if harness.orch.abort_check():
+                return harness.orch.DetectResult(success=False, status="cancelled", reason="cancelled",
+                                                 snapshot=None, snapshot_path=None, cut_permission=None)
+            time.sleep(0.05)
+        return harness.orch.DetectResult()
+    harness.orch.behaviour = cancellable
+    gh = harness._wait(harness.send()[0])
+    assert gh.accepted and started.wait(5)
+    harness._wait(gh.cancel_goal_async())
+    res = harness._wait(gh.get_result_async())
+    from action_msgs.msg import GoalStatus
+    assert res.status == GoalStatus.STATUS_CANCELED
+    assert res.result.status == "cancelled" and not res.result.success and res.result.snapshot_path == ""
+
+
+def test_cancel_during_capture_wait(tmp_path, spinner):
+    h = Harness(tmp_path, spinner, camera=False, capture_timeout_s=30.0)
+    h.snap.write_text("{}")
+    h.orch.behaviour = lambda nc, cfg, pr: (nc(1), h.orch.DetectResult())[1]
+    gh = h._wait(h.send()[0])
+    time.sleep(0.8)
+    t0 = time.monotonic()
+    h._wait(gh.cancel_goal_async())
+    res = h._wait(gh.get_result_async())
+    from action_msgs.msg import GoalStatus
+    assert res.status == GoalStatus.STATUS_CANCELED and time.monotonic() - t0 < 3.0
+    assert res.result.status == "cancelled" and not h.snap.exists()
+
+
+def test_cancel_after_publish_stays_succeeded(harness):
+    def late(nc, cfg, pr):
+        time.sleep(0.5)
+        return harness.orch.DetectResult()  # snapshot already published
+    harness.orch.behaviour = late
+    gh = harness._wait(harness.send()[0])
+    harness._wait(gh.cancel_goal_async())
+    res = harness._wait(gh.get_result_async())
+    from action_msgs.msg import GoalStatus
+    assert res.status == GoalStatus.STATUS_SUCCEEDED and res.result.success
+
+
+def test_param_dry_run_exception_keeps_snapshot(tmp_path, spinner):
+    h = Harness(tmp_path, spinner, dry_run=True)
+    h.snap.write_text("{}")
+
+    def boom(*a):
+        raise RuntimeError("x")
+    h.orch.behaviour = boom
+    _, res, _ = h.run()
+    assert res.result.status == "error" and h.snap.exists()
+
+
+def test_empty_snapshot_path_passes_none(tmp_path, spinner):
+    h = Harness(tmp_path, spinner, snapshot_path="")
+    h.run()
+    assert h.orch.calls[0].snapshot_path is None
+
+
+def test_override_maps_to_overridden(harness):
+    harness.orch.behaviour = lambda nc, cfg, pr: harness.orch.DetectResult(
+        cut_permission={"status": "blocked", "override": "allow_cut_blocked"})
+    assert harness.run()[1].result.cut_permission == "overridden"
+
+
+def test_overlay_cleared_at_start(harness):
+    got = []
+    from sensor_msgs.msg import Image
+    harness.client_node.create_subscription(Image, "/box_seam_detector/overlay", got.append,
+                                            QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                                                       durability=DurabilityPolicy.TRANSIENT_LOCAL))
+    harness.run()
+    time.sleep(0.5)
+    assert got and got[-1].width == 0
+
+
+def test_parameter_validation(tmp_path):
+    with pytest.raises(ValueError, match="capture_timeout_s"):
+        DetectNode(orchestrator=make_fake_orchestrator(), parameter_overrides=[
+            rclpy.parameter.Parameter("capture_timeout_s", value=0.0),
+            rclpy.parameter.Parameter("warm_daemon", value=False)])
