@@ -1,0 +1,40 @@
+# box_seam_detection: DetectBox action server (node `box_seam_detector`).
+# Launch: ros2 launch box_seam_detection box_seam_detection.launch.py
+# Call:   ros2 action send_goal /box_seam_detector/detect_box compal_box_msgs/action/DetectBox "{}" --feedback
+# The node never commands the robot; the snapshot file it writes (via live.orchestrator) is read by the H-cut executor.
+box_seam_detector:
+  ros__parameters:
+    # ---- capture ---------------------------------------------------------------------------------------------
+    capture_source: node            # node = capture from the topics below; recorder = today's rgbd_recorder path
+                                    #   (needs live.recorder.capture_once(output_root, attempt, timeout_s))
+    color_topic: /camera/color/image_raw        # rgb8 or bgr8
+    depth_topic: /camera/depth/image_raw        # 16UC1 (mm) or 32FC1 (m), REGISTERED to colour (same size + frame:
+                                                #   scene_camera.yaml depth_registration: true, align_target_stream: COLOR)
+    camera_info_topic: /camera/color/camera_info
+    sync_slop_s: 0.04               # ApproximateTime slop colour<->depth (15 fps = 66 ms apart)
+    sync_queue_size: 10
+    capture_margin_s: 0.0           # a frame must be stamped later than request time + this (host clock)
+    capture_timeout_s: 10.0         # wait for a fresh synced frame per attempt
+    driver_parent_frame: camera_link   # driver extrinsic camera_link -> colour optical frame (tf2) written to the manifest
+    use_tf: true
+    extrinsic_required: false       # true = refuse the capture when the tf lookup fails
+    output_root: /home/farhan/Igus_rebel/outputs/rgbd_captures   # rgb/ pointcloud/ captures/ + pipeline/ outputs
+    # ---- DetectConfig (live.orchestrator) -------------------------------------------------------------------
+    max_attempts: 4                 # goal.max_attempts > 0 overrides
+    retry_policy: smart
+    allow_needs_review: false       # goal flag is OR-ed with this
+    allow_cut_blocked: false        # override: write the snapshot although cut_permission is blocked (recorded)
+    dry_run: false                  # detect and report, never write/remove the snapshot file
+    rect_tol_mm: -1.0               # < 0 = detector default
+    sam3_python: /home/farhan/miniconda3/envs/book_grasping/bin/python   # env BOX_SEAM_SAM3_PYTHON overrides the default
+    sam3_daemon: auto               # auto | off | ... (shared machine-wide singleton, never stopped by the node)
+    downstream_inprocess: true
+    calib_file: ~/.ros2/easy_handeye2/calibrations/rebel_handeye_h_v2.calib
+    driver_extrinsic: recorded      # base_link = calib o driver extrinsic (recorded constant or the manifest value)
+    target_frame: base_link
+    side_seed: true
+    snapshot_path: /home/farhan/Igus_rebel/outputs/seam_3d_base_link.json    # box_h_cut_snapshot/v1 for the executor
+    # ---- node ------------------------------------------------------------------------------------------------
+    warm_daemon: true               # ensure the SAM3 daemon at start (readiness in ~/status)
+    overlay_glob: "*overlay*.png"   # newest match under the pipeline dir is published on ~/overlay
+    status_period_s: 2.0            # ~/status refresh (also published on every state change)

@@ -1,0 +1,25 @@
+# Detect the box top face + tape seam with the RGB-D scene camera and write the
+# box_h_cut_snapshot/v1 snapshot for the H-cut executor (box_seam_detection).
+# Goal
+int32 max_attempts          # 0 = node default
+bool allow_needs_review     # accept detections flagged needs_review
+bool allow_cut_blocked      # write the snapshot even when cut_permission is blocked (override, recorded)
+bool dry_run                # detect and report, never write/remove the snapshot file
+---
+# Result
+bool success                # accepted AND (cut allowed OR overridden) AND snapshot written (unless dry_run)
+string status               # accepted | rejected | blocked | error
+string reason               # one-line summary
+string[] reasons            # detector / cut-permission reason codes
+string cut_permission       # allowed | blocked | n/a
+string snapshot_id
+string snapshot_path        # empty when nothing was written
+string capture_id
+string seam_status          # ok | estimated | ...
+int32 attempts
+float64 elapsed_s
+---
+# Feedback
+string stage                # capture | detect | geometry | snapshot
+int32 attempt
+string message
