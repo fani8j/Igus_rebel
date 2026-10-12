@@ -32,6 +32,7 @@ box_seam_detector:
     sam3_daemon: auto               # auto | off | ... (shared machine-wide singleton, never stopped by the node)
     downstream_inprocess: true
     calib_file: ~/.ros2/easy_handeye2/calibrations/rebel_handeye_h_v2.calib
+    scene_config: ""                # "" = table_cell_v1 (today); dual_arm_v1 = dual-arm cell (its calib file is the default)
     driver_extrinsic: recorded      # base_link = calib o driver extrinsic (recorded constant or the manifest value)
     target_frame: base_link
     side_seed: true

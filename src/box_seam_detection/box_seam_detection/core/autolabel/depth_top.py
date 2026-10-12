@@ -505,8 +505,63 @@ def _merge_top_candidates(cropped: np.ndarray, cands: list,
                      "merged_from": sorted(grouped[0])}
 
 
+def is_hidden_stand(dcfg: dict) -> bool:
+    """True when the scene's support model is ``hidden_stand``."""
+    mode = dcfg.get("support", "visible_table")
+    if mode not in ("visible_table", "hidden_stand"):
+        raise ValueError(f"depth_top.support must be visible_table|hidden_stand, got {mode!r}")
+    return mode == "hidden_stand"
+
+
+def _plane_basis(n: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    n = np.asarray(n, dtype=np.float64)
+    n = n / np.linalg.norm(n)
+    ref = np.array([1.0, 0.0, 0.0]) if abs(n[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+    e1 = np.cross(n, ref)
+    e1 /= np.linalg.norm(e1)
+    return e1, np.cross(n, e1)
+
+
+def _plane_footprint(table: dict, table_xyz: np.ndarray) -> dict | None:
+    """Convex hull of the plane inliers in the plane's own 2-D frame (the
+    support footprint of a hidden-stand scene). Deterministic stride
+    subsample bounds the cost."""
+    if table_xyz.shape[0] < 3:
+        return None
+    pts = table_xyz
+    if pts.shape[0] > 40000:
+        pts = pts[::int(-(-pts.shape[0] // 40000))]
+    e1, e2 = _plane_basis(table["n"])
+    uv = np.stack([pts @ e1, pts @ e2], axis=1).astype(np.float32)
+    hull = cv2.convexHull(uv)
+    if hull.shape[0] < 3:
+        return None
+    return {"e1": e1, "e2": e2, "hull": hull, "n_hull": int(hull.shape[0])}
+
+
+def _inside_footprint(fp: dict | None, point, expand_m: float) -> tuple[bool, float | None]:
+    """(inside, signed margin m): ``point`` projected into the footprint frame
+    against the hull, tolerance ``expand_m`` (negative margin = outside)."""
+    if fp is None:
+        return False, None
+    p = np.asarray(point, dtype=np.float64)
+    margin = float(cv2.pointPolygonTest(
+        fp["hull"], (float(p @ fp["e1"]), float(p @ fp["e2"])), True))
+    return margin >= -float(expand_m), margin
+
+
+def scene_noise_mm(planes: list[dict]) -> float | None:
+    """Depth noise of the scene: median RMS (mm) of the large planes fitted
+    by :func:`sequential_planes` (inliers within the RANSAC band, so the value
+    saturates for very noisy data; it is monotone in the real noise, which is
+    all the guided-plane gate scaling needs). None without planes."""
+    rms = [float(p["rms"]) * 1000.0 for p in planes]
+    return float(np.median(rms)) if rms else None
+
+
 def identify_table_top(planes: list[dict], cropped: np.ndarray,
-                       dcfg: dict) -> tuple[dict | None, dict | None, dict, dict, str | None]:
+                       dcfg: dict, support_hint: dict | None = None
+                       ) -> tuple[dict | None, dict | None, dict, dict, str | None]:
     """Pick table + carton top from sequential planes.
 
     ``cropped`` is the workspace array the plane ``mask``s index (masks are
@@ -514,6 +569,12 @@ def identify_table_top(planes: list[dict], cropped: np.ndarray,
     table support is invariant to discovery order). Returns ``(table, top,
     front, diagnostics, reason)``; ``reason`` is None on success. ``front``
     is diagnostics-only (never gating).
+
+    ``support_hint`` (hidden_stand only; ``{"n", "d", ...}`` of the scene's
+    floor plane fitted on the FULL cloud): used as the support plane when
+    ``planes`` come from a sub-region (ROI retry) that does not contain the
+    floor; every plane is then a top candidate and the floor footprint check
+    is skipped.
     """
     cropped = np.asarray(cropped, dtype=np.float64)
     diag: dict = {"planes": [_plane_diag(p) for p in planes]}
@@ -522,17 +583,45 @@ def identify_table_top(planes: list[dict], cropped: np.ndarray,
     if not planes:
         return None, None, front, diag, "depth_no_table"
     order = sorted(range(len(planes)), key=lambda i: -planes[i]["n_inliers"])
-    table = planes[order[0]]
-    if table["n_inliers"] < int(dcfg["table_min_inliers"]):
-        diag["table_reject"] = "below_table_min_inliers"
-        return None, None, front, diag, "depth_no_table"
-    diag["table_rank"] = int(order[0])
-    table_xyz = cropped[table["mask"]]
+    hidden = is_hidden_stand(dcfg)
+    hinted = bool(hidden and support_hint is not None)
+    if hinted:
+        table = {"n": np.asarray(support_hint["n"], dtype=np.float64),
+                 "d": float(support_hint["d"]),
+                 "n_inliers": int(support_hint.get("n_inliers") or 0),
+                 "rms": float(support_hint.get("rms_mm") or 0.0) / 1000.0,
+                 "centroid": np.zeros(3), "mask": np.zeros(cropped.shape[0], bool)}
+        rest = list(order)
+        diag["support_hint"] = True
+        table_xyz = cropped[:0]
+    else:
+        table = planes[order[0]]
+        if table["n_inliers"] < int(dcfg["table_min_inliers"]):
+            diag["table_reject"] = "below_table_min_inliers"
+            return None, None, front, diag, "depth_no_table"
+        diag["table_rank"] = int(order[0])
+        rest = order[1:]
+        table_xyz = cropped[table["mask"]]
     tmin = table_xyz.min(axis=0) if table_xyz.shape[0] else np.zeros(3)
     tmax = table_xyz.max(axis=0) if table_xyz.shape[0] else np.zeros(3)
     expand = float(dcfg["support_expand_m"])
+    floor_hull = None
+    if hidden and not hinted:
+        # footprint of the visible floor = the dominant plane plus its coplanar
+        # fragments (sequential RANSAC splits a noisy far floor into pieces)
+        floor_pts = [table_xyz]
+        for i in rest:
+            ang_f, off_f = plane_angle_offset(table["n"], table["d"],
+                                              planes[i]["n"], planes[i]["d"])
+            if (ang_f <= float(dcfg["parallel_tol_deg"])
+                    and off_f < float(dcfg["offset_min"])):
+                floor_pts.append(cropped[planes[i]["mask"]])
+        floor_hull = _plane_footprint(table, np.concatenate(floor_pts))
+        diag["floor_fragments"] = len(floor_pts)
+    if hidden:
+        diag["support_mode"] = "hidden_stand"
     cands, parallel_notes = [], []
-    for i in order[1:]:
+    for i in rest:
         p = planes[i]
         angle, offset = plane_angle_offset(table["n"], table["d"], p["n"], p["d"])
         note: dict = {"rank": int(i), "n_inliers": p["n_inliers"],
@@ -546,7 +635,15 @@ def identify_table_top(planes: list[dict], cropped: np.ndarray,
             note["excluded"] = "offset_out_of_range"
             parallel_notes.append(note)
             continue
-        if offset > float(dcfg.get("offset_above_check_from", 0.30)):
+        if hidden:
+            # The dominant plane is the floor under a stand that hides the real
+            # support: the box top is above it by stand + box (any height in
+            # [offset_min, offset_max]); it must lie on the camera side.
+            if _signed_height_above(table, p["centroid"]) <= 0.0:
+                note["excluded"] = "not_above_table"
+                parallel_notes.append(note)
+                continue
+        elif offset > float(dcfg.get("offset_above_check_from", 0.30)):
             # Beyond the legacy 0.30 m limit (tall boxes): the plane must lie
             # on the CAMERA side of the table, else it is a floor / the real
             # table below a mis-picked "table" (the box top itself).
@@ -559,8 +656,21 @@ def identify_table_top(planes: list[dict], cropped: np.ndarray,
             parallel_notes.append(note)
             continue
         c = p["centroid"]
-        if not (tmin[0] - expand <= c[0] <= tmax[0] + expand
-                and tmin[1] - expand <= c[1] <= tmax[1] + expand):
+        if hinted:
+            pass        # sub-region retry: the floor is not in the cloud
+        elif hidden:
+            # The stand is smaller than the box, so no support is visible under
+            # the top: instead the top must project (along the floor normal)
+            # inside the convex footprint of the visible floor points.
+            inside, margin = _inside_footprint(floor_hull, c, expand)
+            note["floor_footprint_margin_mm"] = (None if margin is None
+                                                 else round(margin * 1000.0, 1))
+            if not inside:
+                note["excluded"] = "no_floor_support"
+                parallel_notes.append(note)
+                continue
+        elif not (tmin[0] - expand <= c[0] <= tmax[0] + expand
+                  and tmin[1] - expand <= c[1] <= tmax[1] + expand):
             note["excluded"] = "no_spatial_support"
             parallel_notes.append(note)
             continue
@@ -611,7 +721,7 @@ def identify_table_top(planes: list[dict], cropped: np.ndarray,
     # condition as the front diagnostics), so a large distant wall in the
     # workspace can never dilute the ratio of a valid carton.
     perp_inliers = 0
-    for i in order[1:]:
+    for i in rest:
         if int(i) in top_ranks:
             continue
         p = planes[i]
@@ -633,7 +743,7 @@ def identify_table_top(planes: list[dict], cropped: np.ndarray,
     # Front/side faces: near-perpendicular to the TOP (diagnostics only).
     fnotes = []
     passing_ranks: list[int] = []
-    for i in order[1:]:
+    for i in rest:
         if int(i) in top_ranks:
             continue
         p = planes[i]
@@ -859,7 +969,8 @@ def support_hull_and_quad(top_xyz: np.ndarray, cam: dict, image_hw: tuple[int, i
 
 
 def estimate_top(xyz: np.ndarray, cam: dict, image_hw: tuple[int, int],
-                 dcfg: dict, *, first_plane_out: dict | None = None) -> dict:
+                 dcfg: dict, *, first_plane_out: dict | None = None,
+                 support_hint: dict | None = None) -> dict:
     """Full depth-first top estimate. Never raises on data; reports reasons.
 
     Returns ``{"ok", "reason", "quad", "hull", "depth", "support"}``;
@@ -873,6 +984,9 @@ def estimate_top(xyz: np.ndarray, cam: dict, image_hw: tuple[int, int],
     result): ``n``/``d``/``n_inliers``/``n_pool`` of the FIRST sequential
     plane, so a caller can reuse it as the table plane (same cropped cloud,
     same seed) instead of refitting.
+
+    ``support_hint`` (hidden_stand scenes, ROI retries only): the floor plane
+    of the full cloud, see :func:`identify_table_top`.
     """
     xyz = np.asarray(xyz, dtype=np.float64)
     depth: dict = {"assumed_registered": True,
@@ -892,8 +1006,15 @@ def estimate_top(xyz: np.ndarray, cam: dict, image_hw: tuple[int, int],
             d=float(planes[0]["d"]), n_inliers=int(planes[0]["n_inliers"]),
             rms=float(planes[0]["rms"]),
             n_pool=int(cropped.shape[0]))
-    table, top, front, ident, reason = identify_table_top(planes, cropped, dcfg)
+    table, top, front, ident, reason = identify_table_top(
+        planes, cropped, dcfg, support_hint=support_hint)
     depth.update(ident)
+    if is_hidden_stand(dcfg):
+        # the table/support plane is the FLOOR: its distance to the top is
+        # stand + box, never the box height
+        depth["support_hidden"] = True
+    if dcfg.get("measure_noise"):
+        depth["noise_mm"] = scene_noise_mm(planes)
     if table is not None:
         depth["table_inliers"] = table["n_inliers"]
         depth["table_rms_mm"] = round(table["rms"] * 1000.0, 2)

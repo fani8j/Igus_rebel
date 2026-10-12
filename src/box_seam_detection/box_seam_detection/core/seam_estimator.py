@@ -494,6 +494,11 @@ def expected_view_shift(corners_xyz, axis: str,
     if profile == "generic":
         out["reason"] = "generic_profile"
         return out
+    if profile in _profiles.PROFILES and _profiles.PROFILES[profile].own_constants:
+        # later profile (large_392): its OWN shift, never the legacy class table
+        out["reason"] = f"profile_{profile}"
+        out["expected_shift_mm"] = float(_profiles.PROFILES[profile].view_shift_mm)
+        return out
     cls = geo["box_class"]
     c = _class_value(vcfg.get("shift_mm"), cls, VIEW_SHIFT_MM.get(cls, 0.0))
     k = _class_value(vcfg.get("k_tan_mm"), cls,
@@ -1610,13 +1615,13 @@ def _estimate_seam_core(bgr: np.ndarray, corners,
             "'darkline_confirm' or 'either_confirm'")
     max_off = _est_cfg(est_cfg, "confirm_max_offset_mm",
                         CONFIRM_MAX_OFFSET_MM)
-    if profile == "generic":
-        # Generic box: no validated view-shift model, so the confirmation
-        # tolerance comes from the profile (known profiles keep the config
-        # value above: bit-identical). Still the evidence path
+    if profile in _profiles.PROFILES and _profiles.PROFILES[profile].own_constants:
+        # Generic box / later profile (large_392): no validated view-shift
+        # model, so the confirmation tolerance comes from the profile (small/big
+        # keep the config value above: bit-identical). Still the evidence path
         # (axis_evidence + either_confirm); no ``observed_tape`` publisher
         # yet (waits for real tape data, docs/multi_box_plan.md M4).
-        _gp = _profiles.PROFILES["generic"].confirm_max_offset_mm
+        _gp = _profiles.PROFILES[profile].confirm_max_offset_mm
         if _gp is not None:
             max_off = float(_gp)
     max_ang = _est_cfg(est_cfg, "confirm_max_angle_deg",

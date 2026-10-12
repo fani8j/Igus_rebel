@@ -123,6 +123,10 @@ class DetectConfig:
     # a manifest driver_extrinsic block (node captures) that differs from the recorded constant by
     # > 1 mm / 0.1 deg: refuse (default, fail closed) | warn (use the manifest, log) | use_manifest
     driver_extrinsic_policy: str = "refuse"
+    # scene config (core/scene.py): YAML path or shipped name; None = table_cell_v1 (today's values).
+    # It supplies the default calib file, the driver extrinsic reference, the seam-direction prior and
+    # the depth-top / gate overrides of the detector.
+    scene_config: Optional[str] = None
 
     def __post_init__(self):
         # "" / "." (Path("")) from a caller means "no snapshot path": never publish to Path('.')
@@ -334,7 +338,8 @@ def side_seed_profile_args(seam_json_path):
     # Only the pipeline's own record profile is handed over; a profile the
     # detector merely guessed from the corners (source corners_legacy) is left
     # to the seed's identical legacy classification.
-    if name in ("small", "big", "generic") and profile.get("source") == "record":
+    from ..core import box_profiles  # noqa: PLC0415
+    if name in box_profiles.PROFILES and profile.get("source") == "record":
         extra += ["--box-profile", name]
     height = block.get("measured_height_mm")
     if isinstance(height, (int, float)) and not isinstance(height, bool) \
@@ -381,6 +386,12 @@ def preflight_calibration(cfg):
         raise ValueError(f"手眼標定檔 {calib_file} robot_base_frame "
                          f"{calibration['robot_base_frame']!r} != --target-frame {cfg.target_frame!r}")
     expected_tracking = base_tf.RECORDED_DRIVER_EXTRINSIC["parent_frame"]
+    if getattr(cfg, "scene_config", None):
+        from ..core import scene as _scene  # noqa: PLC0415
+        try:
+            _scene.load_scene(cfg.scene_config)
+        except _scene.SceneError as error:
+            raise ValueError(f"scene config: {error}") from error
     if (getattr(cfg, "driver_extrinsic", None) == "recorded"
             and calibration["tracking_base_frame"] != expected_tracking):
         raise ValueError(f"手眼標定檔 {calib_file} tracking_base_frame "
@@ -1371,6 +1382,8 @@ def run_autolabel_v2_attempt(cfg, image_path, pcd_path, manifest_path, manifest,
         "--sam3-python", str(cfg.sam3_python),
         "--calib-file", str(Path(cfg.calib_file or DEFAULT_CALIB_FILE).expanduser()),
     ]
+    if getattr(cfg, "scene_config", None):
+        argv += ["--scene-config", str(cfg.scene_config)]
     if cfg.allow_needs_review:
         argv.append("--allow-needs-review")
     if getattr(cfg, "allow_cut_blocked", False):
@@ -1787,11 +1800,17 @@ def _run_detection(next_capture, cfg, progress, ctx, abort_check=None):
         # clear fail-closed reason BEFORE the transform step (the step itself enforces it too)
         from . import base_link as _base_link  # noqa: PLC0415
         try:
+            scene = None
+            if getattr(cfg, "scene_config", None):
+                from ..core import scene as _scene  # noqa: PLC0415
+                scene = _scene.load_scene(cfg.scene_config)
             block = _base_link.driver_extrinsic_from_manifest(
                 manifest_path, _base_link.RECORDED_DRIVER_EXTRINSIC["parent_frame"],
                 manifest["pointcloud"]["header"]["frame_id"])
             if block is not None:
-                _base_link.driver_extrinsic_check(block, cfg.driver_extrinsic_policy)
+                _base_link.driver_extrinsic_check(
+                    block, cfg.driver_extrinsic_policy,
+                    reference=_base_link.scene_driver_blocks(scene)[0])
         except ValueError as error:
             print(f"driver extrinsic check failed: {error}", file=sys.stderr)
             raise DetectionAbort(1, str(error), reasons=[str(error)]) from error
@@ -1801,6 +1820,8 @@ def _run_detection(next_capture, cfg, progress, ctx, abort_check=None):
                     "--calib-file", str(Path(cfg.calib_file).expanduser()),
                     "--driver-extrinsic", cfg.driver_extrinsic,
                     "--driver-extrinsic-policy", cfg.driver_extrinsic_policy]
+    if getattr(cfg, "scene_config", None):
+        convert_argv += ["--scene-config", str(cfg.scene_config)]
     run_script_step(cfg, "4/5 轉換 base_link 並提交 canonical planner snapshot",
                     "base_link", convert_argv, inprocess_ok=cfg.driver_extrinsic == "recorded")
     say("snapshot", attempt, "side cutting points + provenance")
@@ -1889,7 +1910,12 @@ def _build_parser():
                              "capture's captures/ dir, else --output-dir)")
     parser.add_argument("--target-frame", default="base_link")
     parser.add_argument("--calib-file", default=None,
-                        help=f"hand-eye calibration (default {DEFAULT_CALIB_FILE})")
+                        help=f"hand-eye calibration (default: the scene's calib_file, else {DEFAULT_CALIB_FILE})")
+    parser.add_argument("--scene-config", default=None, metavar="PATH",
+                        help="scene config (YAML path or shipped name such as dual_arm_v1; default "
+                             "table_cell_v1 = today's values): depth-top workspace + support mode, "
+                             "guided-plane gate, seam-direction prior, driver extrinsic reference, default "
+                             "calib file")
     parser.add_argument("--driver-extrinsic", choices=("tf", "recorded"), default=None,
                         help="camera_link->optical source: tf (default; needs ROS, runs the base_link step in "
                              "its own process) or recorded (manifest block, else the recorded constant)")
@@ -1938,6 +1964,18 @@ def _build_parser():
     return parser
 
 
+def _scene_calib(scene_config):
+    """Default calib file: the scene's, else the table-cell default (a bad scene
+    config is reported by preflight_calibration, not here)."""
+    if not scene_config:
+        return DEFAULT_CALIB_FILE
+    try:
+        from ..core import scene as _scene  # noqa: PLC0415
+        return _scene.load_scene(scene_config).calib_file
+    except Exception:  # noqa: BLE001
+        return DEFAULT_CALIB_FILE
+
+
 def config_from_args(args):
     """DetectConfig of the parsed CLI args (``args.from_image`` decides live vs offline)."""
     live = not args.from_image
@@ -1948,7 +1986,8 @@ def config_from_args(args):
         allow_needs_review=args.allow_needs_review, allow_cut_blocked=args.allow_cut_blocked,
         dry_run=args.dry_run, rect_tol_mm=args.rect_tol_mm, sam3_python=args.autolabel_v2_sam3_python,
         sam3_daemon=args.sam3_daemon, downstream_inprocess=args.downstream_inprocess == "on",
-        calib_file=args.calib_file or DEFAULT_CALIB_FILE, driver_extrinsic=args.driver_extrinsic or "tf",
+        calib_file=args.calib_file or _scene_calib(args.scene_config), driver_extrinsic=args.driver_extrinsic or "tf",
+        scene_config=args.scene_config,
         target_frame=args.target_frame, side_seed=not args.no_side_seed,
         output_root=Path(args.output_dir).resolve(),
         snapshot_path=Path(args.planner_output_json).resolve() if args.planner_output_json else None,

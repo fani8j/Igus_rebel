@@ -133,9 +133,10 @@ def test_r2_geometry_is_independent_of_reference_height():
 
 
 def test_generic_tall_box_profile_end_to_end_components():
-    """measured height -> generic -> no R10 / no depth-edge / fold height."""
+    """measured height -> generic -> no R10 / no depth-edge / fold height
+    (a 36 x 30 x 24 cm box; the 39 x 32 x 48 cm carton is the large_392 profile)."""
     from types import SimpleNamespace as NS
-    sc, xyz = _cloud(0.48, 0.39, 0.32, 1.2, 600.0)
+    sc, xyz = _cloud(0.36, 0.30, 0.24, 1.2, 600.0)
     tr = sc.truth()
     ctx = {"xyz": xyz, "cam": sc.cam, "dcfg": default_config()["depth_top"]}
     h = P.measure_box_height(ctx, NS(normal=tr["top_n"], d=tr["top_d"]),
@@ -144,8 +145,8 @@ def test_generic_tall_box_profile_end_to_end_components():
     assert prof.is_generic and rec["name"] == "generic"
     assert rec["depth_edge_validated"] is False
     assert rec["geometry_axis_validated"] is False
-    assert abs(rec["measured_height_mm"] - 480.0) < 1.5
-    assert rec["top_dims_mm"][0] == pytest.approx(390.0, abs=1.0)
+    assert abs(rec["measured_height_mm"] - 360.0) < 1.5
+    assert rec["top_dims_mm"][0] == pytest.approx(300.0, abs=1.0)
 
 
 @pytest.mark.parametrize("case,h", [((0.0863, 0.11, 0.098, 0.454, 720.0), 86.3),

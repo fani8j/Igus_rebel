@@ -1408,7 +1408,8 @@ def apply_depth_edge(record: dict, seam: dict, manifest: dict, pcd_path, gray=No
     """
     t0 = time.monotonic()
     try:
-        if profile is not None and not profile.depth_edge_validated and profile.is_generic:
+        if profile is not None and not profile.depth_edge_validated \
+                and profile.own_constants:
             # The fix is validated for the known boxes only (per-profile flag);
             # 'big' keeps today's own class gate inside depth_edge_fix.
             raise _DepthEdgeSkip(f"depth_edge_not_validated_for_profile({profile.name})")
@@ -1492,6 +1493,16 @@ def _measured_height_mm(record: dict):
     return None
 
 
+def _support_hidden_height(record: dict) -> bool:
+    """The pipeline could not measure the height because the support under the
+    box is hidden (scene ``hidden_stand``): box_profile.height_unavailable ==
+    "support_hidden". Not a measurement failure: a KNOWN profile then uses its
+    own height (generic has none, so it is still blocked)."""
+    recorded = record.get("box_profile")
+    return (isinstance(recorded, dict)
+            and recorded.get("height_unavailable") == "support_hidden")
+
+
 def _height_mismatch_flag(record: dict) -> bool:
     """box_profile.flags (pipeline.resolve_box_profile) contains height_mismatch."""
     recorded = record.get("box_profile")
@@ -1543,7 +1554,7 @@ def evaluate_cut_permission(record: dict, seam: dict, seam_direction: dict = Non
     estimate = (record.get("seam") or {}).get("estimate") or {}
     geom_axis = bool(seam_geometry) or estimate.get("axis_source") == "geometry_class"
     if geom_axis:
-        if profile is not None and profile.is_generic:
+        if profile is not None and profile.own_constants:
             reasons.append(_cp_reason(
                 "geometry_axis_generic_profile", False,
                 "seam axis from box geometry only; generic profile has no validated geometry rule"))
@@ -1576,15 +1587,18 @@ def evaluate_cut_permission(record: dict, seam: dict, seam_direction: dict = Non
                     f"nearest corner {margin:.1f}px from the border (< {border_px:g}px)"))
         except (TypeError, ValueError, IndexError):
             pass
-    if profile is not None and profile.is_generic and status != "ok":
+    if profile is not None and profile.own_constants and status != "ok":
         reasons.append(_cp_reason(
             "generic_seam_unconfirmed", False,
             f"seam status {status}: line not confirmed by gap/darkline evidence"))
     # Any profile: without a measured height a known footprint could be a taller box.
     # Applies to the pipeline's own identification (record box_profile) and to generic;
     # records of the old format (no box_profile at all) have no height to demand.
+    hidden_known = bool(profile is not None and not profile.is_generic
+                        and profile.height_mm is not None
+                        and _support_hidden_height(record))
     if profile is not None and (profile.is_generic or isinstance(record.get("box_profile"), dict)) \
-            and _measured_height_mm(record) is None:
+            and _measured_height_mm(record) is None and not hidden_known:
         reasons.append(_cp_reason("height_unavailable", False,
                                   "no measured box height (a taller box of the same footprint "
                                   "cannot be excluded)"))
@@ -1595,7 +1609,8 @@ def evaluate_cut_permission(record: dict, seam: dict, seam_direction: dict = Non
     # the measured height); a corner-fallback class says nothing beyond size.
     final_dev = (_final_top_dims_dev_mm(record, profile)
                  if isinstance(record.get("box_profile"), dict) else None)
-    if final_dev is not None and final_dev > CUT_MAX_TOP_DIMS_DEV_MM:
+    if final_dev is not None and final_dev > max(CUT_MAX_TOP_DIMS_DEV_MM,
+                                                 float(profile.dims_tol_mm)):
         # Known box (legacy class / measured height) but the FINAL top-face quad
         # (after the depth-edge fix / R9) is far from its top dims: the quad is
         # wrong (e.g. a 101 x 33 mm tape band instead of the 110 x 98 mm top).
@@ -1850,7 +1865,7 @@ SEAM_DIRECTION_CALIB = "/home/farhan/.ros2/easy_handeye2/calibrations/rebel_hand
 _CAM_TO_BASE_CACHE = {}
 
 
-def _camera_to_base_matrix(calib_file=None, manifest=None):
+def _camera_to_base_matrix(calib_file=None, manifest=None, scene=None):
     """base_link <- camera_color_optical_frame = hand-eye calibration composed
     with the driver extrinsic (the manifest's driver_extrinsic block when it has one, else the
     recorded constant; no ROS). ``calib_file`` is the SAME file the snapshot transform uses
@@ -1868,7 +1883,11 @@ def _camera_to_base_matrix(calib_file=None, manifest=None):
             block_key = (tuple(block["translation"]), tuple(block["quaternion_xyzw"]))
         except (KeyError, TypeError):
             block = None
-    key = (calib_file, mtime, block_key)
+    fallback = scene.driver_block("fallback") if scene is not None else None
+    fb_key = None
+    if fallback is not None:
+        fb_key = (tuple(fallback["translation"]), tuple(fallback["quaternion_xyzw"]))
+    key = (calib_file, mtime, block_key, fb_key)
     if key in _CAM_TO_BASE_CACHE:
         return _CAM_TO_BASE_CACHE[key]
     matrix = None
@@ -1876,7 +1895,7 @@ def _camera_to_base_matrix(calib_file=None, manifest=None):
         from . import base_link as c2b  # noqa: PLC0415
 
         calibration = c2b.load_handeye_calibration(calib_file)
-        recorded = c2b.RECORDED_DRIVER_EXTRINSIC
+        recorded = fallback if fallback is not None else c2b.RECORDED_DRIVER_EXTRINSIC
         if block_key is not None:
             recorded = {"translation": block["translation"], "quaternion_xyzw": block["quaternion_xyzw"]}
         driver = c2b.transform_matrix(recorded["translation"], recorded["quaternion_xyzw"])
@@ -1891,7 +1910,7 @@ def _camera_to_base_matrix(calib_file=None, manifest=None):
 
 
 def compute_seam_direction(record: dict, seam, manifest: dict, camera_to_base=None,
-                           calib_file=None) -> dict:
+                           calib_file=None, scene=None) -> dict:
     """Seam direction in the camera's top-plane frame and (approximately, from
     the hand-eye calibration + recorded driver extrinsic) in base_link.
 
@@ -1899,12 +1918,17 @@ def compute_seam_direction(record: dict, seam, manifest: dict, camera_to_base=No
     top plane, e2 = n x e1. base_link angle = atan2(y, x) of the seam vector.
     ``seam_direction_outside_soft_range`` is True when the base_link axis is
     more than SEAM_DIRECTION_SOFT_RANGE_DEG from SEAM_DIRECTION_PRIOR_DEG.
-    A SOFT PRIOR ONLY: logged/flagged, never a rejection.
+    A SOFT PRIOR ONLY: logged/flagged, never a rejection. ``scene`` (a
+    ``core.scene.Scene``) supplies the prior (``live.seam_direction_prior_deg``;
+    None there = the prior is disabled: the angle is still reported, nothing is
+    flagged) and the soft range; without a scene the constants above apply.
     """
     import numpy as np  # noqa: PLC0415
 
-    out = {"available": False, "prior_deg": SEAM_DIRECTION_PRIOR_DEG,
-           "soft_range_deg": SEAM_DIRECTION_SOFT_RANGE_DEG,
+    prior_deg = SEAM_DIRECTION_PRIOR_DEG if scene is None else scene.seam_prior_deg
+    soft_deg = SEAM_DIRECTION_SOFT_RANGE_DEG if scene is None else scene.seam_soft_range_deg
+    out = {"available": False, "prior_deg": prior_deg,
+           "soft_range_deg": soft_deg,
            "seam_direction_outside_soft_range": False}
     try:
         if not seam:
@@ -1932,17 +1956,23 @@ def compute_seam_direction(record: dict, seam, manifest: dict, camera_to_base=No
         out["plane_frame_angle_deg"] = round(
             math.degrees(math.atan2(float(v @ e2), float(v @ e1))) % 180.0, 2)
         out["direction_camera"] = [round(float(c), 5) for c in v]
-        matrix = _camera_to_base_matrix(calib_file, manifest) if camera_to_base is None else camera_to_base
+        matrix = (_camera_to_base_matrix(calib_file, manifest, scene)
+                  if camera_to_base is None else camera_to_base)
         if matrix is None:
             out["base_link_angle_deg"] = None
             out["reason"] = "calibration_unavailable(plane-frame angle only)"
             return out
         vb = np.asarray(matrix, dtype=np.float64)[:3, :3] @ v
         angle = math.degrees(math.atan2(float(vb[1]), float(vb[0]))) % 180.0
-        offset = (angle - SEAM_DIRECTION_PRIOR_DEG + 90.0) % 180.0 - 90.0
-        out.update({"base_link_angle_deg": round(angle, 2), "offset_from_prior_deg": round(offset, 2),
-                    "seam_direction_outside_soft_range":
-                        bool(abs(offset) > SEAM_DIRECTION_SOFT_RANGE_DEG),
+        if prior_deg is None:
+            offset = None
+            outside = False
+        else:
+            offset = (angle - prior_deg + 90.0) % 180.0 - 90.0
+            outside = bool(abs(offset) > soft_deg)
+        out.update({"base_link_angle_deg": round(angle, 2),
+                    "offset_from_prior_deg": None if offset is None else round(offset, 2),
+                    "seam_direction_outside_soft_range": outside,
                     "base_link_source": "calib(rebel_handeye_h_v2)+recorded_driver_extrinsic",
                     "base_link_calib_file": os.path.expanduser(str(calib_file or SEAM_DIRECTION_CALIB)),
                     "note": "approximate; soft prior, flag only (never rejects)"})
@@ -2316,9 +2346,10 @@ def _parse_args(argv=None):
     parser.add_argument("--edge-tol-px", type=float, default=DEFAULT_EDGE_TOL_PX,
                         help="max seam-endpoint distance to its contract edge, "
                              "0 < tol <= 5 (default 2.0)")
-    parser.add_argument("--rect-tol-mm", type=float, default=DEFAULT_RECT_TOL_MM,
+    parser.add_argument("--rect-tol-mm", type=float, default=None,
                         help="max |difference| of opposite 3-D top-face side lengths "
-                             "(back/front, left/right), 0 < tol <= 20 mm (default 3.0); "
+                             "(back/front, left/right), 0 < tol <= 20 mm (default: the scene's "
+                             "rect_tol_mm, else 3.0); "
                              "larger -> exit 1 rectangle_inconsistent (retryable)")
     parser.add_argument("--rect-max-corner-dev-deg", type=float,
                         default=RECT_MAX_CORNER_DEV_DEG,
@@ -2339,6 +2370,10 @@ def _parse_args(argv=None):
     parser.add_argument("--calib-file", default=None,
                         help="hand-eye calibration used for the seam-direction soft prior (the same "
                              "file as the snapshot transform; default rebel_handeye_h_v2.calib)")
+    parser.add_argument("--scene-config", default=None,
+                        help="scene config (YAML path or shipped name, e.g. dual_arm_v1): depth-top "
+                             "workspace/support mode, guided-plane gate, seam-direction prior, driver "
+                             "extrinsic reference, default calib. Default: table_cell_v1 (today's values)")
     parser.add_argument("--sam3-timeout", type=int, default=300,
                         help="per-image SAM3 query timeout in seconds")
     parser.add_argument("--debug", action="store_true")
@@ -2498,9 +2533,24 @@ def run_request(args, sam3) -> dict:
         _say(f"prerequisite failure: --edge-tol-px must be in (0, {MAX_EDGE_TOL_PX:g}], "
              f"got {args.edge_tol_px!r}")
         return result
-    if not (math.isfinite(args.rect_tol_mm) and 0.0 < args.rect_tol_mm <= MAX_RECT_TOL_MM):
+    scene_arg = None            # None = the built-in table_cell_v1 (no file read, no config key)
+    calib_arg = getattr(args, "calib_file", None)
+    if getattr(args, "scene_config", None):
+        from ..core import scene as _scene  # noqa: PLC0415
+        try:
+            scene_arg = _scene.load_scene(args.scene_config)
+        except _scene.SceneError as error:
+            _say(f"prerequisite failure: scene config: {error}")
+            return result
+        if not calib_arg:
+            calib_arg = scene_arg.calib_file
+    rect_tol = getattr(args, "rect_tol_mm", None)
+    if rect_tol is None:
+        rect_tol = (scene_arg.rect_tol_mm if scene_arg is not None and scene_arg.rect_tol_mm is not None
+                    else DEFAULT_RECT_TOL_MM)
+    if not (math.isfinite(rect_tol) and 0.0 < rect_tol <= MAX_RECT_TOL_MM):
         _say(f"prerequisite failure: --rect-tol-mm must be in (0, {MAX_RECT_TOL_MM:g}], "
-             f"got {args.rect_tol_mm!r}")
+             f"got {rect_tol!r}")
         return result
     corner_dev = float(getattr(args, "rect_max_corner_dev_deg", RECT_MAX_CORNER_DEV_DEG))
     if not (math.isfinite(corner_dev) and 0.0 < corner_dev <= MAX_RECT_CORNER_DEV_DEG):
@@ -2580,7 +2630,7 @@ def run_request(args, sam3) -> dict:
 
         session.query = timed_query
         try:
-            cfg = default_config()
+            cfg = default_config(scene_arg) if scene_arg is not None else default_config()
             cfg.setdefault("sam3", {})["checkpoint_sha256"] = None
             est_cfg = cfg.get("seam_estimator") if isinstance(cfg, dict) else None
             paths = {"image": str(image_path), "pcd": str(pcd_path),
@@ -2631,7 +2681,7 @@ def run_request(args, sam3) -> dict:
                 profile=box_profile)
         timing["depth_edge"] = depth_edge.get("time_s")
         record["depth_edge"] = depth_edge
-        seam_direction = compute_seam_direction(record, seam, manifest, calib_file=getattr(args, "calib_file", None))
+        seam_direction = compute_seam_direction(record, seam, manifest, calib_file=calib_arg, scene=scene_arg)
         record["seam_direction"] = seam_direction
         try:
             write_json_atomically(record_path, record)
@@ -2644,13 +2694,13 @@ def run_request(args, sam3) -> dict:
         else:
             try:
                 record, seam, rect, rect_repair = rectangle_gate_with_repair(
-                    record, seam, manifest, float(args.rect_tol_mm), corner_dev)
+                    record, seam, manifest, float(rect_tol), corner_dev)
             except Reject as rect_error:
                 rect_repair = getattr(rect_error, "repair", None)
                 raise
             if rect_repair is not None:
                 record["rect_repair"] = rect_repair
-                seam_direction = compute_seam_direction(record, seam, manifest, calib_file=getattr(args, "calib_file", None))
+                seam_direction = compute_seam_direction(record, seam, manifest, calib_file=calib_arg, scene=scene_arg)
                 record["seam_direction"] = seam_direction
                 try:
                     write_json_atomically(record_path, record)
@@ -2665,7 +2715,7 @@ def run_request(args, sam3) -> dict:
             record, seam, seam_geometry = geometry_seam(
                 record, seam_reject, est_cfg, box_profile)
             record["seam_geometry"] = seam_geometry
-            seam_direction = compute_seam_direction(record, seam, manifest, calib_file=getattr(args, "calib_file", None))
+            seam_direction = compute_seam_direction(record, seam, manifest, calib_file=calib_arg, scene=scene_arg)
             record["seam_direction"] = seam_direction
         elif ((record.get("seam") or {}).get("estimate") or {}).get(
                 "axis_source") == "geometry_class":
@@ -2818,6 +2868,7 @@ _REQUEST_VALUE_FLAGS = {
     "rect_tol_mm": "--rect-tol-mm", "rect_max_corner_dev_deg": "--rect-max-corner-dev-deg",
     "autolabel_repo": "--autolabel-repo",
     "sam3_python": "--sam3-python", "sam3_timeout": "--sam3-timeout", "calib_file": "--calib-file",
+    "scene_config": "--scene-config",
 }
 _REQUEST_SWITCHES = {"allow_needs_review": "--allow-needs-review",
                      "allow_cut_blocked": "--allow-cut-blocked",

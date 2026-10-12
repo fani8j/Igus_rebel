@@ -154,6 +154,17 @@ V2_DEFAULTS: dict = {
         "offset_max": 0.60,
         "offset_above_check_from": 0.30,
         "support_expand_m": 0.10,
+        # Support model of the scene (config/scenes/*.yaml):
+        #   visible_table: the box stands on a table the camera sees (today);
+        #     the top must lie inside the dominant plane's footprint.
+        #   hidden_stand:  the support under the box is hidden (stand smaller
+        #     than the box): the dominant plane is the floor, the top is a large
+        #     parallel plane [offset_min, offset_max] above it; the floor
+        #     distance is NEVER the box height (measured height unavailable).
+        "support": "visible_table",
+        # record the scene depth noise (median plane RMS) in the depth
+        # estimate; read by the noise-adaptive guided-plane gate (v2.noise_adaptive)
+        "measure_noise": False,
         "front_min_angle_deg": 75.0,
         "front_max_angle_deg": 90.0,
         "front_min_inliers": 2000,
@@ -183,6 +194,24 @@ V2_DEFAULTS: dict = {
         # p95 absolute residual (mm) over ALL eroded-interior points (not
         # just RANSAC inliers) above this flags wrong_face_suspect.
         "max_plane_p95_mm": 8.0,
+        # Noise-adaptive guided-plane gate (off = the two fixed thresholds above
+        # and guided_plane.ransac_threshold_m). The scene noise is the median
+        # RMS (mm) of the large planes estimate_top fitted (5 mm RANSAC band).
+        # excess = max(0, noise - rms_floor_mm); then
+        #   band    = guided_plane.ransac_threshold_m + band_k_mm_per_mm * excess
+        #   p95 max = max_plane_p95_mm + p95_k_mm_per_mm * excess + bulge
+        # (never below today's values; bulge = bulge_mm_per_m * longest top side
+        # [m] capped at bulge_max_mm, only for tops >= bulge_min_side_m).
+        "noise_adaptive": {
+            "enabled": False,
+            "rms_floor_mm": 1.8,
+            "band_k_mm_per_mm": 4.0,
+            "max_band_mm": 8.0,
+            "p95_k_mm_per_mm": 2.0,
+            "bulge_mm_per_m": 5.0,
+            "bulge_max_mm": 2.0,
+            "bulge_min_side_m": 0.25,
+        },
         # Quad confidence cap when no independent depth check exists.
         "max_conf_no_depth_check": 0.50,
         # Confidence weights: concept, edge, plane-support, iou.
@@ -282,8 +311,10 @@ V2_DEFAULTS: dict = {
 CORNER_ORDER = ("back_left", "back_right", "front_right", "front_left")
 
 
-def default_config() -> dict:
-    """Return a deep copy of the v2 defaults.
+def default_config(scene=None) -> dict:
+    """Return a deep copy of the v2 defaults (``scene``: a
+    :class:`scene.Scene` whose overrides are merged in; None = the defaults,
+    which are the ``table_cell_v1`` scene).
 
     ``AUTOLABEL_V2_RELIABILITY_OFF=1`` in the environment switches the
     R2/R3/R5 reliability fixes off (A/B replays and rollback; the old path)."""
@@ -291,4 +322,6 @@ def default_config() -> dict:
     if os.environ.get("AUTOLABEL_V2_RELIABILITY_OFF") == "1":
         for k in ("r2_enabled", "r3_enabled", "r5_enabled"):
             cfg["reliability"][k] = False
+    if scene is not None:
+        scene.apply(cfg)
     return cfg

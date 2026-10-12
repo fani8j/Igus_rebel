@@ -87,6 +87,7 @@ class DetectNode(Node):
         "sam3_daemon": "auto", "downstream_inprocess": True, "calib_file": DEFAULT_CALIB,
         "driver_extrinsic": "recorded", "target_frame": "base_link", "side_seed": True,
         "output_root": DEFAULT_OUTPUT_ROOT, "snapshot_path": DEFAULT_SNAPSHOT,
+        "scene_config": "",     # "" = table_cell_v1 (today's values); path or shipped name e.g. dual_arm_v1
     }
 
     def __init__(self, *, orchestrator=None, node_name: str = "box_seam_detector", **kwargs):
@@ -202,6 +203,12 @@ class DetectNode(Node):
         orch = self._orch()
         vals = {k: self._gp(k) for k in self.DETECT_PARAMS}
         vals["rect_tol_mm"] = None if float(vals["rect_tol_mm"]) < 0 else float(vals["rect_tol_mm"])
+        scene = str(vals.get("scene_config") or "").strip()
+        vals["scene_config"] = scene or None
+        if scene and str(vals["calib_file"]) == str(DEFAULT_CALIB):
+            # the scene's calib file is the default when the calib_file parameter is left alone
+            from ..core import scene as _scene  # noqa: PLC0415
+            vals["calib_file"] = _scene.load_scene(scene).calib_file
         vals["output_root"] = self.output_root
         vals["snapshot_path"] = self.snapshot_path  # None = no publish
         if goal is not None:

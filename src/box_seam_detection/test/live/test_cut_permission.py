@@ -363,3 +363,35 @@ def test_orchestrator_cut_permission_signature_for_smart_retry():
     assert orch.cut_permission_signature(rej("a", stage="rectangle")) is None
     assert orch.cut_permission_signature(rej()) is None
     assert orch.cut_permission_signature(None) is None
+
+
+# ---- support_hidden (dual-arm scene): known profile keeps its height --------------
+
+def _hidden_rec(name):
+    rec = live._record()
+    rec["box_profile"] = {"name": name, "measured_height_mm": None,
+                          "height_unavailable": "support_hidden", "flags": []}
+    return rec
+
+
+def test_support_hidden_does_not_block_a_known_profile(det):
+    prof = det.box_profiles.PROFILES["large_392"]
+    rec = _hidden_rec("large_392")
+    rec["seam"]["status"] = "ok"
+    perm = _perm(det, rec, profile=prof)
+    assert "height_unavailable" not in _codes(perm)
+
+
+def test_support_hidden_still_blocks_generic_and_plain_missing_height(det):
+    rec = _hidden_rec("generic")
+    assert "height_unavailable" in _codes(_perm(det, rec, profile=_generic(det)))
+    rec = _hidden_rec("large_392")
+    rec["box_profile"]["height_unavailable"] = "no_table_plane"      # a real failure
+    assert "height_unavailable" in _codes(_perm(det, rec, profile=det.box_profiles.PROFILES["large_392"]))
+
+
+def test_large_profile_needs_a_confirmed_seam(det):
+    prof = det.box_profiles.PROFILES["large_392"]
+    rec = _hidden_rec("large_392")
+    perm = _perm(det, rec, seam={"status": "estimated"}, profile=prof)
+    assert "generic_seam_unconfirmed" in _codes(perm)

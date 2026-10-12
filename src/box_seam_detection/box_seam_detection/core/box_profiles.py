@@ -26,6 +26,7 @@ import os
 from dataclasses import dataclass, field
 
 LEGACY_BIG_LONG_SIDE_M = 0.150   # today's class split (fold_edge, seam view shift, side seed)
+LEGACY_NAMES = ("small", "big")  # the two boxes of the original table cell
 
 
 @dataclass(frozen=True)
@@ -57,6 +58,10 @@ class BoxProfile:
     #: them: bit-identical); a generic box has no validated view-shift model,
     #: so it confirms with this looser tolerance (applied via the profile only).
     confirm_max_offset_mm: float | None = 1.5
+    #: side seed: how far BELOW 0 the outer-wall offset (outer dim - measured top
+    #: dim)/2 may be (mm) before the top face counts as "bigger than the box"
+    #: (wrong box / bad corners); a smaller negative value is clamped to 0
+    wall_neg_tol_mm: float = 1.0
 
     @property
     def height_m(self) -> float | None:
@@ -66,6 +71,23 @@ class BoxProfile:
     def is_generic(self) -> bool:
         return self.name == "generic"
 
+    @property
+    def is_legacy(self) -> bool:
+        """small / big: the two original boxes whose constants are hard-wired
+        into fold_edge / seam view shift / side seed by the 150 mm class rule."""
+        return self.name in LEGACY_NAMES
+
+    @property
+    def own_constants(self) -> bool:
+        """generic or a later profile (not small/big): view shift, seam confirm
+        tolerance and fold height come from the PROFILE (or the measured
+        height), never from the legacy 150 mm class tables."""
+        return not self.is_legacy
+
+
+#: flat top (long, short) mm of the large carton as the detector measures it
+#: (guided top plane + SAM3 outline, support hidden; see the profile below)
+LARGE_TOP_DIMS_MM = (394.5, 328.6)
 
 PROFILES: dict[str, BoxProfile] = {
     "small": BoxProfile(
@@ -79,6 +101,25 @@ PROFILES: dict[str, BoxProfile] = {
         outer_dims_mm={"along_seam": None, "across_seam": None},
         view_shift_mm=0.5, seam_joins=None,
         geometry_axis_validated=False, depth_edge_validated=False),
+    # Large carton of the dual-arm cell (2026-10-12): outer 390 x 320 x 480 mm,
+    # brown with a centred tape; the flap gap runs parallel to the LONG (390)
+    # side. It stands on a stand smaller than the box, so its height can never
+    # be measured against the support (support_hidden): the profile height is
+    # used. Nothing about it is validated yet: seam_joins unknown (R10 never),
+    # no depth-edge fix, no apparent view shift, generic-like seam confirm
+    # tolerance. dims_tol 15 mm (vs 8): the flat-top dims were measured on ONE
+    # capture, 1.2 m away at ~2.7 mm depth noise, with a +-2 mm lid bulge;
+    # tighten once ~20 captures are in.
+    "large_392": BoxProfile(
+        name="large_392", top_dims_mm=LARGE_TOP_DIMS_MM, height_mm=480.0,
+        outer_dims_mm={"along_seam": 390.0, "across_seam": 320.0},
+        view_shift_mm=0.0, seam_joins=None,
+        geometry_axis_validated=False, depth_edge_validated=False,
+        dims_tol_mm=15.0, confirm_max_offset_mm=4.0,
+        # the measured flat top (394.5 x 328.6 mm) is BIGGER than the outer box
+        # (390 x 320): the depth plane of this cell is tilted 2-4 deg, which
+        # inflates the 3-D dims by up to ~9 mm; clamp (not reject) up to this
+        wall_neg_tol_mm=10.0),
     "generic": BoxProfile(name="generic", top_dims_mm=None, height_mm=None,
                           confirm_max_offset_mm=4.0),
 }
@@ -210,8 +251,11 @@ HEIGHT_MISMATCH_MM = 5.0
 
 def known_height_distance_mm(height_mm: float) -> float:
     """Distance (mm) from ``height_mm`` to the nearest known profile height."""
+    # legacy boxes only: later profiles (large_392) cannot be height-measured
+    # in their own scene (support hidden) and must not change today's
+    # generic-height decision of the original cell
     hs = [p.height_mm for p in active_profiles().values()
-          if p.height_mm is not None]
+          if p.height_mm is not None and p.is_legacy]
     if not hs:
         return float("inf")
     return min(abs(float(height_mm) - h) for h in hs)
@@ -250,6 +294,11 @@ def resolve(long_m: float, short_m: float, height_mm: float | None = None
         # no near-miss / height-match rescue
         eff = PROFILES["generic"]
         info["reason"] = "legacy_class_excluded"
+    elif not matched.is_generic and not matched.is_legacy:
+        # a later profile (e.g. large_392): matched by its own top dims (and
+        # height when one is measured); the 150 mm legacy class says nothing
+        eff = matched
+        info["reason"] = "matched"
     elif not matched.is_generic:
         eff = legacy
         info["reason"] = "matched"

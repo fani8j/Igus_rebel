@@ -140,3 +140,22 @@ BOX_SEAM_E2E=1 BOX_SEAM_E2E_SCRATCH=/some/scratch/dir \
   (`hardware_protocol:=mock_hardware`, `run_box_h_cut_executor:=true`, camera static TFs from HANDOFF.md), then
   `ros2 param set /box_h_cut_executor external_snapshot_file <scratch>/snap.json` (fresh stamp, max age 240 s) and
   call `/box_h_cut_executor/plan_h_cut`. Keep `execution_enabled` false.
+
+## Scene configs (`config/scenes/*.yaml`, `--scene-config`, node parameter `scene_config`)
+
+A scene bundles the camera/cell-specific constants (core/scene.py): depth-top workspace + support mode, guided-plane
+(wrong-face) gate, reliability overrides, default calib file, driver-extrinsic reference/fallback, seam-direction prior,
+rectangle-gate tolerance. `table_cell_v1` = today's values and the default (built in, no file read: bit-identical);
+`dual_arm_v1` = dual-arm cell (box on a stand smaller than the box, floor visible, 1.0-1.3 m, ~2.7 mm depth noise,
+left-arm calib `dualcal_20261009_left_single`, NOT verified by touches).
+
+- `support: hidden_stand`: the dominant plane is the floor; the top is a large plane parallel to it, `offset_min..offset_max`
+  above, inside the floor's footprint. A desk at the same height is indistinguishable by depth: `depth_ambiguous_top` is
+  resolved by the SAM3 candidate's ROI (floor passed as `support_hint`). The floor distance is never a box height:
+  `box_profile.height_unavailable = "support_hidden"`; a KNOWN profile (large_392) then uses its own height (fold, side
+  seed) and is not cut-blocked for it; generic still is.
+- `v2.noise_adaptive`: guided-plane band and p95 limit grow with the measured scene noise (median RMS of the fitted planes)
+  above `rms_floor_mm`, plus a bounded lid-bulge allowance; never below today's values.
+- `live.driver_extrinsic.reference: null` = no verified reference for the camera (manifest block used with a warning);
+  `fallback` = value composed for a `recorded` run without a manifest block (tagged `recorded_constant_assumed`).
+- `large_392` profile (39 x 32 x 48 cm carton): see core/box_profiles.py.

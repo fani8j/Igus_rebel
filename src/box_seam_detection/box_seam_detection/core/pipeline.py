@@ -233,8 +233,14 @@ def _depth_top_roi(quad: np.ndarray, W: int, H: int, cfg: dict,
     sel = ((uv[:, 0] >= roi[0]) & (uv[:, 0] < roi[2])
            & (uv[:, 1] >= roi[1]) & (uv[:, 1] < roi[3]))
     sub = np.asarray(xyz, dtype=np.float64)[idx[sel]]
+    kw = {}
+    if support_hidden(depth_ctx):
+        # the sub-cloud does not contain the floor: reuse the full-cloud one
+        tbl = estimate_table_plane(depth_ctx)
+        if tbl is not None:
+            kw["support_hint"] = tbl
     try:
-        est = _depth.estimate_top(sub, cam, (H, W), cfg["depth_top"])
+        est = _depth.estimate_top(sub, cam, (H, W), cfg["depth_top"], **kw)
     except Exception:  # noqa: BLE001 — retry failure == unavailable
         return None, roi
     return est, roi
@@ -280,6 +286,25 @@ TRIM_MAX_PLANES = 3          # sequential RANSAC planes inside the quad
 
 def _dcfg_of(depth_ctx: dict) -> dict:
     return depth_ctx.get("dcfg") or default_config()["depth_top"]
+
+
+def support_hidden(depth_ctx: dict | None) -> bool:
+    """True when the scene's support model is ``hidden_stand`` (the "table"
+    plane of ``depth_ctx`` is then the FLOOR: heights above it are stand + box,
+    never the box height)."""
+    if not depth_ctx:
+        return False
+    return str((_dcfg_of(depth_ctx) or {}).get("support",
+                                               "visible_table")) == "hidden_stand"
+
+
+def _apply_scene_limits(depth_ctx: dict | None) -> None:
+    """hidden_stand: floor-relative plane heights run up to ``offset_max`` (the
+    scene's stand + box range) instead of the table-cell box limits."""
+    if depth_ctx is not None and support_hidden(depth_ctx):
+        lim = float(_dcfg_of(depth_ctx)["offset_max"]) * 1000.0
+        depth_ctx["box_h_max_mm"] = lim
+        depth_ctx["box_h_scope_max_mm"] = lim
 
 
 def estimate_table_plane(depth_ctx: dict) -> dict | None:
@@ -344,7 +369,8 @@ class _h_max_scope:
     def __enter__(self):
         if self.ctx is not None:
             self.prev = self.ctx.get("box_h_max_mm")
-            self.ctx["box_h_max_mm"] = BOX_H_MAX_MM
+            self.ctx["box_h_max_mm"] = float(self.ctx.get(
+                "box_h_scope_max_mm", BOX_H_MAX_MM))
         return self
 
     def __exit__(self, *exc):
@@ -384,6 +410,11 @@ def measure_box_height(depth_ctx: dict | None, plane, corners_xyz,
     try:
         if not depth_ctx:
             out["height_unavailable"] = "no_depth"
+            return out
+        if support_hidden(depth_ctx):
+            # the plane below the box is the floor under a stand that hides the
+            # real support: its distance is stand + box, never the box height
+            out["height_unavailable"] = "support_hidden"
             return out
         table = estimate_table_plane(depth_ctx)
         if table is None:
@@ -905,6 +936,62 @@ def independent_top_confirm(quad: np.ndarray, depth_ctx: dict | None,
     return out
 
 
+def noise_adaptive_gate(cfg: dict, depth_est) -> dict:
+    """Guided-plane gate thresholds for this scene's depth noise.
+
+    Disabled (``v2.noise_adaptive.enabled`` false): today's fixed values
+    (``guided_plane.ransac_threshold_m`` band, ``v2.max_plane_p95_mm``).
+    Enabled: ``noise_mm`` = median RMS of the planes ``estimate_top`` fitted
+    (``depth.noise_mm``); ``excess = max(0, noise - rms_floor_mm)``; the
+    inlier band grows by ``band_k_mm_per_mm * excess`` (capped at
+    ``max_band_mm``) and the p95 limit by ``p95_k_mm_per_mm * excess``; both
+    are never below today's values, so a scene at or below the floor noise
+    (the table cell: 0.7-1.6 mm) keeps exactly the fixed thresholds. No noise
+    estimate (depth failed early) -> fixed thresholds. Returns the band (mm),
+    p95 limit (mm) and the bulge parameters."""
+    v2cfg, gcfg = cfg["v2"], cfg["guided_plane"]
+    na = v2cfg.get("noise_adaptive") or {}
+    gate: dict = {"enabled": bool(na.get("enabled")), "noise_mm": None,
+                  "excess_mm": 0.0, "scaled": False,
+                  "band_mm": float(gcfg["ransac_threshold_m"]) * 1000.0,
+                  "p95_limit_mm": float(v2cfg["max_plane_p95_mm"]),
+                  "bulge_mm": 0.0}
+    if not gate["enabled"]:
+        return gate
+    noise = ((depth_est or {}).get("depth") or {}).get("noise_mm")
+    try:
+        noise = float(noise)
+    except (TypeError, ValueError):
+        noise = float("nan")
+    if not np.isfinite(noise):
+        gate["reason"] = "no_noise_estimate"
+        return gate
+    excess = max(0.0, noise - float(na["rms_floor_mm"]))
+    gate["noise_mm"] = round(noise, 2)
+    gate["excess_mm"] = round(excess, 2)
+    if excess > 0.0:
+        gate["band_mm"] = min(max(gate["band_mm"], float(na["max_band_mm"])),
+                              gate["band_mm"] + float(na["band_k_mm_per_mm"]) * excess)
+        gate["p95_limit_mm"] += float(na["p95_k_mm_per_mm"]) * excess
+        gate["scaled"] = True
+    return gate
+
+
+def _bulge_allowance_mm(cfg: dict, corners_xyz) -> float:
+    """p95 allowance (mm) for the lid bulge of a LARGE top face (a big flap
+    lid sags/bulges ~+-2 mm): ``bulge_mm_per_m`` x longest side, capped at
+    ``bulge_max_mm``, only for sides >= ``bulge_min_side_m``."""
+    na = (cfg["v2"].get("noise_adaptive") or {})
+    try:
+        c = np.asarray(corners_xyz, dtype=np.float64).reshape(4, 3)
+        side = max(float(np.linalg.norm(c[(i + 1) % 4] - c[i])) for i in range(4))
+    except (TypeError, ValueError):
+        return 0.0
+    if not np.isfinite(side) or side < float(na["bulge_min_side_m"]):
+        return 0.0
+    return float(min(float(na["bulge_max_mm"]), float(na["bulge_mm_per_m"]) * side))
+
+
 def check_depth_cross(quad: np.ndarray, manifest: dict, depth_est, depth_err,
                       W: int, H: int, cfg: dict, depth_ctx: dict | None = None
                       ) -> tuple[dict, dict | None]:
@@ -928,11 +1015,29 @@ def check_depth_cross(quad: np.ndarray, manifest: dict, depth_est, depth_err,
     from .pbd import sam3_depth_fusion as _fusion
 
     v2cfg = cfg["v2"]
+    gate = noise_adaptive_gate(cfg, depth_est)
     reasons: list[str] = []
     out: dict = {"iou": None, "wrong_face": False, "plane": None,
                  "plane_rms_mm": None, "plane_inliers": None,
                  "plane_inlier_ratio": None, "plane_p95_all_mm": None,
                  "corners_xyz": None, "depth_quad": None}
+    ambiguous_retry = None
+    if (depth_ctx is not None and support_hidden(depth_ctx)
+            and depth_est is not None and not depth_est.get("ok")
+            and depth_est.get("reason") == "depth_ambiguous_top"):
+        # hidden_stand: two parallel planes above the floor (this box top and
+        # e.g. a desk) cannot be told apart by depth alone; the candidate's own
+        # ROI decides (the floor is passed in as the support plane).
+        est_a, roi_a = _depth_top_roi(quad, W, H, cfg, depth_ctx)
+        ambiguous_retry = {"used": True, "after": "depth_ambiguous_top",
+                           "roi": roi_a,
+                           "result": "ok" if (est_a is not None
+                                              and est_a.get("ok")) else "failed"}
+        out["depth_top_roi_retry"] = ambiguous_retry
+        if est_a is not None and est_a.get("ok"):
+            depth_est = est_a
+        else:
+            reasons.append("depth_top_ambiguous_unresolved")
     if depth_est is not None and depth_est.get("ok"):
         dquad_tltr = np.asarray(depth_est["quad"], dtype=np.float64).reshape(4, 2)
         dquad = _coarse.depth_quad_to_named(dquad_tltr)
@@ -975,7 +1080,9 @@ def check_depth_cross(quad: np.ndarray, manifest: dict, depth_est, depth_err,
         gplane = _fusion.fit_sam3_guided_depth_plane(
             manifest, quad,
             erosion_px=int(gcfg["erosion_px"]),
-            ransac_threshold_m=float(gcfg["ransac_threshold_m"]),
+            ransac_threshold_m=(float(gcfg["ransac_threshold_m"])
+                                if not gate["scaled"]
+                                else gate["band_mm"] / 1000.0),
             min_inliers=int(gcfg["min_inliers"]))
     except ValueError as exc:
         reasons.append(f"guided_plane_invalid_param({exc})")
@@ -993,12 +1100,19 @@ def check_depth_cross(quad: np.ndarray, manifest: dict, depth_est, depth_err,
         out["plane_p95_all_mm"] = p95_all
         out["corners_xyz"] = np.asarray(gplane.camera_corners_xyz,
                                         dtype=np.float64)
+        p95_limit = float(v2cfg["max_plane_p95_mm"])
+        if gate["enabled"]:
+            gate["bulge_mm"] = round(_bulge_allowance_mm(
+                cfg, out["corners_xyz"]), 2)
+            p95_limit = gate["p95_limit_mm"] + gate["bulge_mm"]
+            gate["p95_limit_total_mm"] = round(p95_limit, 2)
+            out["plane_gate"] = gate
         if (ratio is not None and np.isfinite(ratio)
                 and ratio < float(v2cfg["min_plane_inlier_ratio"])):
             out["wrong_face"] = True
             reasons.append(f"low_plane_inlier_ratio({ratio:.2f})")
         if (p95_all is not None and np.isfinite(p95_all)
-                and p95_all > float(v2cfg["max_plane_p95_mm"])):
+                and p95_all > p95_limit):
             out["wrong_face"] = True
             reasons.append(f"high_plane_p95({p95_all:.1f}mm)")
     elif gplane is not None:
@@ -1155,12 +1269,12 @@ def apply_corner_fold(bgr: np.ndarray, quad: np.ndarray, manifest,
         return quad, corners_xyz, info
     heights = fcfg.get("box_height_m") or _fold.BOX_HEIGHT_M
     height = heights.get(cls)
-    if profile is not None and profile.is_generic:
-        cls = "generic"
+    if profile is not None and profile.own_constants:
+        cls = profile.name
         height = measured_height_m
         info.update({"box_class": cls, "height_m": height})
         if height is None:
-            info["reason"] = "no_height_generic"
+            info["reason"] = f"no_height_{cls}"
             return quad, corners_xyz, info
     info.update({"box_class": cls, "height_m": height})
     try:
@@ -1574,6 +1688,7 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
                  if (xyz is not None and cam is not None) else None)
     if depth_ctx is not None:
         depth_ctx.update(box["res"]["extra"])
+        _apply_scene_limits(depth_ctx)
     winner = None
 
     rcfg = _rel_cfg(cfg)
@@ -1775,6 +1890,8 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
             entry["depth_top_roi_retry"] = cross["depth_top_roi_retry"]
         entry["plane_inlier_ratio"] = cross.get("plane_inlier_ratio")
         entry["plane_p95_all_mm"] = cross.get("plane_p95_all_mm")
+        if cross.get("plane_gate") is not None:
+            entry["plane_gate"] = cross["plane_gate"]
         entry["wrong_face"] = bool(cross.get("wrong_face"))
         if cross.get("wrong_face"):
             entry.update({"status": "depth_cross_rejected",
@@ -1985,9 +2102,16 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
         depth_ctx, plane, corners_xyz, plane_rms_mm, plane_inliers)
     box_prof, box_profile_rec = resolve_box_profile(corners_xyz, height_rec)
     generic = bool(box_prof is not None and box_prof.is_generic)
+    # generic and later profiles (large_392) take their height from the
+    # measurement, else (support hidden / not measurable) from the PROFILE;
+    # small/big keep the legacy class tables (bit-identical).
+    own = bool(box_prof is not None and box_prof.own_constants)
     meas_h_m = (None if height_rec.get("measured_height_mm") is None
                 else float(height_rec["measured_height_mm"]) / 1000.0)
-    guard_ref_h = (meas_h_m if (generic and meas_h_m is not None)
+    fold_h_m = meas_h_m
+    if fold_h_m is None and own and not generic:
+        fold_h_m = box_prof.height_m
+    guard_ref_h = (fold_h_m if (own and fold_h_m is not None)
                    else float(rcfg["r2_ref_height_m"]))
     fold_info = None
     if (cfg.get("corner_fold") or {}).get("enabled"):
@@ -2004,8 +2128,8 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
         quad, corners_xyz, fold_info = apply_corner_fold(
             bgr, quad, manifest, plane, corners_xyz, cfg["corner_fold"],
             outward_limit_px=guard_px,
-            profile=box_prof if generic else None,
-            measured_height_m=meas_h_m)
+            profile=box_prof if own else None,
+            measured_height_m=fold_h_m)
         if guard_px is not None:
             fold_info["outward_guard"] = {"limit_px": guard_px,
                                           "geometry": guard_geom}
@@ -2056,7 +2180,7 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
             and depth_ctx is not None
             and (needs_review or rcfg.get("r5_always_compute"))):
         with _h_max_scope(depth_ctx, bool(
-                generic or (meas_h_m is not None
+                own or (meas_h_m is not None
                             and meas_h_m * 1000.0 > BOX_H_TALL_MM))):
             r5_info = independent_top_confirm(quad, depth_ctx, W, H, rcfg)
         rect_fitted = bool(coarse_prov.get("r2_trim")

@@ -325,17 +325,33 @@ def driver_extrinsic_from_manifest(manifest_path, expected_parent, expected_chil
 DRIVER_EXTRINSIC_POLICIES = ("refuse", "warn", "use_manifest")
 
 
-def compare_driver_block_to_constant(driver_block):
+def compare_driver_block_to_constant(driver_block, reference=None):
     """(translation diff m, rotation diff deg) between a manifest driver_extrinsic block and the
-    recorded constant (rotation compared as rotations, so q and -q agree)."""
-    rec = RECORDED_DRIVER_EXTRINSIC
+    reference constant (default the recorded constant; rotation compared as rotations, so q and -q
+    agree)."""
+    rec = RECORDED_DRIVER_EXTRINSIC if reference is None else reference
     return transform_difference(
         transform_matrix(rec["translation"], rec["quaternion_xyzw"]),
         transform_matrix(driver_block["translation"], driver_block["quaternion_xyzw"]))
 
 
-def driver_extrinsic_check(driver_block, policy="refuse"):
+_NO_SCENE = object()
+
+
+def scene_driver_blocks(scene):
+    """(reference, fallback) driver extrinsic blocks of a scene
+    (``core.scene.Scene``); None = the recorded constant for both (today)."""
+    if scene is None:
+        return RECORDED_DRIVER_EXTRINSIC, RECORDED_DRIVER_EXTRINSIC
+    return scene.driver_block("reference"), scene.driver_block("fallback")
+
+
+def driver_extrinsic_check(driver_block, policy="refuse", reference=_NO_SCENE):
     """Decide what to do with a manifest driver_extrinsic block.
+
+    ``reference``: the block the manifest block is compared with (default the recorded constant).
+    ``None`` (scene without a verified reference for this camera) -> nothing to compare: the manifest
+    block is used as is, with a WARNING (never refused), ``info["reference"] is None``.
 
     Returns the comparison dict {translation_diff_m, rotation_diff_deg, tolerance_m, tolerance_deg,
     exceeds_tolerance, policy, used}. Raises ValueError("driver_extrinsic_mismatch(...)") when the block
@@ -343,7 +359,15 @@ def driver_extrinsic_check(driver_block, policy="refuse"):
     ``warn`` and ``use_manifest`` use the manifest block (``warn`` also logs)."""
     if policy not in DRIVER_EXTRINSIC_POLICIES:
         raise ValueError(f"unknown driver_extrinsic_policy {policy!r}")
-    dt, dr = compare_driver_block_to_constant(driver_block)
+    if reference is None:
+        info = {"reference": None, "exceeds_tolerance": None, "policy": policy, "used": "manifest",
+                "note": "scene has no verified driver extrinsic reference; manifest block used unchecked"}
+        print("WARNING: no driver extrinsic reference for this scene - the capture manifest's "
+              "driver_extrinsic block is used unchecked", file=sys.stderr)
+        return info
+    if reference is _NO_SCENE:
+        reference = None
+    dt, dr = compare_driver_block_to_constant(driver_block, reference)
     exceeds = dt > LIVE_TF_MISMATCH_TRANSLATION_M or dr > LIVE_TF_MISMATCH_ROTATION_DEG
     info = {"translation_diff_m": dt, "rotation_diff_deg": dr,
             "tolerance_m": LIVE_TF_MISMATCH_TRANSLATION_M, "tolerance_deg": LIVE_TF_MISMATCH_ROTATION_DEG,
@@ -361,7 +385,7 @@ def driver_extrinsic_check(driver_block, policy="refuse"):
 
 def resolve_camera_to_base(calib_file, driver_extrinsic, target_frame, source_frame, stamp_ns,
                            timeout_sec=5.0, tf_provider=None, log=None, driver_block=None,
-                           driver_policy="refuse"):
+                           driver_policy="refuse", scene=None):
     """Compose target_frame <- source_frame = T_calib @ T_driver.
 
     driver_extrinsic: "tf" (live lookup tracking_frame <- source_frame through
@@ -371,6 +395,7 @@ def resolve_camera_to_base(calib_file, driver_extrinsic, target_frame, source_fr
     seam_base_geometry/v1["transform"].
     """
     log = log or (lambda message: print(message, file=sys.stderr))
+    reference, fallback = scene_driver_blocks(scene)
     calibration = load_handeye_calibration(calib_file)
     if calibration["robot_base_frame"] != target_frame:
         raise ValueError(
@@ -379,22 +404,27 @@ def resolve_camera_to_base(calib_file, driver_extrinsic, target_frame, source_fr
     live_full = None
     driver_comparison = None
     if driver_extrinsic == "recorded":
-        recorded = driver_block if driver_block is not None else RECORDED_DRIVER_EXTRINSIC
+        recorded = driver_block if driver_block is not None else fallback
         if driver_block is not None:
-            driver_comparison = driver_extrinsic_check(driver_block, driver_policy)   # may refuse
+            driver_comparison = driver_extrinsic_check(driver_block, driver_policy,
+                                                       reference=reference)   # may refuse
         if recorded["parent_frame"] != tracking_frame or recorded["child_frame"] != source_frame:
             raise ValueError(
                 f"recorded driver extrinsic is {recorded['parent_frame']} <- {recorded['child_frame']}, "
                 f"need {tracking_frame} <- {source_frame}")
         driver = transform_matrix(recorded["translation"], recorded["quaternion_xyzw"])
         driver_source = "recorded"
+        if driver_block is None and scene is not None and not scene.driver_verified:
+            # a scene whose camera extrinsic was never verified: say so in the snapshot provenance
+            driver_source = "recorded_constant_assumed"
     elif driver_extrinsic == "tf":
         if tf_provider is None:
             raise ValueError("--driver-extrinsic tf requires a live TF provider")
         driver = tf_provider.lookup(tracking_frame, source_frame, stamp_ns, timeout_sec)
         driver_source = "tf_live"
-        recorded = RECORDED_DRIVER_EXTRINSIC
-        if recorded["parent_frame"] == tracking_frame and recorded["child_frame"] == source_frame:
+        recorded = reference
+        if (recorded is not None and recorded["parent_frame"] == tracking_frame
+                and recorded["child_frame"] == source_frame):
             dt, dr = transform_difference(
                 driver, transform_matrix(recorded["translation"], recorded["quaternion_xyzw"]))
             if dt > LIVE_TF_MISMATCH_TRANSLATION_M or dr > LIVE_TF_MISMATCH_ROTATION_DEG:
@@ -598,6 +628,9 @@ def main(argv=None):
              "(default) when it differs from the recorded constant by > 1 mm / 0.1 deg, warn = use the "
              "manifest block and log, use_manifest = use it silently",
     )
+    parser.add_argument("--scene-config", default=None,
+                        help="scene config (path or shipped name): driver extrinsic reference/fallback; "
+                             "default table_cell_v1 = the recorded constant")
     parser.add_argument("--output-json", help="Optional transformed base-frame geometry JSON")
     parser.add_argument(
         "--planner-output-json",
@@ -624,7 +657,14 @@ def main(argv=None):
         sys.exit(1)
 
     tf_provider = None
+    scene = None
     try:
+        if args.scene_config:
+            from ..core import scene as _scene  # noqa: PLC0415
+            try:
+                scene = _scene.load_scene(args.scene_config)
+            except _scene.SceneError as error:
+                raise ValueError(f"scene config: {error}") from error
         if args.driver_extrinsic == "tf":
             tf_provider = LiveTf()
         driver_block = None
@@ -636,6 +676,7 @@ def main(argv=None):
             args.calib_file, args.driver_extrinsic, args.target_frame, source_frame,
             capture["image_stamp_ns"], timeout_sec=args.timeout, tf_provider=tf_provider,
             driver_block=driver_block, driver_policy=args.driver_extrinsic_policy,
+            scene=scene,
         )
         results, target_normal = transform_results(source_results, source_frame, args.target_frame,
                                                    matrix, camera_normal)

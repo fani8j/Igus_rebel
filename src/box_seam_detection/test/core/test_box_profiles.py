@@ -58,8 +58,11 @@ def test_classify_known_unordered_and_generic():
     assert bp.classify(110, 98)[0].name == "small"
     assert bp.classify(98, 110)[0].name == "small"
     assert bp.classify(193, 105, 134.25)[0].name == "big"
-    p, info = bp.classify(390, 320, 480)
+    p, info = bp.classify(300, 240, 360)
     assert p.is_generic and info["reason"] == "no_profile_within_tolerance"
+    # the large carton of the dual-arm cell (39 x 32 x 48 cm) is a known profile
+    assert bp.classify(390, 320, 480)[0].name == "large_392"
+    assert bp.classify(320, 390)[0].name == "large_392"            # unordered, no height
     # right top, wrong height -> not that profile
     assert bp.classify(110, 98, 150)[0].is_generic
 
@@ -92,7 +95,7 @@ def test_resolve_known_height_with_badly_wrong_top_keeps_legacy():
 
 
 def test_resolve_truly_generic():
-    prof, info = bp.resolve(0.39, 0.32, 480.0)
+    prof, info = bp.resolve(0.30, 0.24, 360.0)
     assert prof.is_generic and info["legacy_class"] == "big"
     assert not prof.geometry_axis_validated and not prof.depth_edge_validated
     # same top as the small box but 300 mm tall is not the small box
@@ -107,7 +110,7 @@ def test_resolve_box_profile_record_and_flags():
     prof, rec = P.resolve_box_profile(_xyz(111.0, 98.0), h)
     assert prof.name == "small" and "height_mismatch" in rec["flags"]
     assert rec["depth_edge_validated"] and rec["geometry_axis_validated"]
-    prof, rec = P.resolve_box_profile(_xyz(390, 320), {"measured_height_mm": 480.0})
+    prof, rec = P.resolve_box_profile(_xyz(300, 240), {"measured_height_mm": 360.0})
     assert prof.is_generic and rec["name"] == "generic"
     assert rec["legacy_class"] == "big" and not rec["depth_edge_validated"]
     assert P.resolve_box_profile(None, None) == (None, None)

@@ -1,0 +1,37 @@
+# Scene table_cell_v1: the original single-arm table cell (camera ~0.8 m above a VISIBLE table,
+# small/big boxes). These are exactly the built-in defaults of box_seam_detection (core/scene.py
+# TABLE_CELL_V1 and core/config.py V2_DEFAULTS); the unit test test_scene.py keeps the three equal.
+# Running without --scene-config is this scene (no file is read).
+scene: table_cell_v1
+description: "single-arm table cell: camera ~0.8 m, box on a visible table (today's values)"
+calib_file: ~/.ros2/easy_handeye2/calibrations/rebel_handeye_h_v2.calib
+
+depth_top:                     # core/autolabel/depth_top.py (camera frame, z forward)
+  ws_x_min: -1.2
+  ws_x_max: 1.2
+  ws_y_min: -0.8
+  ws_y_max: 0.8
+  ws_z_min: 0.2
+  ws_z_max: 2.0
+  offset_min: 0.05             # top plane height above the table, m
+  offset_max: 0.60
+  support: visible_table       # the top must lie inside the visible table's footprint
+  support_expand_m: 0.10
+
+guided_plane:
+  ransac_threshold_m: 0.003    # inlier band of the SAM3-guided top plane
+
+v2:
+  min_plane_inlier_ratio: 0.80 # wrong_face_suspect below this share inside the band
+  max_plane_p95_mm: 8.0        # ... or above this p95 residual (mm)
+  noise_adaptive:
+    enabled: false             # fixed thresholds (bit-identical to the pre-scene behaviour)
+
+live:
+  seam_direction_prior_deg: 83.0     # observed seam direction in THIS cell's base_link (soft prior)
+  seam_direction_soft_range_deg: 45.0
+  rect_tol_mm: null                  # detector default 3.0 mm
+  driver_extrinsic:
+    reference: recorded_constant     # live.base_link.RECORDED_DRIVER_EXTRINSIC (Orbbec, this camera)
+    fallback: recorded_constant      # used when a `recorded` run has no manifest block
+    verified: true

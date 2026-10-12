@@ -357,6 +357,7 @@ def compute_seed(snapshot, box_height_mm=None, box_class="auto",
     flags = []
     wall_errors = []   # raised after the geometry checks (a bad quad is the root cause)
     lo_off, hi_off = WALL_OFFSET_RANGE_M
+    neg_tol = float(getattr(profile, "wall_neg_tol_mm", 1.0)) / 1000.0
     for key in ("along_seam", "across_seam"):
         outer = outer_dims[key]
         if outer is None:
@@ -365,7 +366,7 @@ def compute_seed(snapshot, box_height_mm=None, box_class="auto",
                 flags.append("outer_wall_unknown")
             continue
         offset = 0.5 * (outer - measured_top[key])
-        if not (lo_off - WALL_OFFSET_NEG_TOL_M - WALL_OFFSET_EPS_M <= offset <= hi_off + WALL_OFFSET_EPS_M):
+        if not (lo_off - neg_tol - WALL_OFFSET_EPS_M <= offset <= hi_off + WALL_OFFSET_EPS_M):
             hint = (" (negative: detected top face is BIGGER than the outer box -> wrong "
                     "box, wrong class or bad corners)" if offset < 0 else
                     " (detected top face far smaller than the box -> wrong class or bad "

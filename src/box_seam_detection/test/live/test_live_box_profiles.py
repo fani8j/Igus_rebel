@@ -70,7 +70,8 @@ def test_class_match_uses_the_profile_table(det):
     assert det._class_match(quad(117.9, 105.9)) == "small"
     assert det._class_match(quad(193.0, 105.0)) == "big"
     assert det._class_match(quad(120.0, 98.0)) is None
-    assert det._class_match(quad(390.0, 320.0)) is None
+    assert det._class_match(quad(300.0, 240.0)) is None
+    assert det._class_match(quad(390.0, 320.0)) == "large_392"
 
 
 # ------------------------------------------------------------ profile resolution
