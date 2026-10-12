@@ -31,6 +31,8 @@ setup(
             "box_seam_detector = box_seam_detection.live.detector:main",
             # offline autolabel runner (replaces rgbd_captures scripts/autolabel_v2/run.py)
             "box_seam_autolabel = box_seam_detection.core.run:main",
+            # hands-free capture session (saves when the box was moved and the scene is still)
+            "box_seam_auto_capture = box_seam_detection.live.auto_capture:main",
         ],
     },
 )
