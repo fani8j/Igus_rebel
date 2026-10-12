@@ -774,7 +774,8 @@ def refine_on_darkline(bgr: np.ndarray, corners, candidate: str,
                        halfwin_px: int | None = None,
                        est_cfg: dict | None = None,
                        corners_xyz=None,
-                       center_offset_rect: float = 0.0) -> tuple:
+                       center_offset_rect: float = 0.0,
+                       keep_slices: bool = False) -> tuple:
     """Fit the darkest-contrast line along the prior (user method).
 
     Stations every ~2-3 px along the middle ~80% of the prior line; at
@@ -910,6 +911,10 @@ def refine_on_darkline(bgr: np.ndarray, corners, candidate: str,
     gap_frac = float(gap / max(1, len(sup_full)))
     med_contrast = float(np.median(np.array(Ct))) if Ct else 0.0
     mm_per_px = _rect_px_to_mm(corners_xyz, axis, W, H)
+    if keep_slices:
+        info["_slice_t"] = [float(v) for v in T]
+        info["_slice_c"] = [float(v) for v in C]
+        info["_line"] = (float(m), float(b))
     info.update({"slope": round(float(m), 4),
                  "intercept_rect": round(float(b), 2),
                  "coverage": round(coverage, 3),
@@ -974,7 +979,8 @@ def refine_on_gap(bgr: np.ndarray, corners, candidate: str,
                   halfwin_px: int | None = None,
                   est_cfg: dict | None = None,
                   corners_xyz=None,
-                  center_offset_rect: float = 0.0) -> tuple:
+                  center_offset_rect: float = 0.0,
+                  keep_slices: bool = False) -> tuple:
     """Fit the flap-gap line from observations alone.
 
     The prior is used ONLY for the search window (rect row/col +/- halfwin
@@ -1089,6 +1095,11 @@ def refine_on_gap(bgr: np.ndarray, corners, candidate: str,
                 if mm_per_px is not None else None)
     max_dev = float(np.abs((m * t[inl] + b) - prior).max()) \
         if inl.sum() else float(halfwin + 1)
+    if keep_slices:
+        # lists: dropped by every JSON-facing filter of the info dict
+        info["_slice_t"] = [float(v) for v in T]
+        info["_slice_c"] = [float(v) for v in C]
+        info["_line"] = (float(m), float(b))
     info.update({"slope": round(float(m), 4),
                  "intercept_rect": round(float(b), 2),
                  "coverage": round(coverage, 3),
@@ -1537,14 +1548,22 @@ def _estimate_seam_core(bgr: np.ndarray, corners,
         if isinstance(_vcfg, dict) else True
     vshift["center_windows"] = center_windows
     win_off = shift_rect if center_windows else 0.0
+    _prof = _profiles.PROFILES.get(profile) if profile else None
+    publish_obs = bool(_prof is not None and _prof.seam_publish == "observed")
+    gap_hw = None
+    if publish_obs and mmpp is not None and mmpp > 1e-9 and np.isfinite(mmpp):
+        # the search window must cover at least +-seam_gap_window_mm around the midline
+        gap_hw = max(_gap_halfwin(W, H, est_cfg),
+                     int(np.ceil(float(_prof.seam_gap_window_mm) / float(mmpp))))
     observed, score, info = refine_on_gap(
-        bgr, corners, axis, est_cfg=est_cfg, corners_xyz=corners_xyz,
-        center_offset_rect=win_off)
+        bgr, corners, axis, halfwin_px=gap_hw, est_cfg=est_cfg,
+        corners_xyz=corners_xyz, center_offset_rect=win_off,
+        keep_slices=publish_obs)
     tape_eps, tape_score, tape_info = refine_on_tape(
         bgr, corners, axis, est_cfg=est_cfg, corners_xyz=corners_xyz)
     dark_eps, dark_score, dark_info = refine_on_darkline(
         bgr, corners, axis, est_cfg=est_cfg, corners_xyz=corners_xyz,
-        center_offset_rect=win_off)
+        center_offset_rect=win_off, keep_slices=publish_obs)
     obs = ({"seam_left": [round(float(observed[0][0]), 2),
                            round(float(observed[0][1]), 2)],
             "seam_right": [round(float(observed[1][0]), 2),
@@ -1676,6 +1695,11 @@ def _estimate_seam_core(bgr: np.ndarray, corners,
     result["agreement"] = agreement
     result["expected_shift_mm"] = est_block["expected_shift_mm"]
     result["observed_offset_mm"] = dict(est_block["observed_offset_mm"])
+    if publish_obs:
+        return _publish_observed(
+            result, est_block, _prof, M, axis, mmpp, prior_block,
+            observed, score, info, obs, dark_eps, dark_score, dark_info, dark,
+            agreement, dark_rect, target_rect, max_ang)
     if mode == "refine":
         if _mode_none:
             result.update({"refined_endpoints_px": None,
@@ -1877,6 +1901,121 @@ def _estimate_seam_core(bgr: np.ndarray, corners,
         return result
     result.update({"source": "prior_confirmed_by_gap", "status": "ok"})
     return result
+
+def gap_shape(slice_t, slice_c, line, mmpp, smooth: int = 7) -> dict | None:
+    """Shape of an observed gap against its published straight line.
+
+    ``slice_t`` / ``slice_c``: per-slice along / across rect coordinates,
+    ``line`` = (slope, intercept) of ``c = m t + b``. Residuals (mm, perpendicular,
+    + = larger rect across coordinate) are median-filtered over ``smooth`` neighbouring
+    slices (single-slice noise is not curvature); ``curvature_mm`` = max |smoothed residual|,
+    ``offset_median_mm`` / ``offset_max_mm`` = median / max |raw residual| of the points
+    against the line. None without a metric scale or points.
+    """
+    if mmpp is None or not np.isfinite(mmpp) or len(slice_t) < 4:
+        return None
+    t = np.asarray(slice_t, float)
+    c = np.asarray(slice_c, float)
+    order = np.argsort(t)
+    t, c = t[order], c[order]
+    m, b = line
+    k = float(mmpp) / float(np.sqrt(1.0 + m * m))
+    r = (c - (m * t + b)) * k
+    h = smooth // 2
+    sm = np.array([np.median(r[max(0, i - h):i + h + 1]) for i in range(len(r))])
+    return {"curvature_mm": round(float(np.max(np.abs(sm))), 3),
+            "offset_median_mm": round(float(np.median(r)), 3),
+            "offset_max_mm": round(float(np.max(np.abs(r))), 3),
+            "n_points": int(len(r))}
+
+
+def _publish_observed(result, est_block, prof, M, axis, mmpp, prior_block,
+                      observed, score, info, obs, dark_eps, dark_score,
+                      dark_info, dark, agreement, dark_rect, target_rect,
+                      max_ang) -> dict:
+    """Seam publisher of profiles with ``seam_publish == "observed"``.
+
+    Publishes the straight line fitted to the observed flap-gap valley (dark line
+    only when the gap is not found). ``ok`` needs coverage >= ``seam_min_obs_coverage``
+    of the slices, a fitted line inside the search window and within ``max_ang`` of the
+    midline (the existing gap plausibility checks - width, residual, gaps - are already
+    part of the fit); else ``estimated`` with the midline as estimate-only endpoints.
+    Records the per-slice gap points and ``seam_curvature_mm``.
+    """
+    min_cov = float(prof.seam_min_obs_coverage)
+    win = float(prof.seam_gap_window_mm)
+    dark_agreement = (_line_agreement_rect(target_rect, dark_rect, mmpp)
+                      if target_rect is not None and dark_rect is not None else None)
+    est_block["darkline_agreement"] = dark_agreement
+    result["darkline_agreement"] = dark_agreement
+
+    def _usable(eps, inf, agr):
+        if eps is None:
+            return f"{inf.get('reject') or 'no_fit'}"
+        if (inf.get("coverage") or 0) < min_cov:
+            return f"low_coverage({inf.get('coverage')}<{min_cov})"
+        if agr is None or agr.get("max_offset_mm") is None:
+            return "no_mm_scale"
+        if agr["max_offset_mm"] > win:
+            return f"outside_window({agr['max_offset_mm']}mm)"
+        if agr["angle_deg"] > max_ang:
+            return f"angle({agr['angle_deg']}deg)"
+        return None
+
+    why_gap = _usable(observed, info, agreement)
+    why_dark = _usable(dark_eps, dark_info, dark_agreement)
+    est_block["publish"] = "observed"
+    est_block["publish_gates"] = {"min_coverage": round(min_cov, 3),
+                                  "window_mm": round(win, 3),
+                                  "max_angle_deg": round(float(max_ang), 3)}
+    if why_gap is None:
+        src, eps_pub, eps_obs, sc, inf = "observed_gap", observed, obs, score, info
+    elif why_dark is None and observed is None:
+        # dark line only as the fallback when the gap valley is not found at all
+        src, eps_pub, eps_obs, sc, inf = ("observed_darkline", dark_eps, dark,
+                                          dark_score, dark_info)
+    else:
+        src = None
+    shape = None
+    if src is not None and "_slice_t" in inf:
+        shape = gap_shape(inf["_slice_t"], inf["_slice_c"], inf["_line"], mmpp)
+    if src is None:
+        # report the shape of whatever line was fitted (audit), publish the midline unconfirmed
+        if observed is not None and "_slice_t" in info:
+            shape = gap_shape(info["_slice_t"], info["_slice_c"], info["_line"], mmpp)
+        est_block["estimate_endpoints_px"] = dict(prior_block)
+        est_block["seam_curvature_mm"] = (shape or {}).get("curvature_mm")
+        est_block["gap_shape"] = shape
+        result["seam_curvature_mm"] = est_block["seam_curvature_mm"]
+        result["estimate"] = dict(est_block)
+        result["confirm_reject"] = f"observed_unusable(gap:{why_gap};darkline:{why_dark})"
+        result["refined_endpoints_px"] = None
+        result["refine_score"] = 0.0
+        result.update({"source": "prior", "status": "estimated"})
+        return result
+    est_block["estimate_endpoints_px"] = {k: list(v) for k, v in eps_obs.items()}
+    est_block["published_line"] = src
+    est_block["seam_curvature_mm"] = (shape or {}).get("curvature_mm")
+    est_block["gap_shape"] = shape
+    try:
+        Mi = np.linalg.inv(np.asarray(M, dtype=np.float64))
+        pts = []
+        for t_, c_ in zip(inf["_slice_t"], inf["_slice_c"]):
+            xy = (t_, c_) if axis == "lr" else (c_, t_)
+            q = Mi @ np.array([xy[0], xy[1], 1.0])
+            pts.append([round(float(q[0] / q[2]), 1), round(float(q[1] / q[2]), 1)])
+        est_block["observed_points_px"] = pts
+    except (np.linalg.LinAlgError, ValueError, TypeError, KeyError):
+        est_block["observed_points_px"] = None
+    result["seam_curvature_mm"] = est_block["seam_curvature_mm"]
+    result["estimate"] = dict(est_block)
+    result["refined_endpoints_px"] = {
+        "seam_left": [float(eps_pub[0][0]), float(eps_pub[0][1])],
+        "seam_right": [float(eps_pub[1][0]), float(eps_pub[1][1])]}
+    result["refine_score"] = round(float(sc), 3)
+    result.update({"source": src, "status": "ok"})
+    return result
+
 
 # ---- confirm mode: prior confirmed by gap ----------------------------------
 

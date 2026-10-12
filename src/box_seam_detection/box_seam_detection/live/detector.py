@@ -1591,6 +1591,15 @@ def evaluate_cut_permission(record: dict, seam: dict, seam_direction: dict = Non
         reasons.append(_cp_reason(
             "generic_seam_unconfirmed", False,
             f"seam status {status}: line not confirmed by gap/darkline evidence"))
+    limit = getattr(profile, "seam_max_curvature_mm", None) if profile is not None else None
+    curvature = estimate.get("seam_curvature_mm")
+    if limit is not None and isinstance(curvature, (int, float)) \
+            and not isinstance(curvature, bool) and math.isfinite(curvature) \
+            and curvature > float(limit):
+        reasons.append(_cp_reason(
+            "seam_too_curved", False,
+            f"observed flap gap bows {curvature:.1f} mm from the straight cut line "
+            f"(> {float(limit):g} mm)"))
     # Any profile: without a measured height a known footprint could be a taller box.
     # Applies to the pipeline's own identification (record box_profile) and to generic;
     # records of the old format (no box_profile at all) have no height to demand.
@@ -2153,6 +2162,13 @@ def sam3_unavailable_reason(record: dict):
     return None
 
 
+def _seam_curvature_mm(record: dict):
+    """Observed-gap curvature (mm) recorded by the seam estimator (observed-publish profiles), else None."""
+    value = ((record.get("seam") or {}).get("estimate") or {}).get("seam_curvature_mm")
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) \
+        and math.isfinite(value) else None
+
+
 def build_canonical_seam_doc(record: dict, image_path: str, width: int, height: int,
                              capture_id: str, seam: dict, relabel: dict,
                              record_path: str, timing: dict,
@@ -2189,6 +2205,8 @@ def build_canonical_seam_doc(record: dict, image_path: str, width: int, height: 
         "seam_status": seam["status"],
         "cut_permission": cut_permission,
         "seam_observed": bool(seam["observed"]),
+        **({"seam_curvature_mm": _seam_curvature_mm(record)}
+           if _seam_curvature_mm(record) is not None else {}),
         # The published line (observed-confirmed or geometric midline) is
         # the physical seam for these cartons (flap gap measured centred).
         "cutting_target_valid": True,

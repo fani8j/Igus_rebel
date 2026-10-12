@@ -1837,6 +1837,8 @@ def _run_detection(next_capture, cfg, progress, ctx, abort_check=None):
                 "average_frames": int(cfg.average_frames) if live_mode else 1,
                 "attempts": attempts},
             "cut_permission": cut_permission}
+        if isinstance(seam_doc.get("seam_curvature_mm"), (int, float)):
+            stamp_extra["seam_curvature_mm"] = float(seam_doc["seam_curvature_mm"])
         stamp_detector_method(staged_snapshot_path, DETECTOR_METHOD, stamp_extra)
     except (OSError, ValueError, json.JSONDecodeError) as error:
         print(f"planner snapshot 側邊切割點整合失敗: {error}", file=sys.stderr)

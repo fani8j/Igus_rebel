@@ -62,6 +62,19 @@ class BoxProfile:
     #: dim)/2 may be (mm) before the top face counts as "bigger than the box"
     #: (wrong box / bad corners); a smaller negative value is clamped to 0
     wall_neg_tol_mm: float = 1.0
+    #: which line the seam stage PUBLISHES: "prior" = the projective midline,
+    #: confirmed (ok) or not (estimated) by the observed gap (small/big/generic:
+    #: unchanged); "observed" = the straight line fitted to the OBSERVED flap gap
+    #: (gap valley; dark line only as fallback), ok only when that observation
+    #: covers ``seam_min_obs_coverage`` of the slices and passes the gap plausibility checks
+    seam_publish: str = "prior"
+    #: observed mode: minimum fraction of slices that support the fitted line
+    seam_min_obs_coverage: float = 0.60
+    #: observed mode: half-width (mm, across the seam) the gap search window covers at least
+    seam_gap_window_mm: float = 12.0
+    #: observed mode: cut rule ``seam_too_curved`` above this maximum perpendicular
+    #: deviation (mm) of the observed gap from the published straight line; None = no rule
+    seam_max_curvature_mm: float | None = None
 
     @property
     def height_m(self) -> float | None:
@@ -113,15 +126,19 @@ PROFILES: dict[str, BoxProfile] = {
     "large_392": BoxProfile(
         name="large_392", top_dims_mm=LARGE_TOP_DIMS_MM, height_mm=480.0,
         outer_dims_mm={"along_seam": 390.0, "across_seam": 320.0},
-        # Seam viewing shift (+ = away from the camera): the observed flap gap / dark line
-        # sits 5.05 +- 0.56 mm (min 3.97, max 5.96) behind the projective midline on 16 of
-        # 17 detected dual-arm captures (2026-10-12, 1.20-1.29 m, view 28-35 deg; one at
-        # 1.92 m / 51 deg: 6.5 mm). Thick double-wall flaps: looking into the V-gap shows its
-        # far wall. PROVISIONAL until the gap is measured centred on the real box. The
-        # tolerance (2 mm) keeps an off-centre gap from confirming the midline.
-        view_shift_mm=5.0, seam_joins=None,
+        # The seam is published as the straight line fitted to the OBSERVED flap gap (not the
+        # projective midline): on 15 accepted dual-arm captures (2026-10-12, 1.2-1.3 m) the real
+        # gap lies +5.5 mm (per capture 4.5-6.4) behind the midline, away from the camera
+        # (the quad's front edge over-extends onto the rounded front lip), and it is slightly
+        # CURVED (bows 1.2-4.1 mm, median 2.7, from its best straight line: convex flaps that
+        # the tape does not hold). No viewing shift: the observed line is the target.
+        # Curvature limit 6 mm = 1.5x the largest bow seen (4.1 mm); a straight cut then stays
+        # within ~half the bow of the real gap.
+        view_shift_mm=0.0, seam_joins=None,
+        seam_publish="observed", seam_min_obs_coverage=0.60,
+        seam_gap_window_mm=12.0, seam_max_curvature_mm=6.0,
         geometry_axis_validated=False, depth_edge_validated=False,
-        dims_tol_mm=15.0, confirm_max_offset_mm=2.0,
+        dims_tol_mm=15.0,
         # the measured flat top (394.5 x 328.6 mm) is BIGGER than the outer box
         # (390 x 320): the depth plane of this cell is tilted 2-4 deg, which
         # inflates the 3-D dims by up to ~9 mm; clamp (not reject) up to this

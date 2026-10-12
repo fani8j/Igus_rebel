@@ -395,3 +395,19 @@ def test_large_profile_needs_a_confirmed_seam(det):
     rec = _hidden_rec("large_392")
     perm = _perm(det, rec, seam={"status": "estimated"}, profile=prof)
     assert "generic_seam_unconfirmed" in _codes(perm)
+
+
+def test_seam_too_curved_blocks_only_profiles_with_a_limit(det):
+    large = det.box_profiles.PROFILES["large_392"]
+    rec = _with_height()
+    rec["box_profile"]["name"] = "large_392"
+    rec["seam"] = {"estimate": {"seam_curvature_mm": 6.5}}
+    perm = _perm(det, rec, seam={"status": "ok"}, profile=large)
+    assert "seam_too_curved" in _codes(perm)
+    assert next(r for r in perm["reasons"] if r["code"] == "seam_too_curved")["retryable"] is False
+    rec["seam"]["estimate"]["seam_curvature_mm"] = 3.0
+    assert "seam_too_curved" not in _codes(_perm(det, rec, seam={"status": "ok"}, profile=large))
+    # no limit on legacy / generic profiles
+    rec["seam"]["estimate"]["seam_curvature_mm"] = 50.0
+    assert "seam_too_curved" not in _codes(_perm(det, rec, seam={"status": "ok"}, profile=_small(det)))
+    assert "seam_too_curved" not in _codes(_perm(det, rec, seam={"status": "ok"}, profile=_generic(det)))

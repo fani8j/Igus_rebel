@@ -679,3 +679,52 @@ def test_no_view_shift_cli_reproduces_pre_v10_confirmation():
     assert info["intercept_rect"] == pytest.approx(139.5, abs=1e-6)
     assert info["coverage"] == pytest.approx(1.0)
     assert info["n_one_sided"] == 0
+
+
+# ---- seam_publish="observed" (large_392) -------------------------------------------------
+
+def _xyz_rect(w=0.40, h=0.30, z=1.2):
+    # BL, BR, FR, FL in the camera frame (a flat 400 x 300 mm face)
+    return {"back_left": [0.0, 0.0, z], "back_right": [w, 0.0, z],
+            "front_right": [w, h, z], "front_left": [0.0, h, z]}
+
+
+def test_observed_profile_publishes_the_gap_not_the_midline():
+    img, corners, gt = _synth_face(seam_axis="lr", gap_offset_px=6)
+    xyz = _xyz_rect()
+    res = estimate_seam(img, corners, corners_xyz=xyz, profile="large_392")
+    assert res["status"] == "ok" and res["source"] == "observed_gap"
+    pub = res["refined_endpoints_px"]
+    eps = np.array([pub["seam_left"], pub["seam_right"]])
+    assert (np.linalg.norm(eps[0] - gt[0]) + np.linalg.norm(eps[1] - gt[1])) / 2.0 > 3.0  # not the midline
+    mid = np.array(projective_midlines(corners)["lr"]["endpoints"])
+    assert abs(eps[:, 1].mean() - mid[:, 1].mean()) > 3.0
+    inner = res["estimate"]
+    assert inner["publish"] == "observed" and inner["published_line"] == "observed_gap"
+    assert res["seam_curvature_mm"] is not None and res["seam_curvature_mm"] < 1.0   # straight synthetic gap
+    assert len(inner["observed_points_px"]) > 50
+    assert abs(inner["gap_shape"]["offset_median_mm"]) < 0.3     # the line sits on the gap points
+    # the same face under a legacy profile keeps publishing the (projective) prior
+    old = estimate_seam(img, corners, corners_xyz=xyz, profile="small")
+    assert old.get("source") != "observed_gap" and "seam_curvature_mm" not in old
+
+
+def test_observed_profile_without_gap_is_estimated():
+    img, corners, _ = _synth_face(tape=True, gap=False)
+    res = estimate_seam(img, corners, corners_xyz=_xyz_rect(), profile="large_392")
+    assert res["status"] != "ok"
+    if res["status"] == "estimated":
+        assert res["source"] == "prior" and res["refined_endpoints_px"] is None
+
+
+def test_gap_shape_curvature_and_outlier_robustness():
+    from box_seam_detection.core.seam_estimator import gap_shape
+    t = np.arange(0.0, 400.0, 2.0)
+    bow = 4.0 * (1.0 - ((t - 200.0) / 200.0) ** 2)            # 4 px bow
+    line = (0.0, 2.0)                                          # published line sits at the ends
+    g = gap_shape(t, 2.0 + bow, line, 1.0)
+    assert 3.9 < g["curvature_mm"] < 4.1
+    spike = np.full_like(t, 2.0)
+    spike[50] += 20.0                                          # one bad slice is not curvature
+    assert gap_shape(t, spike, line, 1.0)["curvature_mm"] < 0.1
+    assert gap_shape(t[:3], t[:3], line, 1.0) is None and gap_shape(t, bow, line, None) is None
