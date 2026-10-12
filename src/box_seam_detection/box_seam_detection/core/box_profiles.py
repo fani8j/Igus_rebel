@@ -75,6 +75,18 @@ class BoxProfile:
     #: observed mode: cut rule ``seam_too_curved`` above this maximum perpendicular
     #: deviation (mm) of the observed gap from the published straight line; None = no rule
     seam_max_curvature_mm: float | None = None
+    #: K1 (core/top_from_gap.py): publish the gap-anchored known-size top (the two edges
+    #: parallel to the seam at gap +- half the known across-seam dimension, the seam-end
+    #: edges re-centred to the known along-seam length when they disagree). The RGB quad
+    #: is always recorded next to it. Needs ``seam_publish == "observed"`` and outer dims.
+    top_from_gap: bool = False
+    #: D1 (core/edge_support.py): block the cut (``top_edge_unsupported(<edge>)``) when the
+    #: coplanar top continues beyond a quad edge. The measurement is recorded for every profile.
+    edge_support_cut_rule: bool = False
+    #: F4 (core/top_diag.py): reject (``multiple_boxes_suspect``) on corroborated evidence of
+    #: a second box-sized coplanar component or a depth step inside the top. Evidence is
+    #: recorded for every profile.
+    multi_box_reject: bool = False
 
     @property
     def height_m(self) -> float | None:
@@ -137,6 +149,12 @@ PROFILES: dict[str, BoxProfile] = {
         view_shift_mm=0.0, seam_joins=None,
         seam_publish="observed", seam_min_obs_coverage=0.60,
         seam_gap_window_mm=12.0, seam_max_curvature_mm=6.0,
+        # K1: edges parallel to the seam = observed gap +- 160 mm (the box is 320 deep and the gap is
+        # centred); evidence and per-edge deltas in docs/friend_detector_plan.md
+        top_from_gap=True,
+        # D1 + F4 enabled after validation on the 20 dual-arm captures (flags #2 / #18, none of the
+        # 15 good ones) and the 431-capture replay (see docs/friend_detector_plan.md)
+        edge_support_cut_rule=True, multi_box_reject=True,
         geometry_axis_validated=False, depth_edge_validated=False,
         dims_tol_mm=15.0,
         # the measured flat top (394.5 x 328.6 mm) is BIGGER than the outer box

@@ -448,6 +448,39 @@ def rename_record(rec: dict, manifest=None, source: str | None = None,
         if isinstance(tf.get("corners_xyz_camera_m"), dict):
             tf["corners_xyz_camera_m"] = perm_named(
                 tf["corners_xyz_camera_m"])
+        # K1 / D1 records (top_face.top_from_gap, top_face.depth_diag): corner dicts
+        # and per-edge dicts follow the renaming (absent on records of other profiles)
+        tfg = tf.get("top_from_gap")
+        if isinstance(tfg, dict):
+            for qk in ("rgb_quad", "gap_anchored_quad"):
+                if isinstance(tfg.get(qk), dict):
+                    for ck in ("corners_px", "corners_xyz_camera_m"):
+                        if isinstance(tfg[qk].get(ck), dict):
+                            tfg[qk][ck] = perm_named(tfg[qk][ck])
+            for ek in ("deltas_mm",):
+                pe = tfg.get(ek)
+                if isinstance(pe, dict) and all(e in pe for e in EDGE_NAMES):
+                    tfg[ek] = {e: pe[emap[e]] for e in EDGE_NAMES}
+            if isinstance(tfg.get("sides_mm"), list) and len(tfg["sides_mm"]) == 4:
+                # ring-order side lengths (edge i joins ring corners i, i+1): follow the edges
+                old_by_name = dict(zip(EDGE_NAMES, tfg["sides_mm"]))
+                tfg["sides_mm"] = [old_by_name[emap[e]] for e in EDGE_NAMES]
+        dd = tf.get("depth_diag")
+        if isinstance(dd, dict):
+            es = dd.get("edge_support")
+            if isinstance(es, dict):
+                pe = es.get("edges")
+                if isinstance(pe, dict) and all(e in pe for e in EDGE_NAMES):
+                    es["edges"] = {e: pe[emap[e]] for e in EDGE_NAMES}
+                if isinstance(es.get("unsupported"), list):
+                    es["unsupported"] = sorted(
+                        (eold2new.get(e, e) for e in es["unsupported"]),
+                        key=lambda e: EDGE_NAMES.index(e) if e in EDGE_NAMES else 9)
+            ksf = dd.get("known_size_fit")
+            if isinstance(ksf, dict) and isinstance(ksf.get("corner_disagreement_mm"), list) \
+                    and len(ksf["corner_disagreement_mm"]) == 4:
+                old_by = dict(zip(CORNER_ORDER, ksf["corner_disagreement_mm"]))
+                ksf["corner_disagreement_mm"] = [old_by[new2old[k]] for k in CORNER_ORDER]
         checks = out.get("checks") or {}
         cf = checks.get("corner_flags")
         if isinstance(cf, dict) and isinstance(cf.get("corners"), dict):

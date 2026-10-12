@@ -159,3 +159,23 @@ left-arm calib `dualcal_20261009_left_single`, NOT verified by touches).
 - `live.driver_extrinsic.reference: null` = no verified reference for the camera (manifest block used with a warning);
   `fallback` = value composed for a `recorded` run without a manifest block (tagged `recorded_constant_assumed`).
 - `large_392` profile (39 x 32 x 48 cm carton): see core/box_profiles.py.
+
+## Top-face depth diagnostics and the gap-anchored top (2026-10-12; plan: docs/friend_detector_plan.md)
+
+Recorded for EVERY detection under `record.top_face.depth_diag` (shadow; `AUTOLABEL_V2_TOP_DIAG_OFF=1` switches it off,
+~0.2 s): per-edge depth support (`core/edge_support.py`: outward walk from each quad edge over the height above the top
+plane, depth "cliff" offset, share of stations where the coplanar top continues, `unsupported` edges), multiple-box evidence
+(`core/top_diag.py`: other box-sized coplanar components / an off-plane blob inside the top), a known-size fit score and a
+height-band component summary (`core/known_size_fit.py`, `autolabel/depth_top.height_band_components`; never used).
+Profile flags (`core/box_profiles.py`, only `large_392` has them on; small/big stay shadow = bit-identical):
+
+- `edge_support_cut_rule`: cut rule `top_edge_unsupported(<edge>)` (retryable).
+- `multi_box_reject`: reject `multiple_boxes_suspect(...)` with an operator hint (stage `multi_box`, before cut permission).
+- `top_from_gap` (K1, `core/top_from_gap.py`): the published top is the gap-anchored known-size quad: edges parallel to the
+  seam at observed gap +- across_seam/2 in a plane re-fitted on the central 60 % of the quad; seam-end edges keep their RGB
+  position unless the length along the seam deviates > 5 mm from along_seam (then re-centred); declines (RGB quad kept,
+  reason recorded) when the RGB quad does not already agree with the known size. `record.top_face.top_from_gap` holds BOTH
+  quads (`rgb_quad`, `gap_anchored_quad`), per-edge `deltas_mm` (outward displacement, + = further out) and the re-fitted
+  plane; `top_face.corners_*` / `plane` / `seam.endpoints_px` carry the published (gap-anchored) values. The detector's
+  rectangle gate and the profile size check evaluate the MEASURED (RGB) quad of a K1 record, so K1 can never launder a
+  quad those gates would reject. `AUTOLABEL_V2_TOP_FROM_GAP=shadow|off` computes-and-records / disables it.

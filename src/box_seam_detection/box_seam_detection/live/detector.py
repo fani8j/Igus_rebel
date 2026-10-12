@@ -428,6 +428,29 @@ def corner_angles_deg(points: dict) -> dict:
     return angles
 
 
+def _gap_anchored_rgb_xyz(record: dict):
+    """3-D corners {name: xyz} of the RGB quad when the published quad is the
+    gap-anchored one (top_face.top_from_gap applied); None otherwise (records of
+    every other profile)."""
+    tfg = (record.get("top_face") or {}).get("top_from_gap")
+    if not (isinstance(tfg, dict) and tfg.get("applied")):
+        return None
+    xyz = (tfg.get("rgb_quad") or {}).get("corners_xyz_camera_m")
+    try:
+        return {k: [float(c) for c in xyz[k]] for k in RING}
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _rgb_quad_rect_diffs(record: dict):
+    """(|back-front|, |left-right|) mm of the measured RGB quad of a K1 record, or None."""
+    pts = _gap_anchored_rgb_xyz(record)
+    if pts is None:
+        return None
+    lengths = {side: 1000.0 * math.dist(pts[a], pts[b]) for side, (a, b) in RECT_SIDES.items()}
+    return (abs(lengths["back"] - lengths["front"]), abs(lengths["left"] - lengths["right"]))
+
+
 def rectangle_check(record: dict, tol_mm: float,
                     max_corner_dev_deg: float = RECT_MAX_CORNER_DEV_DEG) -> dict:
     """3-D rectangle consistency of the top face (rule corner names).
@@ -460,6 +483,10 @@ def rectangle_check(record: dict, tol_mm: float,
                      details={"lengths_mm": {k: round(v, 3) for k, v in lengths.items()}})
     diff_a = abs(lengths["back"] - lengths["front"])
     diff_b = abs(lengths["left"] - lengths["right"])
+    rgb_diffs = _rgb_quad_rect_diffs(record)
+    if rgb_diffs is not None:
+        # K1 published the gap-anchored quad: the MEASURED (RGB) quad must pass the same gate
+        diff_a, diff_b = max(diff_a, rgb_diffs[0]), max(diff_b, rgb_diffs[1])
     angles = corner_angles_deg(points)
     max_dev = max(abs(a - 90.0) for a in angles.values())
     lengths_ok = diff_a <= tol_mm and diff_b <= tol_mm
@@ -468,6 +495,8 @@ def rectangle_check(record: dict, tol_mm: float,
               "lengths_mm": {k: round(v, 3) for k, v in lengths.items()},
               "diffs_mm": {"A": round(diff_a, 3), "B": round(diff_b, 3)},
               "pairs": {"A": ["back", "front"], "B": ["left", "right"]},
+              **({"rgb_quad_diffs_mm": {"A": round(rgb_diffs[0], 3), "B": round(rgb_diffs[1], 3)}}
+                 if rgb_diffs is not None else {}),
               "corner_angles_deg": {k: round(v, 3) for k, v in angles.items()},
               "max_corner_dev_deg": round(max_dev, 3),
               "corner_dev_limit_deg": float(max_corner_dev_deg),
@@ -1523,6 +1552,8 @@ def _final_top_dims_dev_mm(record: dict, profile):
     if profile is None or profile.is_generic or not profile.top_dims_mm:
         return None
     xyz = (record.get("top_face") or {}).get("corners_xyz_camera_m")
+    # K1 publishes a known-size quad: the size check must look at the MEASURED (RGB) one
+    xyz = _gap_anchored_rgb_xyz(record) or xyz
     try:
         pts = [[float(v) for v in xyz[k]] for k in RING]
     except (KeyError, TypeError, ValueError):
@@ -1576,6 +1607,12 @@ def evaluate_cut_permission(record: dict, seam: dict, seam_direction: dict = Non
                                   f"coverage {coverage:.3f} < {CUT_MIN_GAP_COVERAGE:g}"))
     size = image_size or record.get("image_size")
     corners = (record.get("top_face") or {}).get("corners_px")
+    # Visibility is about the MEASURED outline: with top_from_gap the published corners
+    # are model-placed (e.g. the front edge moved ~6 mm inwards), so use the RGB quad.
+    rgb_quad = (((record.get("top_face") or {}).get("top_from_gap") or {})
+                .get("rgb_quad") or {}).get("corners_px")
+    if isinstance(rgb_quad, dict) and rgb_quad:
+        corners = rgb_quad
     if size and isinstance(corners, dict):
         try:
             width, height = float(size[0]), float(size[1])
@@ -1627,6 +1664,18 @@ def evaluate_cut_permission(record: dict, seam: dict, seam_direction: dict = Non
         reasons.append(_cp_reason(
             "top_face_does_not_match_profile", True,
             f"final top face {final_dev:.1f} mm from the {profile.name} profile dims"))
+    if profile is not None and getattr(profile, "edge_support_cut_rule", False):
+        # D1: the coplanar top continues beyond a quad edge = a truncated quad (e.g. a quad
+        # that ends on the flap gap, a tape band). Evidence from top_face.depth_diag.
+        diag = (record.get("top_face") or {}).get("depth_diag")
+        support = diag.get("edge_support") if isinstance(diag, dict) else None
+        unsupported = support.get("unsupported") if isinstance(support, dict) else None
+        for edge in (unsupported if isinstance(unsupported, list) else []):
+            info = ((support.get("edges") or {}).get(edge)) or {}
+            reasons.append(_cp_reason(
+                f"top_edge_unsupported({edge})", True,
+                f"the coplanar top continues {info.get('extent_mm')} mm beyond the {edge} edge "
+                f"({info.get('continue_frac')} of its stations): the quad is truncated"))
     evidence = (record.get("seam") or {}).get("tape_evidence")
     candidates = evidence.get("candidates") if isinstance(evidence, dict) else None
     if isinstance(candidates, list):
@@ -1639,6 +1688,25 @@ def evaluate_cut_permission(record: dict, seam: dict, seam_direction: dict = Non
                                       f"{len(qualified)} qualified tape candidates "
                                       f"(axes {axes})"))
     return {"status": "blocked" if reasons else "allowed", "reasons": reasons}
+
+
+MULTI_BOX_HINT = ("more than one box (or a hand / object on the top) seen: leave only the box to cut "
+                  "in view, with clear space around it, and capture again")
+
+
+def multi_box_suspect(record: dict, profile):
+    """F4: corroborated evidence of several boxes / an object on the top (the
+    pipeline's ``top_face.depth_diag.multi_box``: another box-sized component
+    coplanar with the top, or an off-plane blob inside the top). Only for a
+    profile with ``multi_box_reject``; returns the evidence dict or None."""
+    if profile is None or not getattr(profile, "multi_box_reject", False):
+        return None
+    diag = (record.get("top_face") or {}).get("depth_diag")
+    multi = diag.get("multi_box") if isinstance(diag, dict) else None
+    if isinstance(multi, dict) and multi.get("suspect"):
+        return {k: multi.get(k) for k in ("evidence", "other_box_sized", "step_blobs",
+                                          "own_area_ratio", "components")}
+    return None
 
 
 def reject_cut_permission(error) -> dict:
@@ -2779,6 +2847,11 @@ def run_request(args, sam3) -> dict:
             x, y = relabel["corners"][key]
             if not (0.0 <= x < width and 0.0 <= y < height):
                 raise Reject("contract_edges", [f"{key} [{x}, {y}] outside {width}x{height}"])
+        multi = multi_box_suspect(record, box_profile)
+        if multi is not None:
+            operator_hint = {"suggestion": MULTI_BOX_HINT, "evidence": multi}
+            raise Reject("multi_box", [f"multiple_boxes_suspect({', '.join(multi['evidence'])})"],
+                         retryable=False, details={"multi_box": multi})
         cut_permission = evaluate_cut_permission(
             record, seam, seam_direction, seam_geometry, box_profile, (width, height))
         if cut_permission["status"] == "blocked":

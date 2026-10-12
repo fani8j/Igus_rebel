@@ -2265,6 +2265,72 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
     debug["seam_info"] = seam_info
     debug["estimate"] = estimate
 
+    # ---- depth diagnostics of the RGB quad + gap-anchored top (K1) --------
+    # Recorded for every profile (shadow); K1 only changes what is published
+    # for a profile with top_from_gap (large_392).
+    depth_diag = top_depth_diagnostics(quad, corners_xyz, plane, plane_rms_mm,
+                                       depth_ctx, manifest, W, H, box_prof)
+    tfg = top_from_gap_stage(quad, corners_xyz, plane, depth_ctx, manifest, W, H,
+                             box_prof, seam_dict)
+    tfg_rec = None
+    if tfg is not None:
+        rgb_px, rgb_xyz = _named_px_xyz(quad, corners_xyz)
+        tfg_mode = _top_from_gap_mode()
+        tfg_rec = {"mode": tfg_mode, "applied": False, "published": "rgb",
+                   "reason": tfg.get("reason"),
+                   "rgb_quad": {"corners_px": rgb_px,
+                                "corners_xyz_camera_m": rgb_xyz,
+                                "plane": ({"normal": [round(float(v), 4) for v in
+                                                      np.asarray(plane.normal).ravel()],
+                                           "offset_m": round(float(plane.d), 5)}
+                                          if plane is not None else None)}}
+        for key in ("across_rgb_mm", "along_rgb_mm", "gap_from_centre_mm",
+                    "rgb_rect_diffs_mm", "recentred_ends", "end_edge_angle_deg",
+                    "deltas_mm", "sides_mm", "known_mm"):
+            if key in tfg:
+                tfg_rec[key] = tfg[key]
+        if tfg.get("plane"):
+            fit = tfg["plane"]
+            tfg_rec["refit_plane"] = {
+                "normal": [round(float(v), 4) for v in fit["n"]],
+                "offset_m": round(float(fit["d"]), 5),
+                "tilt_deg": round(float(fit["tilt_deg"]), 3),
+                "rms_mm": round(float(fit["rms_mm"]), 2),
+                "inliers": int(fit["n_inliers"]), "points": int(fit["n_points"])}
+        if tfg.get("applied"):
+            g_px, g_xyz = _named_px_xyz(tfg["quad_px"], tfg["corners_xyz"])
+            tfg_rec["gap_anchored_quad"] = {"corners_px": g_px,
+                                            "corners_xyz_camera_m": g_xyz}
+            if tfg.get("seam_endpoints"):
+                tfg_rec["seam_endpoints_gap_anchored"] = {
+                    k: [round(float(v), 2) for v in pt]
+                    for k, pt in tfg["seam_endpoints"].items()}
+            if tfg_mode == "on":
+                tfg_rec["applied"], tfg_rec["published"] = True, "gap_anchored"
+                tfg_rec["seam_endpoints_rgb"] = dict(seam_dict["endpoints_px"])
+                quad = np.asarray(tfg["quad_px"], dtype=np.float64).reshape(4, 2)
+                corners_xyz = np.asarray(tfg["corners_xyz"], dtype=np.float64)
+                fit = tfg["plane"]
+                plane_normal = [float(v) for v in fit["n"]]
+                plane_offset = float(fit["d"])
+                plane_rms_mm, plane_inliers = fit["rms_mm"], fit["n_inliers"]
+                if tfg.get("seam_endpoints"):
+                    ep = tfg["seam_endpoints"]
+                    new_eps = _rounded_eps([ep["seam_left"], ep["seam_right"]])
+                    if new_eps is not None:
+                        endpoints = new_eps
+                        seam_dict["endpoints_px"] = new_eps
+                        estimate["refined_endpoints_px"] = {
+                            "seam_left": list(new_eps["seam_left"]),
+                            "seam_right": list(new_eps["seam_right"])}
+                        debug["seam"] = [tuple(new_eps["seam_left"]),
+                                         tuple(new_eps["seam_right"])]
+                debug["gap_anchored_quad"] = quad.copy()
+            else:
+                reasons.append("top_from_gap_shadow")
+        else:
+            reasons.append(f"top_from_gap_declined({tfg.get('reason')})")
+
     # ---- record ----------------------------------------------------------
     named = {name: [round(float(quad[i][0]), 1), round(float(quad[i][1]), 1)]
              for i, name in enumerate(CORNER_ORDER)}
@@ -2327,7 +2393,9 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
                if (r5_info or {}).get("skipped_rectangle_fitted") else {}),
         },
         "top_face": {"corners_px": named, "corners_xyz_camera_m": xyz_named,
-                     "plane": plane_rec},
+                     "plane": plane_rec,
+                     **({"top_from_gap": tfg_rec} if tfg_rec is not None else {}),
+                     **({"depth_diag": depth_diag} if depth_diag is not None else {})},
         "side_faces": [],
         "seam": {"status": seam_status, "endpoints_px": endpoints,
                  "axis": seam_axis, "score": seam_score,
@@ -2358,6 +2426,113 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
     }
     record = apply_corner_names(record, manifest, cfg, debug)
     return record, debug
+
+
+# ----------------------------------------------------------------------
+# Top-face depth diagnostics + gap-anchored known-size top (2026-10-12)
+# ----------------------------------------------------------------------
+
+def _top_diag_off() -> bool:
+    return os.environ.get("AUTOLABEL_V2_TOP_DIAG_OFF", "").strip() not in ("", "0")
+
+
+def _top_from_gap_mode() -> str:
+    """``on`` (default; only profiles with ``top_from_gap`` are affected),
+    ``shadow`` (computed and recorded, not published) or ``off``."""
+    v = os.environ.get("AUTOLABEL_V2_TOP_FROM_GAP", "on").strip().lower()
+    return v if v in ("on", "shadow", "off") else "on"
+
+
+def _plane_backprojector(manifest, n, d):
+    """f(uv (N,2)) -> (N,3) camera-frame points where the pixel rays meet the
+    plane (the manifest intrinsics, like the guided-plane corners)."""
+    fe = _fold_mod()
+    km = fe._intrinsics(manifest)
+    if km is None:
+        raise ValueError("no camera intrinsics")
+    return lambda uv: fe._backproject(np.asarray(uv, dtype=np.float64).reshape(-1, 2),
+                                      km, np.asarray(n, dtype=np.float64), float(d))
+
+
+def _named_px_xyz(quad, corners_xyz) -> tuple[dict, dict | None]:
+    px = {name: [round(float(quad[i][0]), 1), round(float(quad[i][1]), 1)]
+          for i, name in enumerate(CORNER_ORDER)}
+    if corners_xyz is not None and np.all(np.isfinite(corners_xyz)):
+        xyz = {name: [round(float(corners_xyz[i][0]), 4),
+                      round(float(corners_xyz[i][1]), 4),
+                      round(float(corners_xyz[i][2]), 4)]
+               for i, name in enumerate(CORNER_ORDER)}
+    else:
+        xyz = None
+    return px, xyz
+
+
+def top_depth_diagnostics(quad, corners_xyz, plane, plane_rms_mm, depth_ctx,
+                          manifest, W: int, H: int, box_prof) -> dict | None:
+    """D1 / F4 / shadow-fit diagnostics of the final RGB quad (core/top_diag.py).
+    None when there is no cloud / plane or the diagnostics are switched off
+    (``AUTOLABEL_V2_TOP_DIAG_OFF=1``); never raises."""
+    if _top_diag_off() or depth_ctx is None or plane is None:
+        return None
+    try:
+        from . import top_diag as _td
+
+        n, d = _fold_mod()._plane_nd(plane)
+        if n is None:
+            return None
+        idx, uv = _depth_projection(depth_ctx)
+        if idx is None:
+            return None
+        dims = None
+        if box_prof is not None and not box_prof.is_generic:
+            if (box_prof.outer_dims_mm.get("along_seam")
+                    and box_prof.outer_dims_mm.get("across_seam")):
+                dims = (box_prof.outer_dims_mm["along_seam"],
+                        box_prof.outer_dims_mm["across_seam"])
+            elif box_prof.top_dims_mm:
+                dims = tuple(box_prof.top_dims_mm)
+        return _td.run(quad, corners_xyz, (n, d), plane_rms_mm,
+                       depth_ctx["xyz"], (idx, uv), depth_ctx["cam"],
+                       _plane_backprojector(manifest, n, d), (W, H), dims,
+                       box_prof.name if box_prof is not None else None)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"{type(exc).__name__}: {exc}"}
+
+
+def top_from_gap_stage(quad, corners_xyz, plane, depth_ctx, manifest, W: int, H: int,
+                       box_prof, seam_dict) -> dict | None:
+    """K1 for a profile with ``top_from_gap`` and an observed-gap seam: the raw
+    :func:`top_from_gap.compute` result (``applied`` False + reason when it
+    declines) or None when K1 does not concern this detection."""
+    if (box_prof is None or not getattr(box_prof, "top_from_gap", False)
+            or _top_from_gap_mode() == "off" or depth_ctx is None or plane is None):
+        return None
+    if (seam_dict.get("status") != "ok" or seam_dict.get("source") != "observed_gap"
+            or not seam_dict.get("endpoints_px")):
+        return {"applied": False, "reason": "seam_not_observed_gap"}
+    try:
+        from . import top_from_gap as _tfg
+
+        fe = _fold_mod()
+        n, d = fe._plane_nd(plane)
+        if n is None:
+            return {"applied": False, "reason": "no_plane"}
+        idx, uv = _depth_projection(depth_ctx)
+        if idx is None:
+            return {"applied": False, "reason": "no_cloud"}
+        km = fe._intrinsics(manifest)
+        dims = box_prof.outer_dims_mm
+        if not (dims.get("along_seam") and dims.get("across_seam")) or km is None:
+            return {"applied": False, "reason": "no_known_dims"}
+        return _tfg.compute(
+            quad, seam_dict["endpoints_px"], seam_dict.get("axis"),
+            depth_ctx["xyz"], (idx, uv), (n, d),
+            lambda nn, dd: _plane_backprojector(manifest, nn, dd),
+            lambda X: fe._project(np.asarray(X, dtype=np.float64), km),
+            float(dims["along_seam"]), float(dims["across_seam"]), (W, H))
+    except Exception as exc:  # noqa: BLE001
+        return {"applied": False, "reason": f"error({type(exc).__name__}: {exc})"}
+
 
 
 def apply_corner_names(record: dict, manifest, cfg: dict,

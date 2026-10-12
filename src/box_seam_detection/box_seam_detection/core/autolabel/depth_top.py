@@ -60,6 +60,8 @@ __all__ = [
     "estimate_top",
     "seam_inside_hull",
     "seam_support_check",
+    "height_grid",
+    "height_band_components",
 ]
 
 
@@ -1113,3 +1115,100 @@ def seam_inside_hull(seam, hull: np.ndarray, tol_px: float) -> tuple[bool, float
     pts = [(x1, y1), (x2, y2), ((x1 + x2) / 2.0, (y1 + y2) / 2.0)]
     dists = [float(cv2.pointPolygonTest(hull.astype(np.float32), p, True)) for p in pts]
     return (min(dists) >= -float(tol_px)), round(min(dists), 2)
+
+
+# ---------------------------------------------------------------------------
+# Height grid + height-band components (shadow diagnostics only, 2026-10-12)
+# ---------------------------------------------------------------------------
+# Idea taken from the conveyor box detector of a colleague (rgbd_detector.py,
+# `detect_rgbd_boxes`: per-pixel height above a plane -> |h - H| band mask ->
+# 8-connected components); here the plane is the per-capture top plane and the
+# result is only RECORDED (multi-box evidence, known-size fit score), never
+# used to move a corner. Pure numpy/OpenCV.
+
+def height_grid(xyz: np.ndarray, proj: tuple, n: np.ndarray, d: float,
+                roi: list, return_index: bool = False):
+    """Signed height (mm) of the cloud above the plane ``n.x + d = 0`` (n unit,
+    camera on the + side, so the support/background is NEGATIVE) on the pixel
+    grid of ``roi`` = [x0, y0, x1, y1] (half-open). NaN where no cloud point
+    lands; where several points share a pixel the nearest to the camera wins.
+    ``proj`` = ``(row indices into xyz, Nx2 pixel projections)``. With
+    ``return_index`` the result is ``(grid, rows)`` where ``rows`` (int64, -1 =
+    empty) holds the row of ``xyz`` that produced each pixel.
+    """
+    x0, y0, x1, y1 = (int(v) for v in roi)
+    idx, uv = proj
+    w, h = x1 - x0, y1 - y0
+    grid = np.full((max(h, 0), max(w, 0)), np.nan, dtype=np.float32)
+    rows = (np.full(grid.shape, -1, dtype=np.int64) if return_index else None)
+    if w <= 0 or h <= 0 or idx is None or len(idx) == 0:
+        return (grid, rows) if return_index else grid
+    pu = np.rint(uv[:, 0]).astype(np.int64)
+    pv = np.rint(uv[:, 1]).astype(np.int64)
+    sel = (pu >= x0) & (pu < x1) & (pv >= y0) & (pv < y1)
+    if not np.any(sel):
+        return (grid, rows) if return_index else grid
+    pts = np.asarray(xyz, dtype=np.float64)[idx[sel]]
+    hh = (pts @ np.asarray(n, dtype=np.float64) + float(d)) * 1000.0
+    order = np.argsort(-pts[:, 2], kind="stable")      # far first, near last wins
+    grid[pv[sel][order] - y0, pu[sel][order] - x0] = hh[order].astype(np.float32)
+    if return_index:
+        rows[pv[sel][order] - y0, pu[sel][order] - x0] = idx[sel][order]
+        return grid, rows
+    return grid
+
+
+def height_band_components(grid: np.ndarray, roi: list, cam: dict,
+                           n: np.ndarray, d: float, band_mm: float,
+                           min_area_mm2: float = 2000.0, close_px: int = 0) -> dict:
+    """8-connected components of the pixels with ``|h| <= band_mm`` in a
+    :func:`height_grid`; each with its physical area (mm^2, on the plane).
+
+    Returns ``{"labels": int32 grid (0 = background), "components": [{label,
+    area_px, area_mm2, bbox [x0,y0,x1,y1] (image px), centroid_px}]}`` for the
+    components of at least ``min_area_mm2``, largest first. The per-pixel
+    footprint on the plane is ``z^3 / (fx fy |n.P|)`` (P the cloud point), so
+    tilted planes need no fronto-parallel assumption. ``close_px`` > 1: a
+    morphological closing of that size first (bridges thin gaps such as the
+    flap gap, depth dropouts), like the colleague's detector.
+    """
+    x0, y0 = int(roi[0]), int(roi[1])
+    mask = np.isfinite(grid) & (np.abs(grid) <= float(band_mm))
+    if int(close_px) > 1:
+        k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (int(close_px), int(close_px)))
+        mask = cv2.morphologyEx(mask.astype(np.uint8), cv2.MORPH_CLOSE, k) > 0
+    nlab, labels, stats, cents = cv2.connectedComponentsWithStats(
+        mask.astype(np.uint8), connectivity=8)
+    fx, fy = float(cam["fx"]), float(cam["fy"])
+    nn = np.asarray(n, dtype=np.float64)
+    comps = []
+    for lab in range(1, nlab):
+        area_px = int(stats[lab, cv2.CC_STAT_AREA])
+        if area_px < 50:
+            continue
+        # footprint of one pixel at the component centroid (pixel rays are
+        # smooth over a component: the centroid value is exact to ~1 %)
+        cx_, cy_ = float(cents[lab][0]) + x0, float(cents[lab][1]) + y0
+        r = np.array([(cx_ - float(cam["cx"])) / fx,
+                      (cy_ - float(cam["cy"])) / fy, 1.0])
+        den = abs(float(nn @ r))
+        if den < 1e-6:
+            continue
+        z = -float(d) / (float(nn @ r))                  # depth of the plane on this ray
+        if not np.isfinite(z) or z <= 0:
+            continue
+        px_area = z * z / (fx * fy * den)
+        area_mm2 = area_px * px_area * 1e6
+        if area_mm2 < float(min_area_mm2):
+            continue
+        comps.append({"label": lab, "area_px": area_px,
+                      "area_mm2": float(area_mm2),
+                      "bbox": [int(stats[lab, cv2.CC_STAT_LEFT]) + x0,
+                               int(stats[lab, cv2.CC_STAT_TOP]) + y0,
+                               int(stats[lab, cv2.CC_STAT_LEFT]
+                                   + stats[lab, cv2.CC_STAT_WIDTH]) + x0,
+                               int(stats[lab, cv2.CC_STAT_TOP]
+                                   + stats[lab, cv2.CC_STAT_HEIGHT]) + y0],
+                      "centroid_px": [cx_, cy_]})
+    comps.sort(key=lambda c: -c["area_mm2"])
+    return {"labels": labels, "components": comps, "px_area_mm2_model": "z3/(fx fy |n.P|)"}
