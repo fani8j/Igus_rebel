@@ -186,7 +186,8 @@ def test_large_profile_classification_and_constants():
     p = bp.PROFILES["large_392"]
     assert p.height_mm == 480.0 and p.outer_dims_mm == {"along_seam": 390.0, "across_seam": 320.0}
     assert p.seam_joins is None and not p.geometry_axis_validated and not p.depth_edge_validated
-    assert p.view_shift_mm == 0.0 and p.dims_tol_mm == 15.0 and p.confirm_max_offset_mm == 4.0
+    # 5.0 mm viewing shift / 2 mm tolerance fitted on 16 dual-arm captures (2026-10-12)
+    assert p.view_shift_mm == 5.0 and p.dims_tol_mm == 15.0 and p.confirm_max_offset_mm == 2.0
     assert p.own_constants and not p.is_legacy and not p.is_generic
     prof, info = bp.resolve(0.3945, 0.3286, None)                 # no height (support hidden)
     assert prof.name == "large_392" and info["reason"] == "matched"

@@ -113,9 +113,15 @@ PROFILES: dict[str, BoxProfile] = {
     "large_392": BoxProfile(
         name="large_392", top_dims_mm=LARGE_TOP_DIMS_MM, height_mm=480.0,
         outer_dims_mm={"along_seam": 390.0, "across_seam": 320.0},
-        view_shift_mm=0.0, seam_joins=None,
+        # Seam viewing shift (+ = away from the camera): the observed flap gap / dark line
+        # sits 5.05 +- 0.56 mm (min 3.97, max 5.96) behind the projective midline on 16 of
+        # 17 detected dual-arm captures (2026-10-12, 1.20-1.29 m, view 28-35 deg; one at
+        # 1.92 m / 51 deg: 6.5 mm). Thick double-wall flaps: looking into the V-gap shows its
+        # far wall. PROVISIONAL until the gap is measured centred on the real box. The
+        # tolerance (2 mm) keeps an off-centre gap from confirming the midline.
+        view_shift_mm=5.0, seam_joins=None,
         geometry_axis_validated=False, depth_edge_validated=False,
-        dims_tol_mm=15.0, confirm_max_offset_mm=4.0,
+        dims_tol_mm=15.0, confirm_max_offset_mm=2.0,
         # the measured flat top (394.5 x 328.6 mm) is BIGGER than the outer box
         # (390 x 320): the depth plane of this cell is tilted 2-4 deg, which
         # inflates the 3-D dims by up to ~9 mm; clamp (not reject) up to this
