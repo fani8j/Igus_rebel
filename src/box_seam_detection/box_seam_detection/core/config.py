@@ -165,6 +165,12 @@ V2_DEFAULTS: dict = {
         # record the scene depth noise (median plane RMS) in the depth
         # estimate; read by the noise-adaptive guided-plane gate (v2.noise_adaptive)
         "measure_noise": False,
+        # several parallel top candidates (hidden_stand): the one whose points
+        # lie inside the SAM3 quad (dilated) wins if its share is >= min and
+        # >= ratio x the runner-up's (estimate_top prefer_quad)
+        "top_overlap_dilate": 1.1,
+        "top_overlap_min": 0.5,
+        "top_overlap_ratio": 2.0,
         "front_min_angle_deg": 75.0,
         "front_max_angle_deg": 90.0,
         "front_min_inliers": 2000,
@@ -211,6 +217,9 @@ V2_DEFAULTS: dict = {
             "bulge_mm_per_m": 5.0,
             "bulge_max_mm": 2.0,
             "bulge_min_side_m": 0.25,
+            # None = scale with the scene noise only; else the range model
+            # (see pipeline.noise_adaptive_gate)
+            "range_model": None,
         },
         # Quad confidence cap when no independent depth check exists.
         "max_conf_no_depth_check": 0.50,

@@ -240,6 +240,8 @@ def _depth_top_roi(quad: np.ndarray, W: int, H: int, cfg: dict,
         if tbl is not None:
             kw["support_hint"] = tbl
     try:
+        if support_hidden(depth_ctx):
+            kw["prefer_quad"] = q
         est = _depth.estimate_top(sub, cam, (H, W), cfg["depth_top"], **kw)
     except Exception:  # noqa: BLE001 — retry failure == unavailable
         return None, roi
@@ -323,16 +325,23 @@ def estimate_table_plane(depth_ctx: dict) -> dict | None:
         dcfg = dict(_dcfg_of(depth_ctx))
         xyz = np.asarray(depth_ctx["xyz"], dtype=np.float64)
         cropped = xyz[_depth.workspace_mask(xyz, dcfg)]
-        dcfg["max_planes"] = 1
-        dcfg["top_min_inliers"] = int(dcfg["table_min_inliers"])
+        hidden = support_hidden(depth_ctx)
+        if not hidden:
+            dcfg["max_planes"] = 1
+            dcfg["top_min_inliers"] = int(dcfg["table_min_inliers"])
         planes = _depth.sequential_planes(cropped, dcfg)
         if planes:
-            n, d = np.asarray(planes[0]["n"], dtype=np.float64), planes[0]["d"]
+            # hidden_stand: the support is the LARGEST of the fitted planes
+            # (what estimate_top picks), not the first RANSAC plane (a
+            # foreground table can be found before the floor fragments)
+            k = (max(range(len(planes)), key=lambda i: planes[i]["n_inliers"])
+                 if hidden else 0)
+            n, d = np.asarray(planes[k]["n"], dtype=np.float64), planes[k]["d"]
             if d < 0:
                 n, d = -n, -d
             table = {"n": n, "d": float(d),
-                     "n_inliers": int(planes[0]["n_inliers"]),
-                     "rms_mm": float(planes[0]["rms"]) * 1000.0}
+                     "n_inliers": int(planes[k]["n_inliers"]),
+                     "rms_mm": float(planes[k]["rms"]) * 1000.0}
     except Exception:  # noqa: BLE001 — unavailable == dominant fallback
         table = None
     depth_ctx["_table"] = table
@@ -936,7 +945,7 @@ def independent_top_confirm(quad: np.ndarray, depth_ctx: dict | None,
     return out
 
 
-def noise_adaptive_gate(cfg: dict, depth_est) -> dict:
+def noise_adaptive_gate(cfg: dict, depth_est, z_top_m: float | None = None) -> dict:
     """Guided-plane gate thresholds for this scene's depth noise.
 
     Disabled (``v2.noise_adaptive.enabled`` false): today's fixed values
@@ -948,7 +957,17 @@ def noise_adaptive_gate(cfg: dict, depth_est) -> dict:
     are never below today's values, so a scene at or below the floor noise
     (the table cell: 0.7-1.6 mm) keeps exactly the fixed thresholds. No noise
     estimate (depth failed early) -> fixed thresholds. Returns the band (mm),
-    p95 limit (mm) and the bulge parameters."""
+    p95 limit (mm) and the bulge parameters.
+
+    ``noise_adaptive.range_model`` (dict or None): depth noise grows with the
+    range of the BOX, which the support planes (floor, 1-2.5 m) do not
+    represent and whose band-truncated RMS saturates near 2.9 mm. With a model
+    the scene noise above ``rms_floor_mm`` only ACTIVATES the scaling, and the
+    thresholds are ``band_ref_mm`` / ``p95_ref_mm`` x (z_top / z_ref_m) **
+    exponent (z_top = mean range of the top corners; z_ref when not yet known),
+    never below today's values, band capped at ``max_band_mm``. Constants fitted
+    on the two dual-arm captures (1.17 m: ratio 0.87 @ 7 mm, p95 9.0; 1.91 m:
+    ratio 0.88 @ 10 mm, p95 12.9 -> exponent 0.7-0.8)."""
     v2cfg, gcfg = cfg["v2"], cfg["guided_plane"]
     na = v2cfg.get("noise_adaptive") or {}
     gate: dict = {"enabled": bool(na.get("enabled")), "noise_mm": None,
@@ -969,7 +988,17 @@ def noise_adaptive_gate(cfg: dict, depth_est) -> dict:
     excess = max(0.0, noise - float(na["rms_floor_mm"]))
     gate["noise_mm"] = round(noise, 2)
     gate["excess_mm"] = round(excess, 2)
-    if excess > 0.0:
+    rm = na.get("range_model")
+    if excess > 0.0 and isinstance(rm, dict):
+        zr = float(rm["z_ref_m"])
+        f = (float(z_top_m) / zr) ** float(rm["exponent"]) if z_top_m else 1.0
+        gate["z_top_m"] = None if not z_top_m else round(float(z_top_m), 3)
+        gate["model"] = "range"
+        gate["band_mm"] = min(float(na["max_band_mm"]),
+                              max(gate["band_mm"], float(rm["band_ref_mm"]) * f))
+        gate["p95_limit_mm"] = max(gate["p95_limit_mm"], float(rm["p95_ref_mm"]) * f)
+        gate["scaled"] = True
+    elif excess > 0.0:
         gate["band_mm"] = min(max(gate["band_mm"], float(na["max_band_mm"])),
                               gate["band_mm"] + float(na["band_k_mm_per_mm"]) * excess)
         gate["p95_limit_mm"] += float(na["p95_k_mm_per_mm"]) * excess
@@ -1032,7 +1061,8 @@ def check_depth_cross(quad: np.ndarray, manifest: dict, depth_est, depth_err,
         ambiguous_retry = {"used": True, "after": "depth_ambiguous_top",
                            "roi": roi_a,
                            "result": "ok" if (est_a is not None
-                                              and est_a.get("ok")) else "failed"}
+                                              and est_a.get("ok")) else "failed",
+                           "reason": (est_a or {}).get("reason")}
         out["depth_top_roi_retry"] = ambiguous_retry
         if est_a is not None and est_a.get("ok"):
             depth_est = est_a
@@ -1076,14 +1106,26 @@ def check_depth_cross(quad: np.ndarray, manifest: dict, depth_est, depth_err,
         reasons.append(str((depth_est or {}).get(
             "reason", depth_err or "depth_unavailable")))
     gcfg = cfg["guided_plane"]
-    try:
-        gplane = _fusion.fit_sam3_guided_depth_plane(
+
+    def _fit(g):
+        return _fusion.fit_sam3_guided_depth_plane(
             manifest, quad,
             erosion_px=int(gcfg["erosion_px"]),
             ransac_threshold_m=(float(gcfg["ransac_threshold_m"])
-                                if not gate["scaled"]
-                                else gate["band_mm"] / 1000.0),
+                                if not g["scaled"] else g["band_mm"] / 1000.0),
             min_inliers=int(gcfg["min_inliers"]))
+    try:
+        gplane = _fit(gate)
+        if (gate.get("model") == "range" and gplane is not None
+                and gplane.status == "OK" and gplane.plane is not None):
+            # second pass: the band for the range the first fit found
+            g2 = noise_adaptive_gate(cfg, depth_est, float(np.mean(
+                np.asarray(gplane.camera_corners_xyz, dtype=np.float64)[:, 2])))
+            if abs(g2["band_mm"] - gate["band_mm"]) > 0.5:
+                gate = g2
+                gplane = _fit(gate)
+            else:
+                gate = g2
     except ValueError as exc:
         reasons.append(f"guided_plane_invalid_param({exc})")
         return {**out, "reasons": reasons}, None
@@ -1567,7 +1609,8 @@ def _run_depth_work(_depth, read_pcd_xyz, paths: dict, cam, H: int, W: int,
             # when both rules would pass exactly as for the full fit.
             tmin = int(dcfg["table_min_inliers"])
             if (first and first["n_pool"] >= tmin
-                    and first["n_inliers"] >= tmin):
+                    and first["n_inliers"] >= tmin
+                    and dcfg.get("support", "visible_table") != "hidden_stand"):
                 n, d = first["n"], first["d"]
                 if d < 0:
                     n, d = -n, -d

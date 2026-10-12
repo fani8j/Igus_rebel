@@ -23,7 +23,10 @@ depth_top:
                                # only: a desk at the same height as the box cannot be told apart from
                                # the box top by depth; the SAM3 ROI retry decides)
   max_planes: 6                # a noisy far floor splits into several RANSAC planes that use up slots
-  top_rms_max: 0.004           # RMS of a 5 mm RANSAC band saturates near 2.9 mm at this noise
+  ransac_thresh: 0.007         # 5 mm keeps only ~45 % of the top at 1.9 m: sparse, unstable plane/support;
+                               # 7 mm gave a stable top on both captures (1.2 m and 1.9 m)
+  top_rms_max: 0.006           # RMS inside the (wider) band: 3.7-3.8 mm on the 1.9 m top
+  min_hull_area_frac: 0.003    # the top covers only 0.8 % of the image at 1.9 m (1 % is the table-cell value)
   measure_noise: true          # the noise-adaptive guided-plane gate reads the scene noise
 
 v2:
@@ -33,16 +36,21 @@ v2:
     enabled: true              # band/p95 limit grow with the measured scene noise (never below the above)
     rms_floor_mm: 1.8          # table cell: 0.7-1.6 mm -> unchanged; here ~2.8 mm
     band_k_mm_per_mm: 4.0
-    max_band_mm: 8.0
+    max_band_mm: 12.0
     p95_k_mm_per_mm: 2.0
     bulge_mm_per_m: 5.0
     bulge_max_mm: 2.0
     bulge_min_side_m: 0.25
+    range_model:               # box noise ~ (z_top / z_ref) ** exponent; fitted on the 1.17 m and 1.91 m captures
+      z_ref_m: 1.2
+      exponent: 0.8
+      band_ref_mm: 7.0         # ratio >= 0.8 needs 6 mm @ 1.17 m, 8.7 mm @ 1.91 m (measured)
+      p95_ref_mm: 9.5          # p95 residual 9.0 mm @ 1.17 m, 12.9 mm @ 1.91 m (+ lid bulge allowance)
 
 live:
   seam_direction_prior_deg: null     # 83 deg is the old cell's base_link seam direction: disabled here
   seam_direction_soft_range_deg: 45.0
-  rect_tol_mm: 15.0                  # opposite-side gate: 3 mm is for a 110 mm box; on this 390 x 320 mm top the
+  rect_tol_mm: 20.0                  # opposite-side gate: 3 mm is for a 110 mm box; on this 390 x 320 mm top the
                                      # systematic depth-plane tilt (2-4 deg) alone gives 8-12 mm (see DESIGN.md)
   driver_extrinsic:
     reference: null                  # no verified reference for this camera: a manifest block is used as

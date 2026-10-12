@@ -169,9 +169,9 @@ def test_noise_gate_fixed_when_disabled_or_quiet():
 def test_noise_gate_scales_with_scene_noise_and_is_bounded():
     dual = _dual_cfg()
     g = P.noise_adaptive_gate(dual, _est_with_noise(2.81))        # the new capture
-    assert g["scaled"] and 6.5 < g["band_mm"] < 7.5 and 9.5 < g["p95_limit_mm"] < 10.5
-    big = P.noise_adaptive_gate(dual, _est_with_noise(9.0))
-    assert big["band_mm"] == 8.0                                  # max_band_mm cap
+    assert g["scaled"] and 6.5 < g["band_mm"] < 7.5 and 9.4 < g["p95_limit_mm"] < 10.5
+    big = P.noise_adaptive_gate(dual, _est_with_noise(9.0), 5.0)
+    assert big["band_mm"] == 12.0                                 # max_band_mm cap
     assert g["band_mm"] > 3.0 and g["p95_limit_mm"] > 8.0
     # bulge: only for large tops, bounded
     c = np.array([[0, 0, 1], [0.39, 0, 1], [0.39, 0.32, 1], [0, 0.32, 1.0]])
@@ -195,3 +195,66 @@ def test_large_profile_classification_and_constants():
     assert bp.resolve(0.1117, 0.0992, 86.2)[0].name == "small"    # old boxes unchanged
     assert bp.resolve(0.1927, 0.1048, 136.4)[0].name == "big"
     assert bp.is_generic_height(480.0)
+
+
+def test_overlap_chooser_picks_the_candidate_under_the_sam3_quad():
+    """Box top and a desk above the same floor: the SAM3 quad decides (no hint needed)."""
+    import cv2
+    cam = cg.load_camera()
+    n, xyz = _hidden_cloud(desk=True)
+    uv, _z, _ = D.project_points(xyz[np.abs(xyz @ n + 1.1) < 0.01], cam)
+    quad = cv2.boxPoints(cv2.minAreaRect(np.asarray(uv, np.float32))).astype(float)
+    cfg = _dual_cfg()
+    assert D.estimate_top(xyz, cam, (1080, 1920), cfg["depth_top"])["reason"] == "depth_ambiguous_top"
+    est = D.estimate_top(xyz, cam, (1080, 1920), cfg["depth_top"], prefer_quad=quad)
+    assert est["ok"] and abs(est["depth"]["top_offset_mm"] - 600.0) < 8.0
+    assert est["depth"]["top_chosen_by_overlap"] is not None
+    # a quad over nothing clear (the floor) must not pick anything
+    far = np.array([[100, 100], [160, 100], [160, 160], [100, 160]], float)
+    assert not D.estimate_top(xyz, cam, (1080, 1920), cfg["depth_top"], prefer_quad=far)["ok"]
+
+
+def test_range_model_gate_scales_with_box_range_only_when_noisy():
+    dual = _dual_cfg()
+    near = P.noise_adaptive_gate(dual, _est_with_noise(2.8), 1.17)
+    far = P.noise_adaptive_gate(dual, _est_with_noise(2.8), 1.92)
+    assert near["model"] == "range" and far["band_mm"] > near["band_mm"]
+    assert 6.0 < near["band_mm"] < 7.5 and 9.5 < far["band_mm"] <= 12.0
+    assert far["p95_limit_mm"] > 13.0 > near["p95_limit_mm"] > 8.0
+    quiet = P.noise_adaptive_gate(dual, _est_with_noise(1.5), 1.92)
+    assert quiet["scaled"] is False and quiet["band_mm"] == 3.0
+
+
+# ---- the two real dual-arm captures (skipped without the data root) -----------------
+
+_ROOT = Path("/media/farhan/My Passport/Igus_rebel/outputs/rgbd_captures")
+_CAPS = {  # id: (SAM3 quad as refined: BL, BR, FR, FL pixels, range m)
+    "frame_000001_20261011_225221_220788": ([[822.7, 698.0], [1143.0, 709.3], [1144.5, 976.9], [768.3, 954.6]], 1.17),
+    "frame_000001_20261012_001211_445510": ([[777.3, 507.2], [853.3, 375.0], [1010.0, 408.9], [945.0, 548.4]], 1.92),
+}
+
+
+@pytest.mark.skipif(not _ROOT.is_dir(), reason="capture data root absent")
+@pytest.mark.parametrize("cid", sorted(_CAPS))
+def test_real_dual_arm_captures_pass_the_depth_gates(cid):
+    import json
+    from box_seam_detection.core.autolabel.pcd import read_pcd_xyz
+    quad, z = _CAPS[cid]
+    pcd, man = _ROOT / "pointcloud" / f"{cid}.pcd", _ROOT / "captures" / f"{cid}.json"
+    if not (pcd.is_file() and man.is_file()):
+        pytest.skip("capture files absent")
+    manifest = json.loads(man.read_text())
+    xyz = np.asarray(read_pcd_xyz(str(pcd))[0], dtype=np.float64)
+    cam, _ = D.camera_from_capture_info(manifest["camera_info"])
+    cfg = _dual_cfg()
+    est = D.estimate_top(xyz, cam, (1080, 1920), cfg["depth_top"])
+    ctx = {"xyz": xyz, "cam": cam, "dcfg": cfg["depth_top"]}
+    q = np.array(quad, float)
+    cross, _g = P.check_depth_cross(q, manifest, est, None, 1920, 1080, cfg, depth_ctx=ctx)
+    assert not cross["wrong_face"], cross["reasons"]
+    assert cross["iou"] is not None and cross["iou"] > 0.6
+    assert abs(cross["plane_gate"]["z_top_m"] - z) < 0.05
+    c = cross["corners_xyz"]
+    sides = sorted(float(np.linalg.norm(c[(i + 1) % 4] - c[i])) * 1000 for i in range(4))
+    assert 300 < sides[0] and sides[-1] < 410          # a 390 x 320 mm top (depth-plane tilt inflates it)
+    assert P.measure_box_height(ctx, cross["plane"], c)["height_unavailable"] == "support_hidden"

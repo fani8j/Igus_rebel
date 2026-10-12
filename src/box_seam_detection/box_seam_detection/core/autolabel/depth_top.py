@@ -559,8 +559,40 @@ def scene_noise_mm(planes: list[dict]) -> float | None:
     return float(np.median(rms)) if rms else None
 
 
+def overlap_chooser(cropped: np.ndarray, cam: dict, quad, dcfg: dict):
+    """Chooser for :func:`identify_table_top`: the candidate whose inliers
+    project inside ``quad`` (dilated ``top_overlap_dilate``) wins when its
+    share is >= ``top_overlap_min`` and at least ``top_overlap_ratio`` x the
+    runner-up's; otherwise None (still ambiguous)."""
+    q = np.asarray(quad, dtype=np.float64).reshape(4, 2)
+    c = q.mean(axis=0)
+    poly = (c + (q - c) * float(dcfg.get("top_overlap_dilate", 1.1))).astype(np.float32)
+
+    def choose(cands):
+        shares = {}
+        for rank, p in cands:
+            pts = cropped[p["mask"]]
+            if pts.shape[0] > 20000:
+                pts = pts[::int(-(-pts.shape[0] // 20000))]
+            uv, _z, _ = project_points(pts, cam)
+            uv = np.asarray(uv, dtype=np.float64).reshape(-1, 2)
+            ok = np.isfinite(uv).all(axis=1)
+            inside = np.array([cv2.pointPolygonTest(poly.reshape(-1, 1, 2), (float(u), float(v)), False) >= 0
+                               for u, v in uv[ok]]) if ok.any() else np.zeros(0, bool)
+            shares[rank] = float(inside.mean()) if inside.size else 0.0
+        order = sorted(shares, key=lambda r: -shares[r])
+        best = shares[order[0]]
+        second = shares[order[1]] if len(order) > 1 else 0.0
+        if (best >= float(dcfg.get("top_overlap_min", 0.5))
+                and best >= float(dcfg.get("top_overlap_ratio", 2.0)) * second):
+            return order[0]
+        return None
+    return choose
+
+
 def identify_table_top(planes: list[dict], cropped: np.ndarray,
-                       dcfg: dict, support_hint: dict | None = None
+                       dcfg: dict, support_hint: dict | None = None,
+                       chooser=None
                        ) -> tuple[dict | None, dict | None, dict, dict, str | None]:
     """Pick table + carton top from sequential planes.
 
@@ -575,6 +607,11 @@ def identify_table_top(planes: list[dict], cropped: np.ndarray,
     ``planes`` come from a sub-region (ROI retry) that does not contain the
     floor; every plane is then a top candidate and the floor footprint check
     is skipped.
+
+    ``chooser`` (optional ``f(cands) -> rank | None``, ``cands`` = list of
+    ``(rank, plane)``): resolves two or more parallel candidates that do not
+    merge (e.g. the box top and a desk) instead of ``depth_ambiguous_top``;
+    returning None keeps the ambiguity.
     """
     cropped = np.asarray(cropped, dtype=np.float64)
     diag: dict = {"planes": [_plane_diag(p) for p in planes]}
@@ -685,6 +722,13 @@ def identify_table_top(planes: list[dict], cropped: np.ndarray,
         # the merged plane is refit from measured points.
         groups, merged = _merge_top_candidates(cropped, cands, dcfg)
         diag["top_merge_groups"] = [[int(r) for r in g] for g in groups]
+        pick = None
+        if merged is None and chooser is not None:
+            pick = chooser([(int(i), c) for i, c, _, _ in cands])
+        if merged is None and pick is not None:
+            merged = next(c for i, c, _, _ in cands if int(i) == int(pick))
+            merged = {**merged, "merged_from": [int(pick)]}
+            diag["top_chosen_by_overlap"] = int(pick)
         if merged is None:
             diag["ambiguity"] = sorted(
                 ({"rank": int(i), "offset_mm": round(o * 1000.0, 1),
@@ -970,7 +1014,8 @@ def support_hull_and_quad(top_xyz: np.ndarray, cam: dict, image_hw: tuple[int, i
 
 def estimate_top(xyz: np.ndarray, cam: dict, image_hw: tuple[int, int],
                  dcfg: dict, *, first_plane_out: dict | None = None,
-                 support_hint: dict | None = None) -> dict:
+                 support_hint: dict | None = None,
+                 prefer_quad=None) -> dict:
     """Full depth-first top estimate. Never raises on data; reports reasons.
 
     Returns ``{"ok", "reason", "quad", "hull", "depth", "support"}``;
@@ -987,6 +1032,10 @@ def estimate_top(xyz: np.ndarray, cam: dict, image_hw: tuple[int, int],
 
     ``support_hint`` (hidden_stand scenes, ROI retries only): the floor plane
     of the full cloud, see :func:`identify_table_top`.
+
+    ``prefer_quad`` (4x2 pixels, e.g. the SAM3 quad of the candidate being
+    checked): among two or more parallel top candidates the one whose points
+    lie clearly inside this quad wins (:func:`overlap_chooser`).
     """
     xyz = np.asarray(xyz, dtype=np.float64)
     depth: dict = {"assumed_registered": True,
@@ -1007,7 +1056,9 @@ def estimate_top(xyz: np.ndarray, cam: dict, image_hw: tuple[int, int],
             rms=float(planes[0]["rms"]),
             n_pool=int(cropped.shape[0]))
     table, top, front, ident, reason = identify_table_top(
-        planes, cropped, dcfg, support_hint=support_hint)
+        planes, cropped, dcfg, support_hint=support_hint,
+        chooser=(overlap_chooser(cropped, cam, prefer_quad, dcfg)
+                 if prefer_quad is not None else None))
     depth.update(ident)
     if is_hidden_stand(dcfg):
         # the table/support plane is the FLOOR: its distance to the top is
