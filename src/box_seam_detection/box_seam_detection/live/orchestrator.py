@@ -1846,7 +1846,9 @@ def _run_detection(next_capture, cfg, progress, ctx, abort_check=None):
         print(f"planner snapshot 側邊切割點整合失敗: {error}", file=sys.stderr)
         Path(staged_snapshot_path).unlink(missing_ok=True)
         raise DetectionAbort(1, f"planner snapshot post-processing failed: {error}") from error
-    height_waived = "height_waived(support_hidden)" in ((cut_permission or {}).get("flags") or [])
+    height_waived = ("height_waived(support_hidden)" in ((cut_permission or {}).get("flags") or [])
+                     or any(isinstance(r, dict) and r.get("code") == "height_unavailable"
+                            for r in ((cut_permission or {}).get("reasons") or [])))
     if cfg.side_seed and height_waived:
         # generic box without a height (dual_arm_v1 waiver): the side-tape seed needs a height and
         # would fail; the top cut does not need it (the executor fails closed on a missing seed block
