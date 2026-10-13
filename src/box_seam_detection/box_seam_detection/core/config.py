@@ -162,6 +162,12 @@ V2_DEFAULTS: dict = {
         #     parallel plane [offset_min, offset_max] above it; the floor
         #     distance is NEVER the box height (measured height unavailable).
         "support": "visible_table",
+        # hidden_stand only: coplanar floor fragments (offset within this, m)
+        # merge when picking the support = farthest large gravity-aligned plane
+        # family (far floor fragments disagree by 20-30 mm); support candidates
+        # have their normal within support_gravity_tol_deg of base_link +z
+        "support_merge_m": 0.08,
+        "support_gravity_tol_deg": 20.0,
         # record the scene depth noise (median plane RMS) in the depth
         # estimate; read by the noise-adaptive guided-plane gate (v2.noise_adaptive)
         "measure_noise": False,

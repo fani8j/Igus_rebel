@@ -31,6 +31,7 @@ live:
   seam_direction_prior_deg: 83.0     # observed seam direction in THIS cell's base_link (soft prior)
   seam_direction_soft_range_deg: 45.0
   rect_tol_mm: null                  # detector default 3.0 mm
+  generic_cut_without_height: false  # blocked: a generic box needs a measured height
   driver_extrinsic:
     reference: recorded_constant     # live.base_link.RECORDED_DRIVER_EXTRINSIC (Orbbec, this camera)
     fallback: recorded_constant      # used when a `recorded` run has no manifest block

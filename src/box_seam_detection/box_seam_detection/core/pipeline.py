@@ -331,17 +331,24 @@ def estimate_table_plane(depth_ctx: dict) -> dict | None:
             dcfg["top_min_inliers"] = int(dcfg["table_min_inliers"])
         planes = _depth.sequential_planes(cropped, dcfg)
         if planes:
-            # hidden_stand: the support is the LARGEST of the fitted planes
+            # hidden_stand: the support is the farthest large plane family
             # (what estimate_top picks), not the first RANSAC plane (a
             # foreground table can be found before the floor fragments)
-            k = (max(range(len(planes)), key=lambda i: planes[i]["n_inliers"])
-                 if hidden else 0)
-            n, d = np.asarray(planes[k]["n"], dtype=np.float64), planes[k]["d"]
-            if d < 0:
-                n, d = -n, -d
-            table = {"n": n, "d": float(d),
-                     "n_inliers": int(planes[k]["n_inliers"]),
-                     "rms_mm": float(planes[k]["rms"]) * 1000.0}
+            k, _sd = 0, {}
+            if hidden:
+                # farthest large gravity-aligned plane family (floor), shared
+                # with depth_top.identify_table_top; fail closed (no support)
+                # when a calibration is present but no such family exists
+                k, _sd = _depth.pick_hidden_support(planes, dcfg)
+            if k is not None:
+                n, d = np.asarray(planes[k]["n"], dtype=np.float64), planes[k]["d"]
+                if d < 0:
+                    n, d = -n, -d
+                table = {"n": n, "d": float(d),
+                         "n_inliers": int(planes[k]["n_inliers"]),
+                         "rms_mm": float(planes[k]["rms"]) * 1000.0}
+                if hidden and _sd.get("support_gravity_unchecked"):
+                    table["support_gravity_unchecked"] = True
     except Exception:  # noqa: BLE001 — unavailable == dominant fallback
         table = None
     depth_ctx["_table"] = table
@@ -424,6 +431,21 @@ def measure_box_height(depth_ctx: dict | None, plane, corners_xyz,
             # the plane below the box is the floor under a stand that hides the
             # real support: its distance is stand + box, never the box height
             out["height_unavailable"] = "support_hidden"
+            # recorded only: top-to-floor distance along the floor normal = box + stand,
+            # an UPPER bound on the box height (never used as the height)
+            try:
+                tbl = estimate_table_plane(depth_ctx)
+                cc = (None if corners_xyz is None
+                      else np.asarray(corners_xyz, dtype=np.float64).reshape(-1, 3))
+                if tbl is not None and cc is not None and cc.shape == (4, 3) \
+                        and np.all(np.isfinite(cc)):
+                    clr = (float(tbl["n"] @ cc.mean(axis=0)) + tbl["d"]) * 1000.0
+                    if np.isfinite(clr):
+                        out["support_clearance_mm"] = round(float(clr), 1)
+                    if tbl.get("support_gravity_unchecked"):
+                        out["support_gravity_unchecked"] = True
+            except Exception:  # noqa: BLE001
+                pass
             return out
         table = estimate_table_plane(depth_ctx)
         if table is None:

@@ -1532,6 +1532,55 @@ def _support_hidden_height(record: dict) -> bool:
             and recorded.get("height_unavailable") == "support_hidden")
 
 
+GENERIC_EDGE_MIN_VALID_FRAC = 0.8
+#: waiver: coplanar top beyond each quad edge (edge_support extent / share of stations);
+#: good dual-arm tops <= 5.8 mm / 0.1, the new generic box <= 2.5 mm / 0.0 (2026-10-13)
+GENERIC_EDGE_MAX_EXTENT_MM = 8.0
+GENERIC_EDGE_MAX_CONTINUE_FRAC = 0.2
+
+
+def _depth_confirmed_and_supported(record: dict) -> bool:
+    """Fail-closed evidence for the generic_cut_without_height waiver:
+    checks.independent_top_check.confirmed is True (and not a circular
+    rectangle-fitted skip) AND top_face.depth_diag.edge_support.edges holds ALL
+    four edges, each evaluated (status ok, valid_frac >= GENERIC_EDGE_MIN_VALID_FRAC),
+    AND none is unsupported. A missing depth_diag (e.g. AUTOLABEL_V2_TOP_DIAG_OFF)
+    or edges with insufficient depth never qualify."""
+    prof = record.get("box_profile")
+    clearance = prof.get("support_clearance_mm") if isinstance(prof, dict) else None
+    if not (isinstance(clearance, (int, float)) and not isinstance(clearance, bool)
+            and math.isfinite(clearance) and clearance > 0.0) \
+            or prof.get("support_gravity_unchecked"):
+        return False        # support not measured below the top, or chosen without gravity check
+    check = (record.get("checks") or {}).get("independent_top_check")
+    if not isinstance(check, dict) or check.get("confirmed") is not True \
+            or check.get("skipped_rectangle_fitted"):
+        return False
+    diag = (record.get("top_face") or {}).get("depth_diag")
+    support = diag.get("edge_support") if isinstance(diag, dict) else None
+    if not isinstance(support, dict) or support.get("unsupported") != []:
+        return False
+    edges = support.get("edges")
+    if not isinstance(edges, dict):
+        return False
+    def _num(v):
+        return (isinstance(v, (int, float)) and not isinstance(v, bool)
+                and math.isfinite(v))
+
+    for name in ("back", "front", "left", "right"):
+        e = edges.get(name)
+        if not isinstance(e, dict):
+            return False
+        vf, ext, cf = e.get("valid_frac"), e.get("extent_mm"), e.get("continue_frac")
+        # evaluated AND located: the coplanar top must end at the quad edge (no size check
+        # backs a generic box, so a top continuing past an edge would put the cut ends short)
+        if not (e.get("status") == "ok" and _num(vf) and vf >= GENERIC_EDGE_MIN_VALID_FRAC
+                and _num(ext) and ext <= GENERIC_EDGE_MAX_EXTENT_MM
+                and _num(cf) and cf <= GENERIC_EDGE_MAX_CONTINUE_FRAC):
+            return False
+    return True
+
+
 def _height_mismatch_flag(record: dict) -> bool:
     """box_profile.flags (pipeline.resolve_box_profile) contains height_mismatch."""
     recorded = record.get("box_profile")
@@ -1566,7 +1615,8 @@ def _final_top_dims_dev_mm(record: dict, profile):
 
 def evaluate_cut_permission(record: dict, seam: dict, seam_direction: dict = None,
                             seam_geometry: dict = None, profile=None,
-                            image_size=None, border_px: float = CUT_BORDER_PX) -> dict:
+                            image_size=None, border_px: float = CUT_BORDER_PX,
+                            generic_cut_without_height: bool = False) -> dict:
     """Cut permission of an accepted detection: ``{"status": "allowed"|"blocked",
     "reasons": [{"code", "retryable", "detail"}]}``. Pure; reads only the
     arguments. Detection and cut permission are separate: a blocked capture
@@ -1643,11 +1693,19 @@ def evaluate_cut_permission(record: dict, seam: dict, seam_direction: dict = Non
     hidden_known = bool(profile is not None and not profile.is_generic
                         and profile.height_mm is not None
                         and _support_hidden_height(record))
+    flags = []
     if profile is not None and (profile.is_generic or isinstance(record.get("box_profile"), dict)) \
             and _measured_height_mm(record) is None and not hidden_known:
-        reasons.append(_cp_reason("height_unavailable", False,
-                                  "no measured box height (a taller box of the same footprint "
-                                  "cannot be excluded)"))
+        if (generic_cut_without_height and profile.is_generic
+                and _support_hidden_height(record)
+                and _depth_confirmed_and_supported(record)):
+            # scene option: the cut only needs the top face + seam (the executor has its
+            # own carton height); the depth check confirmed the top and no edge is truncated
+            flags.append("height_waived(support_hidden)")
+        else:
+            reasons.append(_cp_reason("height_unavailable", False,
+                                      "no measured box height (a taller box of the same footprint "
+                                      "cannot be excluded)"))
     if _height_mismatch_flag(record):
         reasons.append(_cp_reason("height_mismatch", False,
                                   "measured box height disagrees with the profile (needs review)"))
@@ -1687,7 +1745,10 @@ def evaluate_cut_permission(record: dict, seam: dict, seam_direction: dict = Non
             reasons.append(_cp_reason("multiple_tape_candidates", False,
                                       f"{len(qualified)} qualified tape candidates "
                                       f"(axes {axes})"))
-    return {"status": "blocked" if reasons else "allowed", "reasons": reasons}
+    out = {"status": "blocked" if reasons else "allowed", "reasons": reasons}
+    if flags:
+        out["flags"] = flags
+    return out
 
 
 MULTI_BOX_HINT = ("more than one box (or a hand / object on the top) seen: leave only the box to cut "
@@ -2718,6 +2779,18 @@ def run_request(args, sam3) -> dict:
         try:
             cfg = default_config(scene_arg) if scene_arg is not None else default_config()
             cfg.setdefault("sam3", {})["checkpoint_sha256"] = None
+            if (cfg.get("depth_top") or {}).get("support") == "hidden_stand":
+                # hidden_stand: the floor is the support family whose normal is gravity
+                # (base_link +z in the camera frame, from the hand-eye calibration); without
+                # a calibration the largest plane is used (tagged support_gravity_unchecked)
+                try:
+                    import numpy as _np  # noqa: PLC0415
+                    c2b = _camera_to_base_matrix(calib_arg, manifest, scene_arg)
+                    if c2b is not None:
+                        up = _np.asarray(c2b, dtype=float)[:3, :3].T @ _np.array([0.0, 0.0, 1.0])
+                        cfg["depth_top"]["gravity_cam"] = [round(float(v), 6) for v in up / _np.linalg.norm(up)]
+                except Exception as _error:  # noqa: BLE001 - optional, falls back to unchecked
+                    _say(f"WARNING: gravity direction unavailable ({type(_error).__name__}: {_error})")
             est_cfg = cfg.get("seam_estimator") if isinstance(cfg, dict) else None
             paths = {"image": str(image_path), "pcd": str(pcd_path),
                      "manifest": str(manifest_path)}
@@ -2853,7 +2926,9 @@ def run_request(args, sam3) -> dict:
             raise Reject("multi_box", [f"multiple_boxes_suspect({', '.join(multi['evidence'])})"],
                          retryable=False, details={"multi_box": multi})
         cut_permission = evaluate_cut_permission(
-            record, seam, seam_direction, seam_geometry, box_profile, (width, height))
+            record, seam, seam_direction, seam_geometry, box_profile, (width, height),
+            generic_cut_without_height=bool(scene_arg is not None
+                                            and scene_arg.generic_cut_without_height))
         if cut_permission["status"] == "blocked":
             if not getattr(args, "allow_cut_blocked", False):
                 try:

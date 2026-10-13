@@ -57,6 +57,10 @@ LIVE_DEFAULTS: dict = {
     # default max |opposite 3-D side difference| (mm) of the rectangle gate when
     # --rect-tol-mm is not given; null = the detector default (3.0)
     "rect_tol_mm": None,
+    # generic (unknown-size) box on a hidden stand: the cut is not blocked for the
+    # missing height when the independent depth check confirmed the top and every
+    # top edge is depth-supported (detector.evaluate_cut_permission)
+    "generic_cut_without_height": False,
     # recorded_constant | null | explicit block (see module docstring)
     "driver_extrinsic": {
         "reference": "recorded_constant",
@@ -122,6 +126,10 @@ class Scene:
     def rect_tol_mm(self) -> float | None:
         v = self.live.get("rect_tol_mm")
         return None if v is None else float(v)
+
+    @property
+    def generic_cut_without_height(self) -> bool:
+        return self.live.get("generic_cut_without_height") is True
 
     @property
     def seam_soft_range_deg(self) -> float:
@@ -209,6 +217,8 @@ def _from_mapping(data: dict, path: str | None, sha: str | None) -> Scene:
         if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float))
                               or not math.isfinite(float(v))):
             raise SceneError(f"live.{key} must be a finite number or null, got {v!r}")
+    if not isinstance(live.get("generic_cut_without_height"), bool):
+        raise SceneError("live.generic_cut_without_height must be true or false")
     if live["driver_extrinsic"].get("fallback") is None:
         raise SceneError("live.driver_extrinsic.fallback must not be null")
     overrides = {k: v for k, v in data.items() if k not in _META_KEYS}

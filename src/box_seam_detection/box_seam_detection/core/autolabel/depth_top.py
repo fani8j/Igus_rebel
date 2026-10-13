@@ -376,6 +376,78 @@ def plane_angle_offset(n1: np.ndarray, d1: float,
     return angle, float(abs(d1 - sign * d2))
 
 
+def pick_hidden_support(planes: list[dict], dcfg: dict) -> tuple[int | None, dict]:
+    """hidden_stand support (floor) = the FARTHEST large gravity-aligned plane family.
+
+    ONE helper shared by ``identify_table_top`` (estimate_top), the pipeline's
+    ``estimate_table_plane`` (height / independent top check / trim plane choice),
+    so they cannot disagree.
+
+    With ``dcfg["gravity_cam"]`` (unit vector of base_link +z in the camera
+    frame, set by the detector from the hand-eye calibration): planes are
+    oriented toward the camera (``d > 0``) and only those whose normal is within
+    ``support_gravity_tol_deg`` (default 20) of ``gravity_cam`` (signed: a floor
+    faces up, a ceiling does not) are support candidates, so a back wall can
+    never win. Candidates are grouped greedily (largest first): a plane joins a
+    group whose representative (its largest member) is parallel within
+    ``parallel_tol_deg`` and within ``support_merge_m`` in offset (coplanar
+    fragments of a noisy far floor); inliers are summed. Groups with summed
+    inliers >= ``table_min_inliers`` compete; the farthest from the camera
+    (plane offset ``d``) wins; the support plane is that group's largest member
+    (no refit). FAIL CLOSED: calibration present but no such group -> None.
+
+    Without ``gravity_cam`` (no calibration): today's behaviour, the largest
+    plane; ``diag["support_gravity_unchecked"]`` is True.
+
+    Returns ``(index into planes | None, diag)``.
+    """
+    if not planes:
+        return None, {}
+    order = sorted(range(len(planes)), key=lambda i: -planes[i]["n_inliers"])
+    g = dcfg.get("gravity_cam")
+    if g is None:
+        return int(order[0]), {"support_gravity_unchecked": True}
+    g = np.asarray(g, dtype=np.float64).ravel()
+    g = g / max(float(np.linalg.norm(g)), 1e-12)
+    gtol = float(dcfg.get("support_gravity_tol_deg", 20.0))
+    tol = float(dcfg["parallel_tol_deg"])
+    merge = float(dcfg.get("support_merge_m", 0.08))
+    tmin = int(dcfg["table_min_inliers"])
+    nd = {}
+    for i in order:
+        n = np.asarray(planes[i]["n"], dtype=np.float64)
+        d = float(planes[i]["d"])
+        if d < 0:
+            n, d = -n, -d
+        nd[i] = (n, d)
+    groups: list[dict] = []
+    for i in order:
+        n, d = nd[i]
+        up = float(np.degrees(np.arccos(np.clip(float(n @ g), -1.0, 1.0))))
+        if up > gtol:
+            continue
+        for grp in groups:
+            rn, rd = nd[grp["rep"]]
+            ang, off = plane_angle_offset(rn, rd, n, d)
+            if ang <= tol and off <= merge:
+                grp["members"].append(i)
+                grp["n_inliers"] += int(planes[i]["n_inliers"])
+                break
+        else:
+            groups.append({"rep": i, "members": [i], "n_inliers": int(planes[i]["n_inliers"])})
+    diag = {"support_gravity_tol_deg": gtol,
+            "groups": [{"rank": int(g_["rep"]), "members": [int(m) for m in g_["members"]],
+                        "n_inliers": g_["n_inliers"], "distance_m": round(nd[g_["rep"]][1], 4)}
+                       for g_ in groups]}
+    cands = [g_ for g_ in groups if g_["n_inliers"] >= tmin]
+    if not cands:
+        diag["reject"] = "no_gravity_aligned_support"
+        return None, diag
+    best = max(cands, key=lambda g_: nd[g_["rep"]][1])
+    diag["chosen_group_rank"] = int(best["rep"])
+    return int(best["rep"]), diag
+
+
 def _signed_height_above(table: dict, point) -> float:
     """Height (m) of ``point`` above the ``table`` plane, + = camera side.
 
@@ -634,12 +706,25 @@ def identify_table_top(planes: list[dict], cropped: np.ndarray,
         diag["support_hint"] = True
         table_xyz = cropped[:0]
     else:
-        table = planes[order[0]]
-        if table["n_inliers"] < int(dcfg["table_min_inliers"]):
+        k0 = order[0]
+        if hidden:
+            # hidden_stand: the floor is the farthest large gravity-aligned plane
+            # family, not the largest plane (the box top can be larger than a split floor)
+            k, sdiag = pick_hidden_support(planes, dcfg)
+            diag["support_groups"] = sdiag.get("groups")
+            if sdiag.get("support_gravity_unchecked"):
+                diag["support_gravity_unchecked"] = True
+            if k is None:
+                diag["table_reject"] = sdiag.get("reject", "no_support")
+                return None, None, front, diag, "depth_no_table"
+            k0 = k
+        table = planes[k0]
+        if table["n_inliers"] < int(dcfg["table_min_inliers"]) and (
+                not hidden or diag.get("support_gravity_unchecked")):
             diag["table_reject"] = "below_table_min_inliers"
             return None, None, front, diag, "depth_no_table"
-        diag["table_rank"] = int(order[0])
-        rest = order[1:]
+        diag["table_rank"] = int(k0)
+        rest = [i for i in order if i != k0]
         table_xyz = cropped[table["mask"]]
     tmin = table_xyz.min(axis=0) if table_xyz.shape[0] else np.zeros(3)
     tmax = table_xyz.max(axis=0) if table_xyz.shape[0] else np.zeros(3)
@@ -653,7 +738,7 @@ def identify_table_top(planes: list[dict], cropped: np.ndarray,
             ang_f, off_f = plane_angle_offset(table["n"], table["d"],
                                               planes[i]["n"], planes[i]["d"])
             if (ang_f <= float(dcfg["parallel_tol_deg"])
-                    and off_f < float(dcfg["offset_min"])):
+                    and off_f <= float(dcfg.get("support_merge_m", 0.08))):
                 floor_pts.append(cropped[planes[i]["mask"]])
         floor_hull = _plane_footprint(table, np.concatenate(floor_pts))
         diag["floor_fragments"] = len(floor_pts)

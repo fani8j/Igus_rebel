@@ -52,6 +52,10 @@ live:
   seam_direction_soft_range_deg: 45.0
   rect_tol_mm: 20.0                  # opposite-side gate: 3 mm is for a 110 mm box; on this 390 x 320 mm top the
                                      # systematic depth-plane tilt (2-4 deg) alone gives 8-12 mm (see DESIGN.md)
+  generic_cut_without_height: true   # unknown box on the hidden stand: no measured height, but a depth-confirmed
+                                     # top with all edges supported may be cut (the executor has its own height).
+                                     # The executor's carton_height_m (collision model) MUST cover the TALLEST
+                                     # box used here: the detector does not know a generic box's height.
   driver_extrinsic:
     reference: null                  # no verified reference for this camera: a manifest block is used as
                                      # is (WARNING, never refused); `tf` mode still compares with live TF

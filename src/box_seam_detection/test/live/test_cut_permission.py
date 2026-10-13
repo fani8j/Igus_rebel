@@ -411,3 +411,76 @@ def test_seam_too_curved_blocks_only_profiles_with_a_limit(det):
     rec["seam"]["estimate"]["seam_curvature_mm"] = 50.0
     assert "seam_too_curved" not in _codes(_perm(det, rec, seam={"status": "ok"}, profile=_small(det)))
     assert "seam_too_curved" not in _codes(_perm(det, rec, seam={"status": "ok"}, profile=_generic(det)))
+
+
+# ---- generic_cut_without_height (scene option, dual-arm) -----------------------
+
+def _generic_hidden_rec(confirmed=True, unsupported=()):
+    rec = _hidden_rec("generic")
+    rec["seam"]["status"] = "ok"
+    rec.setdefault("checks", {})["independent_top_check"] = {"confirmed": confirmed}
+    edges = {e: {"status": "ok", "valid_frac": 1.0, "extent_mm": 2.0, "continue_frac": 0.0}
+             for e in ("back", "right", "front", "left")}
+    rec["top_face"]["depth_diag"] = {"edge_support": {"unsupported": list(unsupported), "edges": edges}}
+    rec["box_profile"]["support_clearance_mm"] = 970.0
+    return rec
+
+
+def _perm_g(det, rec, flag=True, profile=None):
+    return det.evaluate_cut_permission(
+        rec, det.published_seam_line(rec), None, None, profile or _generic(det), (W, H),
+        generic_cut_without_height=flag)
+
+
+def test_generic_cut_without_height_allowed_when_confirmed_and_supported(det):
+    perm = _perm_g(det, _generic_hidden_rec())
+    assert "height_unavailable" not in _codes(perm)
+    assert perm["flags"] == ["height_waived(support_hidden)"]
+
+
+def test_generic_cut_without_height_still_blocked_otherwise(det):
+    assert "height_unavailable" in _codes(_perm_g(det, _generic_hidden_rec(confirmed=False)))
+    assert "height_unavailable" in _codes(_perm_g(det, _generic_hidden_rec(confirmed=None)))
+    assert "height_unavailable" in _codes(_perm_g(det, _generic_hidden_rec(unsupported=["front"])))
+    rec = _generic_hidden_rec()
+    rec["top_face"].pop("depth_diag")                                    # no edge-support evidence
+    assert "height_unavailable" in _codes(_perm_g(det, rec))
+    rec = _generic_hidden_rec()                                          # all edges insufficient_depth
+    for e in rec["top_face"]["depth_diag"]["edge_support"]["edges"].values():
+        e.clear(); e["status"] = "insufficient_depth"
+    assert "height_unavailable" in _codes(_perm_g(det, rec))
+    rec = _generic_hidden_rec()                                          # one edge poorly sampled
+    rec["top_face"]["depth_diag"]["edge_support"]["edges"]["left"]["valid_frac"] = 0.5
+    assert "height_unavailable" in _codes(_perm_g(det, rec))
+    rec = _generic_hidden_rec()                                          # top continues 15 mm past the
+    for side in ("left", "right"):                                       # seam ends (real lid larger than
+        rec["top_face"]["depth_diag"]["edge_support"]["edges"][side].update(  # the quad), not "unsupported"
+            extent_mm=15.0, continue_frac=1.0)
+    assert "height_unavailable" in _codes(_perm_g(det, rec))
+    rec = _generic_hidden_rec()                                          # extent missing
+    rec["top_face"]["depth_diag"]["edge_support"]["edges"]["back"].pop("extent_mm")
+    assert "height_unavailable" in _codes(_perm_g(det, rec))
+    rec = _generic_hidden_rec()                                          # edge_support without edges
+    rec["top_face"]["depth_diag"]["edge_support"]["edges"] = {}
+    assert "height_unavailable" in _codes(_perm_g(det, rec))
+    rec = _generic_hidden_rec()                                          # circular R5 skip
+    rec["checks"]["independent_top_check"]["skipped_rectangle_fitted"] = True
+    assert "height_unavailable" in _codes(_perm_g(det, rec))
+    rec = _generic_hidden_rec()                                          # support not measured / unchecked
+    rec["box_profile"].pop("support_clearance_mm")
+    assert "height_unavailable" in _codes(_perm_g(det, rec))
+    rec = _generic_hidden_rec()
+    rec["box_profile"]["support_gravity_unchecked"] = True
+    assert "height_unavailable" in _codes(_perm_g(det, rec))
+    perm = _perm_g(det, _generic_hidden_rec(), flag=False)               # scene option off
+    assert "height_unavailable" in _codes(perm) and "flags" not in perm
+    rec = _generic_hidden_rec()
+    rec["box_profile"]["height_unavailable"] = "no_table_plane"          # a real failure
+    assert "height_unavailable" in _codes(_perm_g(det, rec))
+
+
+def test_generic_cut_without_height_scene_flag():
+    from box_seam_detection.core import scene as sc
+    assert sc.load_scene("dual_arm_v1").generic_cut_without_height is True
+    assert sc.load_scene("table_cell_v1").generic_cut_without_height is False
+    assert sc.builtin_default().generic_cut_without_height is False

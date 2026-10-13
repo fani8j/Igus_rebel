@@ -149,11 +149,28 @@ rectangle-gate tolerance. `table_cell_v1` = today's values and the default (buil
 `dual_arm_v1` = dual-arm cell (box on a stand smaller than the box, floor visible, 1.0-1.3 m, ~2.7 mm depth noise,
 left-arm calib `dualcal_20261009_left_single`, NOT verified by touches).
 
-- `support: hidden_stand`: the dominant plane is the floor; the top is a large plane parallel to it, `offset_min..offset_max`
+- `support: hidden_stand`: the support (floor) is the FARTHEST large gravity-aligned plane family, NOT the largest plane
+  (2026-10-13): `depth_top.pick_hidden_support` (one helper for `identify_table_top`, `pipeline.estimate_table_plane`,
+  hence the height / independent check / trim plane choice). The detector passes `depth_top.gravity_cam` (base_link +z in
+  the camera frame, from the hand-eye calibration); candidate planes face the camera with their normal within
+  `support_gravity_tol_deg` (20) of it (a back wall or a ceiling never qualifies), are grouped (parallel within
+  `parallel_tol_deg`, offset within `support_merge_m` = 0.08 m: a noisy far floor splits into fragments 20-30 mm apart),
+  inliers summed, groups >= `table_min_inliers` compete, the farthest wins; the support plane is the group's largest member
+  (no refit). Fail closed: calibration present but no such family -> no support (depth check unconfirmed). Without a
+  calibration the old rule (largest plane) applies and is tagged `support_gravity_unchecked`. The floor footprint merge uses
+  `support_merge_m` too. `box_profile.support_clearance_mm` records the top-to-floor distance along the floor normal
+  (box + stand: an UPPER bound on the box height; recorded only). visible_table is untouched.
+  Old text: the dominant plane is the floor; the top is a large plane parallel to it, `offset_min..offset_max`
   above, inside the floor's footprint. A desk at the same height is indistinguishable by depth: `depth_ambiguous_top` is
   resolved by the SAM3 candidate's ROI (floor passed as `support_hint`). The floor distance is never a box height:
   `box_profile.height_unavailable = "support_hidden"`; a KNOWN profile (large_392) then uses its own height (fold, side
-  seed) and is not cut-blocked for it; generic still is.
+  seed) and is not cut-blocked for it; generic still is, unless the scene sets `live.generic_cut_without_height: true`
+  (dual_arm_v1): then a generic box with `height_unavailable == support_hidden` is not blocked for the height iff
+  `checks.independent_top_check.confirmed` (not a circular rectangle-fitted skip), `box_profile.support_clearance_mm` > 0
+  (and no `support_gravity_unchecked`), and `top_face.depth_diag.edge_support` has all 4 edges `ok` with `valid_frac >= 0.8`
+  and none unsupported (missing diagnostics / insufficient depth stay blocked). The permission then carries
+  `flags: ["height_waived(support_hidden)"]`. The side-tape seed still needs a height (stays blocked). The executor's
+  `carton_height_m` (collision model) must cover the tallest box used with this scene.
 - `v2.noise_adaptive`: guided-plane band and p95 limit grow with the measured scene noise (median RMS of the fitted planes)
   above `rms_floor_mm`, plus a bounded lid-bulge allowance; never below today's values.
 - `live.driver_extrinsic.reference: null` = no verified reference for the camera (manifest block used with a warning);

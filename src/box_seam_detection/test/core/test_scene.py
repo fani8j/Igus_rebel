@@ -263,3 +263,78 @@ def test_real_dual_arm_captures_pass_the_depth_gates(cid):
     sides = sorted(float(np.linalg.norm(c[(i + 1) % 4] - c[i])) * 1000 for i in range(4))
     assert 300 < sides[0] and sides[-1] < 410          # a 390 x 320 mm top (depth-plane tilt inflates it)
     assert P.measure_box_height(ctx, cross["plane"], c)["height_unavailable"] == "support_hidden"
+
+
+# ---- hidden_stand support = farthest large gravity-aligned plane family --------
+
+GRAV = [0.0, -0.7071, -0.7071]          # "up" in a camera looking down 45 deg
+
+
+def _pl(n_in, d, tilt_deg=0.0, normal=None):
+    n = np.array(normal if normal is not None else GRAV, dtype=float)
+    if tilt_deg:
+        t = np.radians(tilt_deg)
+        n = np.array([np.sin(t), n[1] * np.cos(t), n[2] * np.cos(t)])
+    n /= np.linalg.norm(n)
+    return {"n": n, "d": float(d), "n_inliers": n_in, "rms": 0.002,
+            "centroid": np.zeros(3), "mask": np.zeros(0, bool)}
+
+
+def _gcfg(grav=GRAV):
+    dcfg = dict(_dual_cfg()["depth_top"])
+    if grav is not None:
+        dcfg["gravity_cam"] = list(grav)
+    return dcfg
+
+
+def test_hidden_support_is_the_farthest_family_not_the_largest_plane():
+    dcfg = _gcfg()
+    planes = [_pl(153000, 0.717), _pl(89800, 1.667), _pl(57900, 1.672), _pl(6000, 1.2, 40.0)]
+    k, diag = D.pick_hidden_support(planes, dcfg)
+    assert k == 1
+    assert [g["members"] for g in diag["groups"] if g["rank"] == 1] == [[1, 2]]
+    # a small far family below table_min_inliers is ignored
+    assert D.pick_hidden_support(planes + [_pl(5000, 3.0)], dcfg)[0] == 1
+    # far wall-like plane (normal perpendicular to gravity) and a far ceiling never win
+    wall = _pl(60000, 3.5, normal=[0.0, 0.7071, -0.7071])
+    assert D.pick_hidden_support(planes + [wall], dcfg)[0] == 1
+    ceiling = _pl(60000, 3.5, normal=[0.0, 0.7071, 0.7071])
+    assert D.pick_hidden_support(planes + [ceiling], dcfg)[0] == 1
+    # fragments below the minimum alone, summed above it
+    assert D.pick_hidden_support([_pl(15000, 1.7), _pl(14000, 1.69), _pl(40000, 0.7)], dcfg)[0] == 0
+    assert D.pick_hidden_support([], dcfg)[0] is None
+
+
+def test_hidden_support_fail_closed_and_no_calibration_fallback():
+    # calibration present but only a wall: no support (NOT the largest plane)
+    wall = _pl(90000, 2.0, normal=[0.0, 0.7071, -0.7071])
+    k, diag = D.pick_hidden_support([wall], _gcfg())
+    assert k is None and diag["reject"] == "no_gravity_aligned_support"
+    # no calibration: today's behaviour (largest plane), tagged
+    planes = [_pl(153000, 0.717), _pl(89800, 1.667)]
+    k, diag = D.pick_hidden_support(planes, _gcfg(None))
+    assert k == 0 and diag["support_gravity_unchecked"] is True
+    cam = cg.load_camera()
+    n, xyz = _hidden_cloud()
+    # identify_table_top reports depth_no_table when only a wall qualifies
+    table, top, _f, d2, reason = D.identify_table_top([wall], np.zeros((0, 3)), _gcfg())
+    assert table is None and reason == "depth_no_table"
+
+
+def test_hidden_support_estimate_table_plane_and_visible_table_untouched():
+    cam = cg.load_camera()
+    n, xyz = _hidden_cloud()
+    cfg = _dual_cfg()
+    cfg["depth_top"]["gravity_cam"] = [float(v) for v in n]        # camera-facing normal = up
+    ctx = {"xyz": xyz, "cam": cam, "dcfg": cfg["depth_top"]}
+    tbl = P.estimate_table_plane(ctx)
+    assert tbl["d"] == pytest.approx(1.7, abs=0.03)
+    # wrong gravity (floor not gravity-aligned): fail closed, no table
+    cfg2 = _dual_cfg()
+    cfg2["depth_top"]["gravity_cam"] = [1.0, 0.0, 0.0]
+    assert P.estimate_table_plane({"xyz": xyz, "cam": cam, "dcfg": cfg2["depth_top"]}) is None
+    # visible_table: still the first/dominant plane, identify_table_top unchanged
+    dv = default_config()["depth_top"]
+    planes = [_pl(30000, 0.8), _pl(90000, 1.7)]
+    table, _top, _f, diag, _r = D.identify_table_top(planes, np.zeros((0, 3)), dv)
+    assert diag["table_rank"] == 1 and "support_groups" not in diag
