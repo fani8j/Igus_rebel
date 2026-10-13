@@ -179,3 +179,20 @@ Profile flags (`core/box_profiles.py`, only `large_392` has them on; small/big s
   plane; `top_face.corners_*` / `plane` / `seam.endpoints_px` carry the published (gap-anchored) values. The detector's
   rectangle gate and the profile size check evaluate the MEASURED (RGB) quad of a K1 record, so K1 can never launder a
   quad those gates would reject. `AUTOLABEL_V2_TOP_FROM_GAP=shadow|off` computes-and-records / disables it.
+
+## Truncation recovery (2026-10-13; scene key `truncation_recovery.mode: off | shadow | on`)
+
+Failure: SAM3 outlines only ONE FLAP of the lid (back edge -> flap gap, ~399 x 162 mm). The half-top is coplanar, so the
+depth cross-check passes; the profile resolves `generic` and the seam axis is not published (`seam_status_ambiguous`).
+D1 (`edge_support.decide`, same thresholds as the `top_edge_unsupported` rule) sees it: the coplanar top continues past the front edge.
+
+`pipeline._truncation_recovery` runs right after the top quad is accepted (before fold / profile / seam). Only when D1 flags an
+edge: (a) the first SAM3 alternate of the same response whose quad contains the current one and passes the normal evaluation
+(refine + depth check); (b) otherwise a depth-grown quad (`top_diag.grow_coplanar_region`: pixels within the depth-check band
+of the top plane, closed over the gap, 8-connected component under the seed, opened, hole-filled, convex hull -> `_mask_to_quad_ex`),
+which goes through the normal refine + depth check + fold path; (c) otherwise the old behaviour (reject). A candidate replaces the
+detection only if: it contains >= 90 % of the original quad, D1 flags no edge, its dims resolve to a known profile (generic:
+rectangle gate `generic_rect_tol_mm`), and the downstream stages (re-run through `process_capture(_forced=...)`) give seam status ok
+(observed gap for `top_from_gap` profiles) with a clean D1 on the final quad. Provenance: `record.truncation_recovery`
+(trigger edge / extent / continue share, before and after quads + dims, per-method `tried` results, `applied`).
+`table_cell_v1` = `off` (the code path never runs: records are bit-identical); `AUTOLABEL_V2_TRUNC_RECOVERY=on|shadow|off` overrides.

@@ -313,6 +313,16 @@ V2_DEFAULTS: dict = {
         "enabled": True,
         "rule": "long_side_back_v1",
     },
+    # Truncation recovery (pipeline._truncation_recovery, 2026-10-13): when the
+    # accepted top-face quad is truncated (D1: the coplanar top continues past an
+    # edge), try a containing SAM3 alternate, then the depth-grown coplanar
+    # region; accepted only when nothing is truncated any more and the seam
+    # stage confirms. off | shadow (recorded, never applied) | on.
+    "truncation_recovery": {
+        "mode": "off",
+        "min_contain": 0.90,
+        "generic_rect_tol_mm": 20.0,
+    },
 }
 
 #: Fixed corner order used across the v2 pipeline (ring order; which

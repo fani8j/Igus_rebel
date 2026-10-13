@@ -1630,7 +1630,8 @@ def _run_depth_work(_depth, read_pcd_xyz, paths: dict, cam, H: int, W: int,
 
 def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
                     source: str = "auto", archive_dir=None,
-                    session=None) -> tuple[dict, dict]:
+                    session=None, _forced: dict | None = None
+                    ) -> tuple[dict, dict]:
     """Run the full v2 pipeline for one capture.
 
     ``paths``: {"image", "pcd", "manifest"}. ``source``: auto |
@@ -1640,6 +1641,10 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
     Returns ``(record, debug)`` where debug holds intermediate arrays/dicts
     for the overlay writer (not serialized). Never raises on data: failures
     become records with null geometry and explicit reasons.
+
+    ``_forced`` (private, truncation recovery): ``{"winner", "reasons",
+    "attempts"}`` of an already accepted candidate; the candidate search is
+    skipped and the downstream stages (profile, seam, record) run on it.
     """
     import sys
 
@@ -1717,9 +1722,12 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
 
     # ---- 1. coarse candidates + fallback chain ------------------------
     try:
-        cands = _gather_coarse_candidates(
-            capture_id, source, str(image_path), session, archive_dir,
-            depth_est, depth_err, cfg, depth_join=_depth_join)
+        if _forced is None:
+            cands = _gather_coarse_candidates(
+                capture_id, source, str(image_path), session, archive_dir,
+                depth_est, depth_err, cfg, depth_join=_depth_join)
+        else:
+            cands = []
     finally:
         if thread is not None:
             thread.join()
@@ -1733,6 +1741,10 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
         depth_ctx.update(box["res"]["extra"])
         _apply_scene_limits(depth_ctx)
     winner = None
+    if _forced is not None:
+        winner = _forced["winner"]
+        reasons[:] = list(_forced["reasons"])
+        attempts[:] = list(_forced["attempts"])
 
     rcfg = _rel_cfg(cfg)
     # Box-size awareness (multi-box plan M3). A candidate whose own central
@@ -2061,7 +2073,8 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
             break
     if winner is None and not trimmed_done and live_evals:
         winner = _trim_fallback_all_rejected()
-    elif winner is not None and winner["cand"]["source"] == "sam3_live" \
+    elif winner is not None and _forced is None \
+            and winner["cand"]["source"] == "sam3_live" \
             and not any((winner["cand"].get("prov") or {}).get(k)
                         for k in ("plane_trimmed", "r2_trim", "r3_rect")):
         # (b) accepted but grossly non-rectangular in 3-D: try the trim.
@@ -2084,6 +2097,27 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
             checkpoint_sha=first.get("checkpoint_sha"),
             model_revision=(first.get("prov") or {}).get("model_revision"),
             attempts=attempts), debug
+
+    # ---- truncation recovery (scene flag; off = this block never runs) ------
+    trunc_block = None
+    trunc_mode = _truncation_mode(cfg)
+    if (_forced is None and trunc_mode != "off" and depth_ctx is not None
+            and winner["cand"]["source"] == "sam3_live"
+            and winner["cross"].get("plane") is not None):
+        try:
+            recovered, trunc_block = _truncation_recovery(
+                winner, cands, trunc_mode, cfg, depth_ctx, manifest, W, H,
+                attempts, reasons, _evaluate,
+                lambda w: process_capture(
+                    capture_id, paths, cfg, source, archive_dir, session,
+                    _forced={"winner": w, "reasons": list(reasons),
+                             "attempts": list(attempts)}))
+        except Exception as exc:  # noqa: BLE001 — recovery never breaks the old path
+            recovered = None
+            trunc_block = {"mode": trunc_mode, "triggered": True, "recovered": False,
+                           "error": f"{type(exc).__name__}: {exc}"}
+        if recovered is not None:
+            return recovered
 
     cand = winner["cand"]
     mask_source = cand["source"]
@@ -2425,12 +2459,248 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
             "name": None, **height_rec},
     }
     record = apply_corner_names(record, manifest, cfg, debug)
+    if trunc_block is not None:
+        record["truncation_recovery"] = trunc_block
     return record, debug
 
 
 # ----------------------------------------------------------------------
 # Top-face depth diagnostics + gap-anchored known-size top (2026-10-12)
 # ----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
+# Truncation recovery (2026-10-13)
+# ----------------------------------------------------------------------
+# SAM3 sometimes outlines only ONE FLAP of the lid (back edge -> flap gap). The
+# half-top passes the depth cross-check (it is coplanar), the profile resolves
+# `generic` and the seam is the quad's own front edge. D1 (core/edge_support.py)
+# sees it: the coplanar top continues beyond an edge. Recovery tries (a) a SAM3
+# alternate that contains the quad, (b) the connected coplanar region of the top
+# plane grown from the quad; each candidate runs the full evaluation (refine +
+# depth check) and the downstream stages, and replaces the detection only when
+# nothing is truncated any more and the seam stage confirms.
+
+TRUNC_DEFAULTS = {"mode": "off", "min_contain": 0.90, "generic_rect_tol_mm": 20.0}
+
+
+def _truncation_mode(cfg: dict) -> str:
+    """``off`` (default; the code path is skipped entirely), ``shadow``
+    (recorded, never applied) or ``on``. ``AUTOLABEL_V2_TRUNC_RECOVERY``
+    overrides the scene's ``truncation_recovery.mode``."""
+    v = os.environ.get("AUTOLABEL_V2_TRUNC_RECOVERY")
+    if v is None or not v.strip():
+        v = (cfg.get("truncation_recovery") or {}).get("mode", "off")
+    if v is True:           # unquoted YAML `on`
+        v = "on"
+    elif v is False:        # unquoted YAML `off`
+        v = "off"
+    v = str(v).strip().lower()
+    return v if v in ("on", "shadow", "off") else "off"
+
+
+def _contained_frac(inner: np.ndarray, outer: np.ndarray, W: int, H: int) -> float | None:
+    """Share of the area of quad ``inner`` that lies inside quad ``outer``."""
+    try:
+        mi = np.zeros((H, W), np.uint8)
+        mo = np.zeros((H, W), np.uint8)
+        cv2.fillConvexPoly(mi, np.asarray(inner, dtype=np.float64).astype(np.int32), 1)
+        cv2.fillConvexPoly(mo, np.asarray(outer, dtype=np.float64).astype(np.int32), 1)
+    except cv2.error:
+        return None
+    a = float(mi.sum())
+    return float((mi & mo).sum()) / a if a > 0 else None
+
+
+def _trunc_edges_summary(es: dict, names: list) -> dict:
+    ed = es.get("edges") or {}
+    return {nm: {"extent_mm": (ed.get(nm) or {}).get("extent_mm"),
+                 "continue_frac": (ed.get(nm) or {}).get("continue_frac")}
+            for nm in names}
+
+
+def _quad_json(q) -> list:
+    return [[round(float(x), 1), round(float(y), 1)]
+            for x, y in np.asarray(q, dtype=np.float64).reshape(4, 2)]
+
+
+def _truncation_recovery(win0: dict, cands: list, mode: str, cfg: dict,
+                         depth_ctx: dict, manifest: dict, W: int, H: int,
+                         attempts: list, reasons: list, evaluate, rerun):
+    """Check the accepted winner ``win0`` for a truncated top and try to recover.
+
+    ``evaluate(cand, entry)`` = the pipeline's refine + depth check (appends to
+    ``attempts``); ``rerun(winner)`` = ``process_capture`` forced onto an
+    accepted candidate (profile, seam, record). Returns ``(result | None,
+    block | None)``: ``result`` = ``(record, debug)`` of the recovered
+    detection (mode ``on`` and every acceptance rule passed) else None;
+    ``block`` = the ``truncation_recovery`` provenance record (None when the
+    quad is not truncated)."""
+    from . import top_diag as _td
+    from . import sam3_worker as _w
+
+    tcfg = {**TRUNC_DEFAULTS, **(cfg.get("truncation_recovery") or {})}
+    fe = _fold_mod()
+    cross0 = win0["cross"]
+    n0, d0 = fe._plane_nd(cross0["plane"])
+    idx, uv = _depth_projection(depth_ctx)
+    if n0 is None or idx is None:
+        return None, None
+    xyz = depth_ctx["xyz"]
+    es0 = _td.edge_check(win0["quad"], (n0, d0), cross0.get("plane_rms_mm"), xyz,
+                         (idx, uv), _plane_backprojector(manifest, n0, d0), (W, H))
+    bad0 = list(es0.get("unsupported") or [])
+    if not bad0:
+        return None, None
+    block: dict = {
+        "mode": mode, "triggered": True, "recovered": False, "applied": False,
+        "method": None,
+        "trigger": {"edges": bad0, **_trunc_edges_summary(es0, bad0)},
+        "before": {"corners_px": _quad_json(win0["quad"]),
+                   "top_dims_mm": None},
+        "tried": []}
+    d_before = _rect_diffs_mm(cross0.get("corners_xyz"))
+    c0 = cross0.get("corners_xyz")
+    if c0 is not None and np.all(np.isfinite(c0)):
+        c = np.asarray(c0, dtype=np.float64).reshape(4, 3)
+        sides = [1000.0 * float(np.linalg.norm(c[(i + 1) % 4] - c[i])) for i in range(4)]
+        block["before"]["top_dims_mm"] = [round(0.5 * (sides[0] + sides[2]), 1),
+                                          round(0.5 * (sides[1] + sides[3]), 1)]
+    block["before"]["rect_diffs_mm"] = (None if d_before is None
+                                        else [round(v, 2) for v in d_before])
+    n_att, n_rea = len(attempts), len(reasons)
+    min_contain = float(tcfg["min_contain"])
+
+    def _try(method: str, cand: dict, extra: dict):
+        """evaluate + verify one candidate -> (record, debug) | None."""
+        rec_t: dict = {"method": method, **extra}
+        block["tried"].append(rec_t)
+        entry: dict = {"source": "sam3_live", "truncation_recovery": method}
+        if cand.get("alternate_rank") is not None:
+            entry["alternate_rank"] = int(cand["alternate_rank"])
+            entry["concept_score"] = cand.get("concept_score")
+        win = evaluate(cand, entry)
+        if win is None:
+            rec_t["result"] = "rejected_by_existing_checks"
+            return None
+        quad2 = win["quad"]
+        rec_t["quad_px"] = _quad_json(quad2)
+        cf = _contained_frac(win0["quad"], quad2, W, H)
+        rec_t["contains_original"] = None if cf is None else round(cf, 3)
+        if cf is None or cf < min_contain:
+            rec_t["result"] = "does_not_contain_original"
+            return None
+        pl2 = win["cross"].get("plane")
+        n2, d2 = fe._plane_nd(pl2) if pl2 is not None else (None, None)
+        if n2 is None:
+            rec_t["result"] = "no_plane"
+            return None
+        es2 = _td.edge_check(quad2, (n2, d2), win["cross"].get("plane_rms_mm"), xyz,
+                             (idx, uv), _plane_backprojector(manifest, n2, d2), (W, H))
+        bad2 = es2.get("unsupported")
+        if bad2 is None or bad2:
+            rec_t["result"] = ("edge_check_error" if bad2 is None
+                               else f"still_truncated({','.join(bad2)})")
+            return None
+        res = rerun(win)
+        rec2 = res[0]
+        prof = (rec2.get("box_profile") or {}).get("name")
+        generic = prof in (None, "generic")
+        rec_t["profile"] = prof
+        rec_t["top_dims_mm"] = (rec2.get("box_profile") or {}).get("top_dims_mm")
+        if generic:
+            dd = _rect_diffs_mm(win["cross"].get("corners_xyz"))
+            tol = float(tcfg["generic_rect_tol_mm"])
+            if dd is None or max(dd) > tol:
+                rec_t["result"] = "generic_profile_fails_rectangle_gate"
+                return None
+        seam = rec2.get("seam") or {}
+        if seam.get("status") != "ok":
+            rec_t["result"] = f"seam_not_ok({seam.get('status')})"
+            return None
+        if (not generic and getattr(_bp.get(prof), "top_from_gap", False)
+                and seam.get("source") != "observed_gap"):
+            rec_t["result"] = f"seam_not_observed_gap({seam.get('source')})"
+            return None
+        ds = ((rec2.get("top_face") or {}).get("depth_diag") or {}).get("edge_support") or {}
+        if ds.get("unsupported") is None or ds.get("unsupported"):
+            rec_t["result"] = "final_quad_edge_support_not_clean"
+            return None
+        rec_t["result"] = "verified"
+        return res
+
+    def _commit(res, method: str):
+        block["method"] = method
+        block["recovered"] = True
+        rec2 = res[0]
+        block["after"] = {"corners_px": (rec2.get("top_face") or {}).get("corners_px"),
+                          "top_dims_mm": (rec2.get("box_profile") or {}).get("top_dims_mm"),
+                          "profile": (rec2.get("box_profile") or {}).get("name")}
+
+    result = None
+    found = None
+    # (a) SAM3 alternates of the same response that contain the current quad
+    for cand in cands:
+        if (cand is win0["cand"] or cand.get("source") != "sam3_live"
+                or cand.get("alternate_rank") is None or cand.get("coarse") is None):
+            continue
+        cf = _contained_frac(win0["quad"], np.asarray(cand["coarse"]), W, H)
+        if cf is None or cf < min_contain:
+            continue
+        res = _try("sam3_alternate", dict(cand), {"alternate_rank": int(cand["alternate_rank"])})
+        if res is not None:
+            found, result = "sam3_alternate", res
+            break
+    # (b) depth-grown coplanar region seeded by the quad
+    if result is None:
+        gate = cross0.get("plane_gate") or {}
+        mask, ginfo = _td.grow_coplanar_region(
+            win0["quad"], (n0, d0), cross0.get("plane_rms_mm"), xyz, (idx, uv),
+            depth_ctx["cam"], (W, H),
+            band_mm=gate.get("band_mm", float(cfg["guided_plane"]["ransac_threshold_m"]) * 1000.0))
+        rec_g: dict = {"method": "depth_grown", **ginfo}
+        coarse = None
+        if mask is not None:
+            q4, iou, qmethod = _w._mask_to_quad_ex(mask, H, W)
+            if q4 is None:
+                rec_g["result"] = "no_4gon"
+            else:
+                coarse = np.asarray(_w._to_named(q4), dtype=np.float64).reshape(4, 2)
+                rec_g["coarse_px"] = _quad_json(coarse)
+                rec_g["hull_quad_iou"] = round(float(iou), 3)
+        else:
+            rec_g["result"] = ginfo.get("reason", "no_region")
+        if coarse is None:
+            block["tried"].append(rec_g)
+        else:
+            src = win0["cand"]
+            prov = dict(src.get("prov") or {})
+            prov["truncation_grown"] = {k: v for k, v in rec_g.items() if k != "method"}
+            gcand = {**{k: v for k, v in src.items()
+                        if not k.startswith("_") and k != "skipped"},
+                     "coarse": coarse, "prov": prov}
+            res = _try("depth_grown", gcand, {k: v for k, v in rec_g.items()
+                                              if k != "method"})
+            if res is not None:
+                found, result = "depth_grown", res
+    if result is None:
+        # nothing recovered: the old behaviour; the extra attempts / reasons are
+        # summarised in the block instead of the (unchanged) record lists
+        del attempts[n_att:]
+        del reasons[n_rea:]
+        return None, block
+    _commit(result, found)
+    if mode != "on":
+        del attempts[n_att:]
+        del reasons[n_rea:]
+        return None, block
+    block["applied"] = True
+    rec2, dbg2 = result
+    rec2["truncation_recovery"] = block
+    rs = (rec2.get("checks") or {}).get("reasons")
+    if isinstance(rs, list):
+        rs.append(f"truncation_recovered({found};trigger={','.join(bad0)})")
+    return (rec2, dbg2), block
+
 
 def _top_diag_off() -> bool:
     return os.environ.get("AUTOLABEL_V2_TOP_DIAG_OFF", "").strip() not in ("", "0")

@@ -58,3 +58,7 @@ live:
     fallback: recorded_constant      # `recorded` run without a manifest block: ASSUMES the same Orbbec
                                      # driver extrinsic (camera_link <- colour optical frame)
     verified: false
+
+truncation_recovery:
+  mode: "on"                  # SAM3 sometimes outlines only one flap (back edge -> flap gap): recover the full
+                              # top from a containing alternate or the depth-grown coplanar region (DESIGN.md)
