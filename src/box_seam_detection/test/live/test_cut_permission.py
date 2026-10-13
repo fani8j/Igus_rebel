@@ -466,6 +466,16 @@ def test_generic_cut_without_height_still_blocked_otherwise(det):
     rec = _generic_hidden_rec()                                          # circular R5 skip
     rec["checks"]["independent_top_check"]["skipped_rectangle_fitted"] = True
     assert "height_unavailable" in _codes(_perm_g(det, rec))
+    quad = [[700.0, 600.0], [1200.0, 600.0], [1200.0, 900.0], [700.0, 900.0]]
+    rec["top_face"]["corners_px"] = dict(zip(("back_left", "back_right", "front_right", "front_left"), quad))
+    rec["provenance"] = {"attempts": [{"status": "accepted", "selected": True,       # ... unless the
+                                       "original_coarse": [[p[0] + 5, p[1] + 4] for p in quad]}]}  # SAM3 quad agrees
+    assert "height_unavailable" not in _codes(_perm_g(det, rec))
+    rec["provenance"]["attempts"][0]["original_coarse"] = [[p[0] + 20, p[1]] for p in quad]  # 20 px off
+    assert "height_unavailable" in _codes(_perm_g(det, rec))
+    rec["provenance"]["attempts"][0].pop("selected")                                       # no selected attempt
+    rec["provenance"]["attempts"][0]["original_coarse"] = quad
+    assert "height_unavailable" in _codes(_perm_g(det, rec))
     rec = _generic_hidden_rec()                                          # support not measured / unchecked
     rec["box_profile"].pop("support_clearance_mm")
     assert "height_unavailable" in _codes(_perm_g(det, rec))

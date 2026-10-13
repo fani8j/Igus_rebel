@@ -47,6 +47,13 @@ v2:
       band_ref_mm: 7.0         # ratio >= 0.8 needs 6 mm @ 1.17 m, 8.7 mm @ 1.91 m (measured)
       p95_ref_mm: 9.5          # p95 residual 9.0 mm @ 1.17 m, 12.9 mm @ 1.91 m (+ lid bulge allowance)
 
+seam_estimator:
+  # clear tape over the flap gap hides parts of it: on the new 39 x 28 cm box the gap line was seen on only
+  # 34 % of the seam (a straight line, 0.66 px residual). The line must still agree with the midline (4 mm / 2 deg).
+  min_coverage: 0.30
+  confirm_min_coverage: 0.30
+  darkline_min_coverage: 0.30
+
 live:
   seam_direction_prior_deg: null     # 83 deg is the old cell's base_link seam direction: disabled here
   seam_direction_soft_range_deg: 45.0
@@ -54,8 +61,9 @@ live:
                                      # systematic depth-plane tilt (2-4 deg) alone gives 8-12 mm (see DESIGN.md)
   generic_cut_without_height: true   # unknown box on the hidden stand: no measured height, but a depth-confirmed
                                      # top with all edges supported may be cut (the executor has its own height).
-                                     # The executor's carton_height_m (collision model) MUST cover the TALLEST
-                                     # box used here: the detector does not know a generic box's height.
+                                     # The executor's carton collision box reaches the floor: it uses the snapshot's
+                                     # support_depth_below_top_m (box + hidden stand, from support_clearance_mm),
+                                     # never below its carton_height_m (0.20 m minimum), at most carton_height_max_m.
   driver_extrinsic:
     reference: null                  # no verified reference for this camera: a manifest block is used as
                                      # is (WARNING, never refused); `tf` mode still compares with live TF

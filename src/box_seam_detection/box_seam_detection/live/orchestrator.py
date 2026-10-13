@@ -42,7 +42,8 @@ from typing import Callable, Optional
 from .snapshot import (SIDE_CUTTING_POINT_NAMES, SIDE_SEED_REJECTED_SUFFIX,  # noqa: F401
                        _quarantine_planner_snapshot, _snapshot_xyz, _write_json_atomically,
                        add_side_cutting_points, remove_snapshot, side_seed_rejected_path,
-                       stamp_detector_method, validate_planner_snapshot)
+                       stamp_detector_method, support_depth_below_top,
+                       validate_planner_snapshot)
 
 PACKAGE = __package__ or "box_seam_detection.live"
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]      # directory that holds the box_seam_detection package
@@ -1839,12 +1840,19 @@ def _run_detection(next_capture, cfg, progress, ctx, abort_check=None):
             "cut_permission": cut_permission}
         if isinstance(seam_doc.get("seam_curvature_mm"), (int, float)):
             stamp_extra["seam_curvature_mm"] = float(seam_doc["seam_curvature_mm"])
+        stamp_extra.update(support_depth_below_top(seam_doc))
         stamp_detector_method(staged_snapshot_path, DETECTOR_METHOD, stamp_extra)
     except (OSError, ValueError, json.JSONDecodeError) as error:
         print(f"planner snapshot 側邊切割點整合失敗: {error}", file=sys.stderr)
         Path(staged_snapshot_path).unlink(missing_ok=True)
         raise DetectionAbort(1, f"planner snapshot post-processing failed: {error}") from error
-    if cfg.side_seed:
+    height_waived = "height_waived(support_hidden)" in ((cut_permission or {}).get("flags") or [])
+    if cfg.side_seed and height_waived:
+        # generic box without a height (dual_arm_v1 waiver): the side-tape seed needs a height and
+        # would fail; the top cut does not need it (the executor fails closed on a missing seed block
+        # only when side_tape_handoff_enabled)
+        print("→ side-tape seed skipped: generic box without a measured height (top cut only)")
+    elif cfg.side_seed:
         # 步驟 6：其 contract 角點命名保證 seam_start/seam_end 落在 left/right 邊上；失敗時 fail closed：
         # 暫存 snapshot 移到 <snapshot>.side_seed_rejected（planner 路徑不再有檔案），非零退出。
         say("side_seed", attempt, "side-tape seed")

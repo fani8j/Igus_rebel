@@ -86,6 +86,35 @@ def stamp_detector_method(snapshot_path, detector_method, extra=None):
     return snapshot
 
 
+def _positive_finite(value):
+    return (isinstance(value, (int, float)) and not isinstance(value, bool)
+            and math.isfinite(value) and value > 0.0)
+
+
+def support_depth_below_top(seam_doc):
+    """Optional snapshot fields ``support_depth_below_top_m`` (+ ``_source``): distance in metres from the
+    top face down to the surface the carton stands on, from the detector seam JSON (``autolabel_v2``).
+    ``support_clearance_mm`` (hidden stand: box + stand to the gravity-checked floor) wins; a floor chosen
+    without the gravity check (``support_gravity_unchecked``) is ignored; else a measured table-cell box
+    height (``measured_height_mm``). Returns {} when neither is available (the key is then omitted)."""
+    block = (seam_doc or {}).get("autolabel_v2") if isinstance(seam_doc, dict) else None
+    if not isinstance(block, dict):
+        return {}
+    profile = block.get("box_profile")
+    recorded = profile.get("record") if isinstance(profile, dict) else None
+    if isinstance(recorded, dict) and not recorded.get("support_gravity_unchecked") \
+            and _positive_finite(recorded.get("support_clearance_mm")):
+        return {"support_depth_below_top_m": round(float(recorded["support_clearance_mm"]) / 1000.0, 6),
+                "support_depth_below_top_source": "support_clearance_mm"}
+    height = block.get("measured_height_mm")
+    if not _positive_finite(height) and isinstance(recorded, dict):
+        height = recorded.get("measured_height_mm")
+    if _positive_finite(height):
+        return {"support_depth_below_top_m": round(float(height) / 1000.0, 6),
+                "support_depth_below_top_source": "measured_height_mm"}
+    return {}
+
+
 def write_json_atomically(path, value):
     """Write JSON via a same-directory temp file + os.replace; the temp file is
     removed on any failure (serialisation, fsync or rename)."""

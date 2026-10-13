@@ -169,8 +169,13 @@ left-arm calib `dualcal_20261009_left_single`, NOT verified by touches).
   `checks.independent_top_check.confirmed` (not a circular rectangle-fitted skip), `box_profile.support_clearance_mm` > 0
   (and no `support_gravity_unchecked`), and `top_face.depth_diag.edge_support` has all 4 edges `ok` with `valid_frac >= 0.8`
   and none unsupported (missing diagnostics / insufficient depth stay blocked). The permission then carries
-  `flags: ["height_waived(support_hidden)"]`. The side-tape seed still needs a height (stays blocked). The executor's
-  `carton_height_m` (collision model) must cover the tallest box used with this scene.
+  `flags: ["height_waived(support_hidden)"]`. The side-tape seed still needs a height (stays blocked). The snapshot then carries the
+  optional additive keys `support_depth_below_top_m` (= support_clearance_mm / 1000; for a table-cell scene the measured
+  box height) and `support_depth_below_top_source`; omitted when the floor was not gravity-checked
+  (`support_gravity_unchecked`) or nothing was measured (schema stays box_h_cut_snapshot/v1: the Python validator and the
+  executor's ptree parser ignore unknown keys). The executor sizes the carton collision box with it: height = snapshot
+  value if `carton_height_from_snapshot` and `carton_height_m` <= value <= `carton_height_max_m` (2.0), else
+  `carton_height_m` (0.20 = the minimum; WARN if the value is invalid or above the maximum).
 - `v2.noise_adaptive`: guided-plane band and p95 limit grow with the measured scene noise (median RMS of the fitted planes)
   above `rms_floor_mm`, plus a bounded lid-bulge allowance; never below today's values.
 - `live.driver_extrinsic.reference: null` = no verified reference for the camera (manifest block used with a warning);

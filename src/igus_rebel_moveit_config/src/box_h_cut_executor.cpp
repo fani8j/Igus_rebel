@@ -29,6 +29,7 @@
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
+#include "igus_rebel_moveit_config/carton_height.hpp"
 #include "igus_rebel_moveit_config/rebel_analytic_ik.hpp"
 #include <algorithm>
 #include <array>
@@ -413,6 +414,11 @@ struct Snapshot {
   geometry_msgs::msg::Point back_middle_right;
   geometry_msgs::msg::Point front_middle_right;
   geometry_msgs::msg::Vector3 surface_normal;
+  // Optional snapshot key support_depth_below_top_m: top face down to the surface the carton
+  // stands on (hidden stand: box + stand). Absent in older snapshots.
+  bool has_support_depth{false};
+  double support_depth_below_top_m{std::numeric_limits<double>::quiet_NaN()};
+  std::string support_depth_source;
 };
 // Staged cut-debug session: start planned -> start executed (explicit dispatch) ->
 // start observation saved (teleop to the endpoint, then save completes the record).
@@ -511,13 +517,13 @@ struct TopCutStagedInfo {
 struct PlannerSettings {
   std::string planning_group, planning_frame, tool_link, planning_pipeline, chomp_pipeline,
     pilz_pipeline, carton_collision_id, camera_pole_topic, side_cut_orientation_mode;
-  double external_snapshot_max_age_s{0.0}, carton_height_m{0.0}, hover_clearance_m{0.0},
+  double external_snapshot_max_age_s{0.0}, carton_height_m{0.0}, carton_height_max_m{2.0}, hover_clearance_m{0.0},
     left_lateral_standoff_m{0.0}, cut_clearance_m{0.0}, middle_cut_clearance_m{0.0},
     middle_entry_alignment_m{0.0}, debug_motion_distance_m{0.0},
     debug_motion_clearance_m{0.0}, cartesian_step_m{0.0}, planning_timeout_s{0.0},
     velocity_scaling{0.0}, acceleration_scaling{0.0}, transit_velocity_scaling{0.0},
     transit_acceleration_scaling{0.0};
-  bool allow_tool_carton_contact{false}, camera_pole_required{true};
+  bool allow_tool_carton_contact{false}, camera_pole_required{true}, carton_height_from_snapshot{true};
   std::vector<double> approach_joint_degrees;
   std::int64_t max_solutions{1};
   // Read-only side-tape hand-off/retract safety gates (numeric bounds, never live-tunable).
@@ -864,6 +870,8 @@ private:
       field<str>(
         "camera_pole_topic", kRO, "/box_motion/camera_pole_collision", &S::camera_pole_topic),
       field<double>("carton_height_m", kRO, 0.20, &S::carton_height_m),
+      field<bool>("carton_height_from_snapshot", kRO, true, &S::carton_height_from_snapshot),
+      field<double>("carton_height_max_m", kRO, 2.0, &S::carton_height_max_m),
       field<double>("hover_clearance_m", kRO, 0.10, &S::hover_clearance_m),
       field<double>("left_lateral_standoff_m", kRO, 0.010, &S::left_lateral_standoff_m),
       field<double>("cut_clearance_m", kRO, 0.05, &S::cut_clearance_m),
@@ -1059,7 +1067,8 @@ private:
       {"left_parallel_min_joint_margin_deg", s.left_parallel_min_joint_margin_deg},
       {"left_parallel_search_timeout_s", s.left_parallel_search_timeout_s},
       {"external_snapshot_max_age_s", s.external_snapshot_max_age_s},
-      {"carton_height_m", s.carton_height_m}, {"hover_clearance_m", s.hover_clearance_m},
+      {"carton_height_m", s.carton_height_m},
+      {"hover_clearance_m", s.hover_clearance_m},
       {"left_lateral_standoff_m", s.left_lateral_standoff_m},
       {"cut_clearance_m", s.cut_clearance_m}, {"middle_cut_clearance_m", s.middle_cut_clearance_m},
       {"middle_entry_alignment_m", s.middle_entry_alignment_m},
@@ -1094,6 +1103,9 @@ private:
         "] seconds";
     }
     if (s.carton_height_m <= 0.0) return std::string("carton_height_m must be positive");
+    if (!std::isfinite(s.carton_height_max_m) || s.carton_height_max_m < s.carton_height_m) {
+      return std::string("carton_height_max_m must be finite and >= carton_height_m");
+    }
     if (s.hover_clearance_m < 0.005) return std::string("hover_clearance_m must be >= 0.005 m");
     if (!within(s.left_lateral_standoff_m, 0.005, 0.025)) {
       return std::string("left_lateral_standoff_m must be within [0.005,0.025] m");
@@ -5545,6 +5557,17 @@ private:
       return false;
     }
     // plane_rms_m is validated for schema integrity only; planning does not use it.
+    // Optional (additive) support_depth_below_top_m: a present-but-non-numeric value is kept as
+    // NaN so the height choice rejects it with a warning instead of silently ignoring it.
+    snapshot.has_support_depth = false;
+    if (document.get_child_optional("support_depth_below_top_m")) {
+      snapshot.has_support_depth = true;
+      snapshot.support_depth_below_top_m =
+        document.get_optional<double>("support_depth_below_top_m")
+          .value_or(std::numeric_limits<double>::quiet_NaN());
+      snapshot.support_depth_source =
+        document.get_optional<std::string>("support_depth_below_top_source").value_or("");
+    }
     snapshot.acquisition_stamp_ns = *acquisition_stamp;
     snapshot.surface_normal.x = normal.x;
     snapshot.surface_normal.y = normal.y;
@@ -5788,6 +5811,7 @@ private:
     task.add(std::move(add_pole));
   }
 
+  mutable std::string last_carton_height_log_;
   moveit_msgs::msg::CollisionObject cartonCollisionObject(const Snapshot& snapshot) const
   {
     const Eigen::Vector3d normal = toEigen(snapshot.surface_normal).normalized();
@@ -5805,9 +5829,29 @@ private:
 
     shape_msgs::msg::SolidPrimitive primitive;
     primitive.type = shape_msgs::msg::SolidPrimitive::BOX;
-    primitive.dimensions = {width, depth, settings_.carton_height_m};
+    const auto choice = carton_height::choose(
+      settings_.carton_height_from_snapshot, snapshot.support_depth_below_top_m,
+      snapshot.has_support_depth, settings_.carton_height_m, settings_.carton_height_max_m);
+    const double carton_height = choice.height_m;
+    if (last_carton_height_log_ != snapshot.snapshot_id + "/" + choice.source) {
+      last_carton_height_log_ = snapshot.snapshot_id + "/" + choice.source;
+      if (choice.warn) {
+        RCLCPP_WARN(
+          get_logger(),
+          "carton collision height %.3f m from %s (snapshot support_depth_below_top_m=%.4f, "
+          "allowed %.3f..%.3f m)",
+          carton_height, choice.source.c_str(), snapshot.support_depth_below_top_m,
+          settings_.carton_height_m, settings_.carton_height_max_m);
+      } else {
+        RCLCPP_INFO(
+          get_logger(), "carton collision height %.3f m from %s%s%s", carton_height,
+          choice.source.c_str(), snapshot.support_depth_source.empty() ? "" : " via ",
+          snapshot.support_depth_source.c_str());
+      }
+    }
+    primitive.dimensions = {width, depth, carton_height};
     geometry_msgs::msg::Pose pose;
-    pose.position = toPoint(top_center - normal * settings_.carton_height_m / 2.0);
+    pose.position = toPoint(top_center - normal * carton_height / 2.0);
     pose.orientation = toMsg(basisQuaternion(x_axis, y_axis, normal));
     moveit_msgs::msg::CollisionObject object;
     object.id = settings_.carton_collision_id;

@@ -1539,6 +1539,48 @@ GENERIC_EDGE_MAX_EXTENT_MM = 8.0
 GENERIC_EDGE_MAX_CONTINUE_FRAC = 0.2
 
 
+#: waiver with a depth-fitted (rectangle) quad: the selected attempt's SAM3 outline must agree
+#: (2026-10-13 new box: IoU 0.965, corners <= 9.2 px)
+GENERIC_RGB_MIN_IOU = 0.92
+GENERIC_DEPTH_MIN_IOU = 0.9   # primary depth_top quad vs RGB quad (new box: 0.94-0.96)
+GENERIC_RGB_MAX_CORNER_PX = 12.0
+
+
+def _rgb_quad_agrees(record: dict) -> bool:
+    """The SAM3 (RGB) outline of the selected attempt (``original_coarse`` before the depth
+    rewrite, else ``coarse``) overlaps the final top quad by >= GENERIC_RGB_MIN_IOU and every
+    final corner lies within GENERIC_RGB_MAX_CORNER_PX of an RGB corner. False when unknown."""
+    try:
+        import cv2  # noqa: PLC0415
+        import numpy as np  # noqa: PLC0415
+        attempts = [a for a in ((record.get("provenance") or {}).get("attempts") or [])
+                    if isinstance(a, dict)]
+        sel = [a for a in attempts if a.get("selected") is True]
+        if len(sel) != 1:
+            return False
+        rgb = sel[0].get("original_coarse") or sel[0].get("coarse")
+        c = (record.get("top_face") or {}).get("corners_px") or {}
+        fin = np.asarray([c[k] for k in ("back_left", "back_right", "front_right", "front_left")],
+                         dtype=np.float64).reshape(4, 2)
+        rgb = np.asarray(rgb, dtype=np.float64).reshape(4, 2)
+        if not (np.all(np.isfinite(fin)) and np.all(np.isfinite(rgb))):
+            return False
+        lo = np.floor(np.minimum(fin.min(0), rgb.min(0))) - 2
+        hi = np.ceil(np.maximum(fin.max(0), rgb.max(0))) + 2
+        w, h = int(hi[0] - lo[0]) + 1, int(hi[1] - lo[1]) + 1
+        if w <= 0 or h <= 0 or w * h > 4_000_000:
+            return False
+        ma, mb = np.zeros((h, w), np.uint8), np.zeros((h, w), np.uint8)
+        cv2.fillConvexPoly(ma, np.round(fin - lo).astype(np.int32), 1)
+        cv2.fillConvexPoly(mb, np.round(rgb - lo).astype(np.int32), 1)
+        union = int((ma | mb).sum())
+        iou = int((ma & mb).sum()) / union if union else 0.0
+        corner = max(float(np.min(np.linalg.norm(rgb - p, axis=1))) for p in fin)
+        return iou >= GENERIC_RGB_MIN_IOU and corner <= GENERIC_RGB_MAX_CORNER_PX
+    except Exception:  # noqa: BLE001 - evidence unknown -> no waiver
+        return False
+
+
 def _depth_confirmed_and_supported(record: dict) -> bool:
     """Fail-closed evidence for the generic_cut_without_height waiver:
     checks.independent_top_check.confirmed is True (and not a circular
@@ -1552,9 +1594,19 @@ def _depth_confirmed_and_supported(record: dict) -> bool:
             and math.isfinite(clearance) and clearance > 0.0) \
             or prof.get("support_gravity_unchecked"):
         return False        # support not measured below the top, or chosen without gravity check
-    check = (record.get("checks") or {}).get("independent_top_check")
-    if not isinstance(check, dict) or check.get("confirmed") is not True \
-            or check.get("skipped_rectangle_fitted"):
+    # the primary depth check (depth_top found the top on its own and it overlaps the RGB quad)
+    # is confirmation; the independent re-check only runs when that one is unavailable
+    iou = (record.get("checks") or {}).get("rgb_depth_quad_iou")
+    if isinstance(iou, (int, float)) and not isinstance(iou, bool) and math.isfinite(iou) \
+            and iou >= GENERIC_DEPTH_MIN_IOU:
+        check = {"confirmed": True}
+    else:
+        check = (record.get("checks") or {}).get("independent_top_check")
+    if not isinstance(check, dict) or check.get("confirmed") is not True:
+        return False
+    if check.get("skipped_rectangle_fitted") and not _rgb_quad_agrees(record):
+        # the final quad came from the depth plane itself (circular depth check): only an
+        # agreeing SAM3 (RGB) outline of the same attempt is independent evidence
         return False
     diag = (record.get("top_face") or {}).get("depth_diag")
     support = diag.get("edge_support") if isinstance(diag, dict) else None

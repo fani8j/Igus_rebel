@@ -119,6 +119,9 @@ if(BUILD_TESTING)
   target_link_libraries(test_rebel_analytic_ik rebel_analytic_ik)
   ament_target_dependencies(test_rebel_analytic_ik ament_index_cpp)
 
+  ament_add_gtest(test_carton_height test/test_carton_height.cpp)
+  target_include_directories(test_carton_height PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
   if(kdl_parser_FOUND AND orocos_kdl_FOUND AND urdf_FOUND AND igus_rebel_description_FOUND)
     message(STATUS "igus_rebel_moveit_config: KDL comparison IK test enabled")
     target_compile_definitions(test_rebel_analytic_ik PRIVATE REBEL_ANALYTIC_IK_HAVE_KDL=1)
