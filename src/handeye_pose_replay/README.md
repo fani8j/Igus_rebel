@@ -118,3 +118,49 @@ For the first physical-robot test, keep `wait_for_enter:=true` and 5% speed.
 The scales are fractions of the MoveIt joint limits, which are 0.785 rad/s and
 5.24 rad/s² since 2026-09-27 (previously 2.16 rad/s and 10 rad/s²). 5% is therefore
 about 0.039 rad/s, slower than before; `velocity_scale:=0.10` is about 0.079 rad/s.
+
+## Replay a calibration session
+
+The calibration recorder (`rebel_dual_arm_calibration`) stores one JSON object
+per line in `<session_dir>/samples.jsonl`, each with `"arm"`, `"capture"` and
+`"joints"`. The replay can drive the arm through those joint poses instead of
+the built-in 19 poses:
+
+    ros2 launch handeye_pose_replay replay_handeye.launch.py \
+      poses_file:=~/dual_arm_calibration/right arm:=right
+
+Parameters (launch arguments of the same name):
+
+- `poses_file`: a `samples.jsonl` or a session directory (`~` is expanded).
+  Empty (default) keeps the built-in poses.
+- `arm`: only use samples of this arm (`left`/`right`). If the file contains
+  more than one arm and `arm` is empty, the replay refuses to start.
+- `start_index`: 0-based index into the filtered pose list, to resume. The
+  list excludes other arms and near-duplicates, and the printed `pose i/N`
+  uses the same numbering (`i = start_index + 1` for the first one replayed).
+- `max_poses`: replay at most this many poses (0 = all).
+
+Joints are mapped to the planning group by the trailing `joint<N>` of their
+name, so `joint3` (single-arm session) and `arm_right_joint3` (dual-arm
+session) both drive the group's `joint3`. A pose whose joints are all within
+0.01 rad of the previous kept pose is skipped as a duplicate.
+
+The whole list is validated before anything moves: every pose must have all
+six joints, finite values, and lie inside the robot model's joint limits. On
+any problem every offending line is printed and the node exits without moving.
+Before each pose the node prints `pose i/N (capture #c)`, the target in
+degrees, and the largest joint change from the current state. Planning
+failure for a pose stops the replay (it never skips ahead) and prints the
+`start_index` to resume from. A summary `reached / total` is printed at the end.
+
+Notes:
+
+- With the calibration UI's Auto capture switched ON, the UI captures at each
+  replayed pose by itself. It needs the arm still for about 2 s plus the
+  capture. With `wait_for_enter:=true` the arm waits at the pose anyway; with
+  `wait_for_enter:=false` use `settle_seconds:=5`.
+- Replaying only reproduces the same images if the board mount and the camera
+  have not changed since the session was recorded.
+- The first real run keeps `wait_for_enter:=true` and 5 % speed (the defaults).
+
+Unit tests for the parser: `colcon test --packages-select handeye_pose_replay`.

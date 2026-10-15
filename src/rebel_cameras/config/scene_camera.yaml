@@ -30,3 +30,23 @@ enable_colored_point_cloud: true
 # Halves temporal depth noise on a static scene (measured 1.46 -> 0.74 mm
 # median); take snapshots ~1 s after the scene is still.
 enable_temporal_filter: true
+
+# Color exposure. 60 Hz mains -> lights ripple at 120 Hz (8.33 ms period).
+# Plain AE picked 15.6 ms and beat against the lights (slow +/-7/255 swing);
+# whole-frame AE also overexposed the white table. Trial 2026-10-02: AE metered
+# on the table with anti-flicker (exposure should stay on 8.33 ms multiples).
+enable_color_auto_exposure: true
+color_powerline_freq: 60hz
+color_anti_flicker: true
+color_ae_roi_left: 400
+color_ae_roi_right: 1500
+color_ae_roi_top: 450
+color_ae_roi_bottom: 1079
+# Proven fallback (stable, table ~229/255, carton ~143/255): set
+# enable_color_auto_exposure: false and uncomment:
+# color_exposure: 83   # 8.3 ms, units of 0.1 ms
+# color_gain: 16
+# Auto white balance: a fixed 4600 K turned the carton neutral grey under morning
+# daylight (2026-10-03: white table R-B -19, carton warmth 24 -> 1), which breaks the
+# warm-colour carton mask in detect_tape_seam. Flicker came from exposure, not WB.
+enable_color_auto_white_balance: true

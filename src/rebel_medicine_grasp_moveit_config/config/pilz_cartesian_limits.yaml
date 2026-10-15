@@ -1,0 +1,8 @@
+# Pilz LIN/CIRC limits (read from robot_description_planning.cartesian_limits on Humble; the launch file merges this file into joint_limits.yaml).
+# MoveIt - medicine grasp: same values as rebel_dual_arm_stand_moveit_config (unchanged, no limit loosened).
+# compal_robot's dual-arm values (dual_arm_joint_limits.yaml @ bb76327, MIT): deliberately slow, plan-only stack.
+cartesian_limits:
+  max_trans_vel: 0.05
+  max_trans_acc: 0.1
+  max_trans_dec: -0.1
+  max_rot_vel: 0.2

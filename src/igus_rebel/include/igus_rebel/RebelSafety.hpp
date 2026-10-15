@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "igus_rebel/CriMessages.hpp"
 
@@ -66,16 +67,28 @@ constexpr std::chrono::milliseconds kMinVelocityInterval{15};
 // enable, and the transient while Reset/Enable are processed, from tripping the group.
 constexpr std::chrono::milliseconds kFaultArmSettleTime{500};
 
-// Fault groups: does this CRI kinematics state count as "the controller stopped this arm"?
-// This is the ONE place that decides. It is deliberately strict for bring-up: every state other
-// than NO_ERROR trips the group (also JOINT_LIMIT_MIN/MAX, singularities, virtual-box limits).
-// Candidates to whitelist later, once the real behaviour is known, because a tool that merely
-// touches a joint limit or virtual box may still be recoverable by jogging away:
-// JOINT_LIMIT_MIN, JOINT_LIMIT_MAX (and possibly TOOL_AT_VIRTUAL_BOX_LIMIT_1..6). A state that
-// is not tripping is treated as clean STATUS for arming and for clearing a root-cause fault.
+// Fault groups: is this CRI kinematics state a joint-limit stop (JOINT_LIMIT_MIN / _MAX)? The
+// controller of that arm already blocks any motion further into the limit, and the operator
+// recovers by jogging that arm out of it (typical during teleop), so this is a local condition
+// of ONE arm that must not stop the other arm of the group. Only these two states; the virtual
+// box limits, singularities, MOTION_NOT_ALLOWED and unknown values stay tripping.
+inline bool IsJointLimitKinstate(CriMessages::Kinstate kinstate)
+{
+  return kinstate == CriMessages::Kinstate::JOINT_LIMIT_MIN ||
+         kinstate == CriMessages::Kinstate::JOINT_LIMIT_MAX;
+}
+
+// Fault groups: does this CRI kinematics state count as "the controller stopped this arm" for the
+// whole group? This is the ONE place that decides. Every state other than NO_ERROR trips the
+// group (singularities, virtual-box limits, MOTION_NOT_ALLOWED, unknown values), EXCEPT the two
+// joint-limit states (IsJointLimitKinstate): they are not a group fault. A joint limit never
+// hides a joint error bit: those are evaluated separately and still trip. A state that is not
+// tripping is treated as clean STATUS for arming and for clearing a root-cause fault (the arm is
+// enabled and recoverable by jogging; it must not stay a blocking root cause of its peers).
+// It is only about the group: a joint limit never latches the arm itself, in or out of a group.
 inline bool IsGroupTrippingKinstate(CriMessages::Kinstate kinstate)
 {
-  return kinstate != CriMessages::Kinstate::NO_ERROR;
+  return kinstate != CriMessages::Kinstate::NO_ERROR && !IsJointLimitKinstate(kinstate);
 }
 
 // Velocity override requested at start-up and the tolerance for the STATUS check.
@@ -146,6 +159,15 @@ bool JointPositionsRad(const CriMessages::Status & status, std::array<double, 6>
 
 // True if the STATUS override is within kOverrideTolerancePercent of the expected value.
 bool IsOverrideAsExpected(float overridePercent);
+
+// True if `startInterfaces` (full "<joint>/<type>" names, as passed by the controller manager's
+// resource manager to EVERY system component) contains the `interfaceType` command interface of
+// ALL six joints in `jointNames`. Used to release the post-recovery jog hold: only a switch that
+// (re)starts every command interface of this component counts as "the controller was restarted".
+// Another component's interfaces, a partial start and an empty list are all false.
+bool StartsAllCommandInterfaces(
+  const std::vector<std::string> & startInterfaces, const std::array<std::string, 6> & jointNames,
+  const std::string & interfaceType);
 
 // "CRISTART <counter> ALIVEJOG j1 .. j6 0 0 0 CRIEND\n", 8 decimals, non-finite -> 0.
 std::string FormatAliveJog(int counter, const std::array<float, 6> & jogPercent);

@@ -1,0 +1,64 @@
+# Dual-arm test table: prefixed copy of igus_rebel/config/controller_mock.yaml for two
+# joint_trajectory_controllers (arm_left_, arm_right_) in ONE controller_manager. Gains, tolerances
+# and constraints are identical to the single-arm file (rationale comments are kept on the
+# arm_left block only); test/test_dual_table_description.py checks the equality.
+controller_manager:
+  ros__parameters:
+    update_rate: 100
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    arm_left_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    arm_right_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+arm_left_trajectory_controller:
+  ros__parameters:
+    joints:
+      - arm_left_joint1
+      - arm_left_joint2
+      - arm_left_joint3
+      - arm_left_joint4
+      - arm_left_joint5
+      - arm_left_joint6
+    command_interfaces: [position]
+    state_interfaces: [position, velocity]
+
+    # Same trajectory tolerances as controller.yaml; see the rationale there.
+    # stopped_velocity_tolerance is disabled (was 0.05) so this matches controller.yaml and
+    # streamed MoveIt Servo commands behave the same way in mock as on the real robot.
+    constraints:
+      stopped_velocity_tolerance: 0.0
+      goal_time: 3.0
+      arm_left_joint1: {trajectory: 0.25, goal: 0.02}
+      arm_left_joint2: {trajectory: 0.25, goal: 0.02}
+      arm_left_joint3: {trajectory: 0.25, goal: 0.02}
+      arm_left_joint4: {trajectory: 0.25, goal: 0.02}
+      arm_left_joint5: {trajectory: 0.25, goal: 0.02}
+      arm_left_joint6: {trajectory: 0.25, goal: 0.02}
+
+# arm_right: same values as arm_left above.
+arm_right_trajectory_controller:
+  ros__parameters:
+    joints:
+      - arm_right_joint1
+      - arm_right_joint2
+      - arm_right_joint3
+      - arm_right_joint4
+      - arm_right_joint5
+      - arm_right_joint6
+    command_interfaces: [position]
+    state_interfaces: [position, velocity]
+
+    constraints:
+      stopped_velocity_tolerance: 0.0
+      goal_time: 3.0
+      arm_right_joint1: {trajectory: 0.25, goal: 0.02}
+      arm_right_joint2: {trajectory: 0.25, goal: 0.02}
+      arm_right_joint3: {trajectory: 0.25, goal: 0.02}
+      arm_right_joint4: {trajectory: 0.25, goal: 0.02}
+      arm_right_joint5: {trajectory: 0.25, goal: 0.02}
+      arm_right_joint6: {trajectory: 0.25, goal: 0.02}

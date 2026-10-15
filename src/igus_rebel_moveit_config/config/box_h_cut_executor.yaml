@@ -6,12 +6,19 @@
 #
 # Change semantics (`ros2 param set /box_h_cut_executor ...`):
 # - READ-ONLY (startup only; `param set` is rejected; edit this file and restart): tool_link,
+#   carton_contact_links (default [] = [tool_link]; set by the dual per-arm launch, not here),
 #   external_snapshot_max_age_s, allow_tool_carton_contact, approach_joint_degrees, clearances,
 #   middle_blade_reversed, all *_scaling, top_cut_* offsets/lifts, side_tape_continue_* gates,
 #   side_tape_handoff_*_axis_tool and retract/servo gates.
 # - PLANNING (validated, applied, retained plan cleared; "busy" while a plan/execute/cut-debug
 #   session or side-tape hand-off is active): motion_profile, cut_pattern, side tilts,
-#   pre_cut_stabilization_duration_s, left_parallel_*, cut_debug_*_correction_file,
+#   left_cut_reverse_travel,
+#   pre_cut_stabilization_duration_s, left_parallel_* (incl.
+#   left_parallel_varying_orientation_enabled), left_varying_station_spacing_m,
+#   left_varying_max_step_deg, left_varying_min_cut_fraction, left_varying_start_extra_inward_m,
+#   left_cut_extend_to_corners,
+#   left_cut_corner_margin_m, left_cut_seam_cover_m, left_debug_stop_at_approach,
+#   cut_debug_*_correction_file,
 #   side_tape_handoff_enabled/variant/standoff_mm/box_offset/max_search_angle.
 # - RUNTIME (read when used, never blocked): execution_enabled, debug_motion_execution_enabled,
 #   left_roll_diagnostics_enabled, external_snapshot_file.
@@ -55,12 +62,19 @@ box_h_cut_executor:
     # Signed distance along surface_normal: positive hovers, negative penetrates the top plane.
     # Source validation caps side penetration at 3 mm and middle penetration at 5 mm.
     hover_clearance_m: 0.01
-    cut_clearance_m: -0.001
-    # Middle seam only: 1 mm deeper than the side cuts.
-    middle_cut_clearance_m: -0.002
+    # 2026-10-13 operator: blade 3 mm below the top (was -0.001) so the tilted knife_c start still cuts the tape.
+    cut_clearance_m: -0.003
+    # Middle seam (top cut) only. 2026-10-15 operator: 5 mm below the top (was -0.002; max -0.005).
+    middle_cut_clearance_m: -0.003
     # Roll about the blade axis per side (batch scan over 59 boxes: -10 left, -5 right).
     left_side_cut_tilt_deg: -10.0
     right_side_cut_tilt_deg: -5.0
+    # Operator-approved opt-in (default false): plan the LEFT side cut front_middle_left ->
+    # back_middle_left (blade +Y toward the front; knife_c holder reaches it). Refused when
+    # combined with a left correction, left_parallel, cut-debug/side-tape hand-off paths or
+    # side_cut_orientation_mode != edge_aligned. Middle and right cuts are unaffected.
+    # NOTE: reversing travel mirrors the roll direction of left_side_cut_tilt_deg.
+    left_cut_reverse_travel: false
 
     # ---- Left side cut (taught correction + hand-off to side_tape) --------------------
     # Learned per-cut records (schema box_h_cut_correction/v1). Only applied when
@@ -69,7 +83,58 @@ box_h_cut_executor:
     cut_debug_middle_correction_file: "/home/farhan/cut_debug_corrections/middle_capture_frame_000001_20260914_200444_020309.json"
     # Geometry-derived LEFT orientation, blade as parallel to the top face as reachable.
     # The side-tape hand-off REQUIRES it (fails closed otherwise).
-    left_parallel_orientation_enabled: false
+    # 2026-10-14 operator: on (needed by the varying/corner-to-corner left cut below).
+    left_parallel_orientation_enabled: true
+    # Max blade tilt/pitch off the side face for the left_parallel / varying search ([0, 45] deg,
+    # code default 45). 2026-10-15 operator: 10 (set live, made default): flatter blade, the steep
+    # back-corner start is trimmed instead (the kept part must still cross the tape).
+    left_parallel_max_tilt_deg: 10.0
+    # Opt-in (default false, plan-only left_only/t_cut/h/combined): let the left_parallel
+    # orientation VARY along the stroke (stations every left_varying_station_spacing_m
+    # [0.005, 0.03] m, at most left_varying_max_step_deg [1, 15] deg of tool rotation between
+    # stations, continuous joint branch) and cut the longest feasible contiguous interval, which
+    # may be trimmed at either end; fails closed below left_varying_min_cut_fraction [0.2, 1.0]
+    # of the cut. Needs left_parallel_orientation_enabled and the analytic IK backend; refused with
+    # left_cut_reverse_travel, a left correction, cut-debug, side-tape hand-off, continue_side_cut,
+    # side_cut_penetrate, plan_t_cut and t_cut_handoff, and with any motion_profile other than
+    # ompl_cartesian. The cut is ONE contact stroke (one trajectory through a few smoothed
+    # orientation knots, fraction 1.0, contact scalings).
+    # 2026-10-14 operator: on, so the left cut keeps whatever the arm can reach instead of all-or-nothing.
+    left_parallel_varying_orientation_enabled: true
+    left_varying_station_spacing_m: 0.010
+    left_varying_max_step_deg: 5.0
+    left_varying_min_cut_fraction: 0.5
+    # Operator decision 2026-10-13: push the blade this far further INTO the box (horizontally
+    # inward, opposite to the lateral standoff) at the START of the kept varying left stroke,
+    # tapering linearly to 0 at its finish. [0, 0.005] m. > 0 needs
+    # left_parallel_varying_orientation_enabled: with varying OFF, left-cut planning and every
+    # entry point that refuses varying is refused until this is set back to 0.0.
+    # Default 0 so non-varying plans are not refused; the operator sets 0.003 per session with varying on.
+    left_varying_start_extra_inward_m: 0.0
+    # 2026-10-15 operator: push the WHOLE left stroke this far into the detected face (constant,
+    # [0, 0.008] m, varying mode only). With the hover-corrected calibration the blade ran on the
+    # face and no longer cut the side; the old calibration had put it ~6 mm inside.
+    # 2026-10-15 operator: 5 mm was too shallow on the real cut -> 7 mm (set live, made default).
+    left_cut_inward_m: 0.007
+    # Opt-in (default false; needs left_parallel_varying_orientation_enabled, refused anywhere
+    # varying is refused): run the varying search over the whole left edge instead of the nominal
+    # back_middle_left -> front_middle_left segment. Candidate line = the SAME line, extended
+    # both ways to back_left + margin .. front_left - margin (same cut_clearance_m offset along
+    # the surface normal). Keeps the longest reachable interval that CONTAINS the seam crossing
+    # +/- left_cut_seam_cover_m; its length must be >= left_varying_min_cut_fraction of the
+    # NOMINAL segment. margin [0.005, 0.10] m, seam cover [0, 0.10] m.
+    # 2026-10-14 operator: start at the detected back_left corner (not back_middle_left), run to the
+    # front_left corner, keep the longest reachable part that still crosses the tape. Margin 5 mm = the
+    # closest allowed to the detected corners; seam cover 25 mm = half a 48 mm tape + 1 mm (30 mm
+    # refused a 159 mm reachable cut on a -25 deg carton). scan_results/left_from_corner_20261014/.
+    left_cut_extend_to_corners: true
+    left_cut_corner_margin_m: 0.005
+    left_cut_seam_cover_m: 0.025
+    # Debug (default false; cut_pattern left_only only, otherwise plan_h_cut refuses): plan the
+    # full left cut as usual (published to RViz) but retain only the approach to the left hover
+    # pose after the pre-cut dwell. Executing it needs execution_enabled AND
+    # debug_motion_execution_enabled. Refused by every other planning entry point.
+    left_debug_stop_at_approach: false
     # Side-tape hand-off (left face): ~/plan_side_tape_handoff plans the full left cut for
     # feasibility, executes only the approach to the cut start; side_tape_ros (Servo + knife
     # camera) then cuts. ~/side_tape_retract ends it. Off by default.
@@ -85,6 +150,9 @@ box_h_cut_executor:
     # Max |tilt|,|pitch|,|yaw| the search may add on top of the base pose; side_tape refuses
     # above ~10 deg. Also floors the axis-convention tolerance.
     side_tape_handoff_max_search_angle_deg: 20.0
+    # "Arm at rest" limit for the side-cut/top-cut/T-cut gates. 0.01 (default) is below the
+    # driver's velocity noise (0.01 deg position step / ~13 ms STATUS = 0.0131 rad/s).
+    side_tape_handoff_joint_velocity_threshold: 0.03
     # Left-cut orientation search IK: "analytic" (closed-form, all branches, ~1 s answers;
     # falls back to kdl if its startup self-check fails) or "kdl" (old behaviour). Restart to change.
     left_search_ik_backend: analytic
@@ -96,13 +164,34 @@ box_h_cut_executor:
     side_tape_continue_check_snapshot_age: false
     side_tape_continue_speed_factor: 0.5
     side_tape_continue_end_extension_mm: 5.0
-    side_tape_continue_end_extra_depth_mm: 0.0
+    side_tape_continue_end_extra_depth_mm: 1.5
+    # Hold in the material this long before the left cut stroke (continue_side_cut / T cut).
+    side_cut_post_penetration_dwell_s: 1.0
     side_tape_continue_check_end_depth: false
 
     # ---- Top (middle seam) cut --------------------------------------------------------
     # Blade faces opposite travel (rotated 180 deg about the surface normal), operator
     # 2026-10-01; applies to every middle cut (staged top cut and t_cut/h/combined).
+    # true = sharp edge leads (operator 2026-10-13: false cuts with the dull side).
     middle_blade_reversed: true
+    # middle_only only (planning param, refused by every other middle path): top stroke runs
+    # seam_end -> seam_start. knife_c on the left arm: with middle_blade_reversed the normal
+    # direction has no IK anywhere on the seam; reversed travel reaches ~95 % (the far start is
+    # pulled back by top_cut_allow_shortened_cut). scan_results/top_only_20261013/.
+    middle_cut_reverse_travel: false
+    # plan_h_cut: after the last cut, a free-space transit back to the SRDF home pose (all joints 0),
+    # collision- and wrist-gated like every transit. Planning parameter. 2026-10-15 operator: on.
+    return_home_after_cut: true
+    # Top cut side lean (roll about the blade, same convention as the side tilts), [-30, 30] deg.
+    # 2026-10-14 knife_c left arm, seam_start -> seam_end, sharp edge leading (middle_blade_reversed):
+    # 0 deg has no IK anywhere on the seam; -8..-10 reaches ~80-95 %, -15 the full seam
+    # (scan_results/top_left_to_right_20261014/).
+    middle_cut_tilt_deg: -15.0
+    # t_cut/h/combined: after the left cut's lift to hover, raise this much further straight up (Cartesian,
+    # collision-checked) before the free-space transit to the top cut, [0, 0.25] m. 2026-10-15: without it the
+    # 15:49 capture rotated +40 deg had no safe transit (handpiece through base_link, or joint6 winding > pi);
+    # 0.05 fixes it (scan_results/left_from_corner_20261014/).
+    middle_transit_extra_lift_m: 0.05
     # Staged top cut, taught by teleop 2026-10-01 (snapshot capture_frame_000001_20261001_025532_980481,
     # flipped blade): cut-local [along seam start->end, across, depth (+ = deeper)] mm vs the
     # planned start/end. along/across move the seam points (hover follows); depth applies to

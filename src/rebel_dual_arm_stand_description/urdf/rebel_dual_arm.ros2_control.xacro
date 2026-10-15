@@ -1,0 +1,72 @@
+<?xml version="1.0"?>
+<!-- DERIVED FROM compal_robot (MIT License, Copyright (c) 2026 James), src/igus_rebel_description/urdf/dual_arm_rig.control.xacro @ bb76327. See ../NOTICE.
+     Changes: macro renamed; the XEG-32 gripper / camera-tilt joints are removed (15 actuated joints: lift + 2 sliders + 2 x 6 arm joints);
+     hardware_protocol is mock_hardware | isaac_topic ONLY - there is deliberately no real-hardware (CRI) option in this package;
+     unknown values fail xacro expansion instead of silently producing an empty <hardware> block.
+     isaac_topic -> topic_based_ros2_control/TopicBasedSystem (ros-humble-topic-based-ros2-control 0.2.0 reads the params joint_commands_topic,
+     joint_states_topic and trigger_joint_command_threshold; checked by strings on /opt/ros/humble/lib/libtopic_based_ros2_control.so). -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="rebel_dual_arm_ros2_control"
+               params="hardware_protocol
+                       joint_commands_topic:=/dual_arm/isaac_joint_commands
+                       joint_states_topic:=/dual_arm/isaac_joint_states
+                       initial_positions_file:=''">
+
+    <!-- fail closed on anything but the two supported protocols -->
+    <xacro:unless value="${hardware_protocol in ('mock_hardware', 'isaac_topic')}">
+      ${xacro.fatal('rebel_dual_arm: hardware_protocol must be mock_hardware or isaac_topic, got ' + hardware_protocol)}
+    </xacro:unless>
+
+    <!-- initial_value seeds both the state AND the command buffers. Without it every command starts at 0 and, for isaac_topic, write() would
+         publish those zeros to Isaac (dragging the lift away from the sim's pose) until a controller takes over. -->
+    <xacro:property name="initial_positions"
+                    value="${xacro.load_yaml(initial_positions_file)['initial_positions'] if initial_positions_file else dict()}" />
+
+    <xacro:macro name="rda_joint" params="joint">
+      <joint name="${joint}">
+        <command_interface name="position" />
+        <state_interface name="position">
+          <xacro:if value="${joint in initial_positions}">
+            <param name="initial_value">${initial_positions[joint]}</param>
+          </xacro:if>
+        </state_interface>
+        <state_interface name="velocity" />
+      </joint>
+    </xacro:macro>
+
+    <ros2_control name="rebel_dual_arm_controller" type="system">
+      <hardware>
+        <xacro:if value="${hardware_protocol == 'mock_hardware'}">
+          <plugin>mock_components/GenericSystem</plugin>
+        </xacro:if>
+        <xacro:if value="${hardware_protocol == 'isaac_topic'}">
+          <plugin>topic_based_ros2_control/TopicBasedSystem</plugin>
+          <param name="joint_commands_topic">${joint_commands_topic}</param>
+          <param name="joint_states_topic">${joint_states_topic}</param>
+          <param name="trigger_joint_command_threshold">0.0001</param>
+        </xacro:if>
+      </hardware>
+
+      <!-- gantry -->
+      <xacro:rda_joint joint="lift_joint" />
+      <xacro:rda_joint joint="slider_left_joint" />
+      <xacro:rda_joint joint="slider_right_joint" />
+
+      <!-- arm_left -->
+      <xacro:rda_joint joint="arm_left_joint1" />
+      <xacro:rda_joint joint="arm_left_joint2" />
+      <xacro:rda_joint joint="arm_left_joint3" />
+      <xacro:rda_joint joint="arm_left_joint4" />
+      <xacro:rda_joint joint="arm_left_joint5" />
+      <xacro:rda_joint joint="arm_left_joint6" />
+
+      <!-- arm_right -->
+      <xacro:rda_joint joint="arm_right_joint1" />
+      <xacro:rda_joint joint="arm_right_joint2" />
+      <xacro:rda_joint joint="arm_right_joint3" />
+      <xacro:rda_joint joint="arm_right_joint4" />
+      <xacro:rda_joint joint="arm_right_joint5" />
+      <xacro:rda_joint joint="arm_right_joint6" />
+    </ros2_control>
+  </xacro:macro>
+</robot>

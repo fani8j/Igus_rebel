@@ -5,6 +5,8 @@ from ament_index_python.packages import get_package_prefix, get_package_share_di
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
+    ExecuteProcess,
+    LogInfo,
     OpaqueFunction,
     TimerAction,
 )
@@ -61,6 +63,42 @@ def to_humble_pipeline(pipeline, request_adapters):
     return pipeline
 
 
+def cut_recorder_script():
+    """tools/cut_recorder/cut_recorder.py of this workspace (it is not installed)."""
+    candidates = [
+        # --symlink-install: this file resolves into src/<pkg>/launch/
+        Path(__file__).resolve().parents[3] / "tools" / "cut_recorder" / "cut_recorder.py",
+        Path.home() / "igus_rebel_ros2" / "tools" / "cut_recorder" / "cut_recorder.py",
+    ]
+    return next((c for c in candidates if c.is_file()), None)
+
+
+def cut_recorder_actions(context):
+    """Passive camera recorder: one clip per trajectory execution (see its README).
+
+    Real hardware only, and only alongside the H-cut executor. It subscribes to the
+    controller's action status and the camera topics; it never commands anything.
+    """
+    if (LaunchConfiguration("record_cut_video").perform(context).lower() != "true"
+            or LaunchConfiguration("run_box_h_cut_executor").perform(context).lower() != "true"
+            or LaunchConfiguration("hardware_protocol").perform(context) != "rebel"):
+        return []
+    script = cut_recorder_script()
+    if script is None:
+        return [LogInfo(msg="record_cut_video: tools/cut_recorder/cut_recorder.py not found; "
+                            "camera recording disabled")]
+    cmd = ["nice", "-n", "10", "python3", str(script),
+           "--cameras", LaunchConfiguration("cut_video_cameras").perform(context)]
+    out_dir = LaunchConfiguration("cut_video_dir").perform(context)
+    if out_dir:
+        cmd += ["--out-dir", out_dir]
+    return [ExecuteProcess(
+        cmd=cmd,
+        name="cut_recorder",
+        output="screen",
+    )]
+
+
 def opaque_func(context, *args, **kwargs):
     hardware_protocol = LaunchConfiguration("hardware_protocol")
     use_sim_time = LaunchConfiguration("use_sim_time")
@@ -72,6 +110,8 @@ def opaque_func(context, *args, **kwargs):
             package_file("igus_rebel_description", "urdf", "igus_rebel_xeg32_wrapper.urdf.xacro"),
             " hardware_protocol:=",
             hardware_protocol,
+            " tool_variant:=",
+            LaunchConfiguration("tool_variant"),
         ]
     ).perform(context)
     robot_description_semantic = Path(
@@ -245,6 +285,7 @@ def opaque_func(context, *args, **kwargs):
         teleop_twist_joy_node,
         delayed_box_h_cut_node,
         launch_rviz,
+        *cut_recorder_actions(context),
     ]
 
 
@@ -258,6 +299,14 @@ def generate_launch_description():
             default_value="rebel",
             choices=["mock_hardware", "gazebo", "rebel"],
             description="Which hardware protocol or mock hardware should be used",
+        ),
+        DeclareLaunchArgument(
+            "tool_variant",
+            default_value="knife_c",
+            choices=["knife_c", "xeg32_knife_v1"],
+            description="Tool model on link6 (xacro arg tool_variant): knife_c = variant-C knife "
+                        "holder (default), xeg32_knife_v1 = previous XEG-32 gripper + old knife. "
+                        "Must match the rebel.launch.py robot_state_publisher.",
         ),
         DeclareLaunchArgument("use_gui", default_value="true"),
         DeclareLaunchArgument("rviz_config",
@@ -283,6 +332,18 @@ def generate_launch_description():
             default_value="3.0",
             description="Seconds to wait for MoveIt before starting the H-cut executor",
         ),
+        DeclareLaunchArgument(
+            "record_cut_video", default_value="true",
+            description="With the H-cut executor on real hardware: record the cameras during "
+                        "every trajectory execution (tools/cut_recorder, passive)"),
+        DeclareLaunchArgument(
+            "cut_video_cameras", default_value="knife,scene,wrist,right_wrist",
+            description="Cameras for record_cut_video (comma list of knife, scene, wrist, "
+                        "right_wrist)"),
+        DeclareLaunchArgument(
+            "cut_video_dir", default_value="",
+            description="Clip folder root for record_cut_video (empty: the recorder default, "
+                        "the external drive's igus_nvidia/cut_videos)"),
         DeclareLaunchArgument("run_calibration_verification", default_value="false"),
         DeclareLaunchArgument("calibration_execution_allowed", default_value="false"),
         DeclareLaunchArgument(

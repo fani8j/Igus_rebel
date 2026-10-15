@@ -1,0 +1,111 @@
+# Dual-arm test table: prefixed copy of igus_rebel/config/controller.yaml for two
+# joint_trajectory_controllers (arm_left_, arm_right_) in ONE controller_manager. Gains, tolerances
+# and constraints are identical to the single-arm file (rationale comments are kept on the
+# arm_left block only); test/test_dual_table_description.py checks the equality.
+controller_manager:
+  ros__parameters:
+    update_rate: 100
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    arm_left_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    arm_right_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+arm_left_trajectory_controller:
+  ros__parameters:
+    joints:
+      - arm_left_joint1
+      - arm_left_joint2
+      - arm_left_joint3
+      - arm_left_joint4
+      - arm_left_joint5
+      - arm_left_joint6
+    command_interfaces: [velocity]
+    state_interfaces: [position, velocity]
+
+    # D gains are 0: in the 2026-09-09 tuning runs d = 0 ... 0.05 made no measurable
+    # difference (RMS/peak error within run-to-run noise), and the D term acts on the
+    # velocity estimated from 20-30 ms STATUS samples, which only adds noise.
+    # 2026-09-30 sim-tuned candidate (NOT yet run on the real arm with these values). The
+    # 2026-09-09 gains (p 4, ff 1.0/0.9) were tuned with the robot override at ~30-37 %; the driver
+    # now sends Override 100. A real joint1 +25 deg move with the old gains at override 100
+    # (0.324 rad/s, 1.5 rad/s^2) overshot 15.5 deg and rang for 6 s. Fit of that recording (rms
+    # 0.14 deg): plant gain 1.26, delay 0.078 s, velocity lag tau 0.16 s and a robot-side
+    # acceleration limit of ~0.52 rad/s^2. A loopback fake robot with that plant reproduces the
+    # real move (14-16 deg overshoot); there p 1.0 / ff 0.4 gives 0 overshoot and ~2.1-2.4 s to
+    # within 1 deg for 25 deg moves at 0.324 rad/s (planned accel 1.5 or 0.5) and at 0.108 rad/s.
+    # Planned decelerations above ~0.5 rad/s^2 exceed what the robot can follow, so keep transit
+    # acceleration scaling near 0.1 (0.5 rad/s^2) too. Re-verify on the arm with small moves.
+    gains:
+      arm_left_joint1: { p: 1.0, i: 0.0, d: 0.0, i_clamp: 0.0, ff_velocity_scale: 0.4 }
+      arm_left_joint2: { p: 1.0, i: 0.0, d: 0.0, i_clamp: 0.0, ff_velocity_scale: 0.4 }
+      arm_left_joint3: { p: 1.0, i: 0.0, d: 0.0, i_clamp: 0.0, ff_velocity_scale: 0.4 }
+      arm_left_joint4: { p: 1.0, i: 0.0, d: 0.0, i_clamp: 0.0, ff_velocity_scale: 0.4 }
+      arm_left_joint5: { p: 1.0, i: 0.0, d: 0.0, i_clamp: 0.0, ff_velocity_scale: 0.4 }
+      arm_left_joint6: { p: 1.0, i: 0.0, d: 0.0, i_clamp: 0.0, ff_velocity_scale: 0.4 }
+
+    # Trajectory tolerances. Chosen from the 2026-09-09 real-arm tuning bags
+    # (~/rebel_controller_tuning, best gains, velocity scaling 0.1): normal tracking lag
+    # peaked at 5.5-8.3 deg (0.10-0.145 rad) and the final approach is a first-order decay
+    # with tau ~0.7 s. They abort a goal on a runaway or stalled joint, not in normal tracking.
+    #  - trajectory 0.25 rad: ~1.7x the worst observed normal peak lag.
+    #  - goal 0.02 rad: ~2.3x the observed error when the tuning runs were declared settled.
+    #  - goal_time 3.0 s: 0.1 rad -> 0.02 rad needs ~1.1 s at tau 0.7 s; a 1.0 s limit
+    #    would abort normal moves. 0 would wait forever (MoveIt duration monitoring is off).
+    #  - stopped_velocity_tolerance 0.0 (disabled; was 0.05 rad/s): joint_trajectory_controller
+    #    applies these "goal" tolerances to every trajectory it receives, including each
+    #    single-point message MoveIt Servo streams to this same topic (command_out_topic in
+    #    servo.yaml). Servo's points legitimately end with a nonzero target velocity (that's
+    #    what keeps it moving smoothly into the next point) that the real velocity-tracking
+    #    error can exceed right when a streamed burst starts (2026-09-29 real-arm bag: teleop
+    #    and side_tape commands were silently dropped because "State tolerances failed ...
+    #    Velocity Error: -0.0799, Velocity Tolerance: 0.05" then "Exceeded goal_time_tolerance:
+    #    holding position"). A velocity-at-goal check is meaningless for a point whose whole
+    #    purpose is to still be moving, so it is disabled; the position `goal` tolerance above
+    #    and `goal_time` below still catch a stalled/runaway joint at the end of a planned
+    #    (action-based) MTC trajectory, and Servo's own per-cycle position delta is far under
+    #    the 0.02 rad goal tolerance so it does not trip that check either.
+    constraints:
+      stopped_velocity_tolerance: 0.0
+      goal_time: 3.0
+      arm_left_joint1: {trajectory: 0.25, goal: 0.02}
+      arm_left_joint2: {trajectory: 0.25, goal: 0.02}
+      arm_left_joint3: {trajectory: 0.25, goal: 0.02}
+      arm_left_joint4: {trajectory: 0.25, goal: 0.02}
+      arm_left_joint5: {trajectory: 0.25, goal: 0.02}
+      arm_left_joint6: {trajectory: 0.25, goal: 0.02}
+
+# arm_right: same values as arm_left above.
+arm_right_trajectory_controller:
+  ros__parameters:
+    joints:
+      - arm_right_joint1
+      - arm_right_joint2
+      - arm_right_joint3
+      - arm_right_joint4
+      - arm_right_joint5
+      - arm_right_joint6
+    command_interfaces: [velocity]
+    state_interfaces: [position, velocity]
+
+    gains:
+      arm_right_joint1: { p: 1.0, i: 0.0, d: 0.0, i_clamp: 0.0, ff_velocity_scale: 0.4 }
+      arm_right_joint2: { p: 1.0, i: 0.0, d: 0.0, i_clamp: 0.0, ff_velocity_scale: 0.4 }
+      arm_right_joint3: { p: 1.0, i: 0.0, d: 0.0, i_clamp: 0.0, ff_velocity_scale: 0.4 }
+      arm_right_joint4: { p: 1.0, i: 0.0, d: 0.0, i_clamp: 0.0, ff_velocity_scale: 0.4 }
+      arm_right_joint5: { p: 1.0, i: 0.0, d: 0.0, i_clamp: 0.0, ff_velocity_scale: 0.4 }
+      arm_right_joint6: { p: 1.0, i: 0.0, d: 0.0, i_clamp: 0.0, ff_velocity_scale: 0.4 }
+
+    constraints:
+      stopped_velocity_tolerance: 0.0
+      goal_time: 3.0
+      arm_right_joint1: {trajectory: 0.25, goal: 0.02}
+      arm_right_joint2: {trajectory: 0.25, goal: 0.02}
+      arm_right_joint3: {trajectory: 0.25, goal: 0.02}
+      arm_right_joint4: {trajectory: 0.25, goal: 0.02}
+      arm_right_joint5: {trajectory: 0.25, goal: 0.02}
+      arm_right_joint6: {trajectory: 0.25, goal: 0.02}

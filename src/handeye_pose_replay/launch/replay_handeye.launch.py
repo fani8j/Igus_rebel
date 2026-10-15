@@ -3,6 +3,7 @@ from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch.conditions import IfCondition, UnlessCondition
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 REPLAY_PARAMETER_NAMES = (
@@ -12,13 +13,24 @@ REPLAY_PARAMETER_NAMES = (
     "velocity_scale",
     "acceleration_scale",
     "settle_seconds",
+    "poses_file",
+    "arm",
+    "start_index",
+    "max_poses",
 )
+
+STRING_PARAMETER_NAMES = ("poses_file", "arm")
 
 
 def generate_launch_description():
     replay_parameters = {
         name: LaunchConfiguration(name) for name in REPLAY_PARAMETER_NAMES
     }
+    # Keep these as strings (an empty value or "~/..." must not be re-parsed as YAML).
+    for name in STRING_PARAMETER_NAMES:
+        replay_parameters[name] = ParameterValue(
+            LaunchConfiguration(name), value_type=str
+        )
     return LaunchDescription([
         DeclareLaunchArgument(
             "planning_group",
@@ -53,7 +65,32 @@ def generate_launch_description():
             default_value="1.0",
             description="Pause after reaching each calibration pose",
         ),
-
+        DeclareLaunchArgument(
+            "poses_file",
+            default_value="",
+            description=(
+                "samples.jsonl of a calibration session, or the session directory "
+                "(~ is expanded); empty = the built-in 19 poses"
+            ),
+        ),
+        DeclareLaunchArgument(
+            "arm",
+            default_value="",
+            description=(
+                "Only replay samples of this arm (left/right); required when the "
+                "poses file contains more than one arm"
+            ),
+        ),
+        DeclareLaunchArgument(
+            "start_index",
+            default_value="0",
+            description="0-based index into the filtered pose list, to resume a replay",
+        ),
+        DeclareLaunchArgument(
+            "max_poses",
+            default_value="0",
+            description="Replay at most this many poses (0 = all)",
+        ),
         DeclareLaunchArgument(
             "interactive_terminal",
             default_value="true",

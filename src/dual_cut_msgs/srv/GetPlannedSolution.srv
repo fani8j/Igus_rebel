@@ -1,0 +1,43 @@
+# Export the executor's retained plan (read only: does not consume or change it).
+# The executor answers "busy" (success=false) if a planning call holds the plan lock.
+---
+bool success
+string message
+
+# Retained-plan identity, bumped by retainPlan.
+uint64 plan_seq
+
+# Snapshot identity (the externally supplied canonical snapshot the plan was made from).
+string snapshot_id
+string capture_id
+uint64 acquisition_stamp_ns
+bool stale_override
+
+string planning_frame
+string tool_link
+string cut_pattern
+
+# Snapshot frame handling that was applied (section 2). The coordinator checks the transform
+# against the dual URDF world -> arm_X_base_link within 1e-6.
+string snapshot_frame_mode      # planning_frame | fixed_transform
+string snapshot_frame_id
+string snapshot_relabel         # none | rotate_180
+float64[3] snapshot_planning_base_xyz
+float64[3] snapshot_planning_base_rpy
+
+# Fraction of the middle seam actually planned (1.0 unless shortened / half seam).
+float64 middle_cut_fraction
+
+# Cut targets in planning_frame (one pose per cut stroke endpoint, as published to RViz).
+geometry_msgs/PoseStamped[] cut_targets
+
+# Robot state the plan starts from / ends at (unprefixed joint names).
+sensor_msgs/JointState start_state
+sensor_msgs/JointState end_state
+
+PlannedSegment[] segments
+
+string summary
+
+# The MTC solution as retained, for the regression gate (export == raw).
+moveit_task_constructor_msgs/Solution raw

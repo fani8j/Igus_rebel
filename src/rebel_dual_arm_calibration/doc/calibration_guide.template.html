@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dual-arm ReBeL calibration — operator guide</title>
+<style>
+  :root {
+    --fg: #1d2330; --muted: #5b6474; --bg: #ffffff; --panel: #f5f7fa; --line: #dde2ea;
+    --accent: #1f5fbf; --ok: #1a7f37; --warn: #9a6700; --bad: #b42318; --code: #0f1726;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--fg); background: var(--bg); }
+  .layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); max-width: 1180px; margin: 0 auto; }
+  nav { position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto; padding: 24px 16px; border-right: 1px solid var(--line); font-size: 14px; }
+  nav h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; }
+  nav a { display: block; color: var(--fg); text-decoration: none; padding: 4px 8px; border-radius: 6px; }
+  nav a:hover { background: var(--panel); }
+  nav .progress { margin-top: 16px; font-size: 13px; color: var(--muted); }
+  nav .bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin-top: 4px; }
+  nav .bar > div { height: 100%; width: 0; background: var(--ok); transition: width .2s; }
+  main { padding: 32px 40px 80px; min-width: 0; }
+  h1 { font-size: 30px; margin: 0 0 4px; }
+  .subtitle { color: var(--muted); margin: 0 0 24px; }
+  h2 { font-size: 22px; margin: 44px 0 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+  h3 { font-size: 17px; margin: 24px 0 8px; }
+  p, li { max-width: 78ch; }
+  code { font: 14px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--panel); padding: 1px 5px; border-radius: 4px; }
+  .cmd { position: relative; margin: 10px 0 14px; }
+  .cmd pre { margin: 0; background: var(--code); color: #e6edf3; padding: 14px 16px; border-radius: 8px; overflow-x: auto; font: 13.5px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .cmd pre .c { color: #8b98a9; }
+  .cmd button { position: absolute; top: 8px; right: 8px; font-size: 12px; padding: 3px 9px; border-radius: 5px; border: 1px solid #3a4658; background: #1b2638; color: #e6edf3; cursor: pointer; }
+  .cmd button:hover { background: #26344c; }
+  .callout { border-left: 4px solid var(--accent); background: #eef4fd; padding: 12px 16px; border-radius: 6px; margin: 14px 0; }
+  .callout.safety { border-color: var(--bad); background: #fdf0ef; }
+  .callout.warn { border-color: var(--warn); background: #fdf6e7; }
+  .callout.ok { border-color: var(--ok); background: #edf7ef; }
+  .callout strong:first-child { display: block; margin-bottom: 2px; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0 16px; font-size: 14.5px; }
+  th, td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--panel); }
+  ul.check { list-style: none; padding-left: 0; }
+  ul.check li { margin: 6px 0; }
+  ul.check label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+  ul.check input { margin-top: 5px; width: 17px; height: 17px; flex: none; }
+  ul.check input:checked + span { color: var(--muted); text-decoration: line-through; }
+  .steps { counter-reset: s; }
+  figure { margin: 14px 0; }
+  figure img { max-width: 100%; border: 1px solid var(--line); border-radius: 6px; }
+  figcaption { font-size: 13.5px; color: var(--muted); margin-top: 4px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 10px; }
+  .pill.real { background: #fdf0ef; color: var(--bad); }
+  .pill.verified { background: #edf7ef; color: var(--ok); }
+  .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0 4px; font-size: 14px; }
+  .flow span { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; }
+  .flow b { color: var(--muted); }
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } nav { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); } main { padding: 24px 18px 60px; } .grid2 { grid-template-columns: 1fr; } }
+  @media print { nav, .cmd button { display: none; } .layout { display: block; } .cmd pre { background: #f4f4f4; color: #000; border: 1px solid #ccc; } h2 { break-after: avoid; } }
+</style>
+</head>
+<body>
+<div class="layout">
+<nav>
+  <h2>Contents</h2>
+  <a href="#overview">Overview</a>
+  <a href="#expect">What accuracy to expect</a>
+  <a href="#safety">Safety rules</a>
+  <a href="#prepare">1. Prepare</a>
+  <a href="#measure">2. Measure the prints</a>
+  <a href="#tcp">2b. Knife-tip (TCP) calibration</a>
+  <a href="#camera">3. Start the camera</a>
+  <a href="#intrinsics">4. Camera intrinsics (optional)</a>
+  <a href="#place">5. Place board and stickers</a>
+  <a href="#arm1">6. Record arm 1 (left)</a>
+  <a href="#ui">&nbsp;&nbsp;&nbsp;Web UI</a>
+  <a href="#poses">&nbsp;&nbsp;&nbsp;Choosing poses</a>
+  <a href="#touches">&nbsp;&nbsp;&nbsp;Touches</a>
+  <a href="#hover">&nbsp;&nbsp;&nbsp;Touches with hover assist</a>
+  <a href="#arm2">7. Record arm 2 (right)</a>
+  <a href="#solve">8. Solve and read the gate</a>
+  <a href="#fail">9. If the gate FAILs</a>
+  <a href="#use">10. Use it in the dual cell</a>
+  <a href="#recheck">11. Re-checks</a>
+  <a href="#trouble">Troubleshooting</a>
+  <a href="#files">Files and reference</a>
+  <div class="progress">Checklist progress: <span id="prog-text">0 / 0</span><div class="bar"><div id="prog-bar"></div></div></div>
+</nav>
+<main>
+
+<h1>Dual-arm ReBeL calibration</h1>
+<p class="subtitle">Operator guide for the test-table cell: two igus ReBeL arms (<code>arm_left</code> on 192.168.3.11, <code>arm_right</code> on 192.168.3.12) and one Gemini 336 scene camera. Generated {{DATE}}.</p>
+
+<section id="overview">
+<h2>Overview</h2>
+<p>The calibration finds two things:</p>
+<ul>
+  <li><b>Where arm 2 really stands</b> relative to arm 1 (<code>arm_right_base</code>). MoveIt uses this to keep the two arms apart.</li>
+  <li><b>Where the scene camera is</b> (<code>camera_link</code>), for carton detection.</li>
+</ul>
+<p>You record each arm on its own with the normal single-arm software, then one command combines both recordings, checks the result and estimates its uncertainty.</p>
+<div class="flow">
+  <span>Print, mount, measure</span><b>→</b><span>Camera intrinsics (optional)</span><b>→</b><span>Arm 1: 30–40 poses + touches</span><b>→</b><span>Arm 2: same</span><b>→</b><span><code>solve</code></span><b>→</b><span>Gate PASS?</span><b>→</b><span>Dual cell, with the recommended padding</span>
+</div>
+<p><b>Time:</b> about 30 min of preparation, 1–1.5 h per arm, and 20 min for the intrinsics if you need them. <b>Result:</b> <code>~/dual_arm_calibration/dual_arm_calibration.yaml</code> plus a report.</p>
+<div class="callout">
+  <strong>How it works</strong>
+  <ul>
+    <li><b>Arm boards.</b> Each arm carries a small ChArUco board. The camera sees it in many poses, and the solver fits where the camera is relative to each arm's base. That gives arm 2's position through the camera.</li>
+    <li><b>Fit points.</b> Both arms touch the same <b>fit points</b> with the knife tip: 4 crosshairs on the table board plus 4 stickers spread around it. That is a direct arm-to-arm measurement.</li>
+    <li><b>Check points.</b> Both arms also touch 2 <b>check stickers</b> that are <b>never used in any fit</b>. The arm-to-arm disagreement there is the honest accuracy number.</li>
+  </ul>
+  The <b>trust gate</b> (8 checks) passes only if all of this is consistent.
+</div>
+<p><span class="pill verified">verified in mock</span> Every command in this guide ran end to end on 2026-10-08 in a mock setup with a simulated camera and a hidden "true" arm 2 position. The solver recovered it to 0.05 mm / 0.006°. Each deliberate fault failed the gate: a 5 mm check-point error, too few or too close touch points, touches only in the fit, and a 3 % camera focal-length error. Commands marked <span class="pill real">real hardware</span> use <code>hardware_protocol:=rebel</code> and have not been run on the real robots yet.</p>
+</section>
+
+<section id="expect">
+<h2>What accuracy to expect</h2>
+<p>Two independent reviews and the literature agree on these limits for this cell:</p>
+<ul>
+  <li><b>Collision avoidance between the arms works</b> with the padding the solver recommends: <code>max(20 mm, 2 × worst check-point error + 10 mm)</code>.</li>
+  <li><b>At a work point about 0.4 m away</b>, expect the two arms to disagree by roughly <b>7–10 mm typically, and 15–20 mm at worst</b>. The robots run their nominal (uncorrected) kinematics, and these arms have joint zero errors, backlash and flex.</li>
+  <li><b>Not good enough for mm-level coordinated work</b>, such as handing a part from one arm to the other. That needs kinematic correction or taught local corrections.</li>
+  <li><b>A PASS proves accuracy only where you measured it</b>: at the check points. It does not prove it everywhere in the workspace.</li>
+</ul>
+</section>
+
+<section id="safety">
+<h2>Safety rules</h2>
+<div class="callout safety">
+  <strong>Read before moving anything</strong>
+  <ul>
+    <li><b>Only one arm is connected and moving at a time</b> during calibration. The single-arm software does not know the other arm exists, so <b>park the other arm far away</b> (folded, out of the shared workspace) before you move this one.</li>
+    <li><b>Ultrasonic knife OFF</b> for the whole calibration. Keep a hand on the e-stop of the arm that moves.</li>
+    <li>In RViz always set <b>Velocity and Acceleration scaling to 0.05</b> before planning. <b>Plan</b> first, look at the preview, then <b>Execute</b>.</li>
+    <li>Do not run iRC as the active CRI client while the ROS driver is connected.</li>
+    <li>Stop programs with <b>Ctrl-C</b> in their terminal. Never kill processes by name (<code>pkill</code>, <code>killall</code>).</li>
+    <li>A result whose gate did <b>not</b> PASS (<code>source: calibrated_unverified</code>) must not be trusted to keep the arms apart.</li>
+  </ul>
+</div>
+</section>
+
+<section id="prepare">
+<h2>1. Prepare</h2>
+<ul class="check">
+  <li><label><input type="checkbox" data-k="p1"><span>Arm 2's controller is set to <b>192.168.3.12</b>, arm 1 stays on 192.168.3.11. Both answer: <code>ping -c 2 192.168.3.12</code>.</span></label></li>
+  <li><label><input type="checkbox" data-k="p2"><span>Printed <b>at 100 % / "Actual size"</b> from <code>~/dual_arm_targets/</code>, preferably on a laser printer: <code>target_left.pdf</code> (A4), <code>target_right.pdf</code> (A4), <code>target_table.pdf</code> (<b>A4 landscape</b>: set the print dialog to landscape, 100 %, no "fit to page") and <code>touch_stickers.pdf</code> (A4).</span></label></li>
+  <li><label><input type="checkbox" data-k="p3"><span>Every board is glued flat on a <b>stiff backing</b>, not foam board, which bends. Use the <b>3D-printed ribbed plates</b> (<code>~/dual_arm_targets/plate_arm_left.stl</code>, <code>plate_arm_right.stl</code>, <code>plate_table.stl</code>; print with the flat face on the bed, no supports; the table plate needs a bed of at least 225 mm), or aluminium, glass or thick acrylic. Glue the paper to the <b>flat (bed) side</b>. No bubbles or curl. Let the glue settle in the room where you calibrate.</span></label></li>
+  <li><label><input type="checkbox" data-k="p4"><span>The <b>left</b> board is fixed rigidly to arm 1's gripper/flange and the <b>right</b> board to arm 2's, with short, stiff brackets. They must not wobble, and their mounting must not change during that arm's recording. The exact position doesn't matter; it is solved.</span></label></li>
+  <li><label><input type="checkbox" data-k="p5"><span>The sticker sheet is cut into 6 stickers: <b>101–104 FIT</b>, <b>111 and 112 CHECK</b>. You also have a <b>small block about 40 mm high</b> with a flat top, for check sticker 111.</span></label></li>
+  <li><label><input type="checkbox" data-k="p6"><span>The scene camera is <b>screwed down</b>. From the first recording until the last touch of both arms, do not touch it, pull its cable, or change its resolution. The same holds for both arm bases.</span></label></li>
+  <li><label><input type="checkbox" data-k="p7"><span>The knife tip is the touch tool (TCP <code>xeg32_tool_tip</code>), and the blade is tight in its holder. Ultrasonic is OFF. Use a cap or pointer only if its tip is exactly where the blade tip is.</span></label></li>
+  <li><label><input type="checkbox" data-k="p8"><span><b>Warm-up:</b> the robots and camera have been powered on for at least <b>15–20 minutes</b>, and the room temperature is stable.</span></label></li>
+</ul>
+<div class="grid2">
+  <figure><img src="{{IMG_BOARD_LEFT}}" alt="left arm board"><figcaption>Arm board (left shown; right is identical with IDs 20–23). 3×3 squares of 35 mm, IDs 0–3.</figcaption></figure>
+  <figure><img src="{{IMG_BOARD_TABLE}}" alt="table board"><figcaption>Table board, 5×4 squares of 40 mm, IDs 40–49, touch crosshairs 1–4 on inner corners.</figcaption></figure>
+</div>
+<figure><img src="{{IMG_STICKERS}}" alt="touch stickers" style="max-width:520px"><figcaption>Touch stickers: 101–104 widen the fit; 111 and 112 are the held-out check points. The 1 mm ring marks the centre; ticks every 10 mm.</figcaption></figure>
+<p>Every terminal starts with these lines. Use the domain your real robot normally runs on (11):</p>
+<div class="cmd"><pre>source /opt/ros/humble/setup.bash
+source ~/igus_rebel_ros2/install/setup.bash
+export ROS_DOMAIN_ID=11</pre></div>
+</section>
+
+<section id="measure">
+<h2>2. Measure the prints</h2>
+<p>A 1 % print-scale error moves the camera result by about 10 mm at 1 m. Printers also scale the two paper directions differently, so measure the boards <b>after gluing</b>, in <b>both x and y</b>.</p>
+<ol>
+  <li>Check the <b>50 mm scale bar</b> on each page with calipers.</li>
+  <li>On every board, measure across <b>all squares</b> in x (horizontal, as the labels read) and in y (vertical), from the first to the last outer square edge, then divide by the number of squares. Never measure a single square: 0.5 mm of caliper error on one square is a 1.4 % scale error.
+    <ul>
+      <li>Arm boards: 3 squares, nominal <b>105.0 mm</b> in x and in y.</li>
+      <li>Table board: 5 squares in x, nominal <b>200.0 mm</b>; 4 squares in y, nominal <b>160.0 mm</b>. It prints landscape, so the printer's stretch may be on its y axis.</li>
+    </ul>
+    Markers: scale the nominal marker size (26 mm on the arm boards, 30 mm on the table board) by the same factor per axis, e.g. 26 × 105.5 / 105 = 26.12 mm.</li>
+  <li>If x and y differ by more than about 0.15 %, that's normal for printers, but do enter both values.</li>
+  <li>Copy the default target file and enter your values in <b>metres</b>:</li>
+</ol>
+<div class="cmd"><pre>mkdir -p ~/dual_arm_calibration
+cp $(ros2 pkg prefix rebel_dual_arm_calibration)/share/rebel_dual_arm_calibration/config/targets.yaml \
+   ~/dual_arm_calibration/targets_measured.yaml
+nano ~/dual_arm_calibration/targets_measured.yaml
+<span class="c"># under arms.left, arms.right and table_board set, e.g. for 105.5 mm (x) and 105.0 mm (y) across 3 squares:
+#   square_length: 0.0351667   (x)    square_length_y: 0.035     (y)
+#   marker_length: 0.0261238   (x)    marker_length_y: 0.026     (y)</span></pre></div>
+<p>Pass this file to every recorder and UI launch (<code>targets_file:=…/targets_measured.yaml</code>). Each recording stores the sizes it used, so <code>solve</code> picks them up automatically. If a stretched print is slightly larger than its plate, trim the white margin; only the printed squares matter.</p>
+<div class="callout warn"><strong>Don't change anything else in that file</strong>The marker IDs, square counts, touch points and sticker IDs must stay as they are.</div>
+</section>
+
+<section id="tcp">
+<h2>2b. Knife-tip (TCP) calibration, per arm <span class="pill real">real hardware</span></h2>
+<p>The touches measure where the <b>knife tip</b> is, so the tip offset in the robot model (the TCP, <code>igus_tool0 → xeg32_tool_tip</code>) must be right first. The camera recordings (sections 6–7) do not depend on it. Method: <b>pivot calibration</b> — the tip sits in one fixed small dimple while the arm takes about 10 different orientations; the only tip offset that keeps the tip on that point in all of them is the TCP. Do it on the <b>"0. TCP"</b> tab of the calibration UI, for each arm, and again after any blade change.</p>
+<div class="callout safety"><strong>Before you start</strong><ul>
+  <li>Ultrasonic <b>OFF</b>; only this arm connected, the other parked; a hand on the e-stop. The tab's buttons never move the robot; you position it with the teleop keyboard (or the jog panel).</li>
+  <li><b>Pivot fixture</b>: a shallow countersink (about 2 mm deep, 90°) in a hard block (aluminium or steel; not PLA), clamped at working height inside the touch area.</li>
+</ul></div>
+<ol>
+  <li>Start the stack as in 6.5 (driver, MoveIt with <code>run_teleop:=true</code>, the UI, the teleop keyboard) and open the <b>0. TCP</b> tab. Tick the checklist (it resets on every page load).</li>
+  <li><b>Caliper check</b>: measure the flange face → blade tip along the flange axis and enter it. The current model implies 183.4 mm; an old pivot data set suggested ~168 mm — this tells us which is right.</li>
+  <li><b>Fit poses (about 10)</b> following the pose plan shown on the tab: knife vertical; tilted ±30° about two different axes; four combined tilts; two with the wrist rolled ±90° at 25° tilt. For each pose: <b>lift</b> the tip out of the dimple, rotate, <b>re-seat</b> it from above with light contact (do not rotate while the tip is in the dimple), release the keys, wait 2 s, <b>Capture fit pose</b>. A pose closer than 15° to an earlier one is refused.</li>
+  <li><b>Validation poses (4)</b>, at different tilts, the same way with <b>Capture validate pose</b>. They are never used in the fit; they check it.</li>
+  <li><b>Solve</b> and read the verdict:
+    <table>
+      <tr><th>Verdict</th><th>Meaning / what to do</th></tr>
+      <tr><td>GOOD</td><td>Fit RMS ≤ 1 mm, max ≤ 2 mm, held-out OK.</td></tr>
+      <tr><td>PASS</td><td>Fit RMS ≤ 2.0 mm, max ≤ 3.5 mm, held-out ≤ 2.5 mm, each direction ≤ 1 mm (1σ). Normal for this arm: its joint zero errors alone give ~1–1.5 mm.</td></tr>
+      <tr><td>FAIL / INSUFFICIENT</td><td>Follow the reasons: re-seat and re-capture a flagged pose (delete it first — nothing is deleted automatically), add tilts about the axis named, or add validation poses.</td></tr>
+    </table></li>
+  <li><b>Write result</b> (GOOD / PASS only) saves <code>tcp_result_&lt;arm&gt;.yaml</code> in the session and shows a <b>URDF diff</b>. The UI never edits the robot model: review the diff, apply it to <code>igus_rebel_xeg32_wrapper.urdf.xacro</code>, rebuild <code>igus_rebel_description</code> and <code>igus_rebel_moveit_config</code>, restart the stack.</li>
+</ol>
+<div class="callout warn"><strong>Touches recorded with the old TCP</strong>They stay usable: pass the result to the solve and they are re-based automatically — <code>solve … --tcp-file left=$HOME/dual_arm_calibration/left/tcp_result_left.yaml</code> (and <code>right=…</code>). Without it, mixing touches recorded with different TCPs is refused.</div>
+<p>The final proof of the TCP is the touch check later: the same crosshair touched with ≥ 25° different wrist tilts must agree (TCP consistency ≤ 1.5 mm), and the held-out check points must pass the trust gate.</p>
+</section>
+
+<section id="camera">
+<h2>3. Start the scene camera</h2>
+<p>Terminal 1. Skip this if <code>cameras.launch.py</code> is already running with the scene camera.</p>
+<div class="cmd"><pre>ros2 launch rebel_cameras cameras.launch.py scene:=true wrist:=false knife:=false</pre></div>
+<p>Check that images arrive, at about 15 Hz:</p>
+<div class="cmd"><pre>ros2 topic hz /camera/color/image_raw</pre></div>
+</section>
+
+<section id="intrinsics">
+<h2>4. Camera intrinsics (optional)</h2>
+<p><b>You can usually skip this step.</b> By default the recorder uses the lens values the camera publishes itself (<code>/camera/color/camera_info</code>). <code>solve</code> then checks them against the recorded data (gate check <i>intrinsics validated</i>: focal length off by ≤ 0.3 %, centre by ≤ 3 px). Do this step only if that check fails, or if you want to rule the lens out in advance. A 1 % focal-length error moves the camera result by about 10 mm. No robot is needed.</p>
+<p><b>If you skip it:</b> leave out every <code>intrinsics_file:=…</code> and <code>--intrinsics-file …</code> line below. If the check fails later, do this step then (the camera must still be at the same place and resolution) and run <code>solve</code> again with <code>--intrinsics-file</code>; the arm recordings stay valid.</p>
+<div class="callout warn"><strong>You hold the table board in front of the camera</strong>Do this while the table board is not yet taped down, or hold a second print and cover the taped one. Never have two copies of the table board in view at once: they carry the same marker IDs.</div>
+<p>Terminal 4, a recorder just for this step:</p>
+<div class="cmd"><pre>ros2 launch rebel_dual_arm_calibration record.launch.py mode:=single_left \
+  output_dir:=$HOME/dual_arm_calibration/intrinsics_session \
+  targets_file:=$HOME/dual_arm_calibration/targets_measured.yaml</pre></div>
+<p>Hold the board still for about 2 s at each view, then capture from terminal 5:</p>
+<div class="cmd"><pre>ros2 service call /dual_arm_calibration_recorder/capture_intrinsics std_srvs/srv/Trigger</pre></div>
+<ul>
+  <li>Take <b>25–40 views</b>. Cover the <b>whole image</b>: centre, all four corners and the borders.</li>
+  <li>Vary the distance from about <b>0.5 to 1.3 m</b>, and tilt the board up to about 45° in different directions.</li>
+  <li>If a view is refused as "moving / blurred", hold steadier and capture again.</li>
+</ul>
+<p>Then compute and read the result:</p>
+<div class="cmd"><pre>ros2 run rebel_dual_arm_calibration calibrate_intrinsics $HOME/dual_arm_calibration/intrinsics_session \
+  --out $HOME/dual_arm_calibration/intrinsics.yaml</pre></div>
+<p><b>Good:</b> RMS &lt; 0.5 px, at least 25 views, and a coverage map without empty regions. The report also shows how far the factory values were off (Δf %, Δc px). Stop the recorder with Ctrl-C.</p>
+</section>
+
+<section id="place">
+<h2>5. Place the table board and the stickers</h2>
+<ul class="check">
+  <li><label><input type="checkbox" data-k="b1"><span>The <b>table board</b> lies flat where the camera sees it and <b>both arms can reach all 4 crosshairs</b>. Tape it down firmly.</span></label></li>
+  <li><label><input type="checkbox" data-k="b2"><span><b>Fit stickers 101–104</b> are spread about <b>±150 mm</b> around the table board, on the table, where both arms reach them. Wider spread gives a better rotation estimate.</span></label></li>
+  <li><label><input type="checkbox" data-k="b3"><span><b>Check sticker 111</b> is on top of the <b>~40 mm block</b>, which is fixed to the table so it can't move. <b>Check sticker 112</b> is at least <b>150 mm from the table-board centre</b>, ideally towards where the carton will be.</span></label></li>
+  <li><label><input type="checkbox" data-k="b4"><span>Nothing (board, stickers, block, camera) moves until both arms are recorded. You don't need to measure the sticker positions.</span></label></li>
+</ul>
+<div class="callout"><strong>Table board not ready yet?</strong>You can record the arm poses (6.3 and 7) first and do the table board and all touches later, as long as the <b>camera and both arm bases have not moved</b>. Later, start each arm's recorder again with the <b>same</b> <code>output_dir</code> (it resumes), then, before touching:
+<ul>
+  <li>park the arm so it does not hide the table board and <b>capture 3–5 times</b>. The replies say <code>NO ARM SAMPLE RECORDED (table-board image only …)</code>; that is expected here. These images give <code>solve</code> the camera-only loop check.</li>
+  <li>then do the touches (6.4) with that arm.</li>
+</ul>
+If something did move in between, the gate check <i>camera vs touch</i> fails; it does not pass silently.</div>
+</section>
+
+<section id="arm1">
+<h2>6. Record arm 1 (left, 192.168.3.11) <span class="pill real">real hardware</span></h2>
+<div class="callout safety"><strong>Arm 2 must be parked and not connected.</strong>Only arm 1's driver runs in this step.</div>
+<h3>6.1 Start the robot and MoveIt</h3>
+<p>Terminal 2, the driver:</p>
+<div class="cmd"><pre>ros2 launch igus_rebel rebel.launch.py hardware_protocol:=rebel robot_ip:=192.168.3.11</pre></div>
+<p>Wait for <code>First STATUS: joints [deg] …</code> and both controllers reported active. Then terminal 3, MoveIt with RViz:</p>
+<div class="cmd"><pre>ros2 launch igus_rebel_moveit_config move_group.launch.py hardware_protocol:=rebel use_gui:=true run_camera_pole:=false</pre></div>
+<p><code>run_camera_pole:=false</code> is needed because the camera position isn't known to this stack yet. In RViz's MotionPlanning panel set <b>Velocity scaling 0.05</b> and <b>Acceleration scaling 0.05</b>.</p>
+
+<h3>6.2 Start the recorder</h3>
+<p>Terminal 4. Use a <b>new</b> output folder for each arm. Fill in the room conditions; they are stored with the recording.</p>
+<div class="cmd"><pre>ros2 launch rebel_dual_arm_calibration record.launch.py mode:=single_left \
+  output_dir:=$HOME/dual_arm_calibration/left \
+  targets_file:=$HOME/dual_arm_calibration/targets_measured.yaml \
+  intrinsics_file:=$HOME/dual_arm_calibration/intrinsics.yaml \
+  warmup_min:=20 ambient_temp_c:=23.0 ambient_rh_pct:=55</pre></div>
+<p>Terminal 5, used for all service calls. First check the status: every line must be ok.</p>
+<div class="cmd"><pre>ros2 service call /dual_arm_calibration_recorder/status std_srvs/srv/Trigger</pre></div>
+
+<h3 id="ui">6.2b Or: the calibration web UI</h3>
+<p>Instead of terminals 4 and 5 you can use the web UI. It starts the same recorder and adds a live camera view with the detected corners, pose and touch counters, buttons for capture and touches, and step-jog buttons. Use <b>either</b> the UI launch <b>or</b> <code>record.launch.py</code>, not both.</p>
+<div class="cmd"><pre>ros2 launch rebel_dual_arm_calibration calibration_ui.launch.py mode:=single_left \
+  output_dir:=$HOME/dual_arm_calibration/left \
+  targets_file:=$HOME/dual_arm_calibration/targets_measured.yaml \
+  warmup_min:=20 ambient_temp_c:=23.0 ambient_rh_pct:=55
+<span class="c"># open exactly the URL the log prints: http://127.0.0.1:8095/?token=…  (new token at every start)</span></pre></div>
+<ul>
+  <li>Tabs: <b>Setup</b> (session info, health checklist; every line must be green), <b>Intrinsics</b> (step 4, optional), <b>Record arm</b> (6.3, with <b>Auto capture</b>, below), <b>Touches</b> (6.4: pick the point ID, then <i>Capture touch</i>; done marks per arm). <code>solve</code> stays on the command line.</li>
+  <li><b>Jog panel:</b> one small step per click (Cartesian 0.1–10 mm, rotation 0.5–5°, joint 0.5–5°), slow (≤ 10 mm/s), planned by MoveIt and checked for collisions. On the real robot it is locked until you press <b>Enable motion</b> and confirm the dialog (expires after 10 min idle or a page reload). <b>STOP</b> or <b>Esc</b> cancels the step. Keep a hand on the e-stop anyway: the knife tip has no collision model.</li>
+  <li>At a stretched-out arm pose Cartesian steps are refused; bend the elbow with a joint step first.</li>
+  <li><b>Auto capture</b> (Record arm tab): switch it ON and just move the arm from pose to pose. Each time the arm has stood still for 2 s at a <b>new pose</b> (some joint at least 2° away from every pose already handled; 1° and 5° are selectable), it captures by itself and retries "board still moving" for up to 15 s. The same pose is not captured twice. The status line says what it is doing (<i>waiting for a new pose, arm moving, settling, retrying, captured (n this run), same pose, skipped, gave up</i>). It never moves the robot. It pauses during a jog step and switches off when you change tab or close the page; manual Capture is disabled while it is ON.</li>
+</ul>
+<p><span class="pill real">real hardware</span> The UI and jog were verified on the mock stack only. On the first real session start with joint steps of 0.5°, then Cartesian 1 mm, with a hand on the e-stop.</p>
+
+<h3 id="poses">6.3 Record 30–40 poses</h3>
+<p>For each pose: move the arm in RViz (drag the marker, <b>Plan</b>, check, <b>Execute</b>), let it stand still for <b>at least 2 s</b>, then capture:</p>
+<div class="cmd"><pre>ros2 service call /dual_arm_calibration_recorder/capture std_srvs/srv/Trigger</pre></div>
+<p><b>Read every reply.</b> A refused capture records nothing.</p>
+<table>
+  <tr><th>Reply</th><th>Meaning</th></tr>
+  <tr><td><code>success=True</code>, <code>cap N: left: 20 corners (4 markers, 4 chess), PnP 0.2 px, sample #K; table board: …</code></td><td><b>Good.</b> 20 corners is the maximum for the 3×3 board; the recorder needs at least 8, and 16 or more is better.</td></tr>
+  <tr><td><code>arms not stationary yet (still for X s, need 2.00 s)</code></td><td>Wait a moment and call again.</td></tr>
+  <tr><td><code>board still moving (common x px &gt; 0.20 px, …)</code></td><td>The arm stopped but the whole board still shifted between two images 0.4 s apart (plastic arm, bracket). Wait 1–2 s and call again (auto capture retries by itself). If it keeps happening, stiffen the board bracket. Normal pixel noise is not counted: only motion shared by all corners is. A capture that passes reports <code>still (common … px, single max … px)</code>.</td></tr>
+  <tr><td>Message starts with <code>NO ARM SAMPLE RECORDED (table-board image only …)</code></td><td>The arm board was not seen (hidden, too oblique, or a duplicate pose). <b>Move and capture again.</b></td></tr>
+  <tr><td><code>same pose as an existing sample, skipped</code></td><td>Choose a different pose.</td></tr>
+</table>
+<figure><img src="{{IMG_DETECTION}}" alt="example detection"><figcaption>What a good capture contains: the arm board fully visible (green, 20 points) and the table board (yellow). This image is from the mock run's simulated camera; real images will look like your camera view.</figcaption></figure>
+<p><b>How to choose poses.</b> Accuracy comes from variety:</p>
+<ul>
+  <li>Cover the <b>whole area where the carton will be</b>: near and far, left and right, low and high (about 10–30 cm above the table).</li>
+  <li><b>Tilt the board</b> 20–45° in different directions (towards and away from the camera, left and right), and <b>rotate the wrist</b> (joint 6) between poses. Aim for at least 30° of variation in each direction across the set.</li>
+  <li>Keep the board <b>fully visible</b> and not edge-on to the camera (less than about 55° from facing it). The arm must not cover it.</li>
+  <li>Use 30–40 good samples. Fewer than 20 gives a warning.</li>
+  <li>Check the count anytime with <code>status</code> (<code>samples left N</code>).</li>
+</ul>
+
+<h3 id="touches">6.4 Touches</h3>
+<p>Touch every point with the knife tip, set its ID, and record:</p>
+<table>
+  <tr><th>IDs</th><th>Where</th><th>Role</th></tr>
+  <tr><td>1, 2, 3, 4</td><td>Crosshairs on the table board (where four squares meet)</td><td>Fit</td></tr>
+  <tr><td>101, 102, 103, 104</td><td>Fit stickers around the board</td><td>Fit (widens the rotation estimate)</td></tr>
+  <tr><td>111, 112</td><td>Check stickers (block, and far point)</td><td><b>Held-out</b>: never used in the fit; this is the accuracy check</td></tr>
+</table>
+<p>For each point do <b>2–3 touches</b>, tilting the wrist by <b>at least 25°</b> between repeats. That also checks the knife-tip (TCP) position. <b>Always approach from above</b> in the same way, so gear backlash is the same each time.</p>
+<ol>
+  <li>In RViz, bring the knife tip to about <b>10 mm above</b> the point, at scaling 0.05.</li>
+  <li>Come down in small steps until the tip <b>just touches</b> the crosshair centre (the 1 mm ring on the stickers). Don't press: the arm flexes. For fine steps use the web UI's jog panel (0.5 mm, then 0.1 mm), or restart MoveIt with <code>run_teleop:=true</code> and use the keyboard teleop at its smallest step.</li>
+  <li>When the arm is still, select the point and record:</li>
+</ol>
+<div class="cmd"><pre>ros2 param set /dual_arm_calibration_recorder touch_point_id 101
+ros2 service call /dual_arm_calibration_recorder/capture_touch std_srvs/srv/Trigger</pre></div>
+<ol start="4">
+  <li>Lift the tip about 10 mm before the next touch. Go through all 10 IDs, setting <code>touch_point_id</code> each time.</li>
+  <li><i>Optional, for a repeatability number (ISO 9283 style):</i> touch one sticker <b>5 times at the same wrist orientation</b>, lifting 10 mm in between.</li>
+</ol>
+<p>In the web UI: select the ID on the <b>Touches</b> tab and press <i>Capture touch</i> instead of the two commands.</p>
+<div class="callout warn"><strong>A wrong touch?</strong>Stop the recorder (Ctrl-C), delete that line from <code>~/dual_arm_calibration/left/touches.jsonl</code>, and start the recorder again with the same command. It resumes and keeps the existing samples.</div>
+<p>When done: run <code>status</code> once more, then stop the recorder, MoveIt and the driver with Ctrl-C (terminals 4, 3, 2). Leave the camera running.</p>
+
+<h3 id="hover">6.5 Touching the table crosshairs with the hover assist <span class="pill real">real hardware</span></h3>
+<p>The camera finds the table board, the calibration predicts where crosshairs 1–4 are for this arm, and the arm is sent to <b>60 mm above</b> the chosen crosshair with the knife pointing straight down. You bring the tip down the last few centimetres with the <b>teleop keyboard</b> and record the touch. The UI then shows <b>predicted vs touched</b>: how far the real crosshair was from where the calibration thought it was. That number is the honest accuracy of the camera-to-arm calibration at that point.</p>
+<div class="callout safety"><strong>Before you start</strong>
+<ul>
+  <li>Knife <b>covered</b>, ultrasonic <b>off</b>, a hand on the <b>e-stop</b> of the moving arm. Only this arm is connected; the other one is parked out of the way.</li>
+  <li>MoveIt Servo (the teleop) has <b>no collision checking</b> in this setup, and the knife tip has no collision model anywhere: only you keep it off the board.</li>
+  <li>Never press a UI motion button while a teleop key is held. The UI refuses to start a motion while the arm moves ("the arm is moving (teleop active?)").</li>
+  <li>The table board is fixed and must not move until both arms have done their touches.</li>
+</ul></div>
+<p><b>Terminals</b> (all with the same environment as in section 1):</p>
+<div class="cmd"><pre><span class="c"># 1: camera (if not running)</span>
+ros2 launch rebel_cameras cameras.launch.py scene:=true wrist:=false knife:=false
+<span class="c"># 2: driver of THIS arm (left: .11, right: .12)</span>
+ros2 launch igus_rebel rebel.launch.py hardware_protocol:=rebel robot_ip:=192.168.3.11
+<span class="c"># 3: MoveIt + RViz WITH Servo for the teleop</span>
+ros2 launch igus_rebel_moveit_config move_group.launch.py hardware_protocol:=rebel use_gui:=true \
+  run_camera_pole:=false run_teleop:=true
+<span class="c"># 4: calibration UI (same output_dir as this arm's recording; it resumes)</span>
+ros2 launch rebel_dual_arm_calibration calibration_ui.launch.py mode:=single_left \
+  output_dir:=$HOME/dual_arm_calibration/left \
+  targets_file:=$HOME/dual_arm_calibration/targets_measured.yaml \
+  warmup_min:=20 ambient_temp_c:=23.0 ambient_rh_pct:=55
+<span class="c"># 5: teleop keyboard (keep this terminal focused while jogging)</span>
+ros2 run igus_rebel_moveit_config rebel_servo_teleop_keyboard</pre></div>
+<ul class="check">
+  <li><label><input type="checkbox" data-k="h1"><span>In RViz, MotionPlanning panel, <b>Context</b> tab: tick <b>Allow External Comm.</b> (otherwise RViz ignores the goal sent from the UI). On the <b>Planning</b> tab: Velocity and Acceleration scaling <b>0.05</b>.</span></label></li>
+  <li><label><input type="checkbox" data-k="h2"><span>Table-board images in this session: on the <b>Record arm</b> tab, with the arm parked away from the board and Auto capture OFF, press <b>Capture</b> 3–5 times (reply "NO ARM SAMPLE RECORDED (table-board image only …); table board: 48 corners"). Done once per arm session.</span></label></li>
+</ul>
+<p><b>For each crosshair 1–4</b> (Touches tab):</p>
+<ol>
+  <li>Park the arm so it does not hide the board and press <b>Detect points</b>. Crosshairs 1–4 appear on the live image with their predicted positions.</li>
+  <li><b>Click the crosshair</b> on the live image (or its row). It turns yellow.</li>
+  <li>Press <b>Plan hover</b>, then <b>Send to RViz</b>. The orange goal robot appears above the crosshair, knife down. In RViz press <b>Plan</b>, check the preview (no sweep through the board or the table), then <b>Execute</b>. The arm stops 60 mm above the crosshair.
+    <br><i>The UI's own Move / Descend buttons stay off on the real arm until the supervised test (<code>allow_real_move:=true</code>).</i></li>
+  <li><b>Teleop down</b> in the base frame (press <code>w</code> once): <code>.</code> moves down, <code>;</code> up, the arrow keys move in X/Y. Make the steps small as you get close:
+<div class="cmd"><pre>ros2 service call /servo_keyboard_input/set_cartesian_increment \
+  igus_rebel_msgs/srv/SetCartesianIncrement "{increment_meters: 0.002}"   <span class="c"># then 0.0005 for the last mm</span></pre></div>
+    Line the tip up over the cross centre from about 5 mm, then come down until it <b>just touches</b> the paper (a sheet of paper under the tip would just start to drag). Do not press.</li>
+  <li><b>Release the keys</b>, wait ~2 s, choose the crosshair's ID in the touch list and press <b>Capture touch</b>. The reply ends with <b>"predicted vs touched: N mm lateral (x …, y …, above paper …)"</b>.</li>
+  <li><b>Repeat with a tilted wrist</b>: lift ~10 mm (<code>;</code>), switch the teleop to the tool frame (<code>e</code>) and rotate about the tip by at least 25° (<code>i</code>/<code>k</code> or <code>n</code>/<code>m</code>; rotating in the tool frame keeps the tip roughly in place), switch back to <code>w</code>, come down again and capture. 2–3 touches per crosshair, each with a different tilt.</li>
+  <li>Lift at least <b>20 mm</b> before planning the next crosshair (the planned path starts from where the arm is).</li>
+</ol>
+<table>
+  <tr><th>"predicted vs touched" (lateral)</th><th>Meaning</th></tr>
+  <tr><td>≤ 3 mm</td><td>Very good for this cell (nominal kinematics, camera-only calibration).</td></tr>
+  <tr><td>3–10 mm</td><td>Expected range before the touches are used in the solve. Carry on.</td></tr>
+  <tr><td>&gt; 15 mm, or the same large offset on every crosshair</td><td>Stop and report: the camera, the board or the arm base may have moved, or a print size is wrong.</td></tr>
+</table>
+<table>
+  <tr><th>Message</th><th>What to do</th></tr>
+  <tr><td><code>only N fresh camera frame(s) arrived …</code></td><td>The camera is not delivering: check terminal 1 / <code>ros2 topic hz /camera/color/image_raw</code>.</td></tr>
+  <tr><td><code>point N was not detected …</code></td><td>The arm hides the board: move it away and press Detect points again.</td></tr>
+  <tr><td><code>the board moved or the detection changed …</code></td><td>Press Detect points again (with the arm away). If it keeps happening, check that the board is fixed.</td></tr>
+  <tr><td><code>the arm is moving (teleop active?) …</code> / capture refused "not stationary"</td><td>Release the teleop keys and wait 2 s.</td></tr>
+  <tr><td>RViz does not show the goal after Send to RViz</td><td>Tick <b>Allow External Comm.</b> in the MotionPlanning Context tab.</td></tr>
+</table>
+<p>Every touch is stored in <code>touches.jsonl</code> and its predicted-vs-touched comparison in <code>hover_log.jsonl</code> in the session folder. A wrong touch is removed as described in 6.4.</p>
+</section>
+
+<section id="arm2">
+<h2>7. Record arm 2 (right, 192.168.3.12) <span class="pill real">real hardware</span></h2>
+<div class="callout safety"><strong>Park arm 1 first</strong>Fold arm 1 away (with its own stack, before stopping it, or from its pendant). Arm 2 is now the only connected arm. <b>Don't touch the camera, board, stickers or block.</b></div>
+<p>Repeat section 6 with these changes (with the web UI: <code>calibration_ui.launch.py mode:=single_right output_dir:=$HOME/dual_arm_calibration/right</code> and the same other arguments):</p>
+<div class="cmd"><pre><span class="c"># terminal 2: arm 2's controller</span>
+ros2 launch igus_rebel rebel.launch.py hardware_protocol:=rebel robot_ip:=192.168.3.12
+<span class="c"># terminal 3: unchanged</span>
+ros2 launch igus_rebel_moveit_config move_group.launch.py hardware_protocol:=rebel use_gui:=true run_camera_pole:=false
+<span class="c"># terminal 4: mode and folder for the right arm</span>
+ros2 launch rebel_dual_arm_calibration record.launch.py mode:=single_right \
+  output_dir:=$HOME/dual_arm_calibration/right \
+  targets_file:=$HOME/dual_arm_calibration/targets_measured.yaml \
+  intrinsics_file:=$HOME/dual_arm_calibration/intrinsics.yaml \
+  warmup_min:=20 ambient_temp_c:=23.0 ambient_rh_pct:=55</pre></div>
+<ul class="check">
+  <li><label><input type="checkbox" data-k="a1"><span><b>Right arm check:</b> <code>ros2 topic echo /joint_states --once</code> shows arm 2's joint angles, as on its pendant, not arm 1's.</span></label></li>
+  <li><label><input type="checkbox" data-k="a2"><span>The capture replies say <code>right: … corners</code>.</span></label></li>
+  <li><label><input type="checkbox" data-k="a3"><span>30–40 good samples recorded for arm 2.</span></label></li>
+  <li><label><input type="checkbox" data-k="a4"><span><b>The same 10 touch IDs</b> touched (1–4, 101–104, 111, 112), each 2–3 times with different wrist tilts.</span></label></li>
+</ul>
+<p>The gains were tuned on arm 1. On arm 2's first moves, watch that it follows smoothly, without shaking or overshoot.</p>
+</section>
+
+<section id="solve">
+<h2>8. Solve and read the gate</h2>
+<p>Nothing moves in this step. It takes about 20 s, plus about 1 minute for the uncertainty estimate.</p>
+<div class="cmd"><pre>ros2 run rebel_dual_arm_calibration solve \
+  $HOME/dual_arm_calibration/left $HOME/dual_arm_calibration/right \
+  --out $HOME/dual_arm_calibration/dual_arm_calibration.yaml \
+  --intrinsics-file $HOME/dual_arm_calibration/intrinsics.yaml \
+  --uncertainty-mc 200</pre></div>
+<p>Skipped step 4? Leave out the <code>--intrinsics-file</code> line.</p>
+<p>The report ends with the <b>trust gate</b>. All 8 checks must PASS:</p>
+<table>
+  <tr><th>Check</th><th>Passes when</th><th>What it protects against</th></tr>
+  <tr><td>common touch points</td><td>≥ 4 fit points touched by both arms</td><td>Too little data for the arm-to-arm link.</td></tr>
+  <tr><td>touch mismatch</td><td>≤ 1.5 mm, using a number that is <b>not</b> fitted to the same touches</td><td>A fit that only looks good on its own data.</td></tr>
+  <tr><td>check-point coverage</td><td>≥ 2 check points; one ≥ 30 mm off the board plane, one ≥ 150 mm from its centre</td><td>Accuracy proven only at the board.</td></tr>
+  <tr><td><b>check-point error</b></td><td>worst ≤ 3.0 mm</td><td><b>The honest accuracy</b>, at points never used in the fit.</td></tr>
+  <tr><td>touch geometry</td><td>predicted rotation noise ≤ 0.15°, reach-point noise ≤ 1.0 mm</td><td>Touch points too close together for a trustworthy rotation.</td></tr>
+  <tr><td>camera vs touch</td><td>agree within 3× their predicted noise (floors 1 mm / 0.1°)</td><td>The two independent methods disagreeing.</td></tr>
+  <tr><td>held-out validation</td><td>reprojection ≤ 1.0 px and touches ≤ 1.5 mm on data left out of the fit</td><td>Over-fitting.</td></tr>
+  <tr><td>intrinsics validated</td><td>intrinsics file given, or the data shows factory values off by ≤ 0.3 % / 3 px</td><td>A wrong lens model scaling everything.</td></tr>
+</table>
+<p>Also read these in the report:</p>
+<ul>
+  <li><b>Check points</b>: the arm-to-arm error at 111 and 112. This is the number to quote.</li>
+  <li><b>Recommended padding</b> (<code>recommended_padding_mm</code>): use at least this between the arms in MoveIt.</li>
+  <li><b>Uncertainty budget</b>: 95 % ranges for arm 2's position and for the arm-to-arm disagreement at three workspace points. It includes print scale, lens, knife-tip offset, touch noise and joint zero errors.</li>
+  <li><b>Repeatability</b>, if you did the 5-repeat touches: RP in mm per arm. It should be near the ±1 mm specification.</li>
+</ul>
+<div class="cmd"><pre>jq -r .trust_gate.summary $HOME/dual_arm_calibration/dual_arm_calibration_report.json</pre></div>
+<p>Optional cross-check that also fits joint zero errors. They are used only inside the solve and <b>never applied to the robot</b>. If the held-out data shows it is better, the solver writes that base automatically:</p>
+<div class="cmd"><pre>ros2 run rebel_dual_arm_calibration solve \
+  $HOME/dual_arm_calibration/left $HOME/dual_arm_calibration/right \
+  --out $HOME/dual_arm_calibration/dual_arm_calibration_offsets.yaml \
+  --intrinsics-file $HOME/dual_arm_calibration/intrinsics.yaml --joint-offsets</pre></div>
+</section>
+
+<section id="fail">
+<h2>9. If the gate FAILs</h2>
+<p>The YAML is still written, with <code>source: calibrated_unverified</code>. Don't rely on it to keep the arms apart. Find the cause:</p>
+<table>
+  <tr><th>Failing check / symptom</th><th>Likely cause</th><th>Fix</th></tr>
+  <tr><td>common touch points or check-point coverage</td><td>A point was missed on one arm, or a different ID was used</td><td>Touch the missing IDs with that arm (restart its recorder with the same folder; it resumes), then solve again.</td></tr>
+  <tr><td>touch geometry</td><td>The fit stickers are too close together, or there are too few repeats</td><td>Spread stickers 101–104 wider (then re-touch them with <b>both</b> arms), and do 3 touches per point.</td></tr>
+  <tr><td>check-point error &gt; 3 mm while the fit looks good</td><td>Joint zero errors or flex in the arms; the error grows away from the board</td><td>Try the <code>--joint-offsets</code> solve. Otherwise adjust the joint zero offsets in iRC and re-record, or accept a larger padding (the report's <code>recommended_padding_mm</code>).</td></tr>
+  <tr><td>TCP consistency &gt; 1.5 mm (in the report)</td><td>Wrong knife-tip offset, or a loose blade</td><td>Tighten the blade, re-check the TCP calibration, and redo the touches.</td></tr>
+  <tr><td>held-out validation, or a large RMS px</td><td>The camera, board or stickers moved between arms; print size not entered; wobbly board bracket</td><td>Check nothing moved, measure the print, stiffen the bracket, re-record.</td></tr>
+  <tr><td>intrinsics validated</td><td>No intrinsics file, and the factory lens values look off</td><td>Do step 4 and pass <code>--intrinsics-file</code>.</td></tr>
+  <tr><td>camera vs touch</td><td>One of the two methods is biased (lens, print scale, TCP)</td><td>Check the intrinsics, print measurements and TCP consistency first.</td></tr>
+</table>
+</section>
+
+<section id="use">
+<h2>10. Use it in the dual cell</h2>
+<div class="callout warn"><strong>Before the first dual-arm run</strong>
+The installed driver must be rebuilt first, so it includes the two-arm and fault-group support (commits <code>374935a</code>, <code>11f1c4d</code>). Ask for this to be done. When the dual launch starts, its log must show <code>Joined fault group 'dual_arm_table'</code> for <b>both</b> arms.</div>
+<div class="cmd"><pre>ros2 launch rebel_dual_table_description dual_table.launch.py hardware_protocol:=rebel \
+  left_robot_ip:=192.168.3.11 right_robot_ip:=192.168.3.12 \
+  calibration_file:=$HOME/dual_arm_calibration/dual_arm_calibration.yaml
+
+ros2 launch rebel_dual_table_moveit_config move_group.launch.py hardware_protocol:=rebel use_gui:=true \
+  calibration_file:=$HOME/dual_arm_calibration/dual_arm_calibration.yaml</pre></div>
+<ul class="check">
+  <li><label><input type="checkbox" data-k="u1"><span>The trajectory controllers start <b>inactive</b> (<code>ros2 control list_controllers</code>). If the YAML isn't <code>calibrated</code>, the launch prints a warning.</span></label></li>
+  <li><label><input type="checkbox" data-k="u2"><span>The poses match the file: <code>ros2 run tf2_ros tf2_echo world arm_right_base_link</code> and <code>… world camera_link</code>.</span></label></li>
+  <li><label><input type="checkbox" data-k="u3"><span><b>Identity check:</b> in RViz, each arm's model stands like the real arm (compare <code>/joint_states</code> with each pendant).</span></label></li>
+  <li><label><input type="checkbox" data-k="u4"><span>Only then activate: <code>ros2 control switch_controllers --activate arm_left_trajectory_controller arm_right_trajectory_controller</code></span></label></li>
+  <li><label><input type="checkbox" data-k="u5"><span>Keep at least the <b>recommended padding</b> between the arms (the collision-padding setup in the dual MoveIt config is still to be added).</span></label></li>
+  <li><label><input type="checkbox" data-k="u6"><span>First moves: <b>one arm at a time</b>, small, slow (the dual cell is capped at 0.1 rad/s). Then a small move of both together, with a hand on the e-stop.</span></label></li>
+  <li><label><input type="checkbox" data-k="u7"><span>Prove the group stop: while one arm crawls, press the <b>other</b> arm's e-stop. Both must stop. Recover the e-stopped arm first, then the other.</span></label></li>
+</ul>
+</section>
+
+<section id="recheck">
+<h2>11. Re-checks</h2>
+<p><b>After every robot power cycle or re-homing</b>, a joint-1 zero shift turns directly into an error in arm 2's position. Both arms touch the two check stickers again in short recordings (sections 6–7 with new folders, touches only), then:</p>
+<div class="cmd"><pre>ros2 run rebel_dual_arm_calibration check_points \
+  $HOME/dual_arm_calibration/left_recheck $HOME/dual_arm_calibration/right_recheck \
+  --calibration $HOME/dual_arm_calibration/dual_arm_calibration.yaml</pre></div>
+<p>The error must stay within the gate limit of 3 mm. Nothing is fitted in this step. The check stickers must still be exactly where they were.</p>
+<p><b>Reproducibility:</b> repeat the full calibration on another day and compare it with the previous result. Accept when arm 2's base changed by less than <b>2 mm / 0.2°</b>.</p>
+<div class="cmd"><pre>ros2 run rebel_dual_arm_calibration solve <i>…new sessions…</i> --out <i>new.yaml</i> \
+  --compare $HOME/dual_arm_calibration/dual_arm_calibration.yaml</pre></div>
+</section>
+
+<section id="trouble">
+<h2>Troubleshooting</h2>
+<table>
+  <tr><th>Message / symptom</th><th>What to do</th></tr>
+  <tr><td><code>newest image is X s old (max 1.0 s)</code></td><td>The camera isn't delivering. Check <code>ros2 topic hz /camera/color/image_raw</code>, and restart the camera launch if needed. If it happens only sometimes, large 1080p frames are being dropped by the ROS transport.</td></tr>
+  <tr><td><code>no image / camera_info received yet</code></td><td>The camera isn't running, or is on a different <code>ROS_DOMAIN_ID</code>.</td></tr>
+  <tr><td><code>newest image predates the stationary window</code> / <code>no earlier image …</code></td><td>Call capture again after holding still.</td></tr>
+  <tr><td><code>TF base-&gt;tip is stale/unavailable</code></td><td>The robot stack isn't running (or another domain). Check <code>ros2 run tf2_ros tf2_echo base_link link6</code>.</td></tr>
+  <tr><td><code>left: not detected</code> / <code>only N corners</code></td><td>The board is hidden, too oblique, too far, or glare. Tilt it more towards the camera.</td></tr>
+  <tr><td><code>PnP reprojection … rejected</code></td><td>Blurry or partly hidden board. Wait longer before capturing, or pick another pose.</td></tr>
+  <tr><td><code>solve</code> exits with code 2 naming two sessions</td><td>The two recordings used different camera settings (resolution or intrinsics). Re-record one arm with the same camera configuration.</td></tr>
+  <tr><td><code>board still moving (common …)</code> on almost every try, even after standing still for 10 s</td><td>The camera's pixel noise is higher than expected (dim light, flicker). Add light first. If it persists, restart the UI / recorder with the same <code>output_dir</code> plus <code>max_corner_motion_px:=0.3</code> (default 0.2); note the "common" values you saw.</td></tr>
+  <tr><td>Arm 2 shakes or overshoots</td><td>Stop. Its controller gains were tuned on arm 1; this needs a gain check before continuing.</td></tr>
+</table>
+</section>
+
+<section id="files">
+<h2>Files and reference</h2>
+<table>
+  <tr><th>Path</th><th>Contents</th></tr>
+  <tr><td><code>~/dual_arm_targets/*.pdf</code></td><td>Print files: left/right boards (A4), table board (A4 landscape), touch stickers (A4).</td></tr>
+  <tr><td><code>~/dual_arm_targets/plate_*.stl</code> / <code>.step</code></td><td>3D-printable backing plates (arm 125×125 mm, table 220×180 mm). Source: <code>cad/calibration_plates/build_plates.py</code>.</td></tr>
+  <tr><td><code>~/dual_arm_calibration/targets_measured.yaml</code></td><td>Your measured board sizes (x and y).</td></tr>
+  <tr><td><code>~/dual_arm_calibration/intrinsics.yaml</code></td><td>Measured camera intrinsics (only if you did step 4).</td></tr>
+  <tr><td><code>~/dual_arm_calibration/left/</code>, <code>…/right/</code></td><td>Recordings: <code>images/</code>, <code>samples.jsonl</code>, <code>touches.jsonl</code>, <code>table_obs.jsonl</code>, <code>session.json</code> (including room conditions), <code>robot_description.urdf</code>.</td></tr>
+  <tr><td><code>~/dual_arm_calibration/dual_arm_calibration.yaml</code></td><td>Result: <code>arm_right_base</code> and <code>camera_link</code> in <code>world</code> (= arm 1's base), plus <code>source</code>, the gate result and the recommended padding in the notes.</td></tr>
+  <tr><td><code>…/dual_arm_calibration_report.json</code></td><td>Full report: gate, check points, uncertainty budget, repeatability, warnings, validation.</td></tr>
+  <tr><td><code>src/rebel_dual_arm_calibration/README.md</code></td><td>Developer reference: every option and threshold.</td></tr>
+</table>
+<p><b>Frames:</b> <code>world</code> = <code>arm_left_base_link</code>. Left and right are seen from behind the robots, looking along the base +x direction.</p>
+<p><b>Method references:</b>
+Fitzpatrick &amp; West, fiducial vs target registration error (<a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC4607070">PMC4607070</a>);
+ISO 9283 robot accuracy and repeatability (<a href="https://robodk.com/doc/en/Robot-Validation-ISO9283.html">RoboDK summary</a>);
+Albarelli et al., printed targets (<a href="https://bmva-archive.org.uk/bmvc/2010/conference/paper16/abstract16.pdf">BMVC 2010</a>);
+NIST robot calibration validation (<a href="https://arxiv.org/pdf/1908.07273">arXiv 1908.07273</a>);
+Zivid hand-eye verification (<a href="https://support.zivid.com/camera/academy/applications/hand-eye/hand-eye-calibration-verification.html">Zivid</a>);
+ROS-Industrial <a href="https://github.com/ros-industrial/industrial_calibration">industrial_calibration</a>.</p>
+</section>
+
+</main>
+</div>
+<script>
+  document.querySelectorAll('.cmd').forEach(function (block) {
+    var b = document.createElement('button'); b.textContent = 'Copy';
+    b.addEventListener('click', function () {
+      var pre = block.querySelector('pre').cloneNode(true);
+      pre.querySelectorAll('.c').forEach(function (c) { c.remove(); });
+      var text = pre.textContent.split('\n').filter(function (l) { return l.trim() !== ''; }).join('\n');
+      navigator.clipboard.writeText(text).then(function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1200); });
+    });
+    block.appendChild(b);
+  });
+  var KEY = 'rebel-dual-calib-guide';
+  var state = JSON.parse(localStorage.getItem(KEY) || '{}');
+  var boxes = document.querySelectorAll('ul.check input[type=checkbox]');
+  function progress() {
+    var done = 0; boxes.forEach(function (x) { if (x.checked) done++; });
+    document.getElementById('prog-text').textContent = done + ' / ' + boxes.length;
+    document.getElementById('prog-bar').style.width = (100 * done / boxes.length) + '%';
+  }
+  boxes.forEach(function (x) {
+    x.checked = !!state[x.dataset.k];
+    x.addEventListener('change', function () { state[x.dataset.k] = x.checked; localStorage.setItem(KEY, JSON.stringify(state)); progress(); });
+  });
+  progress();
+</script>
+</body>
+</html>

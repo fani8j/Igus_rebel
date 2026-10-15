@@ -18,6 +18,7 @@ find_package(moveit_core REQUIRED)
 find_package(moveit_ros_planning REQUIRED)
 find_package(moveit_task_constructor_core REQUIRED)
 find_package(moveit_task_constructor_msgs REQUIRED)
+find_package(dual_cut_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
 
@@ -68,6 +69,7 @@ ament_target_dependencies(box_h_cut_executor
   visualization_msgs
   moveit_task_constructor_core
   moveit_task_constructor_msgs
+  dual_cut_msgs
 )
 # boost::property_tree (header-only) parses the external snapshot JSON.
 target_link_libraries(box_h_cut_executor Boost::boost rebel_analytic_ik)
@@ -114,6 +116,23 @@ if(BUILD_TESTING)
   find_package(urdf QUIET)
   find_package(ament_index_cpp REQUIRED)
   find_package(igus_rebel_description QUIET)
+
+  # Eigen-only / std-only pure helpers of box_h_cut_executor (snapshot frame, plan export).
+  ament_add_gtest(test_snapshot_frame test/test_snapshot_frame.cpp)
+  target_include_directories(test_snapshot_frame PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+  target_link_libraries(test_snapshot_frame Eigen3::Eigen)
+  target_compile_features(test_snapshot_frame PUBLIC cxx_std_17)
+
+  ament_add_gtest(test_plan_export test/test_plan_export.cpp)
+  target_include_directories(test_plan_export PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+  target_compile_features(test_plan_export PUBLIC cxx_std_17)
+
+  ament_add_gtest(test_left_varying_chain test/test_left_varying_chain.cpp)
+  target_include_directories(test_left_varying_chain PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+  target_compile_features(test_left_varying_chain PUBLIC cxx_std_17)
 
   ament_add_gtest(test_rebel_analytic_ik test/test_rebel_analytic_ik.cpp)
   target_link_libraries(test_rebel_analytic_ik rebel_analytic_ik)

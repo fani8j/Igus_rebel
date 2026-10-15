@@ -8,7 +8,8 @@ from launch.substitutions import (
     PathJoinSubstitution,
     PythonExpression,
 )
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, RegisterEventHandler
+from launch.event_handlers import OnProcessExit
 from ament_index_python.packages import get_package_share_directory
 import os
 
@@ -24,6 +25,15 @@ def generate_launch_description():
         "robot_ip",
         default_value="192.168.3.11",
         description="CRI controller IPv4 address (192.168.3.11 wired LAN, 192.168.50.133 Wi-Fi)",
+    )
+
+    tool_variant_arg = DeclareLaunchArgument(
+        "tool_variant",
+        default_value="knife_c",
+        choices=["knife_c", "xeg32_knife_v1"],
+        description="Tool model on link6 (xacro arg tool_variant): knife_c = variant-C knife "
+                    "holder (default), xeg32_knife_v1 = previous XEG-32 gripper + old knife. "
+                    "Must match the move_group launch.",
     )
 
     igus_rebel_pkg = get_package_share_directory("igus_rebel")
@@ -59,6 +69,8 @@ def generate_launch_description():
                 LaunchConfiguration("hardware_protocol"),
                 " robot_ip:=",
                 LaunchConfiguration("robot_ip"),
+                " tool_variant:=",
+                LaunchConfiguration("tool_variant"),
             ]
         ),
         value_type=str,
@@ -98,11 +110,23 @@ def generate_launch_description():
         output="both",
     )
 
+    # Two spawners calling load_controller concurrently fail at random on hosts
+    # without RT scheduling (either controller can be the one that fails). Start
+    # the trajectory spawner only after the broadcaster spawner has exited.
+    # Ported from github.com/ccjameslai/compal_robot commit efecba2.
+    delayed_robot_trajectory_controller_spawner = RegisterEventHandler(
+        event_handler=OnProcessExit(
+            target_action=joint_state_broadcaster_spawner,
+            on_exit=[robot_trajectory_controller_spawner],
+        )
+    )
+
     return LaunchDescription([
         hardware_protocol_arg,
         robot_ip_arg,
+        tool_variant_arg,
         ros2_control_node,
         robot_state_pub_node,
         joint_state_broadcaster_spawner,
-        robot_trajectory_controller_spawner,
+        delayed_robot_trajectory_controller_spawner,
     ])

@@ -152,6 +152,18 @@ void Rebel::CheckFaultGroupStatus(
       }
     }
   }
+  // JOINT_LIMIT_MIN/MAX: a local condition of this arm (its controller blocks further motion
+  // into the limit, the operator jogs it out). It neither trips the group nor latches this arm,
+  // and counts as clean STATUS below, so a later real fault still trips and arming / the
+  // root-cause clear are not blocked. A joint error bit in the same STATUS still trips (jointText).
+  const bool atJointLimit = Safety::IsJointLimitKinstate(kinstate);
+  if (atJointLimit && kinstate != lastKinstate) {
+    RCLCPP_WARN(
+      logger_,
+      "Fault group '%s': '%s' reports %s (joint limit). Only this arm is limited by its "
+      "controller; the group is NOT stopped. Jog this arm out of the limit.",
+      faultGroup_.c_str(), componentName_.c_str(), CriMessages::KinstateToString(kinstate).c_str());
+  }
   const bool kinError = Safety::IsGroupTrippingKinstate(kinstate);
   const auto nowTime = Safety::SteadyClock::now();
   const std::int64_t nowNs = ToNs(nowTime);
@@ -206,6 +218,10 @@ void Rebel::CheckFaultGroupStatus(
     reason += (jointText.empty() ? "" : "; ") +
       std::string("kinematics error [") + CriMessages::KinstateToString(kinstate) + "]";
   }
+  if (atJointLimit) {
+    // Joint error bit(s) together with a joint limit: the error bit is what trips the group.
+    reason += "; kinematics state [" + CriMessages::KinstateToString(kinstate) + "]";
+  }
   // Fail closed: this arm is latched too (jog zero, read() ERROR), so its own controller
   // cannot resume an old trajectory after a reset_and_enable while the peers are down. It
   // recovers like every other latch (inactive -> active, then cycle the controllers).
@@ -235,7 +251,7 @@ void Rebel::AliveThreadFunction()
       // write() stored one just before the latch/hold took effect. A STATUS coast (not latched,
       // not held) keeps sending the frozen jog.
       const bool inhibited = hardwareErrorLatched_.load() || holdJogZero_.load() ||
-        statusHold_.load();
+        statusHold_.load() || controllerRestartHold_.load();
       if (!stale && !inhibited) {
         for (std::size_t i = 0; i < currentJog.size(); ++i) {
           currentJog[i] = jog[i].load();
@@ -602,6 +618,30 @@ void Rebel::ProcessStatus(const CriMessages::Status & status)
     }
   }
 
+  // STATUS ESTOP field: its meaning (polarity, number of channels) is not documented in this
+  // repo and no real-robot STATUS was captured, so it is NOT used for any fault decision. Log
+  // the first value and every change (at most once per second; the latest value is always
+  // logged eventually) so a real e-stop press can be correlated with the field on the robot.
+  {
+    const std::int64_t nowNs = ToNs(Safety::SteadyClock::now());
+    if (!haveEStop_ ||
+      (status.eStop != lastLoggedEStop_ && nowNs - lastEStopLogNs_ >= 1000000000LL))
+    {
+      if (!haveEStop_) {
+        RCLCPP_INFO(
+          logger_, "STATUS ESTOP field = %d (informational only: not used to stop the arm)",
+          status.eStop);
+      } else {
+        RCLCPP_WARN(
+          logger_, "STATUS ESTOP field changed %d -> %d (informational only: not used to stop "
+          "the arm; semantics unverified)", lastLoggedEStop_, status.eStop);
+      }
+      haveEStop_ = true;
+      lastLoggedEStop_ = status.eStop;
+      lastEStopLogNs_ = nowNs;
+    }
+  }
+
   // Velocity override: log the first value and every change, warn while not ~100 %.
   const float overrideValue = status.overrideValue;
   if (!haveOverride || std::fabs(overrideValue - lastOverride) > 0.05f) {
@@ -780,11 +820,15 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
   current_ccnt = 1;
   lastKinstate = CriMessages::Kinstate::NO_ERROR;
   lastErrorJoints.fill(0);
+  haveEStop_ = false;
+  lastLoggedEStop_ = 0;
+  lastEStopLogNs_ = 0;
   kinstateMessage = "";
   haveOverride = false;
   stopping = false;
   stopped = false;
   hardwareErrorLatched_ = false;
+  controllerRestartHold_ = false;
 
   // The member exists before the message thread starts; it joins the group at the end of a
   // successful on_init (before that no peer can see or call it).
@@ -989,17 +1033,22 @@ CallbackReturn Rebel::on_activate(const rclcpp_lifecycle::State &)
     lastFreshCounterSkipped_ = latest.counterSkipped;
     lastMovingNs_ = 0;
 
+    // Set the controller-restart hold BEFORE the latch clears (and before OnConnected can enable
+    // the drives' effect on motion): there is no instant where neither inhibit is set.
+    controllerRestartHold_ = true;
     OnConnected(true);
     hardwareErrorLatched_ = false;
     RCLCPP_WARN(
       logger_,
       "Hardware component '%s' recovered from a latched error: re-sent SetActive, Reset, "
-      "Enable, MotionTypeJoint and Override with jog held at zero. This driver does NOT "
-      "restart the controllers claiming this hardware (e.g. '%s' "
-      "in this workspace) -- switch them too, e.g. "
-      "'ros2 control switch_controllers --deactivate <controller> --activate <controller>', "
-      "so they resample the current joint state instead of continuing a stale trajectory.",
-      componentName_.c_str(), trajectoryControllerName_.c_str());
+      "Enable, MotionTypeJoint and Override with jog held at zero. Jog stays held at zero "
+      "until the trajectory controller is restarted (switch_controllers --deactivate %s, then "
+      "a separate switch_controllers --activate %s; a single call with both does not restart "
+      "a controller in Humble): this driver does NOT restart the controllers itself, and a "
+      "controller that stayed active may hold a stale setpoint. Neither reset_and_enable nor "
+      "a deactivate-only switch releases the hold.",
+      componentName_.c_str(), trajectoryControllerName_.c_str(),
+      trajectoryControllerName_.c_str());
   }
 
   return CallbackReturn::SUCCESS;
@@ -1030,9 +1079,10 @@ CallbackReturn Rebel::on_error(const rclcpp_lifecycle::State &)
     "Hardware error on component '%s': jog forced to zero and latched. Recover with "
     "'ros2 control set_hardware_component_state %s inactive' then "
     "'ros2 control set_hardware_component_state %s active' (the latter is refused unless "
-    "STATUS is fresh); also cycle the controllers claiming this hardware (e.g. "
-    "'ros2 control switch_controllers --deactivate %s --activate "
-    "%s') so they do not resume from a stale setpoint.%s%s",
+    "STATUS is fresh); the controllers claiming this hardware stay active and cannot be "
+    "deactivated until the hardware is active again (Humble), so after the recovery restart "
+    "them (e.g. 'ros2 control switch_controllers --deactivate %s', then "
+    "'... --activate %s'): the driver keeps jog at zero until then.%s%s",
     componentName_.c_str(), componentName_.c_str(), componentName_.c_str(),
     trajectoryControllerName_.c_str(), trajectoryControllerName_.c_str(),
     faultMember_ ? " " : "", FaultGroupRecoveryHint().c_str());
@@ -1296,7 +1346,8 @@ return_type Rebel::write(const rclcpp::Time &, const rclcpp::Duration &)
     }
   }
   // Decide the inhibit BEFORE storing so a non-zero jog is never published while latched/held.
-  const bool inhibited = holdJogZero_ || statusHold_ || hardwareErrorLatched_;
+  const bool inhibited = holdJogZero_ || statusHold_ || hardwareErrorLatched_ ||
+    controllerRestartHold_;
   for (std::size_t i = 0; i < 6; ++i) {
     const Safety::JogCommand command = Safety::JogPercentFromVelocity(vel_cmd[i]);
     nonFinite = nonFinite || command.nonFinite;
@@ -1307,7 +1358,7 @@ return_type Rebel::write(const rclcpp::Time &, const rclcpp::Duration &)
       jog[i].store(command.percent);  // frozen during a STATUS coast (last jog keeps going)
     }
   }
-  if (holdJogZero_ || statusHold_ || hardwareErrorLatched_) {
+  if (holdJogZero_ || statusHold_ || hardwareErrorLatched_ || controllerRestartHold_) {
     // Re-checked after the store so a concurrent ResetAndEnable() or a latch set by another thread
     // (fault-group stop, message thread) can never be overtaken.
     ZeroJog();
@@ -1323,6 +1374,40 @@ return_type Rebel::write(const rclcpp::Time &, const rclcpp::Duration &)
     RCLCPP_WARN_THROTTLE(
       logger_, throttleClock_, 1000, "Joint velocity command saturated at +-%.0f %% jog",
       Safety::kMaxJogPercent);
+  }
+  return return_type::OK;
+}
+
+return_type Rebel::prepare_command_mode_switch(
+  const std::vector<std::string> &, const std::vector<std::string> &)
+{
+  // Accepts everything, as the SystemInterface default did. The hold release is decided in
+  // perform_command_mode_switch() so a switch that is prepared but never performed releases
+  // nothing.
+  return return_type::OK;
+}
+
+return_type Rebel::perform_command_mode_switch(
+  const std::vector<std::string> & start_interfaces, const std::vector<std::string> &)
+{
+  if (
+    controllerRestartHold_.load() &&
+    Safety::StartsAllCommandInterfaces(
+      start_interfaces, jointNames_, hardware_interface::HW_IF_VELOCITY))
+  {
+    // Called from the controller manager's update thread, the same thread as write(): clear any
+    // stale command left in the interfaces by the stopped controller, then release. The
+    // controller being started writes its own command before the next write().
+    for (double & command : vel_cmd) {
+      command = 0.0;
+    }
+    ZeroJog();
+    controllerRestartHold_ = false;
+    RCLCPP_WARN(
+      logger_,
+      "Hardware component '%s': command interfaces re-started by a controller switch; jog hold "
+      "after the error recovery released, commands are forwarded again.",
+      componentName_.c_str());
   }
   return return_type::OK;
 }

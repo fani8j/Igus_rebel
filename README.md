@@ -571,6 +571,70 @@ Middle translation end deltas are fraction-interpolated and the taught middle en
 orientation is slerp-interpolated by the resolved fraction for the
 bounded prefix; the middle tool-Z penetration gate is revalidated unchanged.
 
+## Side-tape hand-off (left face only, opt-in, off by default)
+
+The hand-off uses the left_parallel tool frame (cut = tool -Y, lateral = tool +X, depth = tool +Z) and requires `left_parallel_orientation_enabled: true`; the chosen search angles relative to F0 (limit `side_tape_handoff_max_search_angle_deg`, default 10) are written to the record as `left_parallel_orientation`.
+
+`side_tape_handoff_enabled` (off by default; see `CONTEXT.md` and
+`~/Downloads/rgbd_captures/docs/side_tape_handoff_request.md`) hands the left cut to
+`side_tape_ros` (MoveIt Servo + knife camera), which cannot run at the same time as MTC
+trajectory execution. `~/plan_side_tape_handoff` plans the full left cut for feasibility
+(same IK/collision/`min_fraction=1.0` stroke as any other left plan), then retains and
+executes only the approach to the cut start pose:
+
+- `side_tape_handoff_variant: in_material` (default) stops the executable approach at the
+  planned in-material start (the same depth the full-stroke plan would cut at).
+- `standoff`'s single Cartesian entry stroke targets the standoff pose (tip
+  `side_tape_handoff_standoff_mm` (9 mm default) in front of the outer wall, same height and
+  orientation) directly: it NEVER targets, or interpolates through, the in-material pose. Every
+  waypoint of the planned trajectory is verified to stay in front of the outer wall plane
+  (reported as `min_wall_distance_mm`, must be >= 0); a trajectory that dips behind it is
+  refused, not just checked at the endpoints.
+
+The planned start pose is checked against the configured side_tape tool-frame convention
+(`side_tape_handoff_cut_axis_tool`/`_lateral_axis_tool`/`_depth_axis_tool`, xeg32_tool_tip
+axes, right-handed `depth = cut x lateral`, validated at startup; defaults keep the existing
+parallel left-cut pose, per the 2026-09-29 operator decision) within 5 degrees. On a mismatch
+this fails closed and reports the measured angle to each expected axis plus which of the
+tool's six signed axes is actually closest, instead of silently rotating anything.
+
+`cut_length_mm` is the projection of (cut end - start) onto the configured cut axis at the
+start pose (not raw Euclidean distance); a >0.5 mm difference from the Euclidean length is
+logged as a warning.
+
+After a successful approach dispatch (no MoveIt goal remains active; Servo is left running)
+the hand-off is `active`; `detected_carton` and the record are exempted from every
+clear/replan/parameter-change attempt. If the dispatch instead fails/aborts, the hand-off
+becomes `approach_failed` (not `active` for side_tape) but the carton and geometry are STILL
+kept, so `~/side_tape_retract` can recover from wherever execution stopped (a
+`clear_plan` is also allowed once the tip is verified in front of the outer wall). The
+hand-off record (`status`: `active`/`approach_failed`/`retracted`; face; `cut_length_mm` and
+`cut_length_euclidean_mm`; start pose in `base_link`; variant; `penetration_mm`/
+`standoff_mm`/`min_wall_distance_mm`; the configured tool axes and their measured `base_link`
+directions at the start pose; snapshot path/id) is written atomically to
+`side_tape_handoff_output_file` (`$HOME/.ros/side_tape_handoff.json` when empty) and published
+on the latched `~/side_tape_handoff` topic (`std_msgs/String`, JSON) on every status change --
+the seed and snapshot always come from one read of the same file, and the seed's own
+`source.snapshot_id`/`acquisition_stamp_ns` are cross-checked against the parsed snapshot.
+
+Call `~/side_tape_retract` (`std_srvs/Trigger`) once side_tape reports done (or abort), or to
+recover an `approach_failed` hand-off. It refuses (Servo is NEVER paused/stopped) if: the
+hand-off was planned/loaded under `debug_allow_stale_snapshot` (never executes anything,
+including the withdraw); a message arrived on `side_tape_handoff_servo_twist_topic`
+(`/delta_twist_cmds`)/`_joint_topic` (`/delta_joint_cmds`) within
+`side_tape_handoff_servo_quiescence_s` (0.5 s default), or any joint `|velocity|` exceeds
+`side_tape_handoff_joint_velocity_threshold`; the current tool orientation deviates more than
+`side_tape_handoff_retract_max_orientation_deg` (10 deg) from the recorded start; or the tip
+is more than `side_tape_handoff_retract_max_line_offset_mm` (20 mm) off the recorded cut line
+(side_tape may have misbehaved -- recover manually via teleop first). Otherwise it withdraws
+along the outer-wall normal by (the CURRENT tip's penetration behind the wall, clamped >= 0,
+computed from the recorded seed plane) plus `hover_clearance_m`, as a Cartesian
+`min_fraction=1.0` stroke; then, ONLY if the snapshot is still fresh, transits back to the
+usual left approach pose. A stale snapshot withdraws only and reports "withdrawn; transit
+skipped (stale snapshot), move away by teleop/replan" -- refusing the whole retract would
+strand the blade in the box. Every existing gate (`execution_enabled`, the free-space transit
+wrist guard) still applies; nothing here loosens them.
+
 ## RobotViewer
 
 At `https://viewer.robotsfan.com/`, choose **Load Files** and select:
@@ -632,8 +696,10 @@ need MoveIt Servo, which the MoveIt launch starts only with `run_teleop:=true` (
 `false`). The gamepad (`joy_node` plus `servo_gamepad_input`, mapping in
 `config/gamepad.yaml`, enable button 7 must be held) starts with the MoveIt launch when
 `run_gamepad:=true` is also passed (default `false`); it publishes Cartesian twist only.
-On Humble, Servo stays idle until `/servo_node/start_servo` is called; the keyboard and
-gamepad nodes call it themselves when they start.
+On Humble, `run_teleop:=true` launches Servo and a one-shot starter for
+`/servo_node/start_servo`. The keyboard and gamepad can also start Servo when run
+standalone; when `/status` is already publishing they skip the redundant call
+(a second Humble start restarts the calculation loop).
 
 You can also run the following command to start teleop_keyboard:
 
@@ -648,7 +714,11 @@ Cartesian linear and angular speed together; `1`-`6` jog a joint and `r` reverse
 joint direction; `q` or Ctrl-C quits. `t` / `j` select twist / joint-jog mode on Jazzy;
 Humble Servo accepts both command types at any time, so the keys have no effect there.
 
-The Cartesian keyboard increment defaults to 5 mm per keypress. Change it at runtime with:
+The Cartesian keyboard increment defaults to a nominal 5 mm per keypress: each key
+holds `increment / 0.3 s` velocity for 0.3 s, republished at 50 Hz with fresh
+stamps. Actual TCP travel depends on Servo and controller dynamics; isolated mock
+measurements on 2026-09-29 were about 2.1-2.2 mm for one 5 mm keypress from a
+nonsingular pose, not 5 mm. Change the increment at runtime with:
 
 ```bash
 ros2 service call /servo_keyboard_input/set_cartesian_increment \

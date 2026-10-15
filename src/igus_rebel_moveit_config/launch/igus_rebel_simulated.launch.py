@@ -21,6 +21,8 @@ def generate_launch_description():
             os.path.join(get_package_share_directory("igus_rebel_description"),
                          "urdf", "igus_rebel_xeg32_wrapper.urdf.xacro"),
             " hardware_protocol:=gazebo",
+            " tool_variant:=",
+            LaunchConfiguration("tool_variant"),
         ]),
         value_type=str,
     )
@@ -46,6 +48,7 @@ def generate_launch_description():
             os.path.join(moveit_config_share, "launch", "move_group.launch.py")),
         launch_arguments={
             "hardware_protocol": "gazebo",
+            "tool_variant": LaunchConfiguration("tool_variant"),
             "use_sim_time": use_sim_time,
             "use_gui": LaunchConfiguration("use_gui"),
         }.items(),
@@ -53,6 +56,9 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument("use_gui", default_value="true", description="Start RViz"),
+        DeclareLaunchArgument("tool_variant", default_value="knife_c",
+                              choices=["knife_c", "xeg32_knife_v1"],
+                              description="Tool model on link6 (see igus_rebel_xeg32_wrapper.urdf.xacro)"),
         DeclareLaunchArgument("use_sim_time", default_value="true",
                               description="Use sim time if true"),
         DeclareLaunchArgument("gz_args", default_value="-r empty.sdf",

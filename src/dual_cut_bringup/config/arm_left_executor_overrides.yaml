@@ -1,0 +1,15 @@
+# Per-arm overrides for /arm_left/box_h_cut_executor, merged over igus_rebel_moveit_config/config/box_h_cut_executor.yaml
+# by launch/per_arm_planning.launch.py (the YAML is loaded into a dict and passed as parameters, so the
+# node name or namespace does not matter). execution_enabled / debug_motion_execution_enabled are forced false.
+#
+# The left per-arm executor must plan exactly like the single-arm stack (same URDF, same frame names, same snapshot
+# frame: snapshot_frame_mode planning_frame, no relabel). Add only genuine per-arm differences. Read-only
+# parameters (for example external_snapshot_file in a mock test) can only be set here, at launch.
+#
+# Top half (WP2): the coordinator plans phase A with cut_pattern middle_only + middle_seam_stop center (seam_start =
+# the left end -> seam centre + overlap), no middle_cut_reverse_travel, and phase B with left_only. Only the
+# overlap is fixed here; it has no effect while middle_seam_stop is "end" (the default), so all other plans stay
+# bit-identical to the single-arm stack.
+box_h_cut_executor:
+  ros__parameters:
+    middle_seam_center_overlap_m: 0.0075

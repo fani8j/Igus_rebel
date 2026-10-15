@@ -1,0 +1,91 @@
+<?xml version="1.0"?>
+<!-- Two igus ReBeL arms (variant-C knife tooling each, shared knife_c_tool macro) on the 650 x 650 mm test table.
+
+     Frames
+       world            == arm_left_base_link (identity); +x is the direction the arms look along.
+       arm_left_*       arm used so far (existing camera calibration is expressed in its base frame).
+       arm_right_*      pose arm_right_base_link in world comes from the calibration YAML
+                        (dual_arm_calibration.arm_right_base), written by rebel_dual_arm_calibration.
+       table            plain box, APPROXIMATE (see below).
+     There is intentionally NO camera link here: camera_link is published as a static transform
+     world -> camera_link by dual_table.launch.py from the same YAML.
+
+     Arguments
+       hardware_protocol   mock_hardware | rebel
+       calibration_file    YAML in the dual_arm_calibration structure
+       left_robot_ip / right_robot_ip / robot_port / fault_group  (rebel only)
+       table_*             table geometry, see below -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="rebel_dual_table">
+  <xacro:arg name="hardware_protocol" default="mock_hardware"/>
+  <xacro:arg name="calibration_file" default="$(find rebel_dual_table_description)/config/dual_arm_calibration.yaml"/>
+  <xacro:arg name="left_robot_ip" default="192.168.3.11"/>
+  <xacro:arg name="right_robot_ip" default="192.168.3.12"/>
+  <xacro:arg name="robot_port" default="3920"/>
+  <xacro:arg name="fault_group" default="dual_arm_table"/>
+  <xacro:arg name="include_ros2_control" default="true"/>
+
+  <!-- Table geometry (APPROXIMATE, tape-measured 2026-10-06; adjust here, not in the macros).
+       The table is 0.65 x 0.65 m with its top surface 1 mm below the base mounting plane (z = -0.001).
+       The bases stand 110 mm back from the table FRONT edge, i.e. the edge toward the work area
+       (+x, where the carton sits on its own lower table): front edge at x = +0.110, the table
+       extends 0.54 m behind the bases (-x, where the camera post stands). Centred between the
+       arms in y (midpoint of the two bases). -->
+  <xacro:arg name="table_size" default="0.65"/>
+  <xacro:arg name="table_thickness" default="0.04"/>
+  <xacro:arg name="table_base_setback" default="0.110"/>
+
+  <xacro:include filename="$(find rebel_dual_table_description)/urdf/rebel_arm.macro.xacro"/>
+  <xacro:include filename="$(find rebel_dual_table_description)/urdf/rebel_tool.macro.xacro"/>
+  <xacro:include filename="$(find rebel_dual_table_description)/urdf/rebel_dual_table.ros2_control.xacro"/>
+
+  <xacro:property name="calib" value="${xacro.load_yaml('$(arg calibration_file)')['dual_arm_calibration']}"/>
+  <xacro:property name="right_xyz" value="${calib['arm_right_base']['xyz']}"/>
+  <xacro:property name="right_rpy" value="${calib['arm_right_base']['rpy']}"/>
+
+  <link name="world"/>
+
+  <xacro:rebel_arm prefix="arm_left_" parent="world" xyz="0 0 0" rpy="0 0 0"/>
+  <xacro:rebel_tool prefix="arm_left_"/>
+
+  <xacro:rebel_arm prefix="arm_right_" parent="world"
+                   xyz="${right_xyz[0]} ${right_xyz[1]} ${right_xyz[2]}"
+                   rpy="${right_rpy[0]} ${right_rpy[1]} ${right_rpy[2]}"/>
+  <xacro:rebel_tool prefix="arm_right_"/>
+
+  <!-- Table: centre x = setback - size/2 ; centre y = midpoint of the two base origins ;
+       top surface at z = -0.001. -->
+  <xacro:property name="table_cx" value="${float('$(arg table_base_setback)') - float('$(arg table_size)') / 2.0}"/>
+  <xacro:property name="table_cy" value="${float(right_xyz[1]) / 2.0}"/>
+  <xacro:property name="table_cz" value="${-0.001 - float('$(arg table_thickness)') / 2.0}"/>
+  <link name="table">
+    <visual>
+      <geometry><box size="$(arg table_size) $(arg table_size) $(arg table_thickness)"/></geometry>
+      <material name="table_material"><color rgba="0.55 0.45 0.35 1"/></material>
+    </visual>
+    <collision>
+      <geometry><box size="$(arg table_size) $(arg table_size) $(arg table_thickness)"/></geometry>
+    </collision>
+  </link>
+  <joint name="world_to_table" type="fixed">
+    <parent link="world"/>
+    <child link="table"/>
+    <origin xyz="${table_cx} ${table_cy} ${table_cz}" rpy="0 0 0"/>
+  </joint>
+
+  <xacro:if value="$(arg include_ros2_control)">
+    <xacro:rebel_dual_table_control
+      arm_id="arm_left" prefix="arm_left_"
+      hardware_protocol="$(arg hardware_protocol)"
+      robot_ip="$(arg left_robot_ip)" robot_port="$(arg robot_port)"
+      node_name="igus_rebel_left"
+      trajectory_controller_name="arm_left_trajectory_controller"
+      fault_group="$(arg fault_group)"/>
+    <xacro:rebel_dual_table_control
+      arm_id="arm_right" prefix="arm_right_"
+      hardware_protocol="$(arg hardware_protocol)"
+      robot_ip="$(arg right_robot_ip)" robot_port="$(arg robot_port)"
+      node_name="igus_rebel_right"
+      trajectory_controller_name="arm_right_trajectory_controller"
+      fault_group="$(arg fault_group)"/>
+  </xacro:if>
+</robot>

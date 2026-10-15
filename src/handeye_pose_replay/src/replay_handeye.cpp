@@ -4,14 +4,20 @@
 
 #include <unistd.h>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
+#include <cstdio>
+#include <limits>
 #include <iostream>
 #include <map>
 #include <memory>
 #include <string>
 #include <thread>
 #include <vector>
+
+#include "handeye_pose_replay/pose_loader.hpp"
 
 struct CalibrationPose
 {
@@ -46,6 +52,20 @@ int main(int argc, char* argv[])
   if (!node->has_parameter("acceleration_scale"))
     node->declare_parameter<double>("acceleration_scale", 0.05);
 
+  // Replay the joint poses of a calibration-recorder session instead of the
+  // built-in poses. Empty poses_file keeps the built-in 19 poses.
+  if (!node->has_parameter("poses_file"))
+    node->declare_parameter<std::string>("poses_file", "");
+
+  if (!node->has_parameter("arm"))
+    node->declare_parameter<std::string>("arm", "");
+
+  if (!node->has_parameter("start_index"))
+    node->declare_parameter<int>("start_index", 0);
+
+  if (!node->has_parameter("max_poses"))
+    node->declare_parameter<int>("max_poses", 0);
+
   std::string planning_group;
   std::string model_source_node;
   bool wait_for_enter;
@@ -59,6 +79,15 @@ int main(int argc, char* argv[])
   node->get_parameter("settle_seconds", settle_seconds);
   node->get_parameter("velocity_scale", velocity_scale);
   node->get_parameter("acceleration_scale", acceleration_scale);
+
+  std::string poses_file;
+  std::string arm;
+  int start_index = 0;
+  int max_poses = 0;
+  node->get_parameter("poses_file", poses_file);
+  node->get_parameter("arm", arm);
+  node->get_parameter("start_index", start_index);
+  node->get_parameter("max_poses", max_poses);
 
   // Each pose is a real robot motion. Without a terminal, std::getline would
   // hit EOF immediately and every "confirmation" would pass unattended, so
@@ -192,7 +221,7 @@ int main(int argc, char* argv[])
 
   // Actual joint positions from /home/farhan/Desktop/pose_h2e/v2.zip, in archive order.
   // p_17.txt is absent from the supplied archive.
-  const std::vector<CalibrationPose> poses = {
+  const std::vector<CalibrationPose> builtin_poses = {
       {"p_0", {-0.62552600657792878, 0.72221726311738121, 1.8074629307547503, -1.7259560866445480, 1.0529571696861122, 2.0820032806830024}},
       {"p_1", {-0.62570051020835626, 0.72204269290792655, 1.8074629307547503, -1.7259560866445480, 1.0529571696861122, 1.6987289929240141}},
       {"p_2", {-0.62552600657792878, 0.72204269290792655, 1.8074629307547503, -1.7259560866445480, 1.0529571696861122, 1.0667452201768066}},
@@ -214,23 +243,142 @@ int main(int argc, char* argv[])
       {"p_19", {-0.60737456637822118, 0.79918628046717000, 1.6582373596040678, -1.3357004552459717, 1.3245303586858523, 1.7263052270634576}},
   };
 
-  RCLCPP_INFO(node->get_logger(), "Loaded %zu poses.", poses.size());
-
-  for (std::size_t i = 0; i < poses.size() && rclcpp::ok(); ++i)
+  // One replay target: a label for the logs and the joint values in the order
+  // of target_joint_names.
+  struct Target
   {
-    const auto& pose = poses[i];
+    std::string label;
+    std::string detail;  // e.g. "(capture #5)"
+    std::vector<double> q;
+  };
+
+  std::vector<std::string> target_joint_names(joint_names.begin(), joint_names.end());
+  std::vector<Target> targets;
+  // Session replay: stop on the first planning failure instead of skipping.
+  const bool session_replay = !poses_file.empty();
+  // 0-based position of each target in the filtered session list (for resuming).
+  std::vector<std::size_t> session_index;
+
+  if (!session_replay)
+  {
+    for (const auto& p : builtin_poses)
+      targets.push_back({p.name, "", std::vector<double>(p.q.begin(), p.q.end())});
+  }
+  else
+  {
+    // Validate the WHOLE list against the loaded model before anything moves.
+    const auto* group = move_group.getRobotModel()->getJointModelGroup(planning_group);
+    if (group == nullptr)
+    {
+      RCLCPP_FATAL(node->get_logger(), "Planning group %s not found in the robot model.", planning_group.c_str());
+      stop_executor();
+      rclcpp::shutdown();
+      return 1;
+    }
+    target_joint_names.clear();
+    std::vector<handeye_pose_replay::JointBounds> bounds;
+    for (const auto* jm : group->getActiveJointModels())
+    {
+      if (jm->getVariableCount() != 1)
+        continue;
+      const auto& vb = jm->getVariableBounds(jm->getName());
+      target_joint_names.push_back(jm->getName());
+      bounds.push_back(
+          {vb.position_bounded_ ? vb.min_position_ : -std::numeric_limits<double>::infinity(),
+           vb.position_bounded_ ? vb.max_position_ : std::numeric_limits<double>::infinity()});
+    }
+
+    if (start_index < 0 || max_poses < 0)
+    {
+      RCLCPP_FATAL(node->get_logger(), "start_index and max_poses must not be negative.");
+      stop_executor();
+      rclcpp::shutdown();
+      return 1;
+    }
+    handeye_pose_replay::LoadOptions options;
+    options.arm = arm;
+    options.start_index = static_cast<std::size_t>(start_index);
+    options.max_poses = static_cast<std::size_t>(max_poses);
+
+    const auto loaded = handeye_pose_replay::loadPoses(poses_file, target_joint_names, bounds, options);
+    if (!loaded.ok())
+    {
+      RCLCPP_FATAL(
+          node->get_logger(), "Refusing to replay %s: %zu problem(s). Nothing was moved.",
+          loaded.source_path.c_str(), loaded.errors.size());
+      for (const auto& e : loaded.errors) RCLCPP_ERROR(node->get_logger(), "  %s", e.c_str());
+      stop_executor();
+      rclcpp::shutdown();
+      return 1;
+    }
+    RCLCPP_INFO(
+        node->get_logger(),
+        "Session %s: arm filter '%s', %zu poses after filtering (%zu near-duplicates skipped), "
+        "replaying %zu starting at index %d.",
+        loaded.source_path.c_str(), arm.c_str(), loaded.filtered_total, loaded.duplicates_skipped,
+        loaded.poses.size(), start_index);
+    for (const auto& p : loaded.poses)
+    {
+      std::string detail = p.capture >= 0 ? "(capture #" + std::to_string(p.capture) + ")" : "(line " + std::to_string(p.line) + ")";
+      targets.push_back({"pose " + std::to_string(p.index + 1) + "/" + std::to_string(loaded.filtered_total), detail, p.q});
+      session_index.push_back(p.index);
+    }
+  }
+
+  RCLCPP_INFO(node->get_logger(), "Loaded %zu poses.", targets.size());
+
+  std::size_t reached = 0;
+  for (std::size_t i = 0; i < targets.size() && rclcpp::ok(); ++i)
+  {
+    const auto& pose = targets[i];
+    const std::string name = session_replay ? pose.label + " " + pose.detail : pose.label;
 
     RCLCPP_INFO(node->get_logger(),
                 "============================================");
-    RCLCPP_INFO(node->get_logger(),
-                "Target %zu / %zu : %s",
-                i + 1, poses.size(), pose.name.c_str());
+    if (session_replay)
+      RCLCPP_INFO(node->get_logger(), "%s", name.c_str());
+    else
+      RCLCPP_INFO(node->get_logger(),
+                  "Target %zu / %zu : %s",
+                  i + 1, targets.size(), pose.label.c_str());
+
+    if (session_replay)
+    {
+      std::string text = "  target [deg]:";
+      char buf[32];
+      for (const double v : pose.q)
+      {
+        std::snprintf(buf, sizeof(buf), " %8.2f", v * 180.0 / M_PI);
+        text += buf;
+      }
+      RCLCPP_INFO(node->get_logger(), "%s", text.c_str());
+
+      const auto current = move_group.getCurrentState(5.0);
+      if (current)
+      {
+        std::vector<double> now;
+        current->copyJointGroupPositions(planning_group, now);
+        if (now.size() == pose.q.size())
+        {
+          double largest = 0.0;
+          for (std::size_t j = 0; j < now.size(); ++j)
+            largest = std::max(largest, std::fabs(now[j] - pose.q[j]));
+          RCLCPP_INFO(
+              node->get_logger(), "  largest joint change from current state: %.1f deg",
+              largest * 180.0 / M_PI);
+        }
+      }
+      else
+      {
+        RCLCPP_WARN(node->get_logger(), "  current state unavailable; cannot show the joint change.");
+      }
+    }
 
     if (wait_for_enter)
     {
       RCLCPP_INFO(
           node->get_logger(),
-          "Press ENTER to plan/move to %s (Ctrl+C to stop)...", pose.name.c_str());
+          "Press ENTER to plan/move to %s (Ctrl+C to stop)...", name.c_str());
 
       std::string input;
       if (!std::getline(std::cin, input))
@@ -238,7 +386,7 @@ int main(int argc, char* argv[])
         RCLCPP_ERROR(
             node->get_logger(),
             "stdin closed before %s was confirmed. Stopping replay.",
-            pose.name.c_str());
+            name.c_str());
         break;
       }
 
@@ -249,17 +397,25 @@ int main(int argc, char* argv[])
     move_group.setStartStateToCurrentState();
 
     std::map<std::string, double> target;
-    for (std::size_t j = 0; j < joint_names.size(); ++j)
-      target[joint_names[j]] = pose.q[j];
+    for (std::size_t j = 0; j < target_joint_names.size(); ++j)
+      target[target_joint_names[j]] = pose.q[j];
 
     const bool target_ok = move_group.setJointValueTarget(target);
 
     if (!target_ok)
     {
+      if (session_replay)
+      {
+        RCLCPP_ERROR(
+            node->get_logger(),
+            "Target %s is invalid or outside a joint limit. Stopping replay.",
+            name.c_str());
+        break;
+      }
       RCLCPP_ERROR(
           node->get_logger(),
           "Target %s is invalid or outside a joint limit. Skipping.",
-          pose.name.c_str());
+          name.c_str());
       continue;
     }
 
@@ -268,17 +424,25 @@ int main(int argc, char* argv[])
 
     if (plan_result != moveit::core::MoveItErrorCode::SUCCESS)
     {
+      if (session_replay)
+      {
+        RCLCPP_ERROR(
+            node->get_logger(),
+            "Planning FAILED for %s. Stopping replay (not skipping ahead); resume with start_index:=%zu.",
+            name.c_str(), session_index[i]);
+        break;
+      }
       RCLCPP_ERROR(
           node->get_logger(),
           "Planning FAILED for %s. Robot will not move to this pose.",
-          pose.name.c_str());
+          name.c_str());
       continue;
     }
 
     RCLCPP_INFO(
         node->get_logger(),
         "Plan successful for %s. Executing...",
-        pose.name.c_str());
+        name.c_str());
 
     const auto exec_result = move_group.execute(plan);
 
@@ -287,14 +451,15 @@ int main(int argc, char* argv[])
       RCLCPP_ERROR(
           node->get_logger(),
           "Execution FAILED at %s. Stopping replay.",
-          pose.name.c_str());
+          name.c_str());
       break;
     }
+    ++reached;
 
     RCLCPP_INFO(
         node->get_logger(),
         "Reached %s. Settling for %.2f s...",
-        pose.name.c_str(),
+        name.c_str(),
         settle_seconds);
 
     std::this_thread::sleep_for(
@@ -303,10 +468,11 @@ int main(int argc, char* argv[])
     RCLCPP_INFO(
         node->get_logger(),
         "POSE_READY: %s",
-        pose.name.c_str());
+        name.c_str());
   }
 
   RCLCPP_INFO(node->get_logger(), "Replay finished.");
+  RCLCPP_INFO(node->get_logger(), "Summary: reached %zu / %zu poses.", reached, targets.size());
 
   stop_executor();
   rclcpp::shutdown();

@@ -23,7 +23,8 @@ from sensor_msgs.msg import CameraInfo
 
 CAMERAS = {
     'scene (336)': '/camera/color/camera_info',
-    'wrist (305)': '/wrist_camera/color/camera_info',
+    'left wrist (305)': '/wrist_camera/color/camera_info',
+    'right wrist (305)': '/right_wrist_camera/color/camera_info',
     'knife (C930e)': '/knife_camera/camera_info',
 }
 

@@ -1,0 +1,54 @@
+###############################################################################################
+# MoveIt Servo parameters shared by /arm_left/servo and /arm_right/servo (Humble layout, applied under
+# the "moveit_servo" parameter key by launch/dual_teleop.launch.py).
+#
+# Derived from igus_rebel_moveit_config/config/servo.yaml. EVERY difference is marked "DUAL:".
+# The launch file adds the per-arm values that cannot live in a shared file:
+#   move_group_name        arm_left | arm_right                      (single arm: igus_rebel_arm)
+#   ee_frame_name          arm_<side>_xeg32_tool_tip                 (single arm: xeg32_tool_tip)
+#   planning_frame         world                                     (single arm: base_link)
+#   robot_link_command_frame world                                   (single arm: base_link)
+#   command_out_topic      /arm_<side>_trajectory_controller/joint_trajectory (absolute)
+#   planning_group_name    arm_left | arm_right                      (top-level node parameter)
+###############################################################################################
+
+publish_period: 0.034  # same as single arm (JTC at 100 Hz needs ~3 cycles per message)
+incoming_command_timeout: 0.1  # same: limits coasting after the selector/teleop dies
+
+command_in_type: "speed_units"  # m/s and rad/s, like the keyboard / gamepad nodes send
+scale:
+  linear: 1.0
+  rotational: 1.0
+  joint: 1.0
+
+command_out_type: trajectory_msgs/JointTrajectory
+publish_joint_positions: true
+publish_joint_velocities: true  # same: the JTC feed-forward needs the reference velocity
+publish_joint_accelerations: false
+
+use_smoothing: false
+smoothing_filter_plugin_name: "online_signal_smoothing::ButterworthFilterPlugin"
+
+# Not the primary scene monitor: /move_group of the dual stack is (Servo requests the scene from it).
+is_primary_planning_scene_monitor: false
+check_octomap_collisions: false
+
+lower_singularity_threshold: 600.0
+hard_stop_singularity_threshold: 900.0
+leaving_singularity_threshold_multiplier: 10.0
+joint_limit_margins: [0.02617994]  # 1.5 degrees, same as single arm
+
+## Topic names. Relative names resolve into the Servo namespace (/arm_<side>/servo).
+cartesian_command_in_topic: delta_twist_cmds  # same name, now /arm_<side>/servo/delta_twist_cmds
+joint_command_in_topic: delta_joint_cmds      # now /arm_<side>/servo/delta_joint_cmds
+joint_topic: /joint_states                    # DUAL: absolute (the dual joint_state_broadcaster publishes all 12 joints)
+status_topic: status                          # now /arm_<side>/servo/status
+
+## Collision checking against the WHOLE dual model: the other arm (self collision, via the SRDF
+## matrix of the dual model), the table, the carton and the camera pole (planning scene of /move_group).
+check_collisions: true            # DUAL: single arm has it off (operator decision, stale phantom carton).
+                                  # Here the other arm is the main hazard; the carton / pole are in the scene.
+collision_check_rate: 10.0        # DUAL: 2 Hz -> 10 Hz. At 2 Hz one check interval is 25 mm of TCP travel at 50 mm/s,
+                                  # more than the proximity thresholds; 10 Hz is the minimum Servo recommends.
+self_collision_proximity_threshold: 0.07   # DUAL: 0.01 -> 0.07 m (other arm, table): Servo's slow-down is exponential (scale 1 at the threshold, 0.001 at contact), so jogging toward an obstacle stops at ~0.44 x threshold = ~31 mm = the coordinator's monitor_stop_distance_m (30 mm)
+scene_collision_proximity_threshold: 0.05  # DUAL: 0.02 -> 0.05 m (camera pole / head, carton): stops at ~22 mm

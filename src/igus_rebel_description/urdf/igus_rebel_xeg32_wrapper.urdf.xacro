@@ -9,6 +9,34 @@
   <xacro:arg name="include_ros2_control" default="true"/>
   <xacro:arg name="attach_xeg32" default="true"/>
 
+  <!-- Tool model mounted on link6 (2026-10-12).
+         knife_c         (DEFAULT) new split printed holder "variant C" (30 deg lean) with the
+                         ultrasonic knife and the Gemini 305 wrist camera, NO gripper. Low-poly
+                         collision/visual meshes in meshes/knife_c/ (see
+                         scan_results/knife_c_model_20261012/README.md).
+         xeg32_knife_v1  the previous tooling, exactly as of git commit 11f1c4d: XEG-32 gripper +
+                         old knife handpiece/holder hulls + old TCP 0.005937 0.094121 0.130699.
+       attach_xeg32:=false drops all tool geometry (links) in either variant but keeps the
+       igus_tool0 / xeg32_tool_tip frames. Any other value fails the xacro on purpose. -->
+  <xacro:arg name="tool_variant" default="knife_c"/>
+  <xacro:property name="tool_variant" value="$(arg tool_variant)"/>
+  <xacro:if value="${tool_variant not in ('knife_c', 'xeg32_knife_v1')}">
+    <xacro:ERROR_tool_variant_must_be_knife_c_or_xeg32_knife_v1/>
+  </xacro:if>
+  <!-- blade_collision:=true (default false) adds the collision box link `knife_c_blade` for the 14.4 mm
+       exposed blade (knife_c variant only; see knife_c_tool.macro.xacro). It exists for planners that
+       must check the blade against the carton / table (per-arm planning stack of the dual cell, which
+       lists it in the executor's carton_contact_links); the MoveIt SRDF then needs the disable pair of
+       config/knife_c_blade_disable_collisions.srdf.inc. With the default the generated URDF is
+       unchanged. Any value other than true/false, or true with xeg32_knife_v1, fails the xacro. -->
+  <xacro:arg name="blade_collision" default="false"/>
+  <xacro:if value="${'$(arg blade_collision)' not in ('true', 'false')}">
+    <xacro:ERROR_blade_collision_must_be_true_or_false/>
+  </xacro:if>
+  <xacro:if value="${'$(arg blade_collision)' == 'true' and tool_variant != 'knife_c'}">
+    <xacro:ERROR_blade_collision_needs_tool_variant_knife_c/>
+  </xacro:if>
+
   <!-- Retained rough gripper mount; not used to define the calibrated TCP. -->
   <xacro:arg name="xeg32_mount_xyz" default="0 0 0.052"/>
   <xacro:arg name="xeg32_mount_rpy" default="0 0 0.261799"/>
@@ -16,6 +44,8 @@
   <xacro:include filename="$(find igus_rebel_description)/urdf/igus_rebel2.urdf"/>
   <xacro:include filename="$(find igus_rebel_description)/urdf/igus_rebel2.control.xacro"/>
   <xacro:include filename="$(find igus_rebel_description)/urdf/xeg32_gripper.urdf.xacro"/>
+  <!-- igus_tool_frames / knife_c_tool: shared with the dual-arm model (rebel_dual_table_description). -->
+  <xacro:include filename="$(find igus_rebel_description)/urdf/knife_c_tool.macro.xacro"/>
 
   <xacro:if value="$(arg include_ros2_control)">
     <xacro:igus_rebel_control
@@ -32,81 +62,111 @@
     <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
 
-  <xacro:if value="$(arg attach_xeg32)">
-    <xacro:xeg32_gripper
-      parent_link="link6"
-      prefix="xeg32_"
-      flange_xyz="$(arg xeg32_mount_xyz)"
-      flange_rpy="$(arg xeg32_mount_rpy)"/>
+  <xacro:if value="${tool_variant == 'xeg32_knife_v1'}">
+    <xacro:if value="$(arg attach_xeg32)">
+      <xacro:xeg32_gripper
+        parent_link="link6"
+        prefix="xeg32_"
+        flange_xyz="$(arg xeg32_mount_xyz)"
+        flange_rpy="$(arg xeg32_mount_rpy)"/>
+    </xacro:if>
   </xacro:if>
   <!-- Calibrated frames remain available even when gripper visuals are omitted. -->
-  <link name="igus_tool0"/>
-  <joint name="link6_to_igus_tool0" type="fixed">
-    <parent link="link6"/>
-    <child link="igus_tool0"/>
-    <origin xyz="0 0 0.0527" rpy="0 0 3.141592653589793"/>
-  </joint>
-  <link name="xeg32_tool_tip">
-    <visual>
-      <geometry><sphere radius="0.006"/></geometry>
-      <material name="xeg32_tool_tip_marker"><color rgba="0.1 1 0.1 1"/></material>
-    </visual>
-  </link>
-  <!-- touch-corrected 2026-09-24c: XY-only safety fix (tip -0.7/+4.6mm tool from CENTER residual); Z held at +15mm fix (0.130699) pending stale-model check -->
-  <joint name="igus_tool0_to_xeg32_tool_tip" type="fixed">
-    <parent link="igus_tool0"/>
-    <child link="xeg32_tool_tip"/>
-    <origin xyz="0.005937 0.094121 0.130699" rpy="0 0 0"/>
-  </joint>
+  <!-- igus_tool0 / xeg32_tool_tip: knife_c gets them from knife_c_tool, the xeg32_knife_v1 variant
+       creates them here (same macro igus_tool_frames). -->
+  <xacro:if value="${tool_variant == 'xeg32_knife_v1'}">
+    <xacro:igus_tool_frames prefix="" parent="link6"/>
+  </xacro:if>
 
-  <!-- Tooling mounted on the XEG-32 gripper (2026-09-28): the ultrasonic knife
-       handpiece + holder and the wrist camera + bracket. Collision-only
-       conservative hulls, registered from operator-confirmed measurements and
-       the JK-Final version.step CAD (handpiece, holder) or estimated from
-       photos scaled against the gripper (wrist camera); see
-       XEG32_MOVEIT_CHANGES.md and HANDOFF.md for the placement reasoning.
-       xeg32_tool_tip itself (the TCP, the exposed ~20 mm of blade below it)
-       intentionally carries no collision geometry. All origins here are
-       identity: the meshes are already expressed in igus_tool0 coordinates. -->
-  <xacro:if value="$(arg attach_xeg32)">
-    <link name="xeg32_knife_handpiece">
-      <visual>
-        <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/knife_handpiece.stl"/></geometry>
-        <material name="xeg32_knife_handpiece_material"><color rgba="0.2 0.2 0.2 0.6"/></material>
-      </visual>
-      <collision>
-        <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/knife_handpiece.stl"/></geometry>
-      </collision>
-    </link>
-    <joint name="igus_tool0_to_xeg32_knife_handpiece" type="fixed">
+  <!-- ======================= tool_variant:=knife_c (default) ============================== -->
+  <!-- Links, materials, collision meshes and the knife-axis tilt joint are in
+       knife_c_tool.macro.xacro (shared with the dual-arm model). -->
+  <xacro:if value="${tool_variant == 'knife_c'}">
+    <xacro:knife_c_tool prefix="" parent="link6" attach="$(arg attach_xeg32)"
+                        blade_collision="$(arg blade_collision)"
+                        blade_tcp_xyz="-0.042069 -0.089590 0.104551">
+      <!-- TCP of the variant-C knife in igus_tool0, from the left-arm pivot of 2026-10-12
+           (~/dual_arm_calibration/left/tcp_pivot.jsonl, 15 fit + 3 validate). That pivot FAILED its
+           gates (fit RMS 4.4 mm, held-out RMS 7.1 / max 9.6 mm). Caliper check of 2026-10-12 (body
+           160.6 + seat 10.2 + blade 14.4 = 185.2 mm from the rear face, rear face on the holder pocket
+           floor) puts the blade point 2.2 mm further along the knife axis and 3.5 mm laterally (4.1 mm
+           total), so this TCP is kept (scan_results/knife_c_handpiece_fix_20261012/README.md).
+           This joint appears exactly once as text and keeps rpy "0 0 0" so that
+           rebel_dual_arm_calibration.tcp_pivot.xacro_apply (xyz-only patcher) keeps working: the
+           pivot solves a POSITION in igus_tool0 only. The knife-axis tilt is the next joint.
+           blade_tcp_xyz (macro argument above) is a COPY of the xyz below, used only for the opt-in
+           blade box; the xyz-only patcher does not touch it, so update both together
+           (rebel_dual_table_description test_wrapper_blade_tcp_equals_tcp_joint fails otherwise). -->
+      <joint name="igus_tool0_to_xeg32_tool_tip" type="fixed">
+        <parent link="igus_tool0"/>
+        <child link="knife_c_tcp_point"/>
+        <origin xyz="-0.042069 -0.089590 0.104551" rpy="0 0 0"/>
+      </joint>
+    </xacro:knife_c_tool>
+  </xacro:if>
+
+  <!-- ===================== tool_variant:=xeg32_knife_v1 (git HEAD tooling) ================ -->
+  <xacro:if value="${tool_variant == 'xeg32_knife_v1'}">
+    <!-- touch-corrected 2026-09-24c: XY-only safety fix (tip -0.7/+4.6mm tool from CENTER residual); Z held at +15mm fix (0.130699) pending stale-model check.
+         (The joint name is built from a property so that the xyz-only TCP patcher, which needs the
+         name once as literal text, only ever sees the knife_c joint. The generated URDF name is
+         igus_tool0_to_xeg32_tool_tip, as before.) -->
+    <xacro:property name="v1_tip_joint_name" value="igus_tool0_to_xeg32_tool_tip"/>
+    <joint name="${v1_tip_joint_name}" type="fixed">
       <parent link="igus_tool0"/>
-      <child link="xeg32_knife_handpiece"/>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <child link="xeg32_tool_tip"/>
+      <origin xyz="0.005937 0.094121 0.130699" rpy="0 0 0"/>
     </joint>
 
-    <link name="xeg32_knife_holder">
-      <visual>
-        <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/knife_holder_ring.stl"/></geometry>
-        <material name="xeg32_knife_holder_material"><color rgba="0.6 0.6 0.6 0.6"/></material>
-      </visual>
-      <collision>
-        <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/knife_holder_ring.stl"/></geometry>
-      </collision>
-      <visual>
-        <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/knife_holder_body.stl"/></geometry>
-        <material name="xeg32_knife_holder_material"/>
-      </visual>
-      <collision>
-        <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/knife_holder_body.stl"/></geometry>
-      </collision>
-    </link>
-    <joint name="igus_tool0_to_xeg32_knife_holder" type="fixed">
-      <parent link="igus_tool0"/>
-      <child link="xeg32_knife_holder"/>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-    </joint>
-    <!-- Wrist camera removed 2026-09-28: it protruded past the blade tip along the knife
-         axis and hit the carton; it is uninstalled until the combined knife/camera holder
-         is redesigned. -->
+    <!-- Tooling mounted on the XEG-32 gripper (2026-09-28): the ultrasonic knife
+         handpiece + holder and the wrist camera + bracket. Collision-only
+         conservative hulls, registered from operator-confirmed measurements and
+         the JK-Final version.step CAD (handpiece, holder) or estimated from
+         photos scaled against the gripper (wrist camera); see
+         XEG32_MOVEIT_CHANGES.md and HANDOFF.md for the placement reasoning.
+         xeg32_tool_tip itself (the TCP, the exposed ~20 mm of blade below it)
+         intentionally carries no collision geometry. All origins here are
+         identity: the meshes are already expressed in igus_tool0 coordinates. -->
+    <xacro:if value="$(arg attach_xeg32)">
+      <link name="xeg32_knife_handpiece">
+        <visual>
+          <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/knife_handpiece.stl"/></geometry>
+          <material name="xeg32_knife_handpiece_material"><color rgba="0.2 0.2 0.2 0.6"/></material>
+        </visual>
+        <collision>
+          <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/knife_handpiece.stl"/></geometry>
+        </collision>
+      </link>
+      <joint name="igus_tool0_to_xeg32_knife_handpiece" type="fixed">
+        <parent link="igus_tool0"/>
+        <child link="xeg32_knife_handpiece"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+      </joint>
+
+      <link name="xeg32_knife_holder">
+        <visual>
+          <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/knife_holder_ring.stl"/></geometry>
+          <material name="xeg32_knife_holder_material"><color rgba="0.6 0.6 0.6 0.6"/></material>
+        </visual>
+        <collision>
+          <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/knife_holder_ring.stl"/></geometry>
+        </collision>
+        <visual>
+          <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/knife_holder_body.stl"/></geometry>
+          <material name="xeg32_knife_holder_material"/>
+        </visual>
+        <collision>
+          <geometry><mesh filename="package://igus_rebel_description/meshes/xeg32_collision/knife_holder_body.stl"/></geometry>
+        </collision>
+      </link>
+      <joint name="igus_tool0_to_xeg32_knife_holder" type="fixed">
+        <parent link="igus_tool0"/>
+        <child link="xeg32_knife_holder"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+      </joint>
+      <!-- Wrist camera removed 2026-09-28: it protruded past the blade tip along the knife
+           axis and hit the carton; it is uninstalled until the combined knife/camera holder
+           is redesigned. -->
+    </xacro:if>
   </xacro:if>
 </robot>

@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>rebel_medicine_grasp_description</name>
+  <version>0.1.0</version>
+  <description>
+    Dual-arm igus ReBeL rig for medicine grasp (shelf picking of medical cartons): the stand/lift/sliders/arms of rebel_dual_arm_stand_description with the
+    v5 suction tool on arm_left and the SMC LEHF20K2-48 gripper on arm_right (no knife / XEG-32 / cutting tooling). URDF/xacro + tool meshes.
+    Mock hardware / Isaac-topic only; no real-hardware path. Companion package: rebel_medicine_grasp_moveit_config.
+  </description>
+  <maintainer email="hucenrotiacompal@gmail.com">farhan</maintainer>
+  <license>MIT (compal_robot-derived stand part, see NOTICE); other files: project default (TODO)</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>xacro</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <!-- stand meshes, the arm macro urdf/rebel_arm_macro.xacro and (through it) the arm meshes -->
+  <exec_depend>rebel_dual_arm_stand_description</exec_depend>
+  <exec_depend>igus_rebel_description</exec_depend>
+  <exec_depend>topic_based_ros2_control</exec_depend>
+  <exec_depend>hardware_interface</exec_depend>
+
+  <test_depend>ament_cmake_pytest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

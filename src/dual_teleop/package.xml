@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>dual_teleop</name>
+  <version>0.1.0</version>
+  <description>
+    Per-arm jog/teleop of the dual-arm cell: one MoveIt Servo per arm (/arm_left/servo, /arm_right/servo),
+    an arm selector/relay for the single-arm keyboard and gamepad nodes, and interlocks against the
+    dual_cut_coordinator and inactive controllers. Mock-tested; real hardware needs operator approval.
+  </description>
+  <maintainer email="hucenrotiacompal@gmail.com">fani8j</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>control_msgs</exec_depend>
+  <exec_depend>controller_manager_msgs</exec_depend>
+  <exec_depend>dual_cut_msgs</exec_depend>
+  <exec_depend>moveit_servo</exec_depend>
+  <exec_depend>moveit_msgs</exec_depend>
+  <exec_depend>joy</exec_depend>
+  <exec_depend>igus_rebel_moveit_config</exec_depend>
+  <exec_depend>rebel_dual_table_description</exec_depend>
+  <exec_depend>rebel_dual_table_moveit_config</exec_depend>
+  <exec_depend>launch_param_builder</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>xacro</exec_depend>
+
+  <test_depend>ament_pytest</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

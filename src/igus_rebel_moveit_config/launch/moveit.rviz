@@ -6,7 +6,6 @@ Panels:
       Expanded:
         - /Global Options1
         - /Status1
-        - /MarkerArray1
         - /PointCloud21
       Splitter Ratio: 0.5
     Tree Height: 316
@@ -27,7 +26,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: PointCloud2
+    SyncSource: ""
   - Class: moveit_task_constructor/Motion Planning Tasks
     Global Settings:
       Task View Settings:
@@ -82,94 +81,6 @@ Visualization Manager:
         Expand Link Details: false
         Expand Tree: false
         Link Tree Style: Links in Alphabetic Order
-        base_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        igus_tool0:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        link1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        link2:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        link3:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        link4:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        link5:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        link6:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        motor1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        motor2:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        motor3:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        motor4:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        motor5:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        world:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        xeg32_base_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        xeg32_left_carriage_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        xeg32_right_carriage_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        xeg32_tool_tip:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
       Name: RobotState
       Robot Alpha: 1
       Robot Description: robot_description
@@ -179,7 +90,7 @@ Visualization Manager:
       Value: false
       Visual Enabled: true
     - Class: moveit_rviz_plugin/PlanningScene
-      Enabled: false
+      Enabled: true
       Move Group Namespace: ""
       Name: PlanningScene
       Planning Scene Topic: /monitored_planning_scene
@@ -199,10 +110,108 @@ Visualization Manager:
           Expand Link Details: false
           Expand Tree: false
           Link Tree Style: Links in Alphabetic Order
+          base_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          igus_tool0:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+          link1:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          link2:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          link3:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          link4:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          link5:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          link6:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          motor1:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          motor2:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          motor3:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          motor4:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          motor5:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          world:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+          xeg32_base_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          xeg32_knife_handpiece:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          xeg32_knife_holder:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          xeg32_left_carriage_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          xeg32_right_carriage_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          xeg32_tool_tip:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
         Robot Alpha: 1
         Show Robot Collision: false
         Show Robot Visual: true
-      Value: false
+      Value: true
     - Acceleration_Scaling_Factor: 0.1
       Class: moveit_rviz_plugin/MotionPlanning
       Enabled: true
@@ -303,6 +312,16 @@ Visualization Manager:
             Show Axes: false
             Show Trail: false
           xeg32_base_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          xeg32_knife_handpiece:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          xeg32_knife_holder:
             Alpha: 1
             Show Axes: false
             Show Trail: false
@@ -441,6 +460,16 @@ Visualization Manager:
             Show Axes: false
             Show Trail: false
             Value: true
+          xeg32_knife_handpiece:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          xeg32_knife_holder:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
           xeg32_left_carriage_link:
             Alpha: 1
             Show Axes: false
@@ -477,94 +506,6 @@ Visualization Manager:
           Expand Link Details: false
           Expand Tree: false
           Link Tree Style: Links in Alphabetic Order
-          base_link:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          igus_tool0:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-          link1:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          link2:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          link3:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          link4:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          link5:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          link6:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          motor1:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          motor2:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          motor3:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          motor4:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          motor5:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          world:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-          xeg32_base_link:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          xeg32_left_carriage_link:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          xeg32_right_carriage_link:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          xeg32_tool_tip:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
         Robot Alpha: 0.5
         Show Robot Collision: false
         Show Robot Visual: true
@@ -635,7 +576,8 @@ Visualization Manager:
       Enabled: true
       Name: Snapshot-Relative H-Cut Dry Run
       Namespaces:
-        {}
+        detected_carton_points: true
+        frozen_h_cut/left side cut: true
       Topic:
         Depth: 1
         Durability Policy: Transient Local

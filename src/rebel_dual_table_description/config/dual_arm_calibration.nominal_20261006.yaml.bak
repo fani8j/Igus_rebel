@@ -1,0 +1,11 @@
+dual_arm_calibration:
+  source: measured          # measured | calibrated (trust gate PASS) | calibrated_unverified (gate FAIL)
+  date: "2026-10-06"
+  world_frame: world        # coincident with arm_left_base_link
+  arm_right_base:           # pose of arm_right_base_link in world
+    xyz: [0.0, -0.4474, 0.0]
+    rpy: [0.0, 0.0, 0.0]
+  camera_link:              # pose of camera_link in world
+    xyz: [-0.052362891163214, -0.306337290082351, 0.452079756273593]
+    rpy: [-0.023756481333572436, 0.7674868255426195, -0.1805089358059625]
+  notes: "arm_right_base: tape-measured table layout (bases 447.4 mm centre to centre, assumed identical base yaw), NOT calibrated. camera_link: ~/.ros2/easy_handeye2/calibrations/rebel_handeye_h_v2.calib (single-arm base_link -> camera_link, quaternion xyzw 0.022773271385773 0.373836805030297 -0.079141815126831 0.923831150380609 converted to URDF fixed-axis rpy), valid because world == arm_left_base_link; unverified for the dual-arm set-up until rebel_dual_arm_calibration has been run."

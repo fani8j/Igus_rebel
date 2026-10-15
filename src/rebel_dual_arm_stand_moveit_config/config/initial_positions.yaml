@@ -1,0 +1,19 @@
+# Mock-hardware start state = SRDF state `home` (also the initial_value of the ros2_control state/command interfaces).
+# Based on compal_robot dual_arm_initial_positions.yaml @ bb76327 (MIT, see ../NOTICE): lift -0.2 and arms upright (all joints 0) kept,
+# gripper joints removed, sliders moved inward by 5.973 mm each: arm spacing = 0.459946 (slider zero) - 2 * 0.005973 = 0.448000 m.
+initial_positions:
+  lift_joint: -0.2
+  slider_left_joint: -0.005973
+  slider_right_joint: 0.005973
+  arm_left_joint1: 0.0
+  arm_left_joint2: 0.0
+  arm_left_joint3: 0.0
+  arm_left_joint4: 0.0
+  arm_left_joint5: 0.0
+  arm_left_joint6: 0.0
+  arm_right_joint1: 0.0
+  arm_right_joint2: 0.0
+  arm_right_joint3: 0.0
+  arm_right_joint4: 0.0
+  arm_right_joint5: 0.0
+  arm_right_joint6: 0.0

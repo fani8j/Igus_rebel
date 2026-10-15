@@ -1,0 +1,32 @@
+# DERIVED FROM compal_robot dual_arm_joint_limits.yaml @ bb76327 (MIT, see ../NOTICE).
+# Arm joints: OUR limits (igus/CPR ReBeL 0.785 rad/s = 45 deg/s, 5.24 rad/s^2 = 300 deg/s^2; same as igus_rebel_moveit_config/config/joint_limits.yaml).
+# lift_joint / slider_*_joint: compal_robot's numbers, NOT from a spec sheet (0.3 m/s, 0.5 m/s^2 are conservative placeholders; replace with the
+# rated speed of the ZLW-20-120 / drylin W axes if known).  Position limits come from the URDF.
+joint_limits:
+  lift_joint: &gantry_limit
+    has_velocity_limits: true
+    max_velocity: 0.3
+    has_acceleration_limits: true
+    max_acceleration: 0.5
+    has_deceleration_limits: true
+    max_deceleration: -0.5
+  slider_left_joint: *gantry_limit
+  slider_right_joint: *gantry_limit
+  arm_left_joint1: &arm_limit
+    has_velocity_limits: true
+    max_velocity: 0.785
+    has_acceleration_limits: true
+    max_acceleration: 5.24
+    has_deceleration_limits: true
+    max_deceleration: -5.24
+  arm_left_joint2: *arm_limit
+  arm_left_joint3: *arm_limit
+  arm_left_joint4: *arm_limit
+  arm_left_joint5: *arm_limit
+  arm_left_joint6: *arm_limit
+  arm_right_joint1: *arm_limit
+  arm_right_joint2: *arm_limit
+  arm_right_joint3: *arm_limit
+  arm_right_joint4: *arm_limit
+  arm_right_joint5: *arm_limit
+  arm_right_joint6: *arm_limit

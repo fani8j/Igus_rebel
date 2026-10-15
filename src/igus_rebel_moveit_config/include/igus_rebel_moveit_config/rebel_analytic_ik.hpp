@@ -1,4 +1,5 @@
-// Closed-form (Pieper-style) inverse kinematics for the igus ReBeL arm + xeg32_tool_tip TCP.
+// Closed-form (Pieper-style) inverse kinematics for the igus ReBeL arm + a caller-supplied
+// fixed link6 -> TCP transform (xeg32_tool_tip for either tool variant).
 //
 // Kinematic structure (derived from igus_rebel_description/urdf/igus_rebel2.urdf, read
 // 2026-09-28): joint1 (z), joint2/joint3 (parallel, axis -y, planar elbow with small offsets),
@@ -42,10 +43,17 @@ struct JointLimits
 // bounds; these defaults exist for standalone use and tests.
 std::array<JointLimits, 6> defaultJointLimits();
 
-// Forward kinematics of the xeg32_tool_tip TCP in base_link, matching the URDF chain
-// exactly (base_link -> ... -> link6 -> igus_tool0 -> xeg32_tool_tip). Does not apply or
-// check joint limits.
-Eigen::Isometry3d forwardKinematics(const JointVector& q);
+// The fixed link6 -> TCP transform of the OLD tool (tool_variant:=xeg32_knife_v1):
+// link6 -> igus_tool0 (0,0,0.0527; rpy 0,0,pi) -> xeg32_tool_tip (0.005937,0.094121,0.130699;
+// rpy 0), composed into one transform (rotation Rz(pi)). Only for tests/back-compat: the
+// executor derives the offset from the live RobotModel instead (the current default tool,
+// knife_c, includes a -30 deg pitch rotation in its offset).
+Eigen::Isometry3d legacyXeg32KnifeV1ToolOffset();
+
+// Forward kinematics of the TCP in base_link: base_link -> ... -> link6, then the caller's
+// fixed `tool_offset` (link6 -> TCP, any rigid transform). Does not apply or check joint
+// limits.
+Eigen::Isometry3d forwardKinematics(const JointVector& q, const Eigen::Isometry3d& tool_offset);
 
 // Returns every IK solution for the given TCP pose (base_link frame) that lies within
 // `limits` (checking the raw solution and, where the joint's range allows, the +-2*pi
@@ -55,7 +63,8 @@ Eigen::Isometry3d forwardKinematics(const JointVector& q);
 // (no iterative search) for unreachable poses: wrist center out of the arm's reach
 // envelope, or an orientation solve with no valid wrist decomposition.
 std::vector<JointVector> solve(
-  const Eigen::Isometry3d& target, const std::array<JointLimits, 6>& limits = defaultJointLimits());
+  const Eigen::Isometry3d& target, const Eigen::Isometry3d& tool_offset,
+  const std::array<JointLimits, 6>& limits = defaultJointLimits());
 
 struct SelfCheckResult
 {
@@ -78,6 +87,7 @@ struct SelfCheckResult
 // configuration is not recovered.
 SelfCheckResult selfCheck(
   std::size_t num_samples, double position_tol_m, double orientation_tol_rad,
-  unsigned seed, const std::array<JointLimits, 6>& limits = defaultJointLimits());
+  unsigned seed, const Eigen::Isometry3d& tool_offset,
+  const std::array<JointLimits, 6>& limits = defaultJointLimits());
 
 }  // namespace rebel_analytic_ik

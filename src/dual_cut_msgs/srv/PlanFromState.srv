@@ -1,0 +1,8 @@
+# Plan the configured cut pattern starting from the given joint state instead of the current one.
+# Exactly the 6 group variables, finite, within bounds. The plan is retained but marked as
+# plan-from-override, so execute_planned_h_cut refuses it; read it back with GetPlannedSolution.
+sensor_msgs/JointState start_state
+---
+bool success
+string message
+uint64 plan_seq

@@ -1,0 +1,84 @@
+<?xml version="1.0"?>
+<!-- Synthetic two-arm cell for the dual_cut_coordinator gtests. Each arm: a 0.1 m box base, two
+     yaw joints (joint1, joint2) about world z at height 0.1, link1 = 0.4 x 0.04 x 0.04 box along
+     +x, link2 = 0.2 x 0.04 x 0.04 box along +x, a 0.03 m sphere "tool" at the end. The left base is
+     at the origin, the right base at y = 0.5, z = 0.013 (a z offset keeps the two bases
+     out of exactly coplanar alignment, where FCL's GJK distance overestimates, see the test). Hand-computable geometry; see test_swept_volume.cpp. -->
+<robot name="synthetic_dual">
+  <link name="world"/>
+  <link name="table">
+    <visual><geometry><box size="1.0 1.0 0.04"/></geometry></visual>
+    <collision><geometry><box size="1.0 1.0 0.04"/></geometry></collision>
+  </link>
+  <joint name="world_to_table" type="fixed">
+    <parent link="world"/><child link="table"/><origin xyz="0.25 0.25 -0.021"/>
+  </joint>
+
+  <!-- arm arm_left_ -->
+  <link name="arm_left_base_link">
+    <visual><geometry><box size="0.1 0.1 0.1"/></geometry><origin xyz="0 0 0.05"/></visual>
+    <collision><geometry><box size="0.1 0.1 0.1"/></geometry><origin xyz="0 0 0.05"/></collision>
+  </link>
+  <joint name="world_to_arm_left_base" type="fixed">
+    <parent link="world"/><child link="arm_left_base_link"/><origin xyz="0 0.0 0"/>
+  </joint>
+  <link name="arm_left_link1">
+    <visual><geometry><box size="0.4 0.04 0.04"/></geometry><origin xyz="0.2 0 0"/></visual>
+    <collision><geometry><box size="0.4 0.04 0.04"/></geometry><origin xyz="0.2 0 0"/></collision>
+  </link>
+  <joint name="arm_left_joint1" type="revolute">
+    <parent link="arm_left_base_link"/><child link="arm_left_link1"/>
+    <origin xyz="0 0 0.1"/><axis xyz="0 0 1"/>
+    <limit lower="-3.2" upper="3.2" effort="10" velocity="1"/>
+  </joint>
+  <link name="arm_left_link2">
+    <visual><geometry><box size="0.2 0.04 0.04"/></geometry><origin xyz="0.1 0 0"/></visual>
+    <collision><geometry><box size="0.2 0.04 0.04"/></geometry><origin xyz="0.1 0 0"/></collision>
+  </link>
+  <joint name="arm_left_joint2" type="revolute">
+    <parent link="arm_left_link1"/><child link="arm_left_link2"/>
+    <origin xyz="0.4 0 0"/><axis xyz="0 0 1"/>
+    <limit lower="-3.2" upper="3.2" effort="10" velocity="1"/>
+  </joint>
+  <link name="arm_left_tool">
+    <visual><geometry><sphere radius="0.03"/></geometry><origin xyz="0.03 0 0"/></visual>
+    <collision><geometry><sphere radius="0.03"/></geometry><origin xyz="0.03 0 0"/></collision>
+  </link>
+  <joint name="arm_left_tool_joint" type="fixed">
+    <parent link="arm_left_link2"/><child link="arm_left_tool"/><origin xyz="0.2 0 0"/>
+  </joint>
+
+  <!-- arm arm_right_ -->
+  <link name="arm_right_base_link">
+    <visual><geometry><box size="0.1 0.1 0.1"/></geometry><origin xyz="0 0 0.05"/></visual>
+    <collision><geometry><box size="0.1 0.1 0.1"/></geometry><origin xyz="0 0 0.05"/></collision>
+  </link>
+  <joint name="world_to_arm_right_base" type="fixed">
+    <parent link="world"/><child link="arm_right_base_link"/><origin xyz="0 0.5 0.013"/>
+  </joint>
+  <link name="arm_right_link1">
+    <visual><geometry><box size="0.4 0.04 0.04"/></geometry><origin xyz="0.2 0 0"/></visual>
+    <collision><geometry><box size="0.4 0.04 0.04"/></geometry><origin xyz="0.2 0 0"/></collision>
+  </link>
+  <joint name="arm_right_joint1" type="revolute">
+    <parent link="arm_right_base_link"/><child link="arm_right_link1"/>
+    <origin xyz="0 0 0.1"/><axis xyz="0 0 1"/>
+    <limit lower="-3.2" upper="3.2" effort="10" velocity="1"/>
+  </joint>
+  <link name="arm_right_link2">
+    <visual><geometry><box size="0.2 0.04 0.04"/></geometry><origin xyz="0.1 0 0"/></visual>
+    <collision><geometry><box size="0.2 0.04 0.04"/></geometry><origin xyz="0.1 0 0"/></collision>
+  </link>
+  <joint name="arm_right_joint2" type="revolute">
+    <parent link="arm_right_link1"/><child link="arm_right_link2"/>
+    <origin xyz="0.4 0 0"/><axis xyz="0 0 1"/>
+    <limit lower="-3.2" upper="3.2" effort="10" velocity="1"/>
+  </joint>
+  <link name="arm_right_tool">
+    <visual><geometry><sphere radius="0.03"/></geometry><origin xyz="0.03 0 0"/></visual>
+    <collision><geometry><sphere radius="0.03"/></geometry><origin xyz="0.03 0 0"/></collision>
+  </link>
+  <joint name="arm_right_tool_joint" type="fixed">
+    <parent link="arm_right_link2"/><child link="arm_right_tool"/><origin xyz="0.2 0 0"/>
+  </joint>
+</robot>

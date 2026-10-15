@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<!-- ros2_control description of the dual-arm test table: one <ros2_control> block per arm.
+
+     mock_hardware: mock_components/GenericSystem, position command interface.
+     rebel:         Igus/Rebel CRI driver (one instance per arm in the same controller_manager),
+                    velocity command interface, like igus_rebel2.control.xacro.
+     The driver parameters are those introduced in igus_rebel commit 374935a (robot_ip, robot_port,
+     node_name, trajectory_controller_name) plus fault_group (one arm faulting stops the others in
+     the group; ignored by drivers that do not know it yet). -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="rebel_dual_table_joint_control" params="joint hardware_protocol">
+    <joint name="${joint}">
+      <xacro:if value="${hardware_protocol == 'mock_hardware'}">
+        <command_interface name="position"/>
+      </xacro:if>
+      <xacro:if value="${hardware_protocol == 'rebel'}">
+        <command_interface name="velocity"/>
+      </xacro:if>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:macro name="rebel_dual_table_control"
+               params="arm_id prefix hardware_protocol robot_ip robot_port node_name trajectory_controller_name fault_group">
+    <ros2_control name="${arm_id}_hw" type="system">
+      <hardware>
+        <xacro:if value="${hardware_protocol == 'mock_hardware'}">
+          <plugin>mock_components/GenericSystem</plugin>
+        </xacro:if>
+        <xacro:if value="${hardware_protocol == 'rebel'}">
+          <plugin>Igus/Rebel</plugin>
+          <param name="robot_ip">${robot_ip}</param>
+          <param name="robot_port">${robot_port}</param>
+          <param name="node_name">${node_name}</param>
+          <param name="trajectory_controller_name">${trajectory_controller_name}</param>
+          <param name="fault_group">${fault_group}</param>
+        </xacro:if>
+      </hardware>
+      <xacro:rebel_dual_table_joint_control joint="${prefix}joint1" hardware_protocol="${hardware_protocol}"/>
+      <xacro:rebel_dual_table_joint_control joint="${prefix}joint2" hardware_protocol="${hardware_protocol}"/>
+      <xacro:rebel_dual_table_joint_control joint="${prefix}joint3" hardware_protocol="${hardware_protocol}"/>
+      <xacro:rebel_dual_table_joint_control joint="${prefix}joint4" hardware_protocol="${hardware_protocol}"/>
+      <xacro:rebel_dual_table_joint_control joint="${prefix}joint5" hardware_protocol="${hardware_protocol}"/>
+      <xacro:rebel_dual_table_joint_control joint="${prefix}joint6" hardware_protocol="${hardware_protocol}"/>
+    </ros2_control>
+  </xacro:macro>
+</robot>

@@ -512,3 +512,213 @@ any joint more than 1 rad. Replay carton result: tilt -10, pitch -5, yaw -10 deg
 branches with a joint within 2 degrees of its URDF bound after those with margin (joint6
 rule first), which keeps the middle seam off a joint4 = -177.6 degree branch after the
 parallel left cut; the default plans are unchanged.
+
+## Varying-orientation left cut (opt-in, 2026-10-13)
+
+`left_parallel_varying_orientation_enabled` (default `false`; needs `left_parallel_orientation_enabled`,
+the analytic IK backend, `motion_profile ompl_cartesian` and `cut_pattern` left_only/t_cut/h/combined)
+lets the left_parallel orientation change along the stroke. The cut line is sampled every
+`left_varying_station_spacing_m` (0.010 m, range [0.005, 0.03]); per station the same orientation
+candidates as the fixed search are evaluated (penetration gate, all analytic IK branches, collision
+under the scoped tool/carton allowance, `left_parallel_min_joint_margin_deg`), and a dynamic program
+(`left_varying_chain.hpp`) picks the longest contiguous station interval whose consecutive
+orientations differ by at most `left_varying_max_step_deg` (5, range [1, 15]) and whose IK branch moves
+at most 0.2 rad per joint (no joint4/joint6 wrap), then the smallest summed score (theta_p dominant).
+Every station and candidate is evaluated (no length-based pruning, which could hide a verifiable
+chain behind a longer one that fails its exit/replay) and candidate/neighbour construction is
+bounded by `left_parallel_search_timeout_s` and a 12000-grid-point cap.
+
+The DP's stepwise orientation profile is then smoothed: keyframes start at the two end orientations
+(piecewise slerp); a station is accepted when the penetration gate holds, theta_p and blade
+deviation stay within the DP station's value + `left_varying_max_step_deg`, and a collision-free
+in-margin IK branch continues from the previous station; the worst failing station becomes a knot
+with its DP orientation until everything passes (all knots = the DP profile). The result is replayed
+with the Cartesian interpolator exactly as the stage runs (entry, ONE stroke through the knots,
+finish, lift; fraction 1.0 for every leg, <= 5 deg joint step between waypoints, bounds, margin, the
+1 rad aggregate contact travel); a failing smoothed profile falls back to the DP profile, a failing
+DP profile bans the offending start/edge/end and the DP is re-solved (bounded).
+
+An interval below `left_varying_min_cut_fraction` (0.5, range [0.2, 1.0]) of the cut fails closed with
+the achievable fraction; a shorter interval trims the cut (response + WARN name the trimmed end). The
+plan uses the fixed parallel mode's stage structure at the first/last station, a JOINT goal for the
+approach transit (the verified hover branch; a pose goal would let the transit pick an unverified
+branch on which the jump-detection-free strokes can flip), and a SINGLE `cut left side cut` stage
+using `WaypointCartesianPath` (a `CartesianPath` subclass): `computeCartesianPath` leg by leg over the
+knots, whole-path fraction 1.0, one time parameterisation with the contact scalings. After MTC
+planning the retained stroke trajectory is validated (single stage, bounds/margin, <= 5 deg joint
+step, every planned station within 1 mm / 1 deg on the replayed IK branch and in order) in addition to
+the unchanged `validateLeftContactJointTravel`. Refused with `left_cut_reverse_travel`, a left
+correction record, `side_cut_orientation_mode != edge_aligned`, cut-debug sessions, side-tape
+hand-off, `continue_side_cut`, `side_cut_penetrate`, `plan_t_cut` and `t_cut_handoff`. Evidence:
+`scan_results/first_cut_plan_20261013/logs/run11_varying/` and `run13_varying_v2/`.
+
+## Extended left cut and approach-only debug plan (opt-in, 2026-10-13)
+
+New PLANNING parameters (validated, finite, "busy" like the other `left_varying_*` ones; all default to the
+old behaviour): `left_cut_extend_to_corners` (false), `left_cut_corner_margin_m` (0.020, [0.005, 0.10]),
+`left_cut_seam_cover_m` (0.030, [0, 0.10]), `left_debug_stop_at_approach` (false).
+
+**`left_cut_extend_to_corners`** (needs `left_parallel_varying_orientation_enabled`; planning is refused with
+a message otherwise, and `start_cut_debug_session`, `plan_side_tape_handoff`, `side_cut_penetrate`,
+`continue_side_cut` and `plan_t_cut` refuse while it is true). With A = back_middle_left, B = front_middle_left,
+u = (B - A)/|B - A| and s(P) = (P - A).u: `s_start = s(back_left) + margin`, `s_end = s(front_left) - margin`;
+the candidate line runs from `A + s_start u` to `A + s_end u` (the nominal line extended both ways; since
+back/front_middle_left are midpoints with seam_start these are collinear with the edge). Both ends go through
+the same `targetPose()` as the nominal cut_start/cut_end (surface-normal offset `cut_clearance_m`, same
+orientation direction), so the line stays at the nominal cut height. Fails closed on a non-finite or degenerate
+span, a span shorter than / not containing the nominal segment, corners or seam_start more than 30 mm off the
+nominal line, or a seam projection outside the span. Stations stay <= `left_varying_station_spacing_m` (about
+29 instead of 17 at 10 mm, so the search takes proportionally longer; `left_parallel_search_timeout_s` still
+bounds it and its error names the station count; the 12000 cap is on orientation grid points, not stations).
+
+Seam band: the kept interval must satisfy first station <= floor(band_lo/h) and last station >= ceil(band_hi/h)
+for band = s(seam_start) -/+ `left_cut_seam_cover_m` clamped to the span (h = station spacing), so it contains the
+band. This is `left_varying::bestVerifiedEndCovering` (longest verified chain among those covering the required
+station range; also used inside the repair loop, so a repaired profile still covers it); the unconstrained
+`bestVerifiedEnd` is unchanged for the non-extended path. Minimum length = `left_varying_min_cut_fraction` x the
+NOMINAL |B - A| (not the extended span); the failure message gives the numbers (and the longest interval anywhere).
+The plan summary states: extended span length, kept length (and % of nominal and its position relative to
+back_middle_left), trim at the back and front end of the span (mm), that the seam band is covered, plus the
+unchanged theta_p / blade deviation / knots / stroke time. Everything downstream (joint-branch hover goal, hover
+offsets, replay, `validateLeftVaryingRetainedStroke`, `validateLeftContactJointTravel`, fraction 1.0, carton contact
+scope only for the stroke) runs on the kept interval unchanged.
+
+**`left_varying_start_extra_inward_m`** (PLANNING, default 0, range [0, 0.005] m; YAML 0.003 since 2026-10-13,
+operator decision). Pushes the blade further INTO the box (horizontally, opposite to `offsetLeftPoseOutward`,
+perpendicular to the cut line and the surface normal) by this much at the START of the kept varying left stroke,
+tapering linearly to 0 at its finish: station offset = `extra * (1 - s/L)` (`left_varying::inwardTaperM`), s = arc
+position from the kept start, L = kept length. The offset is added to the station positions inside
+`searchLeftVaryingOrientation`, so the IK/collision search, DP, hover (offset start + `left_lateral_standoff_m`),
+lift, Cartesian replay, plan stations and `validateLeftVaryingRetainedStroke` all see the same positions. The kept
+interval is only known after the DP, so the search runs as passes: pass 1 tapers over the whole searched span; if the
+kept interval is shorter, the COMPLETE search is re-run with the taper window set to that kept interval, until a pass
+keeps exactly the interval its window is defined on (max 3 passes, otherwise fails closed). With 0 the code path is
+unchanged. > 0 with `left_parallel_varying_orientation_enabled` false is refused (`leftVaryingConflict` for
+left patterns; `refuseLeftVarying` for staged/side-tape/continue/plan_t_cut paths): because the YAML default is
+varying OFF, set the extra to 0.0 (or enable varying) before using those paths. The plan summary states the inward
+offset at the start and the finish (mm). Carton contact scope, `min_fraction` 1.0 and the retained-stroke checks are
+unchanged.
+
+**`left_debug_stop_at_approach`** (`cut_pattern left_only` only; `plan_h_cut` refuses any other pattern, and the
+entry points listed above refuse while it is true). `plan_h_cut` first plans the full left cut exactly as usual
+(varying search with feature 1 if enabled, all validators), then plans a second task over the same segment with
+`stop_at_hover_start`: transit to the left approach pose and the pre-cut stabilization dwell, then nothing (no
+carton contact scope, lateral entry, stroke or lift). In varying mode the second task is handed the full run's
+verified plan (no second search), and its trajectory must END on the verified hover joints
+(`hover_start_joints`, 1e-3 rad); in the other left modes its hover pose and the cut targets must equal the full
+plan's. Any mismatch fails closed. `validateFreeSpaceTransitWrist` and the dwell check run on the retained task;
+the retained-stroke check is skipped only because that task has no stroke (the full task passed it). The full cut's
+markers/targets are published, the retained solution is the approach-only one. The retained plan is flagged
+(`retained_debug_motion_`, cleared by `clear_plan`/replanning and consumed at dispatch): `execute_planned_h_cut`
+needs `execution_enabled` AND `debug_motion_execution_enabled`, plus the usual freshness and
+`debug_allow_stale_snapshot` blocks. The response is labelled APPROACH-ONLY and gives the full-cut summary, hover
+pose and hover joints.
+
+## Dual-arm planning stack: snapshot frame, half seam, plan export, plan from state (2026-10-15)
+Design: `scan_results/dual_arm_stack_20261014/design/P3_P4_DESIGN.md` sections 2-4 and 7; regression evidence in
+`scan_results/dual_cut_p3_regression_20261015/`. With every new parameter at its default the left arm's plans are
+unchanged (regression below).
+
+**New read-only parameters** (`kParameterTable`): `snapshot_frame_mode` (`planning_frame` | `fixed_transform`),
+`snapshot_frame_id`, `snapshot_planning_base_xyz`, `snapshot_planning_base_rpy`, `snapshot_relabel` (`none` |
+`rotate_180`), `plan_export_only`. **New planning parameters**: `middle_seam_stop` (`end` | `center`),
+`middle_seam_center_overlap_m` ([0, 0.03]). `validateSettings`: names/values/sizes checked; non-zero
+`snapshot_planning_base_*` without `fixed_transform` refused; `fixed_transform` or a relabel require
+`plan_export_only=true` and `cut_debug_correction_enabled=false` and `side_tape_handoff_enabled=false`.
+
+**Snapshot** (`applySnapshotFrameHandling`, last step of `parseSnapshotFromDocument`, maths in
+`include/igus_rebel_moveit_config/snapshot_frame.hpp`): `frame_id` must equal `snapshot_frame_id`; the 11 points
+get `p = B^-1 p_snapshot`, the normal is rotated; `header.frame_id` becomes `planning_frame`; then `rotate_180`
+swaps back_left/front_right, back_right/front_left, seam_start/seam_end, back_middle_left/front_middle_right,
+front_middle_left/back_middle_right (centre and normal kept) after checking that the label handedness is unchanged
+(mirror -> refused). With the defaults the function returns before touching anything. Not transformed, hence
+refused in a non-default mode: the `side_tape_seed` block (`parseSideTapeSeedFaceFromDocument`) and pattern `h` with
+`approach_joint_degrees` (`planSnapshot`). Gtests: `test/test_snapshot_frame.cpp`.
+
+**Export-only** (`plan_export_only`): the constructor creates the side-tape, T-cut, staged top-cut and cut-debug
+services and `execute_planned_h_cut` only when it is false; advertised then: `plan_h_cut`, `plan_h_cut_from_state`,
+`get_planned_solution`, `clear_plan`, `diagnose_external_snapshot_sections`.
+
+**Half seam** (`planSnapshot`): after the `middle_cut_reverse_travel` swap, `seam_end = seam_start + (f_c +
+overlap/len)(seam_end - seam_start)`, `f_c` = `seam_center` projected onto the seam; refused unless `f_c` is within
+10..90 % and the stop <= 100 %; `cut_pattern` must be `middle_only` (`planSnapshot` refuses other patterns,
+`refuseHalfSeam` the staged/side-tape/cut-debug/continue entry points); the shortening loop is skipped
+(`half_seam` in the loop's exit condition, message prefix "middle_only half seam ... did not plan; shortening is
+disabled"). The response of a half seam adds `middle_seam_stop=center (half seam, stroke ends X mm past the seam
+centre ...)`.
+
+**Export** (`exportPlannedSolution`, `include/igus_rebel_moveit_config/plan_export.hpp`): `retainPlan` additionally
+stores the cut targets (two per cut segment, exactly what `publishTargetPoses` sends), the segments, the pattern,
+`plan_seq_` (+1) and the pointer of the task it retained (`exportable_task_`; a plan assigned to `planned_task_`
+any other way, e.g. a cut-debug start, is not exportable). The classifier maps stage-name prefixes to kinds
+(TRANSIT: `approach pose above/outside`, `transition from`, `transit to supplied`; ALIGN: `align above`; DWELL:
+`stabilize blade before`, `hold at penetration before`; ENTRY: `enter laterally into`, `descend from aligned`; CUT:
+`cut `; FINISH: `finish pose outside/above`; LIFT: `lift clear of`, `lift straight up`, `raise to safe transit
+height after`). The last LIFT prefix is an addition to the design table (the Cartesian raise after the left cut in
+`t_cut`, `middle_transit_extra_lift_m`). An unknown name with a trajectory, a CUT-stage/target count mismatch (not
+two targets per CUT stage) or a leaf/message count mismatch fails the export. `raw` = `Solution::toMsg(msg,
+&task.introspection())` plus the introspection task id = the message `publishSolution` published.
+Gtests: `test/test_plan_export.cpp`.
+
+**Plan from state** (`planHCutFromState`): validates the six joints against the group and the joint bounds, sets
+`start_state_override_` (RAII), clears the retained plan and runs `planExternalSnapshot`. In `planCutSegments` the
+override replaces the `CurrentState` stage by `FixedState("start state (override)")` (the move_group scene fetched
+once through a temporary node with every component, as `CurrentState` does, the group joints replaced, velocities
+zeroed) and seeds `ik_state` (all left-search/transit seeds derive from it). Refused for `t_cut_handoff`, the debug
+patterns and `left_debug_stop_at_approach`. `retainPlan` stores `retained_from_override_`; `executeRetainedPlan`
+refuses such a plan right after the stale-snapshot block.
+
+**Regression (mock, domain 203, 2026-10-15; evidence `scan_results/dual_cut_p3_regression_20261015/`).** Pristine
+source = `box_h_cut_executor.cpp.before` (sha256 in `source_sha256_before.txt`). 07:49 and 09:20 captures (re-stamped), from
+home, `t_cut` / `left_only` / `middle_only`; baseline = 5 fresh stacks x the full matrix plus 335 in-stack
+`middle_only` runs. `t_cut` and `left_only` are DETERMINISTIC: the response, every Solution trajectory and the cut
+targets are bit-identical over all baseline runs and over all candidate runs (WP2: 3 stacks, WP3: 3 stacks + 2 stacks of
+`plan_h_cut_from_state` with the current joint state). `middle_only` is NOT deterministic in the baseline itself:
+KDL pose-goal IK of the approach/align stages varies run to run (largest pairwise spread 7.7e-5 rad = 8 um at the tool
+tip; downstream Cartesian stages <= 1e-7 rad; also inside one process), and in ~7 % of the 07:49 runs (2-7 % on 09:20)
+the full seam hits a wrist flip in the stroke and is shortened to 95 % (rarely 90 %). So an endpoint tolerance of 1e-6
+is not even met baseline-vs-baseline; the gate (`tools/compare.py gate`) is: bit-identical to a baseline run, or (for
+the non-deterministic case) the same outcome class (response + stage sequence), identical cut targets, joint
+positions within 1e-4 rad (IK-goal stages) / 2e-7 rad (other stages), times within 1e-3 s and tool-tip stage endpoints
+within 20 um of every baseline run of that class. WP2 and WP3 pass; shortening rates equal (07:49: 26/370 baseline,
+26/370 WP3).
+
+## Carton contact links and the opt-in blade collision link (2026-10-15)
+Evidence: `scan_results/dual_arm_stack_20261015/blade_collision/`. The single-arm knife_c model has no collision geometry
+for the 14.4 mm exposed blade (only the TCP frame `xeg32_tool_tip`); the dual model has the box `<prefix>knife_c_blade`.
+The WP7 strict world check found the per-arm approach transits putting that box into `detected_carton` (up to 5.2 mm).
+
+**URDF** (`igus_rebel_description`): `knife_c_tool.macro.xacro` now owns the ONE definition of the blade box
+(`blade_collision:=false` default, `blade_tcp_xyz`); the dual macro (`rebel_tool.macro.xacro`) calls it with
+`blade_collision="true"` and its own `tcp_xyz`. `igus_rebel_xeg32_wrapper.urdf.xacro` has the arg `blade_collision`
+(default false; true needs `tool_variant:=knife_c`; anything but true/false fails). Default output is byte-identical to
+before (all 8 combinations of tool variant x hardware protocol x attach_xeg32, and semantically identical to
+`scan_results/dual_arm_stack_20261014/backup/single_arm_urdf_before.urdf` with `compare_single_arm_urdf.py`); the dual
+URDF is byte-identical before/after. The wrapper passes the TCP xyz twice (joint literal + `blade_tcp_xyz`, a macro cannot
+read its joint block): the xyz-only pivot patcher edits only the joint, so update both (guarded by
+`test_wrapper_blade_tcp_equals_tcp_joint`).
+
+**SRDF**: `igus_rebel2.srdf` is NOT changed (a disable entry for a missing link is noise and would add entries to the
+default ACM). The pair `knife_c_blade`-`knife_c_handpiece` (same proof as the dual SRDF) is in
+`config/knife_c_blade_disable_collisions.srdf.inc`; a launch that builds the URDF with `blade_collision:=true` inserts it
+before `</robot>` (`per_arm_planning.launch.py` does). The single-arm `move_group.launch.py` has no such option.
+
+**Executor**: read-only `carton_contact_links` (string list, default `[]` = `[tool_link]`). Every place that allowed
+tool/carton contact now loops over the effective list: `addCartonContactScope` / carton scenes (`allowCartonContact`), the
+five analytic-search ACM sites (`setCartonContactEntries`), and `PlannedSegment.tool_carton_contact_allowed` (true only if
+all listed links are allowed). Free-space transits keep the blade checked. `validateSettings` refuses empty/duplicate
+entries and `carton_collision_id`; `main()` refuses to start (FATAL, exit 2) when a listed link is not in the robot
+model (only checked for a non-default list; not exercised in this session's reduced test scope).
+
+**Per-arm launch**: `blade_collision` arg (per_arm / both_arms / dual_cut_system / dual_cut_full_mock; default FALSE for
+now, because the installed executor must know the parameter first; with an old binary a blade link breaks every cut
+plan). With true: URDF `blade_collision:=true`, SRDF fragment, `carton_contact_links [tool_link, knife_c_blade]` for both
+arms (launch wins over YAML/overrides). Handpiece/holder need NO contact allowance: every left cut plans with them checked.
+
+**Results (mock, domain 206)**: defaults regression (new binary vs the pre-change source rebuilt today, today's YAML; the
+WP0 baseline pool is stale since the YAML moved): `compare.py gate` PASS, t_cut and left_only bit-identical, middle_only
+within the known envelope. Left arm in the dual stack, blade on vs off: all 6 cases plan, joint trajectories of
+t_cut/left_only identical, plan times unchanged (t_cut 10.8-11.8 s, left_only 10.4-10.8 s, middle_only 0.3 s).
+WP7 strict (`world_penetration_tolerance_m=0`), blade on: 09:20 and 07:49 plan and execute A+B with 0 penetration, except
+one 09:20 run (first after stack start) where left phase B refused: the OMPL approach transit ended with the blade box
+grazing the carton (Computed path is not valid, states 128-134 of 138); 3 reruns of 09:20 and 07:49 passed.

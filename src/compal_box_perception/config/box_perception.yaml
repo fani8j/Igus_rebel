@@ -1,10 +1,13 @@
 box_perception:
   ros__parameters:
     rgb_topic: /camera/color/image_raw/compressed
-    depth_topic: /camera/depth/image_raw/compressedDepth
+    # Raw aligned depth. The orbbec 2.9.3 compressedDepth topic carries mostly
+    # UNALIGNED 1280x800 depth (30/40 msgs on 2026-10-04 while image_raw was 52/52
+    # aligned 1920x1080), so snapshots failed 'RGB/depth dimensions differ'.
+    depth_topic: /camera/depth/image_raw
     camera_info_topic: /camera/color/camera_info
     use_compressed_rgb: true
-    use_compressed_depth: true
+    use_compressed_depth: false
     robot_base_frame: base_link
 
     use_auto_roi: true

@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dual-arm calibration</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">C</span>
+      <div><strong>Dual-arm calibration</strong><span id="mode-label">mode: &mdash;</span></div>
+    </div>
+    <div id="hw-banners" class="hw-banners" aria-label="Hardware per arm"></div>
+    <div id="chips" class="chips" aria-label="Health"></div>
+    <div class="stop-group">
+      <button id="stop" type="button" aria-label="STOP all jog motion (Escape)">STOP</button>
+      <p class="stop-caption">Esc = STOP &mdash; not an e-stop, keep the hardware e-stop in reach</p>
+    </div>
+  </header>
+
+  <div class="statusbars">
+    <div id="banner-backend" class="banner warn" role="alert" hidden>Backend unreachable: no answer from the calibration_ui node. Retrying.</div>
+    <div id="banner-auth" class="banner bad" role="alert" hidden>token missing/invalid: open the URL printed by the calibration_ui node</div>
+    <div id="banner-error" class="banner bad" role="alert" hidden>
+      <span id="banner-error-text"></span>
+      <button id="banner-error-close" type="button" class="small" aria-label="Dismiss error">Dismiss</button>
+    </div>
+    <div id="jog-last" class="banner neutral" aria-live="polite">Last jog: &mdash;</div>
+    <div id="banner-fault" class="banner bad" role="alert" hidden>
+      <span>JOG FAULT: the stop was not confirmed. Check the arm (use the e-stop if it moves). Jogging stays blocked.</span>
+      <button id="clear-fault" type="button" class="small">Clear fault (arm must be standing still)</button>
+    </div>
+  </div>
+
+  <main>
+    <nav class="tabs" role="tablist" aria-label="Calibration pages">
+      <button class="tab" role="tab" id="tab-tcp" data-tab="tcp" aria-controls="page-tcp" type="button">0. TCP</button>
+      <button class="tab" role="tab" id="tab-setup" data-tab="setup" aria-controls="page-setup" type="button">1. Setup</button>
+      <button class="tab" role="tab" id="tab-intrinsics" data-tab="intrinsics" aria-controls="page-intrinsics" type="button">2. Intrinsics (optional)</button>
+      <button class="tab" role="tab" id="tab-record" data-tab="record" aria-controls="page-record" type="button">3. Record arm</button>
+      <button class="tab" role="tab" id="tab-touches" data-tab="touches" aria-controls="page-touches" type="button">4. Touches</button>
+      <button class="tab" role="tab" id="tab-hovertest" data-tab="hovertest" aria-controls="page-hovertest" type="button">5. Hover test</button>
+      <button class="tab" role="tab" id="tab-wrist" data-tab="wrist" aria-controls="page-wrist" type="button" hidden>6. Wrist camera</button>
+    </nav>
+
+    <!-- 0. TCP -->
+    <section id="page-tcp" class="page" role="tabpanel" aria-labelledby="tab-tcp" hidden>
+      <div id="tcp-unsupported" class="card" hidden>
+        <h2>TCP pivot calibration</h2>
+        <p class="result bad" id="tcp-unsupported-text">TCP calibration: single-arm modes only</p>
+      </div>
+      <div class="cols main-side" id="tcp-body">
+        <div class="stack">
+          <div class="card">
+            <h2>TCP pivot calibration <span class="muted" id="tcp-arm"></span></h2>
+            <p>Finds the knife tip <code>r</code> in <code>igus_tool0</code> from poses where the SAME physical tip is re-seated in a
+              fixed countersink fixture. <b>The buttons of this tab never move the robot.</b> You position the arm yourself with the
+              Servo teleop keyboard (recommended: <code>ros2 run igus_rebel_moveit_config rebel_servo_teleop_keyboard</code>) or with
+              the jog panel on this page (its usual enable rules apply), <b>lift the tip out and re-seat it</b>
+              in the fixture between poses (do not rotate about the tip), release the keys, then capture. Ultrasonic stays OFF.</p>
+            <h3>Safety checklist (all items before the first capture)</h3>
+            <ul id="tcp-checklist" class="tcp-checks"></ul>
+            <div id="tcp-warnings" class="tcp-warnings"></div>
+            <dl id="tcp-facts" class="facts"></dl>
+          </div>
+          <div class="card">
+            <h2>Pose guidance</h2>
+            <div id="tcp-live" class="tcp-live"></div>
+            <p id="tcp-suggestion" class="hint" hidden></p>
+            <h3>Pose plan <span class="muted" id="tcp-plan-count"></span></h3>
+            <ul id="tcp-plan" class="tcp-plan"></ul>
+          </div>
+          <div class="card">
+            <h2>Captured poses <span class="muted" id="tcp-counts"></span></h2>
+            <div id="tcp-samples"></div>
+          </div>
+        </div>
+        <div class="side">
+          <div class="jog-slot" id="jog-slot-tcp"></div>
+          <div class="card">
+            <h2>Capture</h2>
+            <p class="muted">Needs the whole checklist ticked, the arm still for <span id="tcp-still-s">2.0</span> s
+              (&lt; <span id="tcp-still-mrad">2</span> mrad), fresh TF, and a tool rotation of at least
+              <span id="tcp-min-rot">15</span>&deg; from every stored pose.</p>
+            <div class="row">
+              <button id="tcp-cap-fit" type="button" class="big primary">Capture FIT pose</button>
+              <button id="tcp-cap-val" type="button" class="big">Capture VALIDATE pose</button>
+            </div>
+            <div class="row">
+              <label for="tcp-note">Note</label>
+              <input id="tcp-note" type="text" maxlength="200" autocomplete="off">
+            </div>
+            <p id="tcp-cap-why" class="tcp-why" aria-live="polite"></p>
+            <p id="tcp-cap-result" class="result" aria-live="polite"></p>
+            <p class="muted">FIT poses are used by the solve; VALIDATE poses are held out and only measure the error. Aim for
+              8&ndash;12 FIT and 3&ndash;4 VALIDATE poses.</p>
+          </div>
+          <div class="card">
+            <h2>Solve</h2>
+            <div class="row">
+              <button id="tcp-solve" type="button" class="big primary">Solve</button>
+            </div>
+            <p id="tcp-solve-result" class="result" aria-live="polite"></p>
+            <div id="tcp-result"></div>
+          </div>
+          <div class="card">
+            <h2>Mechanical sanity check</h2>
+            <p class="muted">Measure with calipers: flange face to blade tip, along the flange axis. The current URDF implies
+              <b id="tcp-mech-urdf">183.4</b> mm; an old pivot data set suggested about <b id="tcp-mech-old">168</b> mm
+              (a ~15 mm z question is open).</p>
+            <div class="row">
+              <label for="tcp-mech-len">Flange face &rarr; blade tip (mm)</label>
+              <input id="tcp-mech-len" type="number" step="0.1" min="50" max="400" inputmode="decimal">
+              <button id="tcp-mech-go" type="button">Check</button>
+            </div>
+            <p id="tcp-mech-result" class="result" aria-live="polite"></p>
+            <div id="tcp-mech"></div>
+          </div>
+          <div class="card">
+            <h2>Output</h2>
+            <div class="row">
+              <button id="tcp-write" type="button" class="big primary">Write result</button>
+            </div>
+            <p id="tcp-write-result" class="result" aria-live="polite"></p>
+            <p class="muted">Writes <code>tcp_result_&lt;arm&gt;.yaml</code> into the session directory only (only GOOD / PASS results).
+              The UI never edits the xacro: you apply the diff by hand.</p>
+            <div id="tcp-written"></div>
+            <h3>Xacro patch (diff, read only)</h3>
+            <pre id="tcp-diff" class="tcp-diff" aria-label="Xacro patch"></pre>
+            <h3>Then, by hand</h3>
+            <ol id="tcp-steps" class="tcp-steps"></ol>
+            <p id="tcp-rebase" class="tcp-rebase"></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 1. Setup -->
+    <section id="page-setup" class="page" role="tabpanel" aria-labelledby="tab-setup" hidden>
+      <div class="cols two">
+        <div class="card">
+          <h2>Session</h2>
+          <dl id="session-facts" class="facts"></dl>
+          <form id="session-form" autocomplete="off">
+            <h3>Session conditions</h3>
+            <div class="form-grid">
+              <label for="f-temp">Ambient temperature (&deg;C)</label>
+              <input id="f-temp" name="ambient_temp_c" type="number" step="0.1" inputmode="decimal">
+              <label for="f-rh">Relative humidity (%)</label>
+              <input id="f-rh" name="ambient_rh_pct" type="number" step="1" min="0" max="100" inputmode="decimal">
+              <label for="f-warm">Arm warm-up (min)</label>
+              <input id="f-warm" name="warmup_min" type="number" step="1" min="0" inputmode="decimal">
+              <label for="f-note">Note</label>
+              <input id="f-note" name="operator_note" type="text" maxlength="500">
+            </div>
+            <div class="row">
+              <button id="session-save" type="submit" class="primary">Save session info</button>
+              <span id="session-result" class="result" aria-live="polite"></span>
+            </div>
+          </form>
+        </div>
+        <div class="card">
+          <h2>Checklist</h2>
+          <p class="muted">All items should be green before you record. Red items are not blocking in the UI, but captures will probably be refused.</p>
+          <ul id="checklist" class="checklist"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. Intrinsics -->
+    <section id="page-intrinsics" class="page" role="tabpanel" aria-labelledby="tab-intrinsics" hidden>
+      <div class="cols main-side">
+        <div class="card">
+          <h2>Live image (intrinsics overlay)</h2>
+          <div class="imgwrap"><img id="img-intrinsics" alt="Live camera image with intrinsics board overlay"><div class="noimg" hidden>no image</div></div>
+        </div>
+        <div class="card">
+          <h2>Camera intrinsics</h2>
+          <p>Only needed if the solve's <b>"intrinsics validated"</b> check fails.</p>
+          <p>Hold the ChArUco board by hand in front of the camera (no robot motion) and capture 25&ndash;40 views with varied tilt and distance, covering the whole image.</p>
+          <p class="bigcount"><span id="intr-count">&mdash;</span> views <span class="muted" id="intr-target"></span></p>
+          <div class="row">
+            <button id="intr-capture" type="button" class="big primary">Capture view</button>
+            <button id="intr-calibrate" type="button" class="big">Calibrate</button>
+          </div>
+          <p id="intr-result" class="result" aria-live="polite"></p>
+          <h3>Calibration job</h3>
+          <div id="intr-job" class="job"><span class="muted">no job yet</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Record arm -->
+    <section id="page-record" class="page" role="tabpanel" aria-labelledby="tab-record" hidden>
+      <div class="cols main-side">
+        <div class="card">
+          <h2>Live image (detection overlay)</h2>
+          <div class="imgwrap"><img id="img-record" alt="Live camera image with detected boards"><div class="noimg" hidden>no image</div></div>
+          <div id="det-record" class="badges"></div>
+        </div>
+        <div class="side">
+          <div class="card">
+            <h2>Arm</h2>
+            <div class="armsel" role="radiogroup" aria-label="Arm to record"></div>
+            <div id="rec-counts" class="counts"></div>
+            <div class="row">
+              <button id="capture" type="button" class="big primary">Capture</button>
+              <button id="auto-toggle" type="button" class="big autobtn" aria-pressed="false">Auto capture: OFF</button>
+              <label class="autochg">Min change
+                <select id="auto-change" aria-label="Auto capture: minimum pose change">
+                  <option value="1">1&deg;</option>
+                  <option value="2" selected>2&deg;</option>
+                  <option value="5">5&deg;</option>
+                </select>
+              </label>
+            </div>
+            <p id="auto-status" class="autostatus" aria-live="polite"></p>
+            <p id="capture-result" class="result" aria-live="polite"></p>
+            <p class="muted">Aim for 30&ndash;40 poses per arm. Hold the arm still; the capture is refused otherwise.
+              Auto capture takes a sample whenever the arm stands still at a pose that differs by the chosen angle from every pose
+              already handled in this run (it never moves the robot; it stops when you leave this tab).</p>
+          </div>
+          <div class="card" id="suggest-card">
+            <h2>Suggested pose <span id="sg-armnote" class="muted"></span></h2>
+            <div class="row">
+              <button id="sg-compute" type="button" class="primary">Suggest pose</button>
+              <button id="sg-next" type="button">Next</button>
+              <button id="sg-rviz" type="button">Send to RViz</button>
+              <button id="sg-plan" type="button">Plan preview</button>
+              <button id="sg-move" type="button" class="danger">Move there</button>
+            </div>
+            <p id="sg-status" class="autostatus" aria-live="polite"></p>
+            <div id="sg-detail" class="sg-detail"></div>
+            <p id="sg-result" class="result" aria-live="polite"></p>
+            <p class="muted">Proposes the next pose that adds the most information (different tilt of the board, new image
+              area, different wrist configuration). The outline in the live image is where the board would appear. Nothing moves
+              until you press <b>Move there</b> after <b>Plan preview</b>; STOP / Esc cancels. <b>Send to RViz</b> only shows the
+              goal pose in the MotionPlanning panel.</p>
+          </div>
+          <div class="jog-slot" id="jog-slot-record"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. Touches -->
+    <section id="page-touches" class="page" role="tabpanel" aria-labelledby="tab-touches" hidden>
+      <div class="cols main-side">
+        <div class="stack">
+          <div class="card">
+            <h2>Touch points</h2>
+            <div class="armsel" role="radiogroup" aria-label="Arm to touch with"></div>
+            <p class="hint">Knife tip exactly on the crosshair centre, arm still.</p>
+            <div id="touch-list" class="touch-list"></div>
+            <div class="row">
+              <button id="touch-capture" type="button" class="big primary">Capture touch</button>
+              <span id="touch-sel" class="muted"></span>
+            </div>
+            <p id="touch-result" class="result" aria-live="polite"></p>
+          </div>
+          <div class="card">
+            <h2>Live image</h2>
+            <div class="imgwrap small"><img id="img-touches" alt="Live camera image"><div class="noimg" hidden>no image</div></div>
+          </div>
+        </div>
+        <div class="side">
+          <div class="card hover-card" id="hover-card-touches" data-hvmode="touches"></div>
+          <div class="jog-slot" id="jog-slot-touches"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. Hover test -->
+    <section id="page-hovertest" class="page" role="tabpanel" aria-labelledby="tab-hovertest" hidden>
+      <div class="cols main-side">
+        <div class="stack">
+          <div class="card hover-card" id="hover-card-test" data-hvmode="test"></div>
+          <div class="card">
+            <h2>Live image (predicted points)</h2>
+            <div class="imgwrap"><img id="img-hovertest" alt="Live camera image with the predicted touch points"><div class="noimg" hidden>no image</div></div>
+          </div>
+        </div>
+        <div class="side">
+          <div class="jog-slot" id="jog-slot-hovertest"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. Wrist camera (eye-in-hand hand-eye calibration, single-arm modes) -->
+    <section id="page-wrist" class="page" role="tabpanel" aria-labelledby="tab-wrist" hidden>
+      <div class="cols main-side">
+        <div class="stack">
+          <div class="card">
+            <h2>Wrist camera image <span id="wr-armnote" class="muted"></span></h2>
+            <div class="imgwrap"><img id="img-wrist" alt="Live wrist camera image with the detected table board"><div class="noimg" hidden>no wrist image</div></div>
+            <p class="muted">Green dots = detected board corners (need &ge; 16); magenta outline = predicted board position of the view the sequence is moving to.</p>
+          </div>
+          <div class="card">
+            <h2>Views and samples</h2>
+            <p id="wr-views" class="autostatus"></p>
+            <div id="wr-view-list" class="sg-detail"></div>
+            <p id="wr-samples" class="autostatus"></p>
+            <div id="wr-cov" class="badges"></div>
+            <div id="wr-sample-list" class="sg-detail"></div>
+          </div>
+          <div class="card">
+            <h2>Sequence log</h2>
+            <pre id="wr-log" class="logbox"></pre>
+          </div>
+        </div>
+        <div class="side">
+          <div class="card" id="wrist-card">
+            <h2>Eye-in-hand calibration (camera on the arm)</h2>
+            <p class="muted">Calibrates <b>link6 &rarr; wrist camera optical frame</b> from ~15-20 automatic views of the fixed table board.
+              Nothing is written to the URDF. The sequence moves the arm through the jog "Move there" machinery (same speed caps,
+              supervision and STOP). <b>STOP / Esc stops everything.</b></p>
+            <ol class="steps">
+              <li><b>Locate board</b> (scene camera, board must lie still)
+                <div class="row"><button id="wr-locate" type="button" class="primary">Locate board</button>
+                  <button id="wr-mockboard" type="button" title="MOCK hardware only: synthetic board pose">Mock board (mock only)</button></div>
+                <p id="wr-board" class="autostatus"></p></li>
+              <li><b>Safety scene</b> (virtual slab / stand / pole pads, +50 mm margins)
+                <div class="row"><button id="wr-scene-add" type="button">Add safety scene</button>
+                  <button id="wr-scene-rm" type="button">Remove safety scene</button></div>
+                <p id="wr-scene" class="autostatus"></p></li>
+              <li><b>Jog</b> (panel below) until the whole board is visible in the wrist image, then
+                <div class="row"><button id="wr-seed" type="button" class="primary">Use as seed</button>
+                  <button id="wr-capture" type="button">Capture here</button></div>
+                <p id="wr-seedinfo" class="autostatus"></p></li>
+              <li><b>Generate views</b>
+                <div class="row"><button id="wr-generate" type="button" class="primary">Generate views</button></div></li>
+              <li><b>Auto sequence</b>
+                <label class="confirm-line"><input type="checkbox" id="wr-confirm"> I confirm: the work area is clear, the knife is covered,
+                  the e-stop is in reach and I watch the arm.</label>
+                <div class="row"><button id="wr-start" type="button" class="danger">Start auto sequence</button>
+                  <button id="wr-stop" type="button" class="danger">STOP sequence</button></div>
+                <p id="wr-run" class="autostatus"></p></li>
+              <li><b>Result</b>
+                <div class="row"><button id="wr-solve" type="button">Solve</button>
+                  <button id="wr-write" type="button">Write result</button>
+                  <button id="wr-pubtf" type="button">Publish TF (live check)</button></div>
+                <div id="wr-result" class="sg-detail"></div></li>
+            </ol>
+            <p id="wr-msg" class="result" aria-live="polite"></p>
+            <p id="wr-estimate" class="muted"></p>
+          </div>
+          <div class="jog-slot" id="jog-slot-wrist"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title">
+    <form method="dialog">
+      <h2 id="confirm-title">Enable motion on REAL robot?</h2>
+      <p>The arm will move. Keep the e-stop in reach.</p>
+      <div class="row end">
+        <button id="confirm-cancel" type="button">Cancel</button>
+        <button id="confirm-ok" type="button" class="danger">Enable motion</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="move-dialog" aria-labelledby="move-title">
+    <form method="dialog">
+      <h2 id="move-title">Move the REAL arm to the suggested pose?</h2>
+      <p id="move-text">Duration ~? s</p>
+      <p>Keep the e-stop in reach. STOP / Esc cancels the move.</p>
+      <p class="danger-text"><strong>The knife has no collision model: keep the blade covered and the path clear.</strong></p>
+      <div class="row end">
+        <button id="move-cancel" type="button">Cancel</button>
+        <button id="move-ok" type="button" class="danger">Move</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="hover-dialog" aria-labelledby="hover-title">
+    <form method="dialog">
+      <h2 id="hover-title">Move the REAL arm above the mark?</h2>
+      <p id="hover-text">Duration ~? s</p>
+      <p>The tool goes to 60 mm above the mark (not to the paper). Keep the e-stop in reach. STOP / Esc cancels the move.</p>
+      <p class="danger-text"><strong>The knife has no collision model: keep the blade covered and the path clear.</strong></p>
+      <div class="row end">
+        <button id="hover-cancel" type="button">Cancel</button>
+        <button id="hover-ok" type="button" class="danger">Move</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

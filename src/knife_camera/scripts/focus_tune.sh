@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Interactively tune the knife camera's manual focus while watching the stream
-# (e.g. in rqt_image_view on /knife_camera/image_raw). Works whether or not the
+# (e.g. in rqt_image_view on /knife_camera/image_raw/compressed). Works whether or not the
 # driver is running. Write the chosen value into config/knife_camera_controls.yaml.
 #
 #   ros2 run knife_camera focus_tune.sh [device]

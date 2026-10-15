@@ -1,0 +1,290 @@
+<?xml version="1.0"?>
+<!-- DERIVED FROM compal_robot (MIT License, Copyright (c) 2026 James), src/igus_rebel_description/urdf/dual_arm_rig_v2.urdf.xacro @ bb76327. See ../NOTICE.
+     Rig frame (stand / lift / slider_left / slider_right / gemini336L head camera) and the arm mount transforms are taken over unchanged
+     (link names, joint names, joint origins and limits identical, so compal_robot's Isaac USDs and bridge scripts, which are copied to ../isaac,
+     stay name-compatible). Changes vs compal_robot:
+       * arms: rebel_arm_chain (urdf/rebel_arm_macro.xacro, kinematics verified against OUR igus_rebel2.urdf by test/check_arm_fk.py)
+         with OUR joint limits and OUR arm meshes (package://igus_rebel_description/meshes/rebel_d00617809/...);
+       * tooling: compal_robot's XEG-32 gripper + virtual knife TCP are DROPPED on both arms; our v3_r_1269 tooling (SMC LEHF20K2-48 gripper, fingers,
+         knife clamp/post/handpiece, Gemini 305 wrist camera, USB knife camera, TCP arm_*_knife_tip) is added by urdf/rebel_cell_tool.xacro;
+       * ros2_control: urdf/rebel_dual_arm.ros2_control.xacro, 15 joints (no gripper joints), hardware_protocol mock_hardware|isaac_topic ONLY
+         (there is deliberately no real-hardware option);
+       * robot name rebel_dual_arm, default hardware_protocol mock_hardware, no carton / table in the URDF (they are planning-scene objects,
+         see rebel_dual_arm_stand_moveit_config/config/cell_scene.yaml).
+     Original description of the rig, kept from compal_robot:
+     dual_arm_rig_v2: dual-arm igus ReBeL 6DOF gantry whose frame (stand / lift / slider_left / slider_right) is rebuilt from the drawing
+     Dual_arms_step.10.1_UpdatedNew_20261004_cable_holes_ch_v4_p63ext100.STEP (cable-hole plates Part63 - lengthened 100 mm toward the back - on the
+     sliders, rear floor plate Part60, base plate, ZLW motor). The 4 ch_v4 parts on Part63 are graspable objects and are NOT in this URDF.
+     See ../isaac/ and compal_robot's dual_arm_rig_v2/README.md for the part -> link table and the measured numbers.
+     Slider positions: the URDF joints are at 0 = compal_robot's zero (arm spacing 459.946 mm). OUR chosen arm spacing s = 0.448 m is set by the
+     initial / home joint values slider_left_joint = -0.005973, slider_right_joint = +0.005973 (rebel_dual_arm_stand_moveit_config/config/initial_positions.yaml
+     and the SRDF state `home`), not by a different joint origin. -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="rebel_dual_arm">
+
+  <xacro:arg name="hardware_protocol" default="mock_hardware" /> <!-- mock_hardware | isaac_topic -->
+  <xacro:arg name="include_ros2_control" default="true" />
+  <!-- yaml with an `initial_positions:` map (rebel_dual_arm_stand_moveit_config/config/initial_positions.yaml). Empty = every interface starts at 0. -->
+  <xacro:arg name="initial_positions_file" default="" />
+  <!-- tooling revision: file name in rebel_dual_arm_stand_description/config, or an absolute path (see rebel_cell_tool.xacro) -->
+  <xacro:arg name="tool_config" default="cell_tool_v3_r_1269.yaml" />
+
+  <xacro:include filename="$(find rebel_dual_arm_stand_description)/urdf/rebel_arm_macro.xacro" />
+  <xacro:include filename="$(find rebel_dual_arm_stand_description)/urdf/rebel_cell_tool.xacro" />
+  <xacro:include filename="$(find rebel_dual_arm_stand_description)/urdf/rebel_dual_arm.ros2_control.xacro" />
+
+  <xacro:property name="M_PI" value="3.14159265358979" />
+
+  <!-- ============================== world / stand ============================== -->
+  <link name="world" />
+
+  <joint name="root_joint" type="fixed">
+    <!-- matches USD PhysicsFixedJoint "root_joint": </World/dual_arm_rig> -> stand -->
+    <parent link="world" />
+    <child link="stand" />
+  </joint>
+
+  <!-- Frame meshes (stand/lift/slider_*): tessellated straight from the STEP (1 mm chord) by
+       dual_arm_rig_v2/export_step_meshes.py (re-run it for a new drawing revision). The STL
+       points are WORLD coordinates, so each visual/collision <origin> below is minus that
+       link's world frame position (same convention as v1). The collision STL is one convex
+       hull per CAD solid (holes and slots are filled in, so it is slightly conservative).
+       Inertial blocks are still rough placeholders (same as v1, not computed from the CAD). -->
+  <link name="stand">
+    <inertial>
+      <origin xyz="0 -0.05 0.9" rpy="0 0 0" />
+      <mass value="60.0" />
+      <inertia ixx="20.0" ixy="0" ixz="0" iyy="20.0" iyz="0" izz="5.0" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry><mesh filename="package://rebel_dual_arm_stand_description/meshes/rig_v2/stand_visual.stl" /></geometry>
+      <material name="stand_color"><color rgba="0.62 0.64 0.7 1" /></material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry><mesh filename="package://rebel_dual_arm_stand_description/meshes/rig_v2/stand_collision.stl" /></geometry>
+    </collision>
+  </link>
+
+  <!-- ============================== gemini336L camera (fixed to stand) ============================== -->
+  <!-- USD: stand/camera_riser + stand/camera_boom are simple mounting-bracket boxes;
+       stand/gemini336L_camera_link is the housing (translate 0 -0.113 1.79, tilted -17.6 deg
+       about X - "俯角傾斜 17.6°" in dual_arm_rig_README.md). gemini336L_depth sits at that
+       housing's own origin (no extra USD xformOp); gemini336L_rgb sits at the SAME point
+       (translate 0 0 0) with its own rotation (rotateYXZ -2.55197 0.12604105 -179.59746 deg)
+       - both converted here from the exact USD numbers (quatf/rotateYXZ -> URDF rpy),
+       verified by reconstructing the rotation matrix numerically.
+       NOT verified: whether Isaac Sim's ROS2 Camera Helper applies its own additional fixed
+       axis-convention offset on top of the USD Camera prim's own orientation when it publishes
+       the optical-frame TF/image headers - check against the running sim before trusting pixel
+       geometry for anything safety-critical. -->
+  <link name="camera_riser">
+    <visual>
+      <origin xyz="0 -0.045 1.7825" rpy="0 0 0" />
+      <geometry><box size="0.09 0.07 0.055" /></geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 -0.045 1.7825" rpy="0 0 0" />
+      <geometry><box size="0.09 0.07 0.055" /></geometry>
+    </collision>
+  </link>
+  <joint name="camera_riser_joint" type="fixed">
+    <parent link="stand" />
+    <child link="camera_riser" />
+  </joint>
+
+  <link name="camera_boom">
+    <visual>
+      <origin xyz="0 -0.068 1.79" rpy="0 0 0" />
+      <geometry><box size="0.05 0.05 0.03" /></geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 -0.068 1.79" rpy="0 0 0" />
+      <geometry><box size="0.05 0.05 0.03" /></geometry>
+    </collision>
+  </link>
+  <joint name="camera_boom_joint" type="fixed">
+    <parent link="stand" />
+    <child link="camera_boom" />
+  </joint>
+
+  <link name="gemini336L_camera_link">
+    <visual>
+      <geometry><box size="0.124 0.029 0.0277" /></geometry>
+      <material name="gemini336L_body"><color rgba="0.12 0.12 0.13 1" /></material>
+    </visual>
+    <collision>
+      <geometry><box size="0.124 0.029 0.0277" /></geometry>
+    </collision>
+  </link>
+  <joint name="gemini336L_camera_joint" type="fixed">
+    <!-- USD Xform "gemini336L_camera_link": translate (0, -0.113, 1.79),
+         orient quatf (0.9882284, -0.15298584, 0, 0) == -17.6 deg about local X -->
+    <parent link="stand" />
+    <child link="gemini336L_camera_link" />
+    <origin xyz="0 -0.113 1.79" rpy="-0.30717795 0 0" />
+  </joint>
+
+  <link name="gemini336L_depth_optical_frame" />
+  <joint name="gemini336L_depth_optical_joint" type="fixed">
+    <!-- Depth is registered to RGB, like the real driver with depth_registration:=true
+         align_target_stream:=COLOR (what box_perception assumes: it reads depth pixels with the
+         RGB camera_info). Since 2026-09-27 USD Camera "gemini336L_depth" copies gemini336L_rgb's
+         pose (translate 0, rotateYXZ (-2.55197, 0.12604105, -179.59746)) and intrinsics
+         (focalLength 16.78527, apertures 36 x 22.643618), so this frame is identical to
+         gemini336L_rgb_optical_frame below; see that joint for the derivation. Before that the
+         depth camera had no rotation of its own (rpy "pi 0 0" here) and was upside down and
+         ~2.6 deg off relative to RGB. -->
+    <parent link="gemini336L_camera_link" />
+    <child link="gemini336L_depth_optical_frame" />
+    <origin xyz="0 0 0" rpy="3.0970523 0.0021976 -3.1346650" />
+  </joint>
+
+  <link name="gemini336L_rgb_optical_frame" />
+  <joint name="gemini336L_rgb_optical_joint" type="fixed">
+    <!-- USD Camera "gemini336L_rgb" (dual_arm_rig.usda as of 2026-09-23): translate (0, 0, 0)
+         - co-located with the depth camera - and rotateYXZ (-2.55197, 0.12604105, -179.59746)
+         deg. USD stores 3-axis rotate values as (rotX, rotY, rotZ) whatever the op's order
+         suffix; "YXZ" means Y applied first, so
+         M_cam = Rz(-179.59746) * Rx(-2.55197) * Ry(0.12604105). Then the same USD-camera ->
+         ROS-optical Rx(pi) as any USD camera: M = M_cam * Rx(pi), standard ZYX extraction
+         (rebuilt with numpy: max element error 5e-8). The ~180 deg roll puts the image top at the
+         far side of the table (-Y world), i.e. the natural view. FOV 94 x 68 deg, focalLength
+         16.78527mm. The depth camera now uses this same pose/intrinsics (see above). -->
+    <parent link="gemini336L_camera_link" />
+    <child link="gemini336L_rgb_optical_frame" />
+    <origin xyz="0 0 0" rpy="3.0970523 0.0021976 -3.1346650" />
+  </joint>
+
+  <!-- ============================== lift (prismatic, Z) ============================== -->
+  <link name="lift">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <mass value="18.0" />
+      <inertia ixx="0.3" ixy="0" ixz="0" iyy="0.3" iyz="0" izz="0.3" />
+    </inertial>
+    <!-- link frame = lift_joint world point (0, -0.0415, 0.889) -->
+    <visual>
+      <origin xyz="0 0.0415 -0.889" rpy="0 0 0" />
+      <geometry><mesh filename="package://rebel_dual_arm_stand_description/meshes/rig_v2/lift_visual.stl" /></geometry>
+      <material name="lift_color"><color rgba="0.25 0.25 0.27 1" /></material>
+    </visual>
+    <collision>
+      <origin xyz="0 0.0415 -0.889" rpy="0 0 0" />
+      <geometry><mesh filename="package://rebel_dual_arm_stand_description/meshes/rig_v2/lift_collision.stl" /></geometry>
+    </collision>
+  </link>
+
+  <joint name="lift_joint" type="prismatic">
+    <!-- USD: localPos0 = (0, -0.0415, 0.889), axis Z, limit -0.6235 .. 0.6265 -->
+    <origin xyz="0 -0.0415 0.889" rpy="0 0 0" />
+    <parent link="stand" />
+    <child link="lift" />
+    <axis xyz="0 0 1" />
+    <limit lower="-0.6235" upper="0.6265" effort="3000" velocity="0.3" />
+    <dynamics damping="0.0" friction="0.0" />
+  </joint>
+  <!-- Safety note from dual_arm_rig_README.md: with the table at its original y = -0.463, going below
+       lift = -0.215 m drives the `stand` support arm into the table (since 2026-10-04 the table sits
+       at y = -0.663 and the limit is ~ -0.374, set by the sliders; see scene_config.lift_lower_limit). That is an environment-specific
+       soft limit, not a mechanical one, so it is NOT baked in here - set it instead as a
+       tighter min_position for lift_joint in joint_limits.yaml if you use that same table. -->
+
+  <!-- ============================== sliders (prismatic, X) ============================== -->
+  <link name="slider_left">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <mass value="5.0" />
+      <inertia ixx="0.02" ixy="0" ixz="0" iyy="0.02" iyz="0" izz="0.02" />
+    </inertial>
+    <!-- link frame = slider_left_joint world point (0.2282, -0.1943, 1.0875) -->
+    <visual>
+      <origin xyz="-0.2282 0.1943 -1.0875" rpy="0 0 0" />
+      <geometry><mesh filename="package://rebel_dual_arm_stand_description/meshes/rig_v2/slider_left_visual.stl" /></geometry>
+      <material name="slider_left_color"><color rgba="0.55 0.57 0.62 1" /></material>
+    </visual>
+    <collision>
+      <origin xyz="-0.2282 0.1943 -1.0875" rpy="0 0 0" />
+      <geometry><mesh filename="package://rebel_dual_arm_stand_description/meshes/rig_v2/slider_left_collision.stl" /></geometry>
+    </collision>
+  </link>
+
+  <joint name="slider_left_joint" type="prismatic">
+    <!-- USD: localPos0 = (0.2282, -0.1943, 1.0875) (world), axis X, limit -0.26 .. 0
+       NOTE: in the USD every rig body (stand/lift/slider_*) keeps its frame at the world
+       origin, so USD localPos0 values are WORLD coordinates. URDF child frames sit at the
+       joint origin, so the value below is this joint's world point minus the parent joint's.
+       (0.2282, -0.1943, 1.0875) - lift_joint (0, -0.0415, 0.889) -->
+    <origin xyz="0.2282 -0.1528 0.1985" rpy="0 0 0" />
+    <parent link="lift" />
+    <child link="slider_left" />
+    <axis xyz="1 0 0" />
+    <limit lower="-0.26" upper="0" effort="1500" velocity="0.3" />
+    <dynamics damping="0.0" friction="0.0" />
+  </joint>
+
+  <link name="slider_right">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <mass value="5.0" />
+      <inertia ixx="0.02" ixy="0" ixz="0" iyy="0.02" iyz="0" izz="0.02" />
+    </inertial>
+    <!-- link frame = slider_right_joint world point (-0.2317, -0.1943, 1.0875) -->
+    <visual>
+      <origin xyz="0.2317 0.1943 -1.0875" rpy="0 0 0" />
+      <geometry><mesh filename="package://rebel_dual_arm_stand_description/meshes/rig_v2/slider_right_visual.stl" /></geometry>
+      <material name="slider_right_color"><color rgba="0.55 0.57 0.62 1" /></material>
+    </visual>
+    <collision>
+      <origin xyz="0.2317 0.1943 -1.0875" rpy="0 0 0" />
+      <geometry><mesh filename="package://rebel_dual_arm_stand_description/meshes/rig_v2/slider_right_collision.stl" /></geometry>
+    </collision>
+  </link>
+
+  <joint name="slider_right_joint" type="prismatic">
+    <!-- USD: localPos0 = (-0.2317, -0.1943, 1.0875) (world), axis X, limit 0 .. 0.26
+       Relative to lift_joint (0, -0.0415, 0.889); see slider_left_joint note. -->
+    <origin xyz="-0.2317 -0.1528 0.1985" rpy="0 0 0" />
+    <parent link="lift" />
+    <child link="slider_right" />
+    <axis xyz="1 0 0" />
+    <limit lower="0" upper="0.26" effort="1500" velocity="0.3" />
+    <dynamics damping="0.0" friction="0.0" />
+  </joint>
+
+  <!-- Two sliders share one 660 mm rail with only 260 mm combined clearance (README):
+       driving both to their inward limits simultaneously will make slider_left and
+       slider_right collide with each other - not represented by joint limits alone.
+       v2 only: the cable-hole plate Part63 rides on each slider and hits the stand's centre
+       triangle support after ~0.095 m of inward travel (left -0.095 / right +0.100, measured
+       with MoveIt collision checking). Left out of <limit> like v1's collision-only limits;
+       MoveIt blocks it (stand-slider_* collisions are not disabled in the SRDF). See
+       dual_arm_rig_v2/README.md. -->
+
+  <!-- ============================== arm_left (= arm1 of tools/cell_planner_check) ============================== -->
+  <!-- USD "arm_left_mount": localPos0 = (0.228209, -0.179297, 1.1093) (world), localRot0 = -90 deg about +Z (arm base x -> world -Y).
+       Relative to slider_left_joint (0.2282, -0.1943, 1.0875); see slider_left_joint note. -->
+  <xacro:rebel_arm_chain
+      prefix="arm_left_"
+      parent_link="slider_left"
+      xyz="0.000009 0.015003 0.0218"
+      rpy="0 0 ${-M_PI/2}" />
+  <xacro:rebel_cell_tool prefix="arm_left_" parent="arm_left_link6" />
+
+  <!-- ============================== arm_right (= arm2 of tools/cell_planner_check) ============================== -->
+  <!-- USD "arm_right_mount": localPos0 = (-0.231737, -0.179297, 1.1093) (world), same -90 deg about Z.
+       Relative to slider_right_joint (-0.2317, -0.1943, 1.0875). -->
+  <xacro:rebel_arm_chain
+      prefix="arm_right_"
+      parent_link="slider_right"
+      xyz="-0.000037 0.015003 0.0218"
+      rpy="0 0 ${-M_PI/2}" />
+  <xacro:rebel_cell_tool prefix="arm_right_" parent="arm_right_link6" />
+
+  <!-- ============================== ros2_control ============================== -->
+  <xacro:if value="$(arg include_ros2_control)">
+    <xacro:rebel_dual_arm_ros2_control hardware_protocol="$(arg hardware_protocol)"
+                                       initial_positions_file="$(arg initial_positions_file)" />
+  </xacro:if>
+
+</robot>

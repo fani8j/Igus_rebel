@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>dual_cut_bringup</name>
+  <version>0.1.0</version>
+  <description>
+    Per-arm, plan-only copies of the single-arm cutting planner (move_group + box_h_cut_executor + camera pole
+    + joint-state relay) in namespaces /arm_left and /arm_right of the dual cell, the one-command dual system
+    launch (driver + dual move_group + per-arm planners + coordinator) and the dual_arm_recover.py operator CLI.
+  </description>
+  <maintainer email="hucenrotiacompal@gmail.com">fani8j</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>igus_rebel_moveit_config</exec_depend>
+  <exec_depend>igus_rebel_description</exec_depend>
+  <exec_depend>rebel_dual_table_description</exec_depend>
+  <exec_depend>rebel_dual_table_moveit_config</exec_depend>
+  <exec_depend>moveit_ros_move_group</exec_depend>
+  <exec_depend>launch_param_builder</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>xacro</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <exec_depend>controller_manager_msgs</exec_depend>
+  <exec_depend>lifecycle_msgs</exec_depend>
+  <exec_depend>rcl_interfaces</exec_depend>
+  <exec_depend>dual_cut_msgs</exec_depend>
+  <exec_depend>dual_cut_coordinator</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+
+  <test_depend>ament_cmake_pytest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

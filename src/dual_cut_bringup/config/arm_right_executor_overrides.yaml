@@ -1,0 +1,58 @@
+# Per-arm overrides for /arm_right/box_h_cut_executor (see arm_left_executor_overrides.yaml for the mechanism).
+#
+# The perception snapshot is written in the LEFT base frame (frame_id "base_link" = world). The right executor
+# brings it into its own planning frame with a FIXED TRANSFORM (snapshot_frame_mode) and relabels the carton
+# corners by a 180 degree rotation, so that the carton's RIGHT face is the executor's "left" cut and every left-only
+# feature (lateral entry, left_parallel, varying orientation, corner extension) applies to it unchanged:
+#
+#   cut_pattern left_only         = the carton's right face (travels front -> back, lean as on the left arm)
+#   cut_pattern middle_only       + middle_seam_stop center (set per phase by the coordinator) = the right half of
+#                                   the top seam, right end -> centre + overlap (no middle_cut_reverse_travel)
+#
+# Everything below is READ-ONLY at run time (edit and restart) unless it says "planning parameter". The executor
+# refuses to start with fixed_transform or a relabel unless plan_export_only is true; it then advertises only
+# plan_h_cut, plan_h_cut_from_state, get_planned_solution, clear_plan and the diagnostics (no execute, side-tape,
+# staged, T-cut or cut-debug service), and refuses taught corrections, the side-tape seed and pattern h with
+# approach_joint_degrees.
+#
+# snapshot_planning_base_xyz / _rpy are NOT in this file on purpose: per_arm_planning.launch.py injects them from
+# arm_right_base of dual_arm_calibration.yaml (the single source, also used by the dual driver and the dual
+# move_group). Without that launch the fixed transform would silently be the identity: always start the right
+# executor through the launch.
+#
+# ---- right reach settings (mock, 2026-10-15, evidence scan_results/dual_arm_stack_20261015/right_reach/) ----------
+# RIGHT FACE (left_only): the left arm's proven mode (left_parallel varying orientation + extension to the corners)
+# is kept, with ONE change: left_cut_corner_margin_m 0.005 -> 0.040 (planning parameter). With 5 mm the search over the
+# 269 mm corner-to-corner span is on the edge for the right arm: it plans in 73-90 s against the 90 s search
+# timeout (09:20 failed at 90.7 s once), because every profile moves joint3 more than 1.0 rad (aggregate
+# contact-stroke limit). With 40 mm the span is ~190 mm: 5/5 repeats on both captures in 13-15 s, deterministic, flat
+# blade (theta_p 0, blade-on-line deviation 0 deg at yaw 0), cut spans t = 1.21 .. -0.21 of the face midpoint line
+# (whole face and ~20 % beyond each end), tip within 0.006 mm of the world line, sharp edge leading (blade runs
+# against the travel; tip within 0.04 mm of the world line over the whole sweep). Yaw sweep -30..+45 deg: plans for 31/32
+# captures x yaw in 2.7-16 s (07:49 at +30 deg: collision gate), blade angles <= 33 deg on the line and <= 42 deg off
+# flat at the +45 end, every joint >= 0.088 rad from its limit.
+# Alternatives measured: 20 mm 35-44 s (5 deg tilt of the blade), 60 mm 12 s (shorter span), no extension 10 s
+# (face midpoint to midpoint only), fixed left_parallel 0.4 s (no extension, margin to the wrist gate 2.8 rad).
+#
+# RIGHT TOP HALF (middle_only + middle_seam_stop center): the left arm's setting middle_cut_tilt_deg -15 is kept. It
+# plans for carton yaw -30..0 deg only (0 deg: transit joint6 = -3.092 rad, 0.015 rad from the +-3.1067 joint limit
+# and 0.050 rad under the pi wrist gate; at -5 deg 0.14 / 0.17 rad, at -10 deg 0.28 / 0.31 rad; the gate itself never rejected a plan, the limit is the joint6 range: from
+# +5 deg on the IK branch or the stroke runs out of joint6 range). Tilts -5..+5 add 30..35 deg (07:49/09:20) but
+# no tilt plans +5..+25 deg; tilts +10..+20 cut the joint6 travel to 0.1-0.9 rad but lean the blade the other way
+# (operator decision, NOT applied).
+box_h_cut_executor:
+  ros__parameters:
+    plan_export_only: true
+    snapshot_frame_mode: fixed_transform
+    snapshot_frame_id: base_link
+    snapshot_relabel: rotate_180
+    cut_debug_correction_enabled: false
+    side_tape_handoff_enabled: false
+    # A bare plan_h_cut plans only the carton's right face. The coordinator switches cut_pattern /
+    # middle_seam_stop per phase.
+    cut_pattern: left_only
+    # Right face: see above (planning parameter).
+    left_cut_corner_margin_m: 0.04
+    # Top half: stroke ends this far past the seam centre (planning parameter; has no effect unless
+    # middle_seam_stop is center). 7.5 mm per arm = 15 mm total overlap.
+    middle_seam_center_overlap_m: 0.0075

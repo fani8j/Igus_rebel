@@ -1,0 +1,87 @@
+# Calibration targets, one per arm.  Lengths in metres.
+# MEASURE the printed square/marker with calipers and enter the measured values.
+# The two arms MUST use disjoint marker ids (checked at load time).
+# Alternative: 4x4 ChArUco, 25 mm squares (100 mm board).  Needs the camera <= ~0.9 m away and
+# a target kept close to face-on; see scan_results/dual_arm_calibration_20261006/README.md.
+arms:
+  left:
+    type: charuco
+    dictionary: DICT_4X4_50
+    squares_x: 4
+    squares_y: 4
+    square_length: 0.025
+    marker_length: 0.018
+    first_marker_id: 0      # 8 markers: ids 0..7
+  right:
+    type: charuco
+    dictionary: DICT_4X4_50
+    squares_x: 4
+    squares_y: 4
+    square_length: 0.025
+    marker_length: 0.018
+    first_marker_id: 20     # 8 markers: ids 20..27
+
+# Fixed table board (loop closure between the two arms, see README "Table board and touches").
+# Lie it FLAT on the work area where both arms and the camera can reach/see it, on a rigid flat plate.
+# Own marker ids (40..49), disjoint from both arm boards (checked at load time).  Prints on A4 landscape (200 mm board).
+# touch_points: the knife tip (TCP) is put on the printed crosshair; "corner: [i, j]" is the inner
+# chessboard corner (i = 1..squares_x-1 from the left, j = 1..squares_y-1 from the top) in the board
+# frame (origin = board centre, x right, y down as read); the touched coordinate is that corner.
+table_board:
+  type: charuco
+  dictionary: DICT_4X4_50
+  squares_x: 5
+  squares_y: 4
+  square_length: 0.040
+  marker_length: 0.030
+  first_marker_id: 40      # 10 markers: ids 40..49
+  paper: A4               # 200 mm board: the generator uses the landscape page
+  touch_points:
+    - {id: 1, corner: [1, 1]}
+    - {id: 2, corner: [4, 1]}
+    - {id: 3, corner: [4, 3]}
+    - {id: 4, corner: [1, 3]}
+
+# Free crosshair stickers (not printed on the table board; positions are NOT known in any frame).  Stick them on the
+# table / on a block anywhere BOTH arms can reach; touch them with capture_touch (touch_point_id = the id here).
+#   fit_points:   >= 3-4 stickers spread +-150 mm around the board (used in the touch-only Kabsch base with the board
+#                 crosshairs; widens the lever arm of the base rotation).  Never in the joint solve.
+#   check_points: >= 2 stickers, NEVER used in any fit: the held-out check (TRE) of the trust gate.  Put one on a
+#                 ~40 mm block (>= 30 mm off the table plane) and one >= 150 mm from the board centre.
+# Ids must be positive, unique and disjoint from the table board's touch point ids (1..4).
+touch_stickers:
+  fit_points: [101, 102, 103, 104]
+  check_points: [111, 112]
+
+# Hover tiles (approach assist, optional): three small ArUco tiles A, B, C printed on ONE A4 page
+# (`ros2 run rebel_dual_arm_calibration generate_tiles`), cut out and glued on 100 x 100 mm plates.  Each tile has its own
+# DICT_4X4_50 marker (ids 13, 14, 15; 50 mm designed) placed OFF-centre and 3 touch crosshairs at irregular positions, spread
+# as far apart as the tile allows.  The UI finds the crosshairs from the marker pose and hovers a TCP over them.
+# MEASURE the printed marker edge in x and y with calipers (marker_length / marker_length_y: ONE value for the whole print);
+# the crosshair positions below are DESIGN millimetres in the MARKER frame (origin = marker centre, x right, y towards the tile's
+# TOP as printed) and are scaled by marker_length / design_marker_length (x) and marker_length_y / design_marker_length (y)
+# at load time.  tile_center = the tile centre in the same frame (where the marker sits on the tile).
+# Rules (checked at load time): marker ids unique and disjoint from every arm / table marker id; point ids unique across the
+# tiles and disjoint from the table touch_points ids (1..4; they may repeat the touch_stickers ids: the tiles replace
+# the sticker paper); every crosshair on the tile >= 6 mm from its edge, >= 8 mm from the marker edge, >= 15 mm from the
+# other crosshairs.  Placement: A and B spread around the table board where both arms reach, C on a ~40 mm block
+# >= 150 mm from the table-board centre.
+hover_tiles:
+  dictionary: DICT_4X4_50
+  tile_size: 0.100              # m, printed tile edge (cut line)
+  design_marker_length: 0.050   # m, designed marker edge (do not change; the points below refer to it)
+  marker_length: 0.050          # m, x edge MEASURED from the printed scale bar / marker
+  marker_length_y: 0.050        # m, y edge MEASURED
+  tiles:
+    - marker_id: 13
+      label: A
+      tile_center: [20, 20]     # marker in the lower-left of the tile
+      points: {101: [59, -21], 102: [-17, 59], 103: [62, 52]}
+    - marker_id: 14
+      label: B
+      tile_center: [-18, -21]   # marker in the upper-right of the tile
+      points: {104: [-60, 19], 105: [-52, -63], 106: [21, -58]}
+    - marker_id: 15
+      label: C
+      tile_center: [-20, 20]    # marker in the lower-right of the tile
+      points: {111: [-60, -20], 112: [-44, 60], 113: [21, 48]}

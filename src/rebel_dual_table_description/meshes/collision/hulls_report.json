@@ -1,0 +1,342 @@
+{
+ "base_link": {
+  "bounds_mm": [
+   [
+    -90.73,
+    -91.39,
+    -0.33
+   ],
+   [
+    90.73,
+    91.39,
+    103.22
+   ]
+  ],
+  "exact_single_hull_volume_cm3": 1749.2172597790661,
+  "faces": [
+   216
+  ],
+  "files": [
+   "base_link_hull.stl"
+  ],
+  "frame": "link frame, visual origin baked in; URDF collision origin is identity",
+  "sum_piece_exact_hull_volume_cm3": 1749.2172597790666,
+  "verify": {
+   "max_outside_mm": -0.1999970306610921,
+   "n_points_outside_gt_tol": 0,
+   "points_checked": 415940,
+   "watertight_convex": true
+  },
+  "volume_cm3": 1827.645275293507
+ },
+ "link1": {
+  "bounds_mm": [
+   [
+    -52.73,
+    -59.85,
+    6.68
+   ],
+   [
+    52.65,
+    52.72,
+    158.68
+   ]
+  ],
+  "exact_single_hull_volume_cm3": 885.1178903538635,
+  "faces": [
+   224,
+   208
+  ],
+  "files": [
+   "link1_hull_1.stl",
+   "link1_hull_2.stl"
+  ],
+  "frame": "link frame, visual origin baked in; URDF collision origin is identity",
+  "sum_piece_exact_hull_volume_cm3": 562.7808339558749,
+  "verify": {
+   "max_outside_mm": -0.1947007110018953,
+   "n_points_outside_gt_tol": 0,
+   "points_checked": 406962,
+   "watertight_convex": true
+  },
+  "volume_cm3": 602.3951679439085
+ },
+ "link2": {
+  "bounds_mm": [
+   [
+    -52.81,
+    -86.35,
+    -52.94
+   ],
+   [
+    112.64,
+    33.35,
+    294.18
+   ]
+  ],
+  "exact_single_hull_volume_cm3": 2905.4675397004657,
+  "faces": [
+   210,
+   158,
+   208
+  ],
+  "files": [
+   "link2_hull_1.stl",
+   "link2_hull_2.stl",
+   "link2_hull_3.stl"
+  ],
+  "frame": "link frame, visual origin baked in; URDF collision origin is identity",
+  "sum_piece_exact_hull_volume_cm3": 1953.577144868567,
+  "verify": {
+   "max_outside_mm": -0.15708138193840093,
+   "n_points_outside_gt_tol": 0,
+   "points_checked": 425227,
+   "watertight_convex": true
+  },
+  "volume_cm3": 2092.2609889819655
+ },
+ "link3": {
+  "bounds_mm": [
+   [
+    -52.73,
+    -52.72,
+    -52.68
+   ],
+   [
+    52.65,
+    59.85,
+    99.31
+   ]
+  ],
+  "exact_single_hull_volume_cm3": 885.1761342709428,
+  "faces": [
+   218,
+   226
+  ],
+  "files": [
+   "link3_hull_1.stl",
+   "link3_hull_2.stl"
+  ],
+  "frame": "link frame, visual origin baked in; URDF collision origin is identity",
+  "sum_piece_exact_hull_volume_cm3": 563.5508998322341,
+  "verify": {
+   "max_outside_mm": -0.19088660015582903,
+   "n_points_outside_gt_tol": 0,
+   "points_checked": 406870,
+   "watertight_convex": true
+  },
+  "volume_cm3": 601.7034272382933
+ },
+ "link4": {
+  "bounds_mm": [
+   [
+    -52.7,
+    -54.18,
+    -10.21
+   ],
+   [
+    52.55,
+    52.76,
+    182.07
+   ]
+  ],
+  "exact_single_hull_volume_cm3": 1157.0488577693402,
+  "faces": [
+   244,
+   214
+  ],
+  "files": [
+   "link4_hull_1.stl",
+   "link4_hull_2.stl"
+  ],
+  "frame": "link frame, visual origin baked in; URDF collision origin is identity",
+  "sum_piece_exact_hull_volume_cm3": 968.8066261285004,
+  "verify": {
+   "max_outside_mm": -0.16970733043002173,
+   "n_points_outside_gt_tol": 0,
+   "points_checked": 419363,
+   "watertight_convex": true
+  },
+  "volume_cm3": 1011.6429133398392
+ },
+ "link6": {
+  "bounds_mm": [
+   [
+    -40.17,
+    -40.43,
+    -18.5
+   ],
+   [
+    40.17,
+    40.2,
+    52.4
+   ]
+  ],
+  "exact_single_hull_volume_cm3": 345.1125432897773,
+  "faces": [
+   182
+  ],
+  "files": [
+   "link6_hull.stl"
+  ],
+  "frame": "link frame, visual origin baked in; URDF collision origin is identity",
+  "sum_piece_exact_hull_volume_cm3": 345.1125432897773,
+  "verify": {
+   "max_outside_mm": -0.1921203324356524,
+   "n_points_outside_gt_tol": 0,
+   "points_checked": 425102,
+   "watertight_convex": true
+  },
+  "volume_cm3": 369.44667611417515
+ },
+ "motor1": {
+  "bounds_mm": [
+   [
+    -52.7,
+    -52.62,
+    -46.4
+   ],
+   [
+    52.7,
+    53.18,
+    26.99
+   ]
+  ],
+  "exact_single_hull_volume_cm3": 563.8120904415227,
+  "faces": [
+   192
+  ],
+  "files": [
+   "motor1_hull.stl"
+  ],
+  "frame": "link frame, visual origin baked in; URDF collision origin is identity",
+  "sum_piece_exact_hull_volume_cm3": 563.8120904415222,
+  "verify": {
+   "max_outside_mm": -0.19856919133805911,
+   "n_points_outside_gt_tol": 0,
+   "points_checked": 415764,
+   "watertight_convex": true
+  },
+  "volume_cm3": 612.3591300031962
+ },
+ "motor2": {
+  "bounds_mm": [
+   [
+    -52.7,
+    -26.99,
+    -52.62
+   ],
+   [
+    52.7,
+    46.4,
+    53.18
+   ]
+  ],
+  "exact_single_hull_volume_cm3": 563.8016735098187,
+  "faces": [
+   202
+  ],
+  "files": [
+   "motor2_hull.stl"
+  ],
+  "frame": "link frame, visual origin baked in; URDF collision origin is identity",
+  "sum_piece_exact_hull_volume_cm3": 563.8016735098188,
+  "verify": {
+   "max_outside_mm": -0.19698480641695826,
+   "n_points_outside_gt_tol": 0,
+   "points_checked": 415735,
+   "watertight_convex": true
+  },
+  "volume_cm3": 609.1315175543464
+ },
+ "motor3": {
+  "bounds_mm": [
+   [
+    -52.7,
+    -26.99,
+    -53.03
+   ],
+   [
+    52.7,
+    65.38,
+    53.03
+   ]
+  ],
+  "exact_single_hull_volume_cm3": 707.1851385152701,
+  "faces": [
+   202
+  ],
+  "files": [
+   "motor3_hull.stl"
+  ],
+  "frame": "link frame, visual origin baked in; URDF collision origin is identity",
+  "sum_piece_exact_hull_volume_cm3": 707.1851385152695,
+  "verify": {
+   "max_outside_mm": -0.19467700844753855,
+   "n_points_outside_gt_tol": 0,
+   "points_checked": 417743,
+   "watertight_convex": true
+  },
+  "volume_cm3": 763.9005672013272
+ },
+ "motor4": {
+  "bounds_mm": [
+   [
+    -52.7,
+    -53.18,
+    -26.99
+   ],
+   [
+    52.7,
+    52.62,
+    46.4
+   ]
+  ],
+  "exact_single_hull_volume_cm3": 563.8075721356214,
+  "faces": [
+   192
+  ],
+  "files": [
+   "motor4_hull.stl"
+  ],
+  "frame": "link frame, visual origin baked in; URDF collision origin is identity",
+  "sum_piece_exact_hull_volume_cm3": 563.8075721356217,
+  "verify": {
+   "max_outside_mm": -0.1985700509952136,
+   "n_points_outside_gt_tol": 0,
+   "points_checked": 415725,
+   "watertight_convex": true
+  },
+  "volume_cm3": 612.3591873413593
+ },
+ "motor5": {
+  "bounds_mm": [
+   [
+    -40.45,
+    -18.5,
+    -40.18
+   ],
+   [
+    40.18,
+    51.4,
+    40.14
+   ]
+  ],
+  "exact_single_hull_volume_cm3": 335.1824288670469,
+  "faces": [
+   198
+  ],
+  "files": [
+   "motor5_hull.stl"
+  ],
+  "frame": "link frame, visual origin baked in; URDF collision origin is identity",
+  "sum_piece_exact_hull_volume_cm3": 335.182428867047,
+  "verify": {
+   "max_outside_mm": -0.1971930422276294,
+   "n_points_outside_gt_tol": 0,
+   "points_checked": 419984,
+   "watertight_convex": true
+  },
+  "volume_cm3": 362.58520340552235
+ }
+}

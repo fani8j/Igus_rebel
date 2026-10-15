@@ -1,0 +1,11 @@
+# DERIVED FROM compal_robot dual_arm_kinematics.yaml @ bb76327 (MIT, see ../NOTICE): one KDL solver per 6-DOF arm group; `gantry` and `dual_arm`
+# have no IK solver.  Timeout = our 0.25 s (igus_rebel_moveit_config/config/kinematics.yaml; compal_robot used 5 s).
+# kinematics_solver_attempts is ignored since MoveIt 2 Humble and search_resolution only affects redundant joints, so neither is set.
+arm_left:
+  kinematics_solver: kdl_kinematics_plugin/KDLKinematicsPlugin
+  kinematics_solver_timeout: 0.25
+  position_only_ik: false
+arm_right:
+  kinematics_solver: kdl_kinematics_plugin/KDLKinematicsPlugin
+  kinematics_solver_timeout: 0.25
+  position_only_ik: false

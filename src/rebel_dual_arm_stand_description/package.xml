@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>rebel_dual_arm_stand_description</name>
+  <version>0.1.0</version>
+  <description>
+    Dual-arm igus ReBeL gantry rig (stand, lift, two sliders, head camera) with our SMC-gripper / knife / two-camera cell tooling.
+    URDF/xacro, meshes, Isaac Sim USD + bridge scripts. Mock / Isaac-topic only; no real-hardware path.
+    Rig frame and Isaac assets derived from compal_robot (MIT), see NOTICE.
+  </description>
+  <maintainer email="hucenrotiacompal@gmail.com">farhan</maintainer>
+  <license>MIT (compal_robot-derived files, see NOTICE); other files: project default (TODO)</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>xacro</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <!-- the arm meshes are referenced as package://igus_rebel_description/meshes/rebel_d00617809/... -->
+  <exec_depend>igus_rebel_description</exec_depend>
+  <exec_depend>topic_based_ros2_control</exec_depend>
+  <exec_depend>hardware_interface</exec_depend>
+
+  <test_depend>ament_cmake_pytest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

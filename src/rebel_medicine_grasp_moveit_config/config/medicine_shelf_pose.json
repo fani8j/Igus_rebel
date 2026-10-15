@@ -1,0 +1,190 @@
+{
+ "schema": "medicine_shelf_pose/v1",
+ "frame": "d200_base_footprint",
+ "note": "W = shelf frame (origin shelf floor at the front edge, centred on the target carton, +X lateral, +Y into the shelf, +Z up); world_T_W = translate xyz, then yaw about +Z. d200_base_footprint = D200 root (floor under the AMR centre, +X forward, Z up). The AMR parks with its front facing the shelf. Source of truth: config/medicine_shelf_scene.yaml.",
+ "W_in_frame": {
+  "xyz": [
+   0.78,
+   0.0,
+   1.05
+  ],
+  "yaw_deg": -90.0
+ },
+ "shelf_floor_top_z_m": 1.05,
+ "shelf_boards_W": {
+  "floor_board": {
+   "centre": [
+    -0.002,
+    0.12525,
+    -0.009
+   ],
+   "size": [
+    0.111,
+    0.2685,
+    0.018
+   ]
+  },
+  "back_board": {
+   "centre": [
+    -0.002,
+    0.2595,
+    0.159
+   ],
+   "size": [
+    0.111,
+    0.018,
+    0.318
+   ]
+  },
+  "side_left": {
+   "centre": [
+    -0.0485,
+    0.12525,
+    0.159
+   ],
+   "size": [
+    0.018,
+    0.2505,
+    0.318
+   ]
+  },
+  "side_right": {
+   "centre": [
+    0.0445,
+    0.12525,
+    0.159
+   ],
+   "size": [
+    0.018,
+    0.2505,
+    0.318
+   ]
+  },
+  "upper_board": {
+   "centre": [
+    -0.002,
+    0.12525,
+    0.309
+   ],
+   "size": [
+    0.111,
+    0.2505,
+    0.018
+   ]
+  }
+ },
+ "shelf_inner_height_m": 0.3,
+ "target_spine_xyz_in_frame": [
+  0.78,
+  0.0,
+  1.1600000000000001
+ ],
+ "plinth": {
+  "centre_xy_w": [
+   0.0,
+   0.16
+  ],
+  "size_xy": [
+   0.3,
+   0.4
+  ],
+  "top_z_w": -0.02,
+  "bottom_z_world": 0.0
+ },
+ "cartons": [
+  {
+   "index": 0,
+   "box_id": 1,
+   "name": "Boston Scientific Agent MONORAIL",
+   "target": false,
+   "centre_x_w_m": -0.0315,
+   "thickness_m": 0.015,
+   "height_m": 0.23,
+   "length_m": 0.25,
+   "centre_y_w_m": 0.125,
+   "centre_z_w_m": 0.115
+  },
+  {
+   "index": 1,
+   "box_id": 2,
+   "name": "iVascular angiolite",
+   "target": false,
+   "centre_x_w_m": -0.016,
+   "thickness_m": 0.016,
+   "height_m": 0.24,
+   "length_m": 0.25,
+   "centre_y_w_m": 0.125,
+   "centre_z_w_m": 0.12
+  },
+  {
+   "index": 2,
+   "box_id": 3,
+   "name": "Terumo Accuforce",
+   "target": true,
+   "centre_x_w_m": 0.0,
+   "thickness_m": 0.016,
+   "height_m": 0.22,
+   "length_m": 0.25,
+   "centre_y_w_m": 0.125,
+   "centre_z_w_m": 0.11
+  },
+  {
+   "index": 3,
+   "box_id": 5,
+   "name": "unknown (photo missing)",
+   "target": false,
+   "centre_x_w_m": 0.014,
+   "thickness_m": 0.012,
+   "height_m": 0.23,
+   "length_m": 0.25,
+   "centre_y_w_m": 0.125,
+   "centre_z_w_m": 0.115
+  },
+  {
+   "index": 4,
+   "box_id": 1,
+   "name": "Boston Scientific Agent MONORAIL",
+   "target": false,
+   "centre_x_w_m": 0.0275,
+   "thickness_m": 0.015,
+   "height_m": 0.23,
+   "length_m": 0.25,
+   "centre_y_w_m": 0.125,
+   "centre_z_w_m": 0.115
+  }
+ ],
+ "target_pull_out_m": 0.0,
+ "handoff_pull_out_m": 0.1,
+ "amr_box_in_frame": {
+  "min": [
+   -0.484,
+   -0.327,
+   0.0
+  ],
+  "max": [
+   0.484,
+   0.327,
+   0.2515
+  ],
+  "note": "d200_base_link collision box (rebel_medicine_grasp.urdf.xacro)"
+ },
+ "amr_clearance_m_packed": {
+  "medicine_shelf": 0.8316,
+  "shelf_plinth": 0.256,
+  "carton_0": 0.8516,
+  "carton_1": 0.8516,
+  "carton_2": 0.8516,
+  "carton_3": 0.8516,
+  "carton_4": 0.8516
+ },
+ "amr_clearance_m_target_pulled_out": {
+  "medicine_shelf": 0.8316,
+  "shelf_plinth": 0.256,
+  "carton_0": 0.8516,
+  "carton_1": 0.8516,
+  "carton_2": 0.8222,
+  "carton_3": 0.8516,
+  "carton_4": 0.8516
+ },
+ "amr_parking": "AMR front faces the shelf (shelf front plane perpendicular to the AMR X axis), shelf centred on the AMR centre line"
+}

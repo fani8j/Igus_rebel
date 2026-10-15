@@ -1,6 +1,6 @@
 """Knife-view camera (Logitech C930e) with a fixed manual focus.
 
-Publishes /knife_camera/image_raw (+ /compressed, /camera_info) via usb_cam.
+Publishes /knife_camera/image_raw/compressed (camera JPEG passthrough) and /camera_info via usb_cam.
 Focus is applied with v4l2-ctl from config/knife_camera_controls.yaml, because
 usb_cam 0.8.1 only knows the pre-kernel-6 control names (see knife_camera.yaml).
 

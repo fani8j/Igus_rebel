@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<!-- Variant-C knife tooling for one arm of the dual-arm test table (no gripper).
+
+     Thin wrapper around knife_c_tool from igus_rebel_description/urdf/knife_c_tool.macro.xacro, the
+     SAME macro the single-arm model (igus_rebel_xeg32_wrapper.urdf.xacro, tool_variant knife_c)
+     uses, so holder, handpiece, wrist camera, collision meshes and the knife-axis tilt are shared.
+     Links created per arm (prefix e.g. "arm_left_"):
+
+       ${prefix}link6 -> ${prefix}igus_tool0 -> ${prefix}knife_c_tcp_point -> ${prefix}xeg32_tool_tip (kinematic TCP)
+       ${prefix}igus_tool0 -> ${prefix}knife_c_holder / ${prefix}knife_c_handpiece / ${prefix}knife_c_wrist_camera
+
+     The TCP POSITION in igus_tool0 is per arm (it is the result of that arm's pivot calibration).
+     tcp_xyz defaults to the value of the single-arm wrapper (left-arm pivot of 2026-10-12, held-out
+     RMS 7.1 mm: a FAILED gate, kept on purpose); the right arm uses the same until it has its own
+     pivot. test/test_dual_table_description.py asserts that the default equals the wrapper's joint.
+
+     BLADE COLLISION: ${prefix}knife_c_blade (box fixed to igus_tool0) comes from the shared macro with
+     blade_collision="true" (opt-in there, always on in the dual model); blade_tcp_xyz is this arm's tcp_xyz, so a
+     per-arm TCP recalibration stays inside the box. Its geometry, frame and margins are documented in
+     knife_c_tool.macro.xacro. -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:include filename="$(find igus_rebel_description)/urdf/knife_c_tool.macro.xacro"/>
+
+  <xacro:macro name="rebel_tool" params="prefix tcp_xyz:='-0.042069 -0.089590 0.104551'">
+    <xacro:knife_c_tool prefix="${prefix}" parent="${prefix}link6" blade_collision="true" blade_tcp_xyz="${tcp_xyz}">
+      <joint name="${prefix}igus_tool0_to_xeg32_tool_tip" type="fixed">
+        <parent link="${prefix}igus_tool0"/>
+        <child link="${prefix}knife_c_tcp_point"/>
+        <origin xyz="${tcp_xyz}" rpy="0 0 0"/>
+      </joint>
+    </xacro:knife_c_tool>
+  </xacro:macro>
+</robot>

@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<robot name="synthetic_dual">
+  <group name="arm_left"><chain base_link="world" tip_link="arm_left_tool"/></group>
+  <disable_collisions link1="arm_left_base_link" link2="arm_left_link1" reason="Adjacent"/>
+  <disable_collisions link1="arm_left_link1" link2="arm_left_link2" reason="Adjacent"/>
+  <disable_collisions link1="arm_left_link2" link2="arm_left_tool" reason="Adjacent"/>
+  <disable_collisions link1="arm_left_link1" link2="arm_left_tool" reason="Adjacent"/>
+  <disable_collisions link1="arm_left_base_link" link2="arm_left_link2" reason="Adjacent"/>
+  <disable_collisions link1="arm_left_base_link" link2="arm_left_tool" reason="Adjacent"/>
+  <disable_collisions link1="table" link2="arm_left_base_link" reason="Adjacent"/>
+  <group name="arm_right"><chain base_link="world" tip_link="arm_right_tool"/></group>
+  <disable_collisions link1="arm_right_base_link" link2="arm_right_link1" reason="Adjacent"/>
+  <disable_collisions link1="arm_right_link1" link2="arm_right_link2" reason="Adjacent"/>
+  <disable_collisions link1="arm_right_link2" link2="arm_right_tool" reason="Adjacent"/>
+  <disable_collisions link1="arm_right_link1" link2="arm_right_tool" reason="Adjacent"/>
+  <disable_collisions link1="arm_right_base_link" link2="arm_right_link2" reason="Adjacent"/>
+  <disable_collisions link1="arm_right_base_link" link2="arm_right_tool" reason="Adjacent"/>
+  <disable_collisions link1="table" link2="arm_right_base_link" reason="Adjacent"/>
+</robot>

@@ -81,8 +81,13 @@ void UsbCam::process_image(const char * src, char * & dest, const int & bytes_us
 {
   // TODO(flynneva): could we skip the copy here somehow?
   // If no conversion required, just copy the image from V4L2 buffer
+  m_image.bytes_used = bytes_used > 0 ? static_cast<size_t>(bytes_used) : 0;
   if (m_image.pixel_format->requires_conversion() == false) {
-    memcpy(dest, src, m_image.size_in_bytes);
+    // Compressed passthrough (raw mjpeg): copy only the bytes actually delivered
+    const bool compressed = m_image.pixel_format->name() == "raw_mjpeg";
+    memcpy(
+      dest, src,
+      usb_cam::utils::bytes_to_copy(compressed, m_image.bytes_used, m_image.size_in_bytes));
   } else {
     m_image.pixel_format->convert(src, dest, bytes_used);
   }

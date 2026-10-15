@@ -1,0 +1,28 @@
+# MOCK ONLY: hidden ground truth of the simulated cell (scripts/mock_scene_camera.py, scripts/mock_pose_sequence.py,
+# scripts/mock_eval_truth.py).  A real calibration never reads this file.  world = arm_left_base_link.
+# Poses: xyz [m], rpy_deg [deg] (URDF fixed-axis rpy).  The nominal seed of the dual cell is arm_right_base
+# xyz [0, -0.4474, 0], rpy 0 (rebel_dual_table_description/config/dual_arm_calibration.yaml); the truth differs from it on
+# purpose (+2 mm x, +3 mm y, 0.4 deg yaw).
+mock_truth:
+  camera:                     # Orbbec Gemini 336 colour, 1920x1080, ~90 deg HFOV, small plumb_bob distortion
+    width: 1920
+    height: 1080
+    fx: 963.4
+    fy: 962.1
+    cx: 957.3
+    cy: 541.6
+    distortion: [-0.0412, 0.0187, -0.0003, 0.0002, 0.0]    # k1 k2 p1 p2 k3
+  camera_link: {xyz: [0.0512, -0.2237, 0.6835], rpy_deg: [0.3, 53.0, 0.4]}   # pose of camera_link in world
+  camera_link_to_optical_xyz: [0.0, -0.0175, 0.0]    # camera_link -> camera_color_optical_frame translation (the
+                                                     # rotation is the standard x-fwd -> z-fwd optical rotation)
+  arm_right_base: {xyz: [0.0020, -0.4444, 0.0010], rpy_deg: [0.03, -0.02, 0.40]}   # pose of arm_right_base_link in world
+  target_mount:               # pose of the target frame (board centre, z into the board) in link6, per arm
+    left:  {xyz: [-0.060, 0.004, 0.080], rpy_deg: [50.4, 0.6, 89.3]}
+    right: {xyz: [0.058, -0.003, 0.074], rpy_deg: [-54.5, -0.5, 90.8]}
+  table_board: {xyz: [0.3000, -0.2237, 0.0040], rpy_deg: [180.2, 0.15, -87.0]}   # pose of the table board frame in world
+  # Free crosshair stickers (world coordinates xyz [m]); the solver never sees these.  fit: four stickers at about +-140 mm
+  # around the table board centre on the table plane (spread for the touch-only Kabsch base); check: one on a 40 mm block
+  # (z = table + 0.040) and one ~215 mm from the board centre (held-out check points).
+  touch_stickers:
+    fit:   {101: [0.16, -0.084, 0.004], 102: [0.44, -0.084, 0.004], 103: [0.16, -0.364, 0.004], 104: [0.44, -0.364, 0.004]}
+    check: {111: [0.43, -0.15, 0.044], 112: [0.12, -0.34, 0.004]}

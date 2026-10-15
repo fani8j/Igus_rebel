@@ -11,7 +11,11 @@
     camera_name: "knife_camera"
     frame_id: "knife_camera_optical_frame"
     camera_info_url: ""   # uncalibrated; the knife tip is a fixed pixel
-    pixel_format: "mjpeg2rgb"
+    # raw_mjpeg: publish the camera's own JPEG on image_raw/compressed (no decode,
+    # no re-encode; 1 % CPU vs 34-43 % for mjpeg2rgb). There is no raw image_raw
+    # topic in this mode; consumers use image_raw/compressed. Needs the vendored
+    # usb_cam passthrough fixes (third_party/usb_cam/VENDORED.md).
+    pixel_format: "raw_mjpeg"
     av_device_format: "YUV422P"
     image_width: 1280
     image_height: 720

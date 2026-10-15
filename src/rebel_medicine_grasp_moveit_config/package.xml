@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>rebel_medicine_grasp_moveit_config</name>
+  <version>0.1.0</version>
+  <description>
+    MoveIt - medicine grasp: MoveIt 2 (Humble) configuration, ros2_control config and plan-only launch for shelf picking of medical cartons with the dual-arm
+    igus ReBeL rig of rebel_medicine_grasp_description (left: suction tool v5, right: SMC LEHF20K2-48 gripper). No cutting tooling.
+    Mock hardware / Isaac Sim topics only; no real-hardware path. Partly derived from compal_robot (MIT), see NOTICE.
+  </description>
+  <maintainer email="hucenrotiacompal@gmail.com">farhan</maintainer>
+  <license>MIT (compal_robot-derived files, see NOTICE); other files: project default (TODO)</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>rebel_medicine_grasp_description</exec_depend>
+  <exec_depend>moveit_ros_move_group</exec_depend>
+  <exec_depend>moveit_kinematics</exec_depend>
+  <exec_depend>moveit_planners_ompl</exec_depend>
+  <exec_depend>pilz_industrial_motion_planner</exec_depend>
+  <exec_depend>moveit_simple_controller_manager</exec_depend>
+  <exec_depend>moveit_ros_visualization</exec_depend>
+  <exec_depend>moveit_msgs</exec_depend>
+  <exec_depend>controller_manager</exec_depend>
+  <exec_depend>joint_state_broadcaster</exec_depend>
+  <exec_depend>joint_trajectory_controller</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>launch_param_builder</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+  <exec_depend>xacro</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+
+  <test_depend>ament_cmake_pytest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

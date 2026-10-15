@@ -38,6 +38,15 @@
 using usb_cam::utils::io_method_from_string;
 
 
+TEST(test_usb_cam_utils, bytes_to_copy) {
+  // compressed: only bytes used, clamped to capacity
+  EXPECT_EQ(usb_cam::utils::bytes_to_copy(true, 150000, 2764800), 150000u);
+  EXPECT_EQ(usb_cam::utils::bytes_to_copy(true, 0, 2764800), 0u);
+  EXPECT_EQ(usb_cam::utils::bytes_to_copy(true, 3000000, 2764800), 2764800u);
+  // uncompressed: always the full frame size
+  EXPECT_EQ(usb_cam::utils::bytes_to_copy(false, 100, 2764800), 2764800u);
+}
+
 TEST(test_usb_cam_utils, test_io_method_from_string) {
   usb_cam::utils::io_method_t test_io;
 

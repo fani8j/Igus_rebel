@@ -118,6 +118,14 @@ private:
   // Set by read() while STATUS age is in the coast tier: write() keeps the last jog frozen
   // (still refreshes the write watchdog) instead of storing new commands.
   std::atomic<bool> statusCoast_{false};
+  // Set by on_activate() when it clears a latched hardware error; cleared only by
+  // perform_command_mode_switch() when a switch starts all six of THIS component's command
+  // interfaces (i.e. the controller claiming them was re-started), and by on_init(). While set,
+  // write() and the ALIVEJOG thread force jog to zero. Humble's controller_manager does not
+  // deactivate controllers on a hardware error, so without this a still-active trajectory
+  // controller would resume from its stale setpoint as soon as the drives are enabled.
+  // reset_and_enable does not touch it. Not set by a first activation without a latch.
+  std::atomic<bool> controllerRestartHold_{false};
   std::uint64_t lastFreshCounterSkipped_ = 0;  // read() thread
   // Message thread: CRI counter tracking.
   int lastCriCounter_ = -1;
@@ -158,6 +166,10 @@ private:
   // Message thread only.
   CriMessages::Kinstate lastKinstate = CriMessages::Kinstate::NO_ERROR;
   std::array<int, 16> lastErrorJoints{};
+  // STATUS ESTOP field logging (message thread only); informational, see ProcessStatus.
+  bool haveEStop_ = false;
+  int lastLoggedEStop_ = 0;
+  std::int64_t lastEStopLogNs_ = 0;
   std::string kinstateMessage;
   bool haveOverride = false;
   float lastOverride = 0.0f;
@@ -227,6 +239,9 @@ public:
   bool StatusHoldActive() const {return statusHold_.load();}
   bool StatusCoastActive() const {return statusCoast_.load();}
   bool HardwareErrorLatched() const {return hardwareErrorLatched_.load();}
+  // True after a recovery from a latched error until the controllers claiming this component's
+  // command interfaces have been re-started (see controllerRestartHold_).
+  bool ControllerRestartHoldActive() const {return controllerRestartHold_.load();}
   // Fault groups: drive/kinematics errors are only monitored once armed (see RebelSafety.hpp),
   // and this instance blocks the recovery of its peers while it holds a root-cause fault.
   bool FaultMonitorArmed() const {return faultArmed_.load();}
@@ -246,6 +261,17 @@ public:
   std::vector<CommandInterface> export_command_interfaces() override;
   return_type read(const rclcpp::Time & time, const rclcpp::Duration & period) override;
   return_type write(const rclcpp::Time & time, const rclcpp::Duration & period) override;
+
+  // Humble's resource_manager passes the FULL start/stop command interface lists (of all
+  // components) to every system component. prepare accepts everything (as the default did);
+  // perform releases controllerRestartHold_ when this component's six velocity interfaces are
+  // in the start list. A deactivate-only switch or another component's interfaces never do.
+  return_type prepare_command_mode_switch(
+    const std::vector<std::string> & start_interfaces,
+    const std::vector<std::string> & stop_interfaces) override;
+  return_type perform_command_mode_switch(
+    const std::vector<std::string> & start_interfaces,
+    const std::vector<std::string> & stop_interfaces) override;
 
   void dio_callback(
     const std::shared_ptr<igus_rebel_msgs::srv::SetDigitalOutput::Request> request,

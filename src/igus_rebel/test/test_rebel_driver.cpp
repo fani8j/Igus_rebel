@@ -115,6 +115,8 @@ public:
   void SetIgnoreEnable(bool ignore) {ignoreEnable_ = ignore;}
   // CRI KINSTATE value reported in every STATUS (0 = no error, 99 = motion not allowed).
   void SetKinstate(int kinstate) {kinstate_ = kinstate;}
+  // Value reported in the STATUS ESTOP field (0 in all captured/fake traffic).
+  void SetEStopField(int value) {eStopField_ = value;}
   std::size_t Connections() const {return connections_.load();}
 
   std::vector<ReceivedFrame> Frames()
@@ -162,7 +164,7 @@ private:
       s << " " << (i < 6 ? joints[i] : 0.0f);
     }
     s << " POSCARTROBOT 0 0 0 0 0 0 POSCARTPLATTFORM 0 0 0 OVERRIDE " << override_.load() <<
-      " DIN 0 DOUT 0 ESTOP 0 SUPPLY 48 CURRENTALL 2 CURRENTJOINTS";
+      " DIN 0 DOUT 0 ESTOP " << eStopField_.load() << " SUPPLY 48 CURRENTALL 2 CURRENTJOINTS";
     for (int i = 0; i < 16; ++i) {
       s << " 0";
     }
@@ -246,6 +248,7 @@ private:
   std::atomic<int> jointErrorBits_{4};
   std::atomic<bool> ignoreEnable_{false};
   std::atomic<int> kinstate_{0};
+  std::atomic<int> eStopField_{0};
   std::atomic<float> jointStepDeg_{0.0f};
   std::atomic<float> override_{40.0f};
   std::atomic<std::size_t> connections_{0};
@@ -1418,6 +1421,251 @@ TEST_F(RebelDriverTest, NonZeroWriteWhileLatchingNeverReachesTheRobot)
   EXPECT_GE(frames, 10u);
 }
 
+namespace
+{
+// Latch (as ros2_control does after read() returned ERROR) and recover through the lifecycle
+// reset: on_error -> on_configure (inactive) -> on_activate (active).
+void LatchAndRecover(Igus::Rebel & rebel)
+{
+  rebel.on_error(rclcpp_lifecycle::State());
+  ASSERT_TRUE(rebel.HardwareErrorLatched());
+  ASSERT_EQ(rebel.on_configure(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  ASSERT_EQ(rebel.on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  ASSERT_FALSE(rebel.HardwareErrorLatched());
+}
+
+// A controller that keeps writing a non-zero velocity on every command interface, as a JTC that
+// stayed active across a hardware error does.
+struct StaleControllerWriter
+{
+  StaleControllerWriter(
+    Igus::Rebel & driver, std::vector<hardware_interface::CommandInterface> & commandInterfaces)
+  : rebel(driver), commands(commandInterfaces)
+  {
+    thread = std::thread(
+      [this]() {
+        while (run) {
+          for (auto & command : commands) {
+            command.set_value(0.05);
+          }
+          rebel.write(rclcpp::Time(0, 0, RCL_STEADY_TIME), rclcpp::Duration(0, 10000000));
+          std::this_thread::sleep_for(5ms);
+        }
+      });
+  }
+  ~StaleControllerWriter() {Stop();}
+  void Stop()
+  {
+    run = false;
+    if (thread.joinable()) {
+      thread.join();
+    }
+  }
+  Igus::Rebel & rebel;
+  std::vector<hardware_interface::CommandInterface> & commands;
+  std::atomic<bool> run{true};
+  std::thread thread;
+};
+
+std::vector<std::string> VelocityInterfaces(const std::string & prefix, int from = 1, int to = 6)
+{
+  std::vector<std::string> names;
+  for (int i = from; i <= to; ++i) {
+    names.push_back(prefix + "joint" + std::to_string(i) + "/velocity");
+  }
+  return names;
+}
+}  // namespace
+
+TEST_F(RebelDriverTest, StartupActivationWithoutLatchHasNoControllerRestartHold)
+{
+  FakeCriServer server;
+  StartDriver(server);
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands().size() >= 5;}, 2000ms));
+  EXPECT_FALSE(rebel->ControllerRestartHoldActive());
+  ASSERT_EQ(rebel->on_configure(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  ASSERT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_FALSE(rebel->ControllerRestartHoldActive());
+
+  // The first controller activation (start list) and a plain write: non-zero jog flows
+  // without any controller-restart step, exactly as before this change.
+  StaleControllerWriter writer(*rebel, commands);
+  ASSERT_TRUE(WaitFor([&]() {return AnyNonZeroJog(server, Clock::now() - 60ms);}, 2000ms));
+  EXPECT_EQ(rebel->perform_command_mode_switch(VelocityInterfaces(""), {}), return_type::OK);
+  EXPECT_FALSE(rebel->ControllerRestartHoldActive());
+  EXPECT_TRUE(AnyNonZeroJog(server, Clock::now() - 60ms));
+}
+
+TEST_F(RebelDriverTest, PrepareCommandModeSwitchAcceptsEverything)
+{
+  FakeCriServer server;
+  StartDriver(server);
+  const auto all = VelocityInterfaces("");
+  EXPECT_EQ(rebel->prepare_command_mode_switch(all, {}), return_type::OK);
+  EXPECT_EQ(rebel->prepare_command_mode_switch({}, all), return_type::OK);
+  EXPECT_EQ(rebel->prepare_command_mode_switch(all, all), return_type::OK);
+  EXPECT_EQ(rebel->prepare_command_mode_switch({}, {}), return_type::OK);
+  EXPECT_EQ(
+    rebel->prepare_command_mode_switch({"other_joint/effort", "arm_right_joint1/velocity"}, {}),
+    return_type::OK);
+  // Also while the hold is active.
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands().size() >= 5;}, 2000ms));
+  LatchAndRecover(*rebel);
+  EXPECT_EQ(rebel->prepare_command_mode_switch({}, all), return_type::OK);
+  EXPECT_EQ(rebel->prepare_command_mode_switch(all, {}), return_type::OK);
+  EXPECT_TRUE(rebel->ControllerRestartHoldActive());  // prepare never releases
+}
+
+TEST_F(RebelDriverTest, RecoveryKeepsJogZeroUntilControllerCommandInterfacesAreRestarted)
+{
+  FakeCriServer server;
+  StartDriver(server);
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 5;}, 2000ms));
+  ASSERT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  ASSERT_FALSE(rebel->ControllerRestartHoldActive());
+
+  // The JTC is running and moving when the error hits and stays active (Humble does not
+  // deactivate controllers on a hardware error).
+  StaleControllerWriter writer(*rebel, commands);
+  ASSERT_TRUE(WaitFor([&]() {return AnyNonZeroJog(server, Clock::now() - 60ms);}, 2000ms));
+
+  // A frame already on the wire when the latch was set may still be non-zero: allow 30 ms.
+  const auto zeroFrom = Clock::now() + 30ms;
+  LatchAndRecover(*rebel);
+  EXPECT_TRUE(rebel->ControllerRestartHoldActive());
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 10;}, 2000ms));
+  std::this_thread::sleep_for(150ms);
+
+  // Hardware active again, drives enabled, stale controller still writing: jog is zero.
+  EXPECT_EQ(rebel->read(now, period), return_type::OK);
+  std::size_t frames = 0;
+  EXPECT_TRUE(AllJogsZero(server, zeroFrom, &frames));
+  EXPECT_GE(frames, 10u);
+
+  // A deactivate-only switch (the controller is stopped, nothing started) does not release.
+  EXPECT_EQ(rebel->perform_command_mode_switch({}, VelocityInterfaces("")), return_type::OK);
+  EXPECT_TRUE(rebel->ControllerRestartHoldActive());
+  // Another component's interfaces being started does not release.
+  EXPECT_EQ(
+    rebel->perform_command_mode_switch(VelocityInterfaces("arm_right_"), {}), return_type::OK);
+  EXPECT_TRUE(rebel->ControllerRestartHoldActive());
+  // A partial start (not all six of this component's interfaces) does not release.
+  EXPECT_EQ(
+    rebel->perform_command_mode_switch(VelocityInterfaces("", 1, 5), {}), return_type::OK);
+  EXPECT_TRUE(rebel->ControllerRestartHoldActive());
+  // Neither does another interface type of this component's joints.
+  EXPECT_EQ(
+    rebel->perform_command_mode_switch(
+      {"joint1/position", "joint2/position", "joint3/position",
+        "joint4/position", "joint5/position", "joint6/position"}, {}), return_type::OK);
+  EXPECT_TRUE(rebel->ControllerRestartHoldActive());
+
+  // reset_and_enable may re-enable the drives but does not release the hold.
+  std::string message;
+  EXPECT_TRUE(rebel->ResetAndEnable(message)) << message;
+  EXPECT_TRUE(rebel->ControllerRestartHoldActive());
+  std::this_thread::sleep_for(150ms);
+  EXPECT_TRUE(AllJogsZero(server, zeroFrom, &frames));
+  EXPECT_FALSE(AnyNonZeroJog(server, zeroFrom));
+
+  // The controller is re-started: its command interfaces are in the start list (also when the
+  // stop list contains them too, i.e. deactivate + activate in one call).
+  const auto releaseCall = Clock::now();
+  EXPECT_EQ(
+    rebel->perform_command_mode_switch(VelocityInterfaces(""), VelocityInterfaces("")),
+    return_type::OK);
+  EXPECT_FALSE(rebel->ControllerRestartHoldActive());
+  EXPECT_TRUE(
+    WaitFor([&]() {return AnyNonZeroJog(server, releaseCall + 5ms);}, 1000ms));
+  // Everything from the error until the release call was zero.
+  for (const auto & frame : server.AliveJogs(zeroFrom)) {
+    if (frame.stamp > releaseCall) {
+      continue;
+    }
+    for (double value : ParseJog(frame.body)) {
+      EXPECT_EQ(value, 0.0);
+    }
+  }
+}
+
+TEST_F(RebelDriverTest, ControllerRestartHoldSurvivesDeactivateAndIsRepeatedPerRecovery)
+{
+  FakeCriServer server;
+  StartDriver(server);
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 5;}, 2000ms));
+  ASSERT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+
+  LatchAndRecover(*rebel);
+  EXPECT_TRUE(rebel->ControllerRestartHoldActive());
+  // A deactivate -> activate of the hardware without a controller restart keeps the hold.
+  EXPECT_EQ(rebel->on_deactivate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_TRUE(rebel->ControllerRestartHoldActive());
+
+  EXPECT_EQ(rebel->perform_command_mode_switch(VelocityInterfaces(""), {}), return_type::OK);
+  EXPECT_FALSE(rebel->ControllerRestartHoldActive());
+
+  // A second error and recovery arms the hold again.
+  LatchAndRecover(*rebel);
+  EXPECT_TRUE(rebel->ControllerRestartHoldActive());
+  EXPECT_EQ(rebel->perform_command_mode_switch(VelocityInterfaces(""), {}), return_type::OK);
+  EXPECT_FALSE(rebel->ControllerRestartHoldActive());
+}
+
+TEST_F(RebelDualArmTest, ControllerRestartHoldIsPerComponentAndFiltersByPrefixedNames)
+{
+  Arm left;
+  Arm right;
+  StartArm(left, "left");
+  ASSERT_NE(left.rebel, nullptr);
+  StartArm(right, "right");
+  ASSERT_NE(right.rebel, nullptr);
+  ASSERT_TRUE(WaitFor([&]() {return left.server->Commands().size() >= 5;}, 2000ms));
+  ASSERT_TRUE(WaitFor([&]() {return right.server->Commands().size() >= 5;}, 2000ms));
+  ASSERT_EQ(left.rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  ASSERT_EQ(right.rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+
+  StaleControllerWriter leftWriter(*left.rebel, left.commands);
+  StaleControllerWriter rightWriter(*right.rebel, right.commands);
+  ASSERT_TRUE(WaitFor([&]() {return AnyNonZeroJog(*left.server, Clock::now() - 60ms);}, 2000ms));
+  ASSERT_TRUE(WaitFor([&]() {return AnyNonZeroJog(*right.server, Clock::now() - 60ms);}, 2000ms));
+
+  const auto errorAt = Clock::now() + 15ms;
+  LatchAndRecover(*left.rebel);
+  LatchAndRecover(*right.rebel);
+  EXPECT_TRUE(left.rebel->ControllerRestartHoldActive());
+  EXPECT_TRUE(right.rebel->ControllerRestartHoldActive());
+  std::this_thread::sleep_for(100ms);
+  EXPECT_TRUE(AllJogsZero(*left.server, errorAt));
+  EXPECT_TRUE(AllJogsZero(*right.server, errorAt));
+
+  // The resource manager hands the same full lists to both components. Restarting only the
+  // left controller releases only the left arm.
+  const auto leftStart = VelocityInterfaces("arm_left_");
+  EXPECT_EQ(left.rebel->perform_command_mode_switch(leftStart, leftStart), return_type::OK);
+  EXPECT_EQ(right.rebel->perform_command_mode_switch(leftStart, leftStart), return_type::OK);
+  EXPECT_FALSE(left.rebel->ControllerRestartHoldActive());
+  EXPECT_TRUE(right.rebel->ControllerRestartHoldActive());
+  const auto releasedAt = Clock::now();
+  EXPECT_TRUE(
+    WaitFor([&]() {return AnyNonZeroJog(*left.server, releasedAt + 5ms);}, 1000ms));
+  std::this_thread::sleep_for(100ms);
+  EXPECT_TRUE(AllJogsZero(*right.server, errorAt));
+
+  // A deactivate-only switch of the right controller does not release it.
+  const auto rightIfs = VelocityInterfaces("arm_right_");
+  EXPECT_EQ(left.rebel->perform_command_mode_switch({}, rightIfs), return_type::OK);
+  EXPECT_EQ(right.rebel->perform_command_mode_switch({}, rightIfs), return_type::OK);
+  EXPECT_TRUE(right.rebel->ControllerRestartHoldActive());
+  // Un-prefixed names (single-arm) are not this component's interfaces either.
+  EXPECT_EQ(right.rebel->perform_command_mode_switch(VelocityInterfaces(""), {}), return_type::OK);
+  EXPECT_TRUE(right.rebel->ControllerRestartHoldActive());
+  EXPECT_EQ(right.rebel->perform_command_mode_switch(rightIfs, {}), return_type::OK);
+  EXPECT_FALSE(right.rebel->ControllerRestartHoldActive());
+  leftWriter.Stop();
+  rightWriter.Stop();
+}
+
 class RebelFaultGroupTest : public ::testing::Test
 {
 protected:
@@ -1667,6 +1915,145 @@ TEST_F(RebelFaultGroupDriveTest, KinematicsErrorAfterEnableStopsTheOtherArm)
   RunCase("cell_kin", [](FakeCriServer & server) {server.SetKinstate(99);});
 }
 
+// ---- Joint limit (KINSTATE 13/14) stops only the arm it concerns; ESTOP field is informational.
+namespace
+{
+constexpr int kJointLimitMin = 13;
+constexpr int kJointLimitMax = 14;
+}  // namespace
+
+TEST_F(RebelFaultGroupTest, JointLimitOnOneArmDoesNotStopTheOtherNorLatchItself)
+{
+  Arm left;
+  Arm right;
+  StartArmedPair(left, right, "cell_jl");
+  RunCycles(left, right, 10, 0.1, 0.1);
+
+  for (const int limit : {kJointLimitMin, kJointLimitMax}) {
+    left.server->SetKinstate(limit);
+    const auto since = Clock::now();
+    // Well past several STATUS periods and the arming settle time.
+    RunCycles(left, right, 80, 0.1, 0.1);
+    EXPECT_FALSE(left.errored);
+    EXPECT_FALSE(right.errored);
+    EXPECT_FALSE(left.rebel->HardwareErrorLatched());
+    EXPECT_FALSE(right.rebel->HardwareErrorLatched());
+    EXPECT_FALSE(left.rebel->FaultGroupRootCause());
+    EXPECT_FALSE(right.rebel->FaultGroupRootCause());
+    // Still monitored: a later real fault must not be hidden.
+    EXPECT_TRUE(left.rebel->FaultMonitorArmed());
+    EXPECT_EQ(left.rebel->read(now, period), return_type::OK);
+    EXPECT_EQ(right.rebel->read(now, period), return_type::OK);
+    // Both arms keep accepting commands (the left one so it can be jogged out).
+    EXPECT_TRUE(AnyNonZeroJog(*left.server, since + 300ms));
+    EXPECT_TRUE(AnyNonZeroJog(*right.server, since + 300ms));
+    left.server->SetKinstate(0);
+    RunCycles(left, right, 10, 0.1, 0.1);
+    EXPECT_FALSE(left.rebel->HardwareErrorLatched());
+  }
+}
+
+TEST_F(RebelFaultGroupTest, RealFaultAfterAJointLimitStillStopsTheGroup)
+{
+  Arm left;
+  Arm right;
+  StartArmedPair(left, right, "cell_jl_then_fault");
+  left.server->SetKinstate(kJointLimitMax);
+  RunCycles(left, right, 80, 0.0, 0.1);
+  ASSERT_FALSE(right.rebel->HardwareErrorLatched());
+  ASSERT_TRUE(left.rebel->FaultMonitorArmed());
+
+  // While still at the joint limit the e-stop supply error appears: trips the group.
+  left.server->SetJointErrorBits(2);  // ESTOP_LOWV
+  left.server->SetDisabledMask(0x3F);
+  ASSERT_TRUE(
+    WaitFor(
+      [&]() {
+        Cycle(left, right, 0.0, 0.1);
+        return right.rebel->HardwareErrorLatched();
+      }, 1000ms));
+  EXPECT_TRUE(left.rebel->FaultGroupRootCause());
+  EXPECT_TRUE(left.rebel->HardwareErrorLatched());
+}
+
+TEST_F(RebelFaultGroupTest, FaultWhileAJointLimitIsActiveStillStopsTheGroupAfterLeavingTheLimit)
+{
+  Arm left;
+  Arm right;
+  StartArmedPair(left, right, "cell_jl_then_kin");
+  left.server->SetKinstate(kJointLimitMin);
+  RunCycles(left, right, 60, 0.0, 0.1);
+  ASSERT_FALSE(right.rebel->HardwareErrorLatched());
+
+  // Another kinematics state (here virtual box limit 30) is not whitelisted: trips.
+  left.server->SetKinstate(30);
+  ASSERT_TRUE(
+    WaitFor(
+      [&]() {
+        Cycle(left, right, 0.0, 0.1);
+        return right.rebel->HardwareErrorLatched();
+      }, 1000ms));
+  EXPECT_TRUE(left.rebel->FaultGroupRootCause());
+}
+
+TEST_F(RebelFaultGroupDriveTest, JointLimitTogetherWithMotorErrorStopsTheOtherArm)
+{
+  RunCase(
+    "cell_jl_mne", [](FakeCriServer & server) {
+      server.SetKinstate(kJointLimitMin);
+      server.SetDisabledMask(0x04);  // MNE on joint 3
+    });
+}
+
+TEST_F(RebelFaultGroupDriveTest, JointLimitTogetherWithSupplyLowStopsTheOtherArm)
+{
+  RunCase(
+    "cell_jl_estop", [](FakeCriServer & server) {
+      server.SetKinstate(kJointLimitMax);
+      server.SetJointErrorBits(2);  // ESTOP_LOWV
+      server.SetDisabledMask(0x3F);
+    });
+}
+
+TEST_F(RebelFaultGroupTest, EStopFieldIsInformationalAndDoesNotStopTheGroup)
+{
+  // The semantics of the STATUS ESTOP field are unverified (no real-robot capture): any value
+  // must neither trip the group nor latch the arm. The e-stop is detected through the joint
+  // error bit ESTOP_LOWV (see SupplyLowEmergencyStopStopsTheOtherArm).
+  Arm left;
+  Arm right;
+  StartArmedPair(left, right, "cell_estop_field");
+  for (const int value : {1, 2, 15, 0}) {
+    left.server->SetEStopField(value);
+    RunCycles(left, right, 15, 0.1, 0.1);
+    EXPECT_FALSE(left.rebel->HardwareErrorLatched()) << value;
+    EXPECT_FALSE(right.rebel->HardwareErrorLatched()) << value;
+    EXPECT_FALSE(left.rebel->FaultGroupRootCause()) << value;
+    EXPECT_EQ(left.rebel->read(now, period), return_type::OK) << value;
+  }
+}
+
+TEST_F(RebelDriverTest, JointLimitWithoutAFaultGroupKeepsRunningAndIsNotLatched)
+{
+  // Single-arm behaviour is unchanged: a joint-limit KINSTATE is only logged; read() stays OK,
+  // nothing latches and write() keeps forwarding the commanded jog (the operator jogs out).
+  FakeCriServer server;
+  StartDriver(server);
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands().size() >= 5;}, 2000ms));
+  for (const int limit : {kJointLimitMin, kJointLimitMax, 99}) {
+    server.SetKinstate(limit);
+    const auto since = Clock::now();
+    for (int i = 0; i < 40; ++i) {
+      ASSERT_EQ(rebel->read(now, period), return_type::OK);
+      commands.at(0).set_value(0.1);
+      ASSERT_EQ(rebel->write(now, period), return_type::OK);
+      std::this_thread::sleep_for(10ms);
+    }
+    EXPECT_FALSE(rebel->HardwareErrorLatched()) << limit;
+    EXPECT_TRUE(AnyNonZeroJog(server, since + 100ms)) << limit;
+  }
+}
+
 TEST_F(RebelFaultGroupTest, DisabledDrivesBeforeTheFirstEnableDoNotTrigger)
 {
   Arm left;
@@ -1750,9 +2137,22 @@ TEST_F(RebelFaultGroupTest, RecoveryIsRefusedUntilTheRootCauseMemberRecovered)
   EXPECT_EQ(right.rebel->read(now, period), return_type::OK);
   EXPECT_EQ(left.rebel->read(now, period), return_type::OK);
 
-  // Both run again and nobody re-latches.
+  // Both run again and nobody re-latches. The recovered arms keep jog at zero (the controller
+  // that stayed active may hold a stale setpoint) until their controllers are re-started; the
+  // controller manager's switch lists contain both arms' interfaces.
   left.errored = false;
   right.errored = false;
+  RunCycles(left, right, 30, 0.0, 0.1);
+  EXPECT_FALSE(left.errored);
+  EXPECT_FALSE(right.errored);
+  EXPECT_TRUE(right.rebel->ControllerRestartHoldActive());
+  EXPECT_FALSE(AnyNonZeroJog(*right.server, Clock::now() - 100ms));
+  auto restart = VelocityInterfaces("arm_right_");
+  for (const auto & name : VelocityInterfaces("arm_left_")) {
+    restart.push_back(name);
+  }
+  EXPECT_EQ(right.rebel->perform_command_mode_switch(restart, {}), return_type::OK);
+  EXPECT_EQ(left.rebel->perform_command_mode_switch(restart, {}), return_type::OK);
   RunCycles(left, right, 30, 0.0, 0.1);
   EXPECT_FALSE(left.errored);
   EXPECT_FALSE(right.errored);
@@ -1766,8 +2166,8 @@ TEST_F(RebelFaultGroupTest, KinstateRootCauseClearsOnlyAfterContinuousCleanStatu
   StartArmedPair(left, right, "cell_kin_clean");
   RunCycles(left, right, 10, 0.0, 0.1);
 
-  // Strict bring-up trigger: any Kinstate other than NO_ERROR (here 99; JOINT_LIMIT_MIN/MAX
-  // behave the same) stops the group, and latches the faulting arm too.
+  // Any Kinstate other than NO_ERROR and the joint-limit states (here 99) stops the group, and
+  // latches the faulting arm too. (Joint limits: see the JointLimit tests.)
   left.server->SetKinstate(99);
   ASSERT_TRUE(
     WaitFor(

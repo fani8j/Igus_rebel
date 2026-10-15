@@ -2,11 +2,16 @@
 """Maintain the fixed external camera pole in MoveIt's planning scene.
 
 Two objects in ``base_link``: ``camera_pole``, the real upright 0.03 x 0.03 x
-1.0 m pole just behind the camera head, and ``camera_head``, a 0.10 m cube
-centred on ``camera_link`` (the camera itself, about 0.45-0.5 m up). "Behind"
-is opposite the camera optical +Z direction, projected horizontally. Only
-``camera_pole`` is published on the latched topic (its consumers expect one
-box). This node never requests robot motion.
+1.0 m pole just behind the camera head, and ``camera_head``, a box around the
+real Orbbec Gemini 336 body (the camera itself, about 0.45-0.5 m up). The head
+box is the body's collision-mesh bounding box in the ``camera_link`` frame
+(see ``BODY_MIN``/``BODY_MAX``) plus ``HEAD_MARGIN`` on every side, posed with
+the full ``camera_link`` orientation from TF (so a downward-tilted camera is
+tilted too). The pole is placed ``POLE_BACK`` behind ``camera_link``,
+independent of the head size; "behind" is opposite the camera optical +Z
+direction, projected horizontally. Only ``camera_pole`` is published on the
+latched topic (its consumers expect one box). This node never requests robot
+motion.
 
 The pole is re-applied to move_group every ``reapply_period_s`` seconds and
 immediately whenever the ``apply_planning_scene`` service reappears, so a
@@ -32,7 +37,20 @@ from shape_msgs.msg import SolidPrimitive
 
 
 POLE_SIZE = 0.03
-HEAD_SIZE = 0.10
+# Pole centre offset behind camera_link (horizontal). Matches the real pole position; it was
+# HEAD_SIZE/2 + POLE_SIZE/2 for the former 0.10 m cube head and must NOT change with the head size.
+POLE_BACK = 0.065
+
+# Gemini 336 body extent in the camera_link frame (x forward, y left, z up), metres. From
+# /opt/ros/humble/share/orbbec_description: urdf/gemini_335_336.urdf.xacro (camera_link collision mesh
+# meshes/gemini335_336/camera_link.STL, origin xyz = -0.01587 -0.025 -0.0125). Mesh bounds
+# (30.0 x 89.5 x 25.0 mm, i.e. the 90 x 25 x 25 mm datasheet size) shifted by that origin and rounded
+# outward to 0.1 mm. camera_link is the left IR/depth sensor, not the body centre.
+BODY_MIN = (-0.0258, -0.0698, -0.0126)
+BODY_MAX = (0.0043, 0.0198, 0.0126)
+# Margin added on every side of the body: covers the mount bracket (absent from the description),
+# the calibration error of camera_link and the USB plug.
+HEAD_MARGIN = 0.010
 
 
 def _box(object_id, frame, x, y, z, yaw, dims):
@@ -52,13 +70,38 @@ def _box(object_id, frame, x, y, z, yaw, dims):
     return collision
 
 
-def pole_objects(camera, optical, frame):
-    """(camera_pole, camera_head) collision objects."""
-    q = optical.transform.rotation
+def _unit_quaternion(q, what):
     norm = math.sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w)
     if not math.isfinite(norm) or norm < 1e-9:
-        raise ValueError("invalid camera optical rotation")
-    x, y, z, w = q.x / norm, q.y / norm, q.z / norm, q.w / norm
+        raise ValueError(f"invalid {what} rotation")
+    return q.x / norm, q.y / norm, q.z / norm, q.w / norm
+
+
+def _rotate(q, v):
+    """Rotate vector v by unit quaternion q = (x, y, z, w)."""
+    x, y, z, w = q
+    vx, vy, vz = v
+    # t = 2 * cross(q.xyz, v); v' = v + w * t + cross(q.xyz, t)
+    tx, ty, tz = 2 * (y * vz - z * vy), 2 * (z * vx - x * vz), 2 * (x * vy - y * vx)
+    return (vx + w * tx + (y * tz - z * ty),
+            vy + w * ty + (z * tx - x * tz),
+            vz + w * tz + (x * ty - y * tx))
+
+
+def _head_box(frame, position, q):
+    centre = tuple((lo + hi) / 2.0 for lo, hi in zip(BODY_MIN, BODY_MAX))
+    dims = tuple(hi - lo + 2.0 * HEAD_MARGIN for lo, hi in zip(BODY_MIN, BODY_MAX))
+    ox, oy, oz = _rotate(q, centre)
+    box = _box("camera_head", frame, position.x + ox, position.y + oy, position.z + oz, 0.0, dims)
+    pose = box.primitive_poses[0]
+    pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w = q
+    return box
+
+
+def pole_objects(camera, optical, frame):
+    """(camera_pole, camera_head) collision objects."""
+    x, y, z, w = _unit_quaternion(optical.transform.rotation, "camera optical")
+    camera_q = _unit_quaternion(camera.transform.rotation, "camera_link")
 
     # Optical +Z in the planning frame, projected onto the horizontal plane.
     fx, fy = 2 * (x * z + w * y), 2 * (y * z - w * x)
@@ -72,11 +115,9 @@ def pole_objects(camera, optical, frame):
         raise ValueError("invalid camera position")
 
     yaw = math.atan2(fy, fx)
-    back = HEAD_SIZE / 2.0 + POLE_SIZE / 2.0
-    pole = _box("camera_pole", frame, position.x - back * fx, position.y - back * fy, 0.5,
+    pole = _box("camera_pole", frame, position.x - POLE_BACK * fx, position.y - POLE_BACK * fy, 0.5,
                 yaw, (POLE_SIZE, POLE_SIZE, 1.0))
-    head = _box("camera_head", frame, position.x, position.y, position.z,
-                yaw, (HEAD_SIZE, HEAD_SIZE, HEAD_SIZE))
+    head = _head_box(frame, position, camera_q)
     return pole, head
 
 
@@ -84,6 +125,12 @@ class CameraPoleCollision(Node):
     def __init__(self):
         super().__init__("camera_pole_collision")
         self.base = self.declare_parameter("base_frame", "base_link").value
+        # Frame_id written on the collision objects (empty = base_frame, the original behaviour).
+        # Per-arm dual-cell stacks look the pose up in the dual TF tree (base_frame:=arm_X_base_link)
+        # but publish it for a single-arm move_group whose own base is called base_link.
+        self.output_frame = (
+            self.declare_parameter("output_frame_id", "").value or self.base
+        )
         self.camera = self.declare_parameter("camera_frame", "camera_link").value
         self.optical = self.declare_parameter(
             "optical_frame", "camera_color_optical_frame"
@@ -148,7 +195,7 @@ class CameraPoleCollision(Node):
         try:
             camera = self.buffer.lookup_transform(self.base, self.camera, Time())
             optical = self.buffer.lookup_transform(self.base, self.optical, Time())
-            collision, head = pole_objects(camera, optical, self.base)
+            collision, head = pole_objects(camera, optical, self.output_frame)
         except (TransformException, ValueError) as exc:
             self.get_logger().warning(
                 f"Waiting for valid camera TF: {exc}", throttle_duration_sec=10.0
@@ -156,11 +203,21 @@ class CameraPoleCollision(Node):
             return
 
         pose = collision.primitive_poses[0]
-        current_pose = (
+        head_pose = head.primitive_poses[0]
+        pole_key = (
             pose.position.x,
             pose.position.y,
             pose.orientation.z,
             pose.orientation.w,
+        )
+        current_pose = pole_key + (
+            head_pose.position.x,
+            head_pose.position.y,
+            head_pose.position.z,
+            head_pose.orientation.x,
+            head_pose.orientation.y,
+            head_pose.orientation.z,
+            head_pose.orientation.w,
         )
         pose_changed = current_pose != self.last_pose
         now = self.get_clock().now()
@@ -174,9 +231,9 @@ class CameraPoleCollision(Node):
         request.scene.is_diff = True
         request.scene.robot_state.is_diff = True
         request.scene.world.collision_objects = [collision, head]
-        if pose_changed:
+        if self.last_pose is None or pole_key != self.last_pose[:4]:
             # Latched topic consumers (H-cut executor, calibration verification)
-            # only need a new message when the geometry changes.
+            # only need a new message when the pole geometry changes.
             self.pole_pub.publish(collision)
         self.pending = self.client.call_async(request)
         self.pending_since = now
@@ -185,10 +242,12 @@ class CameraPoleCollision(Node):
         if pose_changed or service_reappeared:
             self.get_logger().info(
                 "Applying camera_pole: centre="
-                f"({pose.position.x:.4f}, {pose.position.y:.4f}, 0.5000) in {self.base}; "
-                f"size={POLE_SIZE} x {POLE_SIZE} x 1.0 m; camera_head: {HEAD_SIZE} m cube at "
-                f"({head.primitive_poses[0].position.x:.4f}, {head.primitive_poses[0].position.y:.4f}, "
-                f"{head.primitive_poses[0].position.z:.4f})"
+                f"({pose.position.x:.4f}, {pose.position.y:.4f}, 0.5000) in {self.output_frame}; "
+                f"size={POLE_SIZE} x {POLE_SIZE} x 1.0 m; camera_head: Gemini 336 box "
+                f"{head.primitives[0].dimensions[0]:.3f} x {head.primitives[0].dimensions[1]:.3f} x "
+                f"{head.primitives[0].dimensions[2]:.3f} m (body + {HEAD_MARGIN * 1e3:.0f} mm margin, "
+                f"camera_link orientation) at "
+                f"({head_pose.position.x:.4f}, {head_pose.position.y:.4f}, {head_pose.position.z:.4f})"
             )
 
 

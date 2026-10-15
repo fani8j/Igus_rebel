@@ -223,3 +223,66 @@ TEST(Formatting, CommandMatchesOriginalWireFormat)
       "SetActive true"),
     "CRISTART 1 CMD SetActive true CRIEND\n");
 }
+
+TEST(FaultGroupKinstate, OnlyJointLimitsAreLocalEverythingElseTripsTheGroup)
+{
+  using Igus::CriMessages::Kinstate;
+  using Igus::Safety::IsGroupTrippingKinstate;
+  using Igus::Safety::IsJointLimitKinstate;
+
+  EXPECT_FALSE(IsGroupTrippingKinstate(Kinstate::NO_ERROR));
+  EXPECT_FALSE(IsGroupTrippingKinstate(Kinstate::JOINT_LIMIT_MIN));
+  EXPECT_FALSE(IsGroupTrippingKinstate(Kinstate::JOINT_LIMIT_MAX));
+  EXPECT_TRUE(IsJointLimitKinstate(Kinstate::JOINT_LIMIT_MIN));
+  EXPECT_TRUE(IsJointLimitKinstate(Kinstate::JOINT_LIMIT_MAX));
+  EXPECT_FALSE(IsJointLimitKinstate(Kinstate::NO_ERROR));
+
+  for (const Kinstate tripping : {
+    Kinstate::CARTESIAN_SINGULARITY_CENTER, Kinstate::CARTESIAN_SINGULARITY_REACH,
+    Kinstate::CARTESIAN_SINGULARITY_WRIST, Kinstate::TOOL_AT_VIRTUAL_BOX_LIMIT_1,
+    Kinstate::TOOL_AT_VIRTUAL_BOX_LIMIT_2, Kinstate::TOOL_AT_VIRTUAL_BOX_LIMIT_3,
+    Kinstate::TOOL_AT_VIRTUAL_BOX_LIMIT_4, Kinstate::TOOL_AT_VIRTUAL_BOX_LIMIT_5,
+    Kinstate::TOOL_AT_VIRTUAL_BOX_LIMIT_6, Kinstate::MOTION_NOT_ALLOWED, Kinstate::UNKNOWN})
+  {
+    EXPECT_TRUE(IsGroupTrippingKinstate(tripping)) << static_cast<int>(tripping);
+    EXPECT_FALSE(IsJointLimitKinstate(tripping)) << static_cast<int>(tripping);
+  }
+}
+
+TEST(StartsAllCommandInterfaces, RequiresEverySixVelocityInterfaceOfThisComponent)
+{
+  using Igus::Safety::StartsAllCommandInterfaces;
+  const std::array<std::string, 6> left = {
+    "arm_left_joint1", "arm_left_joint2", "arm_left_joint3",
+    "arm_left_joint4", "arm_left_joint5", "arm_left_joint6"};
+  std::vector<std::string> all;
+  for (const auto & joint : left) {
+    all.push_back(joint + "/velocity");
+  }
+  EXPECT_TRUE(StartsAllCommandInterfaces(all, left, "velocity"));
+
+  // The full list of a dual-arm switch contains both arms' interfaces.
+  std::vector<std::string> both = {"arm_right_joint1/velocity", "arm_right_joint6/velocity"};
+  both.insert(both.end(), all.begin(), all.end());
+  EXPECT_TRUE(StartsAllCommandInterfaces(both, left, "velocity"));
+
+  EXPECT_FALSE(StartsAllCommandInterfaces({}, left, "velocity"));
+  // Another component's interfaces.
+  EXPECT_FALSE(
+    StartsAllCommandInterfaces(
+      {"arm_right_joint1/velocity", "arm_right_joint2/velocity", "arm_right_joint3/velocity",
+        "arm_right_joint4/velocity", "arm_right_joint5/velocity", "arm_right_joint6/velocity"},
+      left, "velocity"));
+  // A partial start.
+  std::vector<std::string> partial(all.begin(), all.end() - 1);
+  EXPECT_FALSE(StartsAllCommandInterfaces(partial, left, "velocity"));
+  // The right joints but another interface type; and a prefix that merely starts with the name.
+  EXPECT_FALSE(StartsAllCommandInterfaces(all, left, "position"));
+  std::vector<std::string> lookalike;
+  for (const auto & joint : left) {
+    lookalike.push_back(joint + "x/velocity");
+  }
+  EXPECT_FALSE(StartsAllCommandInterfaces(lookalike, left, "velocity"));
+  // Unset joint names never match.
+  EXPECT_FALSE(StartsAllCommandInterfaces(all, std::array<std::string, 6>{}, "velocity"));
+}

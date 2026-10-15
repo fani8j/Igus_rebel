@@ -1,0 +1,218 @@
+<?xml version="1.0"?>
+<!-- Prefixable tool macros shared by the single-arm model (igus_rebel_xeg32_wrapper.urdf.xacro,
+     prefix "") and the dual-arm model (rebel_dual_table_description, prefix "arm_left_" /
+     "arm_right_"). One definition of the variant-C knife tooling for every arm.
+
+       igus_tool_frames(prefix, parent)
+           <prefix>igus_tool0 (52.7 mm along <parent> z, rotated pi about z) and the
+           <prefix>xeg32_tool_tip marker link. Used by both tool variants of the wrapper.
+       knife_c_tool(prefix, parent, attach, blade_collision, blade_tcp_xyz, *tcp_position_joint)
+           igus_tool_frames + the variant-C holder / handpiece / wrist camera links and the
+           TCP chain igus_tool0 -> knife_c_tcp_point -> xeg32_tool_tip. With blade_collision:=true
+           (default false) also the <prefix>knife_c_blade collision box (see BLADE COLLISION below).
+
+     The caller supplies the joint <prefix>igus_tool0_to_xeg32_tool_tip (parent <prefix>igus_tool0,
+     child <prefix>knife_c_tcp_point, rpy 0 0 0) as the block argument: the TCP POSITION is a
+     per-arm calibration result (pivot method) and the xyz-only patcher
+     rebel_dual_arm_calibration.tcp_pivot.xacro_apply edits that joint literally in
+     igus_rebel_xeg32_wrapper.urdf.xacro. The knife-axis tilt (the next joint, defined here) is
+     common to all arms.
+
+     All link / joint / material names are ${prefix}-prefixed; with prefix "" the output is the
+     one the single-arm wrapper has always produced. -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- Calibrated frames remain available even when gripper visuals are omitted. -->
+  <xacro:macro name="igus_tool_frames" params="prefix parent">
+    <link name="${prefix}igus_tool0"/>
+    <joint name="${prefix}link6_to_igus_tool0" type="fixed">
+      <parent link="${parent}"/>
+      <child link="${prefix}igus_tool0"/>
+      <origin xyz="0 0 0.0527" rpy="0 0 3.141592653589793"/>
+    </joint>
+    <link name="${prefix}xeg32_tool_tip">
+      <visual>
+        <geometry><sphere radius="0.006"/></geometry>
+        <material name="${prefix}xeg32_tool_tip_marker"><color rgba="0.1 1 0.1 1"/></material>
+      </visual>
+    </link>
+  </xacro:macro>
+
+  <!-- Low-poly collision (convex pieces, <= ~120 triangles each) and simplified visual meshes of
+       the variant-C tooling, authored directly in igus_tool0 coordinates (identity origins). -->
+  <xacro:macro name="knife_c_collision" params="file">
+    <collision>
+      <geometry><mesh filename="package://igus_rebel_description/meshes/knife_c/collision/${file}.stl"/></geometry>
+    </collision>
+  </xacro:macro>
+  <xacro:macro name="knife_c_visual" params="file material">
+    <visual>
+      <geometry><mesh filename="package://igus_rebel_description/meshes/knife_c/visual/${file}.stl"/></geometry>
+      <material name="${material}"/>
+    </visual>
+  </xacro:macro>
+
+  <!-- attach:=false drops the holder / handpiece / wrist camera links (and the blade box) but keeps
+       the frames.
+
+       BLADE COLLISION (opt-in, blade_collision:=true, default false): adds ${prefix}knife_c_blade, fixed
+       to igus_tool0 like the handpiece (the blade is physically fixed to the handpiece; the TCP is a
+       calibration result). With the default the output is exactly what it was without this option (the
+       single-arm identity gate, evidence scan_results/dual_arm_stack_20261015/blade_collision/). The
+       dual-arm model (rebel_dual_table_description) always sets it true: this is its ONE definition.
+       Geometry (mm, igus_tool0 frame, scan_results/knife_c_handpiece_fix_20261012/README.md): knife axis
+       a = (-0.5, 0, 0.866); rear face centre of the body (47.45, -92.00, -55.11); blade seat front face
+       (= blade start) 170.8 mm along a at y = -92.262 (CAD stub axis), blade point 185.2 mm along a
+       (160.6 body+collar, +10.2 seat, +14.4 exposed blade; NT Cutter BDC-200P 18 x 4 x 0.38 mm, the 30 deg
+       point is not modelled). The link frame K is the seat-face centre with the orientation of
+       xeg32_tool_tip (rpy 0 -30 deg 0): K z = knife axis, K y = igus_tool0 y (blade width), K x = blade
+       thickness direction. Collision = ONE box in K that contains the blade slab (z 0..14.4, y +-2, x
+       +-0.5 (the real thickness is 0.38, 1.0 is used as in the handpiece fix)) AND the TCP point, with
+       MARGIN 1 mm on every side of both (computed from blade_tcp_xyz, so a per-arm TCP recalibration
+       stays inside the box). Its first 1 mm lies inside the seat (rigid contact with the handpiece: the
+       SRDF must disable the blade-handpiece pair, see igus_rebel_moveit_config/config/
+       knife_c_blade_disable_collisions.srdf.inc). Visuals: the real thin blade slab (magenta) and the
+       translucent collision box.
+
+       blade_tcp_xyz MUST equal the xyz of the TCP position block (a block cannot be read from inside the
+       macro); it is required when blade_collision is true. The single-arm wrapper passes the same literal
+       as its TCP joint (test_wrapper_blade_tcp_equals_tcp_joint guards the duplicate), the dual model
+       passes its tcp_xyz. -->
+  <xacro:macro name="knife_c_tool" params="prefix parent *tcp_position_joint attach:=true blade_collision:=false blade_tcp_xyz:=''">
+    <!-- No property for the normalised flag: xacro turns the text 'true'/'false' of a property back into a bool. -->
+    <xacro:if value="${str(blade_collision).lower() not in ('true', 'false')}">
+      <xacro:ERROR_blade_collision_must_be_true_or_false/>
+    </xacro:if>
+    <xacro:if value="${str(blade_collision).lower() == 'true' and str(blade_tcp_xyz).strip() == ''}">
+      <xacro:ERROR_blade_collision_needs_blade_tcp_xyz/>
+    </xacro:if>
+    <xacro:igus_tool_frames prefix="${prefix}" parent="${parent}"/>
+
+    <link name="${prefix}knife_c_tcp_point"/>
+    <xacro:insert_block name="tcp_position_joint"/>
+    <!-- Orientation of the tip frame: pure tilt of igus_tool0 +Z onto the knife axis. The knife
+         leans 30 deg towards igus_tool0 -X, axis = (-0.5, 0, 0.866) (CAD assembly axis
+         (0, 0.5, 0.866) measured from the knife solid; CAD->tool0 = (-y, x, z)). Minimal rotation =
+         rotation about +Y by -30 deg (rpy 0 -pi/6 0), so tip +Z = knife axis towards the tip, tip +Y =
+         igus_tool0 +Y (blade length / edge direction as in the old convention: edge runs towards
+         tip -Y), tip +X = (0.866, 0, 0.5). The old tip used rpy 0 0 0 (tool Z = igus_tool0 Z). -->
+    <joint name="${prefix}knife_c_tcp_point_to_xeg32_tool_tip" type="fixed">
+      <parent link="${prefix}knife_c_tcp_point"/>
+      <child link="${prefix}xeg32_tool_tip"/>
+      <origin xyz="0 0 0" rpy="0 -0.5235987755982988 0"/>
+    </joint>
+
+    <!-- Holder = holder_flange + holder_knife + cover_plate (rigid, bolted). Handpiece = knife
+         body + collar + blade seat + blade with the caliper-measured lengths of 2026-10-12 (blade
+         point 185.2 mm from the rear face, 4.1 mm from the pivot TCP; see
+         scan_results/knife_c_handpiece_fix_20261012/README.md). The 14.4 mm BLADE carries NO collision
+         geometry by default (visual only; handpiece_blade.stl is kept but not loaded): the executor
+         allows carton contact only for the collisionless xeg32_tool_tip, so a blade hull blocks every
+         cut stroke (unless carton_contact_links lists the opt-in blade link, see below). Collision
+         stops at the seat front, 14.4 mm short of the blade point (old model: ~20 mm).
+         Wrist camera = gemini_cradle + gemini_bracket + Gemini 305 body (the USB cable and the
+         Yahboom camera/bracket are not modelled; no gripper is mounted). -->
+    <xacro:if value="${attach}">
+      <material name="${prefix}knife_c_holder_material"><color rgba="0.98 0.55 0.18 0.8"/></material>
+      <material name="${prefix}knife_c_plate_material"><color rgba="0.95 0.81 0.53 0.8"/></material>
+      <material name="${prefix}knife_c_handpiece_material"><color rgba="0.3 0.3 0.3 0.8"/></material>
+      <material name="${prefix}knife_c_camera_material"><color rgba="0.36 0.56 0.84 0.8"/></material>
+      <material name="${prefix}knife_c_camera_body_material"><color rgba="0.12 0.43 0.82 0.8"/></material>
+
+      <link name="${prefix}knife_c_holder">
+        <xacro:knife_c_visual file="holder_flange" material="${prefix}knife_c_holder_material"/>
+        <xacro:knife_c_visual file="holder_knife" material="${prefix}knife_c_holder_material"/>
+        <xacro:knife_c_visual file="cover_plate" material="${prefix}knife_c_plate_material"/>
+        <xacro:knife_c_collision file="holder_flange_0"/>
+        <xacro:knife_c_collision file="holder_flange_1"/>
+        <xacro:knife_c_collision file="holder_flange_2"/>
+        <xacro:knife_c_collision file="holder_flange_3"/>
+        <xacro:knife_c_collision file="holder_knife_0"/>
+        <xacro:knife_c_collision file="holder_knife_1"/>
+        <xacro:knife_c_collision file="holder_knife_2"/>
+        <xacro:knife_c_collision file="holder_knife_3"/>
+        <xacro:knife_c_collision file="holder_knife_4"/>
+        <xacro:knife_c_collision file="holder_knife_5"/>
+        <xacro:knife_c_collision file="holder_knife_6"/>
+        <xacro:knife_c_collision file="holder_knife_7"/>
+        <xacro:knife_c_collision file="cover_plate"/>
+      </link>
+      <joint name="${prefix}igus_tool0_to_knife_c_holder" type="fixed">
+        <parent link="${prefix}igus_tool0"/>
+        <child link="${prefix}knife_c_holder"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+      </joint>
+
+      <link name="${prefix}knife_c_handpiece">
+        <xacro:knife_c_visual file="handpiece" material="${prefix}knife_c_handpiece_material"/>
+        <xacro:knife_c_collision file="handpiece_housing"/>
+        <xacro:knife_c_collision file="handpiece_collar"/>
+        <xacro:knife_c_collision file="handpiece_seat"/>
+      </link>
+      <joint name="${prefix}igus_tool0_to_knife_c_handpiece" type="fixed">
+        <parent link="${prefix}igus_tool0"/>
+        <child link="${prefix}knife_c_handpiece"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+      </joint>
+
+      <link name="${prefix}knife_c_wrist_camera">
+        <xacro:knife_c_visual file="gemini_bracket" material="${prefix}knife_c_camera_material"/>
+        <xacro:knife_c_visual file="gemini_cradle" material="${prefix}knife_c_camera_material"/>
+        <xacro:knife_c_visual file="gemini_305_body" material="${prefix}knife_c_camera_body_material"/>
+        <xacro:knife_c_collision file="gemini_bracket_0"/>
+        <xacro:knife_c_collision file="gemini_bracket_1"/>
+        <xacro:knife_c_collision file="gemini_bracket_2"/>
+        <xacro:knife_c_collision file="gemini_bracket_3"/>
+        <xacro:knife_c_collision file="gemini_cradle_0"/>
+        <xacro:knife_c_collision file="gemini_cradle_1"/>
+        <xacro:knife_c_collision file="gemini_cradle_2"/>
+        <xacro:knife_c_collision file="gemini_305_body"/>
+      </link>
+      <joint name="${prefix}igus_tool0_to_knife_c_wrist_camera" type="fixed">
+        <parent link="${prefix}igus_tool0"/>
+        <child link="${prefix}knife_c_wrist_camera"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+      </joint>
+
+      <xacro:if value="${str(blade_collision).lower() == 'true'}">
+        <xacro:property name="tcp_v" value="${[float(v) for v in blade_tcp_xyz.split()]}"/>
+        <!-- K origin = seat front face centre, in igus_tool0 (m) -->
+        <xacro:property name="blade_k0" value="${[0.04745 - 0.5 * 0.1708, -0.092262, -0.05511 + 0.8660254037844386 * 0.1708]}"/>
+        <!-- TCP in K: K x = (cos30, 0, 0.5), K y = (0, 1, 0), K z = (-0.5, 0, 0.866) -->
+        <xacro:property name="tcp_kx" value="${0.8660254037844386 * (tcp_v[0] - blade_k0[0]) + 0.5 * (tcp_v[2] - blade_k0[2])}"/>
+        <xacro:property name="tcp_ky" value="${tcp_v[1] - blade_k0[1]}"/>
+        <xacro:property name="tcp_kz" value="${-0.5 * (tcp_v[0] - blade_k0[0]) + 0.8660254037844386 * (tcp_v[2] - blade_k0[2])}"/>
+        <xacro:property name="bm" value="0.001"/>
+        <xacro:property name="bx0" value="${min(-0.0005, tcp_kx) - bm}"/>
+        <xacro:property name="bx1" value="${max(0.0005, tcp_kx) + bm}"/>
+        <xacro:property name="by0" value="${min(-0.002, tcp_ky) - bm}"/>
+        <xacro:property name="by1" value="${max(0.002, tcp_ky) + bm}"/>
+        <xacro:property name="bz0" value="${min(0.0, tcp_kz) - bm}"/>
+        <xacro:property name="bz1" value="${max(0.0144, tcp_kz) + bm}"/>
+        <material name="${prefix}knife_c_blade_material"><color rgba="1.0 0.0 0.8 1.0"/></material>
+        <material name="${prefix}knife_c_blade_box_material"><color rgba="1.0 0.0 0.8 0.35"/></material>
+        <link name="${prefix}knife_c_blade">
+          <visual>
+            <origin xyz="0 0 0.0072" rpy="0 0 0"/>
+            <geometry><box size="0.00038 0.004 0.0144"/></geometry>
+            <material name="${prefix}knife_c_blade_material"/>
+          </visual>
+          <visual>
+            <origin xyz="${(bx0 + bx1) / 2} ${(by0 + by1) / 2} ${(bz0 + bz1) / 2}" rpy="0 0 0"/>
+            <geometry><box size="${bx1 - bx0} ${by1 - by0} ${bz1 - bz0}"/></geometry>
+            <material name="${prefix}knife_c_blade_box_material"/>
+          </visual>
+          <collision>
+            <origin xyz="${(bx0 + bx1) / 2} ${(by0 + by1) / 2} ${(bz0 + bz1) / 2}" rpy="0 0 0"/>
+            <geometry><box size="${bx1 - bx0} ${by1 - by0} ${bz1 - bz0}"/></geometry>
+          </collision>
+        </link>
+        <joint name="${prefix}igus_tool0_to_knife_c_blade" type="fixed">
+          <parent link="${prefix}igus_tool0"/>
+          <child link="${prefix}knife_c_blade"/>
+          <origin xyz="${blade_k0[0]} ${blade_k0[1]} ${blade_k0[2]}" rpy="0 -0.5235987755982988 0"/>
+        </joint>
+      </xacro:if>
+    </xacro:if>
+  </xacro:macro>
+</robot>

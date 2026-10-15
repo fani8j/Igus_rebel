@@ -1,0 +1,63 @@
+# MoveIt - medicine grasp: planning-scene objects (shelf, plinth, 5 packed medical cartons), consumed by scripts/add_medicine_shelf.py.
+# Written new for this package. Geometry and placement are taken over from the Isaac rig of the tooling session (READ ONLY there):
+#   sim_assets/medical_box_tools/usd/shelf_cartons.usda          shelf boards + carton positions in the shelf frame W
+#   sim_assets/medical_box_tools/usd/dual_arm_rig_medical.usda    placement of W in the rig (world) frame + the plinth
+#   cad/medical_box_tooling_v1/common/{params,handoff}.py         BOXES (thickness x height x length), PULL_OUT, shelf rules
+# All numbers below are metres / degrees unless a name says mm.
+#
+# --- Frames ---------------------------------------------------------------------------------------------------------------------------
+# W  = shelf frame of common/handoff.py: origin on the shelf floor at the shelf FRONT edge, laterally centred on the TARGET carton; +X lateral along the
+#      shelf (across the carton thickness), +Y into the shelf (carton length direction), +Z up.  Cartons stand like books, spine (t x h) toward -Y, packed
+#      with zero gap, spines flush at y = 0.
+# world = this URDF's planning frame = d200_base_footprint (the D200 AMR root: floor under the AMR centre, +X forward, +Y left, Z up).  The robot is
+#      "dual-arm stand on a D200": the arms look along +X of this frame, arm_left at y +0.22, arm_right at y -0.22, arm base plane z = 0.2645 + 0.9093 = 1.1738 at the
+#      home lift.  The AMR body is the box x +-0.484, y +-0.327, z 0..0.2515.  The scene is fixed in world: moving the lift moves the arms, not the shelf.
+# `w_frame` is the pose of W in world; it is the SINGLE source of the shelf pose and is exported to config/medicine_shelf_pose.json by
+#   add_medicine_shelf.py --write-pose-json (for the Isaac scene).
+# PLACEMENT (chosen by the plan-only search of scripts/verify_plan_only.py --search, results in scan_results/medicine_grasp_moveit_20261015/): the AMR parks with its
+#   FRONT facing the shelf: the shelf front plane is perpendicular to the AMR X axis, the shelf is centred on the AMR centre line (y = 0, i.e. midway between the two
+#   arms, 0.222 m from each arm base axis), W origin at x = 0.78 m in front of the AMR centre = 0.296 m beyond the AMR front face (x 0.484) and the shelf floor 1.05 m above the
+#   floor (spine centre z = 1.16 m, 14 mm below the arm base plane 1.1738).  Why not the Isaac placement shifted onto the AMR (x 0.746, y 0.228, z 1.313): the left suction TCP is
+#   then straight ahead of its own arm and too close to the shoulder, and the right gripper needs its TCP (pointing down) no higher than ~1.35 m; both IK checks fail there.
+w_frame:
+  origin: [0.78, 0.0, 1.05]
+  yaw_deg: -90.0     # W +Y (into the shelf) = world +X (AMR forward)
+
+# Shelf boards in W (centre, size) = Cube prims of shelf_cartons.usda (UsdGeom.Cube size 1 scaled by the listed xformOp:scale).
+shelf_boards:
+  floor_board: {centre: [-0.002, 0.12525, -0.009], size: [0.111, 0.2685, 0.018]}
+  back_board:  {centre: [-0.002, 0.2595, 0.159],  size: [0.111, 0.018, 0.318]}
+  side_left:   {centre: [-0.0485, 0.12525, 0.159], size: [0.018, 0.2505, 0.318]}
+  side_right:  {centre: [0.0445, 0.12525, 0.159],  size: [0.018, 0.2505, 0.318]}
+  upper_board: {centre: [-0.002, 0.12525, 0.309],  size: [0.111, 0.2505, 0.018]}
+
+# Plinth under the shelf (in W axes for x/y; the top is 20 mm below the shelf floor top, the bottom is the floor z = 0 of `world`).  Dimensions as the Isaac plinth
+# (0.3 x 0.4 m, centred 0.16 m behind the shelf front edge).
+plinth:
+  centre_xy_w: [0.0, 0.16]
+  size_xy: [0.3, 0.4]
+  top_z_w: -0.02
+  bottom_z_world: 0.0
+
+# Cartons, left to right along +X_w (shelf order of shelf_cartons.usda: sequence [1, 2, 3, 5, 1], target index 2 = box 3 "Terumo Accuforce").
+# BOXES from common/params.py (mm): thickness t, height h (spine length, vertical), length l (depth into the shelf).
+cartons:
+  sequence: [1, 2, 3, 5, 1]
+  target_index: 2
+  boxes_mm:
+    1: {name: Boston Scientific Agent MONORAIL, t: 15.0, h: 230.0, l: 250.0}
+    2: {name: iVascular angiolite,              t: 16.0, h: 240.0, l: 250.0}
+    3: {name: Terumo Accuforce,                 t: 16.0, h: 220.0, l: 250.0}
+    4: {name: Terumo Ultimaster Nagomi,         t: 16.0, h: 250.0, l: 295.0}
+    5: {name: unknown (photo missing),          t: 12.0, h: 230.0, l: 250.0}
+  # packing: centre x_i = cumulative thickness, zero gap, the target carton centred on x_w = 0 (reproduces the x of shelf_cartons.usda: -31.5, -16, 0, 14, 27.5 mm);
+  # centre y = l / 2 (spines flush at y = 0), centre z = h / 2 (resting on the shelf floor).
+  rgba: [0.76, 0.6, 0.42, 1.0]
+  target_rgba: [0.9, 0.45, 0.2, 1.0]
+  # the target carton pulled this far out of the shelf toward the robot (common/params.PULL_OUT = 0.100). 0 = still packed in the shelf. The ROS parameter
+  # `pull_out` of add_medicine_shelf.py overrides it; scripts/verify_plan_only.py moves the target to 0.100 for the right-gripper test.
+  target_pull_out_m: 0.0
+
+shelf_rgba: [0.78, 0.78, 0.8, 1.0]
+plinth_rgba: [0.55, 0.55, 0.58, 1.0]
+frame_id: world

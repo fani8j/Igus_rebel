@@ -1,7 +1,10 @@
-# Gemini 305, wrist camera (top view). Passed to orbbec_camera's
+# Gemini 305 on the LEFT arm's knife (arm_left). Passed to orbbec_camera's
 # gemini_301_series.launch.py as config_file_path. Ideal range 7-50 cm.
+# Keeps the name wrist_camera: the 2026-10-13 left-arm hand-eye (link6 ->
+# wrist_camera_link), tools/wrist_handeye and the calibration UI use /wrist_camera.
+# The right arm's 305 is right_wrist_camera.yaml.
 camera_name: wrist_camera
-serial_number: CV27561000NP
+serial_number: CV27561000GA   # 2026-10-12: unit swapped (was CV27561000NP, now on the right arm)
 
 enable_color: true
 color_width: 1280

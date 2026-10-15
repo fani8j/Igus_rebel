@@ -1,0 +1,21 @@
+# MoveIt - medicine grasp. Mock-hardware start state = SRDF state `home` (+ right gripper open); also the initial_value of the ros2_control state/command interfaces.
+# Same as rebel_dual_arm_stand_moveit_config/config/initial_positions.yaml: lift -0.2, arms upright (all joints 0), sliders inward by 5.973 mm each (arm spacing
+# 0.459946 - 2 * 0.005973 = 0.448 m); plus the gripper finger fully open (pad gap 8 + 2 * 0.024 = 56 mm).
+initial_positions:
+  lift_joint: -0.2
+  slider_left_joint: -0.005973
+  slider_right_joint: 0.005973
+  arm_left_joint1: 0.0
+  arm_left_joint2: 0.0
+  arm_left_joint3: 0.0
+  arm_left_joint4: 0.0
+  arm_left_joint5: 0.0
+  arm_left_joint6: 0.0
+  arm_right_joint1: 0.0
+  arm_right_joint2: 0.0
+  arm_right_joint3: 0.0
+  arm_right_joint4: 0.0
+  arm_right_joint5: 0.0
+  arm_right_joint6: 0.0
+  arm_right_finger_left_joint: 0.024
+  arm_right_finger_right_joint: 0.024     # mimic follower of arm_right_finger_left_joint (same value)

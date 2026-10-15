@@ -1,0 +1,92 @@
+<?xml version="1.0"?>
+<!-- ros2_control for MoveIt - medicine grasp.  Adapted from rebel_dual_arm_stand_description/urdf/rebel_dual_arm.ros2_control.xacro (itself DERIVED FROM compal_robot,
+     MIT, see ../NOTICE): the 15 stand/arm joints (lift + 2 sliders + 2 x 6 arm joints) are declared EXACTLY as there, same <hardware> blocks, same fail-closed
+     hardware_protocol check (mock_hardware | isaac_topic ONLY, there is deliberately no real-hardware option).
+     Addition: ONE gripper joint, `arm_right_finger_left_joint` (the actuated LEHF finger; position command + position/velocity state).  The other finger,
+     `arm_right_finger_right_joint`, is a URDF <mimic> of it and is declared as a mimic follower (mock) / state joint (isaac_topic) so that /joint_states has both fingers.
+     The suction tool has no actuated joints (its pad buffers are fixed in this URDF), so nothing is added for the left arm.
+     isaac_topic: Isaac's articulation names the finger joint `finger_left_joint` (no arm_right_ prefix), see README "Isaac name mismatch". -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="rebel_medicine_grasp_ros2_control"
+               params="hardware_protocol
+                       joint_commands_topic:=/dual_arm/isaac_joint_commands
+                       joint_states_topic:=/dual_arm/isaac_joint_states
+                       initial_positions_file:=''">
+
+    <!-- fail closed on anything but the two supported protocols -->
+    <xacro:unless value="${hardware_protocol in ('mock_hardware', 'isaac_topic')}">
+      ${xacro.fatal('rebel_medicine_grasp: hardware_protocol must be mock_hardware or isaac_topic, got ' + hardware_protocol)}
+    </xacro:unless>
+
+    <!-- initial_value seeds both the state AND the command buffers (see the stand package). -->
+    <xacro:property name="initial_positions"
+                    value="${xacro.load_yaml(initial_positions_file)['initial_positions'] if initial_positions_file else dict()}" />
+
+    <xacro:macro name="rmg_joint" params="joint">
+      <joint name="${joint}">
+        <command_interface name="position" />
+        <state_interface name="position">
+          <xacro:if value="${joint in initial_positions}">
+            <param name="initial_value">${initial_positions[joint]}</param>
+          </xacro:if>
+        </state_interface>
+        <state_interface name="velocity" />
+      </joint>
+    </xacro:macro>
+
+    <ros2_control name="rebel_medicine_grasp_controller" type="system">
+      <hardware>
+        <xacro:if value="${hardware_protocol == 'mock_hardware'}">
+          <plugin>mock_components/GenericSystem</plugin>
+        </xacro:if>
+        <xacro:if value="${hardware_protocol == 'isaac_topic'}">
+          <plugin>topic_based_ros2_control/TopicBasedSystem</plugin>
+          <param name="joint_commands_topic">${joint_commands_topic}</param>
+          <param name="joint_states_topic">${joint_states_topic}</param>
+          <param name="trigger_joint_command_threshold">0.0001</param>
+        </xacro:if>
+      </hardware>
+
+      <!-- gantry -->
+      <xacro:rmg_joint joint="lift_joint" />
+      <xacro:rmg_joint joint="slider_left_joint" />
+      <xacro:rmg_joint joint="slider_right_joint" />
+
+      <!-- arm_left -->
+      <xacro:rmg_joint joint="arm_left_joint1" />
+      <xacro:rmg_joint joint="arm_left_joint2" />
+      <xacro:rmg_joint joint="arm_left_joint3" />
+      <xacro:rmg_joint joint="arm_left_joint4" />
+      <xacro:rmg_joint joint="arm_left_joint5" />
+      <xacro:rmg_joint joint="arm_left_joint6" />
+
+      <!-- arm_right -->
+      <xacro:rmg_joint joint="arm_right_joint1" />
+      <xacro:rmg_joint joint="arm_right_joint2" />
+      <xacro:rmg_joint joint="arm_right_joint3" />
+      <xacro:rmg_joint joint="arm_right_joint4" />
+      <xacro:rmg_joint joint="arm_right_joint5" />
+      <xacro:rmg_joint joint="arm_right_joint6" />
+
+      <!-- right gripper: actuated finger + its mimic follower.  The follower is declared so that /joint_states carries BOTH finger joints: MoveIt's planning-scene
+           state and the pipeline's path validation do not update URDF mimic joints that are missing from a joint_state message (the closed follower then collided
+           with the carton in validation while the planner saw the open gripper).
+           mock_hardware: mock_components/GenericSystem `mimic` param (follower = 1 x driver, as the URDF <mimic>); isaac_topic: the follower is a plain joint whose state
+           comes from Isaac (PhysX mimic joint); it is commanded together with the driver (Isaac ignores the right target, see sim_assets README). -->
+      <xacro:rmg_joint joint="arm_right_finger_left_joint" />
+      <joint name="arm_right_finger_right_joint">
+        <xacro:if value="${hardware_protocol == 'mock_hardware'}">
+          <param name="mimic">arm_right_finger_left_joint</param>
+          <param name="multiplier">1</param>
+        </xacro:if>
+        <command_interface name="position" />
+        <state_interface name="position">
+          <xacro:if value="${'arm_right_finger_right_joint' in initial_positions}">
+            <param name="initial_value">${initial_positions['arm_right_finger_right_joint']}</param>
+          </xacro:if>
+        </state_interface>
+        <state_interface name="velocity" />
+      </joint>
+    </ros2_control>
+  </xacro:macro>
+</robot>

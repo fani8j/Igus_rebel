@@ -1,0 +1,67 @@
+# dual_cut_coordinator parameters (design: scan_results/dual_arm_stack_20261014/design/P3_P4_DESIGN.md section 6).
+# Safety defaults: nothing executes unless execution_enabled AND a per-phase enable are set to true at runtime
+# (ros2 param set /dual_cut_coordinator execution_enabled true). Planning parameters are rejected with
+# "busy" while a plan or an execution runs; wiring parameters are read only.
+dual_cut_coordinator:
+  ros__parameters:
+    # --- execution enables (all false) ---
+    execution_enabled: false
+    execute_phase_a_enabled: false
+    execute_phase_b_enabled: false
+
+    # --- validation ---
+    swept_padding_m: 0.05                 # mock default; the real value comes from P4.5 data and model coverage (risk 5)
+    exact_distance_tolerance_m: 0.002     # subtracted from every FCL distance (WP5b: measured max overestimate 0.07 mm)
+    tip_on_line_tolerance_m: 0.002        # tool tip within 2 mm of the exported cut line in CUT segments
+    world_penetration_tolerance_m: 0.0    # strict: any contact outside the allowed tool/carton contact refuses the phase
+    frame_tolerance: 1.0e-6               # exported base transform vs dual URDF world -> arm_X_base_link
+    external_snapshot_max_age_s: 240.0    # same limit as the executors (cap 600 s)
+    sample_dt_s: 0.05
+    max_joint_step_rad: 0.01
+    allow_serial_fallback: true
+    require_planning_scene: true
+    # The dual move_group scene has no carton: each per-arm executor puts detected_carton into ITS scene (the
+    # right one after the fixed snapshot transform). The coordinator reads both (namespaces below), refuses the
+    # plan if they are not the same physical box in the dual world, and uses it for the world check.
+    carton_object_id: detected_carton
+    require_carton: true
+    carton_consistency_tol_m: 0.002
+    carton_consistency_tol_rad: 0.005
+    left_scene_ns: /arm_left
+    right_scene_ns: /arm_right
+    contact_object_ids: ["detected_carton"]
+    contact_link_suffixes: ["knife_c_holder", "knife_c_handpiece", "knife_c_wrist_camera", "knife_c_blade", "xeg32_tool_tip"]
+
+    # --- executor parameters set before each planning call ("name=value") ---
+    # middle_seam_stop must be end for every pattern but middle_only (the executor refuses the combination).
+    left_phase_a_params: ["cut_pattern=middle_only", "middle_seam_stop=center"]
+    left_phase_b_params: ["cut_pattern=left_only", "middle_seam_stop=end"]
+    right_phase_a_params: ["cut_pattern=left_only", "middle_seam_stop=end"]
+    right_phase_b_params: ["cut_pattern=middle_only", "middle_seam_stop=center"]
+    executor_call_timeout_s: 200.0
+
+    # --- monitor (20 Hz) and start barriers ---
+    monitor_stop_distance_m: 0.03
+    joint_state_stale_s: 0.4
+    tracking_stop_rad: 0.2
+    tracking_warn_rad: 0.1
+    barrier_joint_state_age_s: 0.1
+    barrier_start_tolerance_rad: 0.01
+    barrier_rest_velocity: 0.03
+    barrier_rest_duration_s: 0.5
+    barrier_timeout_s: 8.0
+    start_delay_s: 0.25
+    expected_hardware_components: 2
+
+    # --- wiring (read only) ---
+    left_executor_ns: /arm_left/box_h_cut_executor
+    right_executor_ns: /arm_right/box_h_cut_executor
+    left_controller: arm_left_trajectory_controller
+    right_controller: arm_right_trajectory_controller
+    controller_manager: /controller_manager
+    model_node: /move_group
+    planning_scene_service: /get_planning_scene
+    display_topic: /display_planned_path
+    expected_planning_frame: base_link
+    expected_tool_link: xeg32_tool_tip
+    tip_link_suffix: xeg32_tool_tip

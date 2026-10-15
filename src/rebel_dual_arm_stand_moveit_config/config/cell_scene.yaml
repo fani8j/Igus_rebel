@@ -1,0 +1,46 @@
+# Planning-scene objects of the dual-arm cut cell (carton + carton table), consumed by scripts/add_cell_scene.py.
+# Written new for this package; the carton layout comes from scan_results/cell_v3_20261004/recommended.json (rank 1, design r_1269_A0_B0,
+# fixture "BIG") and the frame conventions of tools/cell_planner_check (cellgeom.py, README "Frames").
+#
+# --- Frames ---------------------------------------------------------------------------------------------------------------------------
+# W  = planning frame of tools/cell_planner_check: x forward, y lateral (arm1 at +y), z up; origin mid-way between the two arm base axes,
+#      at the arm base mounting plane; each arm base_link frame is W translated by (0, +-s/2, 0) with IDENTITY rotation.
+#      carton top at z_w = -h, table plane = carton bottom.
+# world = this URDF's world frame (compal_robot rig).  The arm mounts are rotated -90 deg about +Z, so the arm base x axis (= W x = "forward")
+#      points along world -Y, the base y axis (= W y, towards arm1) along world +X; arm1 = arm_left, arm2 = arm_right.
+#      => x_w = -Y_world, y_w = +X_world, z_w = +Z_world:   p_world = O + Rz(-90 deg) p_W,   O = w_frame.origin below.
+#      O.x = mid-point of the two arm base axes in X: (0.228209 - 0.231737)/2 = -0.001764 (unchanged by symmetric slider travel),
+#      O.y = arm base axis Y = -0.179297,
+#      O.z = arm mount plane height = 1.1093 + lift_joint.   The lift moves the arms, the scene is fixed in world, so a reference lift value
+#      is needed: lift_ref = -0.2 = the SRDF `home` value.  IF THE LIFT IS RUN TO ANOTHER HEIGHT THE REAL TABLE MUST FOLLOW; change lift_ref.
+# --- Result at lift_ref = -0.2 (script prints it with --print) -------------------------------------------------------------------------
+#      carton centre world = (-0.085764, -0.729297, 0.8193), yaw about +Z = 165 deg, size 0.32 x 0.37 x 0.18 (local x = seam axis, 0.32 m)
+#      NOTE: the brief said "yaw 15 deg"; recommended.json says 165 deg (= -15 deg modulo the carton's 180 deg symmetry). 165 is used. +15 deg would
+#      be the MIRROR image (a different pose) and is NOT equivalent.
+frame_id: world
+
+w_frame:
+  origin_xy: [-0.001764, -0.179297]
+  mount_plane_z_at_lift0: 1.1093
+  lift_ref: -0.2
+  yaw_deg: -90.0
+
+# W-frame layout (metres / degrees)
+layout:
+  carton:
+    id: carton
+    size_AxBxH: [0.32, 0.37, 0.18]      # BIG370: A (0.32) along the seam axis a = (-sin yaw, cos yaw), B (0.37) across, H tall
+    centre_xy: [0.55, -0.084]           # "440 mm in front of the table edge (+0.110)", 84 mm towards arm 2 (-y)
+    yaw_deg: 165.0                      # study yaw psi; box frame = Rz(psi + 90 deg), cellgeom.carton_geometry
+    h: 0.0                              # carton top at z_w = -h
+    rgba: [0.76, 0.6, 0.42, 1.0]
+  carton_table:
+    id: carton_table
+    # PLACEHOLDER GEOMETRY (not measured): the study only fixes "carton table starts at x_w = 0.12" and the 650 mm test-table width
+    # (summary.md section 9, memory: test table 650 mm). Depth, and the solid block down to the floor, are assumptions.
+    x_front: 0.12
+    depth: 0.80
+    half_width: 0.325
+    thickness: null                     # null = solid block from the table top down to floor_z_world; or a slab thickness in m
+    floor_z_world: 0.0
+    rgba: [0.72, 0.66, 0.55, 0.8]

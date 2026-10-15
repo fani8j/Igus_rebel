@@ -37,8 +37,14 @@ tracker:
   min_conf: 0.15
   use_polarity: false
 robot:
+  # Same scope as before for the new variant-C tool (URDF tool_variant:=knife_c, 2026-10-12):
+  # knife_c_handpiece / knife_c_holder replace xeg32_knife_handpiece / xeg32_knife_holder;
+  # knife_c_wrist_camera is deliberately NOT listed (the old wrist camera never was). The xeg32_*
+  # names stay for tool_variant:=xeg32_knife_v1 (unknown names in the ACM are harmless).
   carton_allowed_links:
   - xeg32_tool_tip
+  - knife_c_handpiece
+  - knife_c_holder
   - xeg32_knife_handpiece
   - xeg32_knife_holder
   - xeg32_base_link

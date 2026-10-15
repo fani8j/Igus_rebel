@@ -141,6 +141,8 @@ typedef struct
   size_t number_of_pixels;
   size_t bytes_per_line;
   size_t size_in_bytes;
+  // bytes actually delivered for the last frame (V4L2 bytesused / read() length)
+  size_t bytes_used = 0;
   v4l2_format v4l2_fmt;
   struct timespec stamp;
 
@@ -219,6 +221,12 @@ public:
   inline size_t get_image_size_in_bytes()
   {
     return m_image.size_in_bytes;
+  }
+
+  /// @brief Bytes actually delivered for the last grabbed frame (JPEG length for raw mjpeg)
+  inline size_t get_image_bytes_used()
+  {
+    return m_image.bytes_used;
   }
 
   inline size_t get_image_size_in_pixels()

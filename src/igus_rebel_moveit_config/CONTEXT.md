@@ -120,3 +120,85 @@ knife. The left cut line runs along the top-left edge (back_middle_left ->
 front_middle_left), so a flat blade meets the tape where it wraps over that edge, edge-first
 from outside the carton (the lateral entry). `left_parallel_orientation_enabled` searches
 for the smallest reachable `theta_p` (opt-in, plan-only).
+
+## Varying-orientation left cut
+Opt-in (`left_parallel_varying_orientation_enabled`, default off). Instead of one fixed left_parallel
+orientation, the tool orientation may change between stations along the left stroke
+(`left_varying_*`); the longest contiguous feasible station interval is cut, trimmed at either end if
+needed, and planning fails closed below `left_varying_min_cut_fraction`. Details in
+`XEG32_MOVEIT_CHANGES.md`.
+
+## Extended left cut (corner-to-corner)
+Opt-in (`left_cut_extend_to_corners`, default off; requires the varying-orientation mode). The varying
+search runs on the nominal `back_middle_left -> front_middle_left` line extended both ways to the corners
+(`back_left + left_cut_corner_margin_m` .. `front_left - left_cut_corner_margin_m`, projected onto that line)
+and keeps the longest reachable interval that CONTAINS the seam crossing +/- `left_cut_seam_cover_m`. The
+minimum length (`left_varying_min_cut_fraction`) is measured against the NOMINAL segment. Details in
+`XEG32_MOVEIT_CHANGES.md`.
+
+## Approach-only left debug plan
+`left_debug_stop_at_approach` (default off, `cut_pattern left_only` only): `plan_h_cut` plans and validates
+the full left cut, publishes its markers, but retains only the approach to the left hover pose (after the
+pre-cut dwell). Executing it needs both `execution_enabled` and `debug_motion_execution_enabled`.
+
+## Snapshot frame mode and relabel (dual-arm planning stack)
+Read-only parameters, defaults = today's behaviour. Perception writes the snapshot in the LEFT base frame
+(`frame_id` `base_link`). An executor that plans for another arm sets `snapshot_frame_mode fixed_transform`:
+the 11 snapshot points are mapped `p_plan = B^-1 p_snapshot` and the normal is rotated, with `B` =
+`snapshot_planning_base_xyz/_rpy` (URDF fixed-axis rpy, R = Rz Ry Rx; the right arm copies
+`dual_arm_calibration.yaml` `arm_right_base` verbatim), after checking `frame_id == snapshot_frame_id`; the result
+is stamped `planning_frame` and then goes through `validateSnapshot` unchanged. `snapshot_relabel rotate_180`
+renames the corners by a 180 degree rotation about the carton normal (back_left<->front_right,
+back_right<->front_left, seam_start<->seam_end, back_middle_left<->front_middle_right,
+front_middle_left<->back_middle_right; seam centre and normal kept), so the carton's RIGHT face becomes the
+executor's "left" cut with exactly the left arm's geometry. The label handedness is checked before and after
+(a mirror relabel flips it and is refused). Both are applied once, at the end of `parseSnapshotFromDocument`
+(pure maths in `snapshot_frame.hpp`). A transformed or relabelled snapshot needs `plan_export_only=true`, forbids
+`cut_debug_correction_enabled` and `side_tape_handoff_enabled`, refuses the side-tape seed block and pattern `h`
+with `approach_joint_degrees`; non-zero `snapshot_planning_base_*` without `fixed_transform` is refused.
+
+## Carton contact links (blade collision)
+Read-only string-list parameter `carton_contact_links` (default `[]`, meaning `[tool_link]` = today's behaviour). The
+scoped tool/carton contact allowance (only while `allow_tool_carton_contact` is true) is installed for EVERY listed link
+in the same places as before: the `allow knife-tip contact` / `restore knife-tip collision checking` stages around the
+cut strokes (`addCartonContactScope`), the carton scene of a cut-debug start and of the side-tape stages, and the
+analytic-search scenes' allowed-collision matrices (`setCartonContactEntries`). Free-space transits, approach and hover
+stay fully checked for the listed links against `detected_carton`. `PlannedSegment.tool_carton_contact_allowed` is true
+only if every listed link is allowed at the start of the stage. Used by the dual per-arm planners: their model carries
+the opt-in collision box `knife_c_blade` (URDF arg `blade_collision:=true`, see `XEG32_MOVEIT_CHANGES.md`), and the launch
+sets `carton_contact_links [xeg32_tool_tip, knife_c_blade]`. `tool_link` is not added automatically to a non-empty list.
+Startup refuses (exit code 2, FATAL log) when a listed link is not in the robot model; `validateSettings` refuses empty,
+duplicate or `carton_collision_id` entries. The scoped allowance is also the only place the blade may touch the carton:
+`knife_c_handpiece` / `knife_c_holder` stay checked during the plunge (see the evidence in `XEG32_MOVEIT_CHANGES.md`).
+
+## Plan export-only mode
+`plan_export_only` (read-only, default false). Only `~/plan_h_cut`, `~/plan_h_cut_from_state`,
+`~/get_planned_solution`, `~/clear_plan` and `~/diagnose_external_snapshot_sections` are advertised: no
+`execute_planned_h_cut`, side-tape, T-cut, staged top-cut or cut-debug service exists. Required by every
+non-default snapshot frame handling.
+
+## Half-seam top cut
+Planning parameters `middle_seam_stop` (`end` default | `center`) and `middle_seam_center_overlap_m` ([0, 0.03] m),
+`cut_pattern middle_only` only (every other pattern, and the staged/side-tape/cut-debug/continue paths, refuse
+`center`). The stroke ends at `seam_center` projected onto the seam (from `seam_start`, after the optional
+`middle_cut_reverse_travel` swap) plus the overlap, beyond the centre in travel direction. The carton box keeps its
+axis. The shortening loop is OFF in this mode: the half either plans in full or the plan fails (shortening would
+leave tape uncut at the centre). `middle_cut_fraction` of the export is the planned fraction of the seam.
+
+## Planned solution (export)
+`~/get_planned_solution` (dual_cut_msgs/GetPlannedSolution) reads the retained plan under the plan lock (`busy`
+if a planning call holds it) and neither consumes nor changes it. Each leaf stage with a trajectory becomes a
+`PlannedSegment` with kind TRANSIT/ALIGN/DWELL/ENTRY/CUT/FINISH/LIFT from its stage name (`plan_export.hpp`; an
+unknown name with a trajectory makes the export FAIL; scene-only stages are skipped), the executor's cut label
+(`cut_id`), the physical cut (`left`/`right` swapped under `rotate_180`) and whether the stage's start scene
+allows tool/carton contact. `cut_targets` are the retained cut target poses in `planning_frame`: two per CUT
+segment (stroke start, stroke end; the tool-tip positions at cut depth, i.e. what the planner targets), the
+convention `dual_cut_coordinator` reads. The response also carries start/end joint state, the snapshot identity
+and the applied frame handling, and `raw`, the MTC Solution message as published on the introspection topic.
+
+## Plan from an explicit start state
+`~/plan_h_cut_from_state` (dual_cut_msgs/PlanFromState): exactly the planning group's six joints, finite, inside
+the joint limits. The normal `plan_h_cut` flow runs with a `FixedState` stage (the move_group scene with those
+joint values) instead of `CurrentState`, and the IK seeds of the left searches come from the same values. Refused
+for `t_cut_handoff`, the debug patterns and `left_debug_stop_at_approach`. The retained plan is marked
+`retained_from_override_`: `execute_planned_h_cut` refuses it for ever (replan with `plan_h_cut`).

@@ -130,6 +130,29 @@ bool IsOverrideAsExpected(float overridePercent)
          std::fabs(overridePercent - kExpectedOverridePercent) <= kOverrideTolerancePercent;
 }
 
+bool StartsAllCommandInterfaces(
+  const std::vector<std::string> & startInterfaces, const std::array<std::string, 6> & jointNames,
+  const std::string & interfaceType)
+{
+  for (const std::string & joint : jointNames) {
+    if (joint.empty()) {
+      return false;
+    }
+    const std::string wanted = joint + "/" + interfaceType;
+    bool found = false;
+    for (const std::string & started : startInterfaces) {
+      if (started == wanted) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      return false;
+    }
+  }
+  return true;
+}
+
 std::string FormatAliveJog(int counter, const std::array<float, 6> & jogPercent)
 {
   std::array<double, 6> jog{};

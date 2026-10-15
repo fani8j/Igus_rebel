@@ -59,6 +59,14 @@ namespace usb_cam
 namespace utils
 {
 
+/// @brief Number of bytes to copy out of a V4L2 buffer when no conversion is needed.
+/// Uncompressed formats copy the full frame size; compressed passthrough formats copy only
+/// the bytes actually used, clamped to the destination capacity (size_in_bytes).
+inline size_t bytes_to_copy(bool compressed, size_t bytes_used, size_t size_in_bytes)
+{
+  return compressed ? (bytes_used < size_in_bytes ? bytes_used : size_in_bytes) : size_in_bytes;
+}
+
 
 /// @brief Read more on IO methods here: https://lwn.net/Articles/240667/
 typedef enum

@@ -1,0 +1,69 @@
+# robot_description_planning. Prefixed copy of igus_rebel_moveit_config/config/joint_limits.yaml.
+# igus/CPR ReBeL limits, same as the single-arm config: 0.785 rad/s (45 deg/s), 5.24 rad/s^2.
+# The 0.1 rad/s / 0.5 rad/s^2 bring-up caps were lifted 2026-10-15 after the software cross-stop was
+# verified on the real cell with the arms standing still (backup: scan_results/dual_arm_stack_20261015/joint_limits.dual.bringup_cap.yaml.bak).
+# Humble MoveIt ignores the default_*_scaling_factor below when a request leaves the scaling at 0 (plans
+# at full speed); the RViz MotionPlanning panel starts its sliders at these values.
+default_velocity_scaling_factor: 0.1
+default_acceleration_scaling_factor: 0.1
+joint_limits:
+  arm_left_joint1:
+    has_velocity_limits: true
+    max_velocity: 0.785
+    has_acceleration_limits: true
+    max_acceleration: 5.24
+  arm_left_joint2:
+    has_velocity_limits: true
+    max_velocity: 0.785
+    has_acceleration_limits: true
+    max_acceleration: 5.24
+  arm_left_joint3:
+    has_velocity_limits: true
+    max_velocity: 0.785
+    has_acceleration_limits: true
+    max_acceleration: 5.24
+  arm_left_joint4:
+    has_velocity_limits: true
+    max_velocity: 0.785
+    has_acceleration_limits: true
+    max_acceleration: 5.24
+  arm_left_joint5:
+    has_velocity_limits: true
+    max_velocity: 0.785
+    has_acceleration_limits: true
+    max_acceleration: 5.24
+  arm_left_joint6:
+    has_velocity_limits: true
+    max_velocity: 0.785
+    has_acceleration_limits: true
+    max_acceleration: 5.24
+  arm_right_joint1:
+    has_velocity_limits: true
+    max_velocity: 0.785
+    has_acceleration_limits: true
+    max_acceleration: 5.24
+  arm_right_joint2:
+    has_velocity_limits: true
+    max_velocity: 0.785
+    has_acceleration_limits: true
+    max_acceleration: 5.24
+  arm_right_joint3:
+    has_velocity_limits: true
+    max_velocity: 0.785
+    has_acceleration_limits: true
+    max_acceleration: 5.24
+  arm_right_joint4:
+    has_velocity_limits: true
+    max_velocity: 0.785
+    has_acceleration_limits: true
+    max_acceleration: 5.24
+  arm_right_joint5:
+    has_velocity_limits: true
+    max_velocity: 0.785
+    has_acceleration_limits: true
+    max_acceleration: 5.24
+  arm_right_joint6:
+    has_velocity_limits: true
+    max_velocity: 0.785
+    has_acceleration_limits: true
+    max_acceleration: 5.24
