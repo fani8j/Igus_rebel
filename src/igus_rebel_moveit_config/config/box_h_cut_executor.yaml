@@ -14,7 +14,8 @@
 #   pre_cut_stabilization_duration_s, left_parallel_*, cut_debug_*_correction_file,
 #   side_tape_handoff_enabled/variant/standoff_mm/box_offset/max_search_angle.
 # - RUNTIME (read when used, never blocked): execution_enabled, debug_motion_execution_enabled,
-#   left_roll_diagnostics_enabled, external_snapshot_file.
+#   left_roll_diagnostics_enabled, external_snapshot_file, and the cri_transit_* /
+#   controller_manager_ns group (additionally rejected while a T cut or CRI transit runs).
 # Numeric values must be finite; out-of-range values fail closed.
 box_h_cut_executor:
   ros__parameters:
@@ -81,10 +82,14 @@ box_h_cut_executor:
     # Operator correction (2026-09-30, measured on the real box), base_link mm: x/y shift the
     # whole snapshot (carton, cut line, seed wall plane); z shifts only the left cut line
     # (seam height). Applies to every later hand-off plan until reset to [0, 0, 0].
-    side_tape_handoff_box_offset_base_mm: [0.6, -12.3, -8.4]
+    # knife_c 2026-10-12: zeroed, the previous value [0.6, -12.3, -8.4] was taught with the OLD tool TCP (compensated its model error); re-teach by teleop with knife_c
+    side_tape_handoff_box_offset_base_mm: [0.0, 0.0, 0.0]
     # Max |tilt|,|pitch|,|yaw| the search may add on top of the base pose; side_tape refuses
     # above ~10 deg. Also floors the axis-convention tolerance.
     side_tape_handoff_max_search_angle_deg: 20.0
+    # "Arm at rest" limit for the side-cut/top-cut/T-cut gates. 0.01 (default) is below the
+    # driver's velocity noise (0.01 deg position step / ~13 ms STATUS = 0.0131 rad/s).
+    side_tape_handoff_joint_velocity_threshold: 0.03
     # Left-cut orientation search IK: "analytic" (closed-form, all branches, ~1 s answers;
     # falls back to kdl if its startup self-check fails) or "kdl" (old behaviour). Restart to change.
     left_search_ik_backend: analytic
@@ -96,7 +101,9 @@ box_h_cut_executor:
     side_tape_continue_check_snapshot_age: false
     side_tape_continue_speed_factor: 0.5
     side_tape_continue_end_extension_mm: 5.0
-    side_tape_continue_end_extra_depth_mm: 0.0
+    side_tape_continue_end_extra_depth_mm: 1.5
+    # Hold in the material this long before the left cut stroke (continue_side_cut / T cut).
+    side_cut_post_penetration_dwell_s: 1.0
     side_tape_continue_check_end_depth: false
 
     # ---- Top (middle seam) cut --------------------------------------------------------
@@ -107,8 +114,10 @@ box_h_cut_executor:
     # flipped blade): cut-local [along seam start->end, across, depth (+ = deeper)] mm vs the
     # planned start/end. along/across move the seam points (hover follows); depth applies to
     # the cut targets only. Poses in scan_results/top_cut_teach_20261001/.
-    top_cut_start_offset_mm: [-11.1, -3.8, 11.8]
-    top_cut_end_offset_mm: [-6.3, -3.3, 12.1]
+    # knife_c 2026-10-12: zeroed, the previous value [-11.1, -3.8, 11.8] was taught with the OLD tool TCP (compensated its model error); re-teach by teleop with knife_c
+    top_cut_start_offset_mm: [0.0, 0.0, 0.0]
+    # knife_c 2026-10-12: zeroed, the previous value [-6.3, -3.3, 12.1] was taught with the OLD tool TCP (compensated its model error); re-teach by teleop with knife_c
+    top_cut_end_offset_mm: [0.0, 0.0, 0.0]
     # Hold at the penetration pose before the cut stroke (every middle-seam plan).
     top_cut_post_penetration_dwell_s: 1.0
     # Tip height above the top after the top-cut lift (staged/continue only), [0.001, 0.05] m.
@@ -122,3 +131,25 @@ box_h_cut_executor:
     # ---- Safety / execution gates (both default false; keep false in the file) ---------
     # Physical trajectory dispatch stays disabled until an operator deliberately enables it.
     execution_enabled: false
+
+    # ---- Opt-in CRI "Move Joint" for free-space transits of the one-call T cut ----------
+    # false = every trajectory runs on the JTC exactly as before. true = in execute_t_cut ONLY
+    # (approach_standoff and continue_top_cut), a transit leaf runs as the robot controller's own
+    # synchronized joint move (igus_rebel_msgs/MoveJoint on the driver) when it is proven to be a
+    # collision-checked straight joint-space line produced by the joint-interpolation planner,
+    # moves exactly the 6 arm joints by >= cri_transit_min_length_rad, and its scene_diff holds
+    # nothing but robot state. All other leaves (OMPL transits, Cartesian strokes, dwells,
+    # scene changes) stay on the JTC. The JTC is deactivated around each CRI move and
+    # re-activated afterwards; any failure fails the T-cut step like a JTC failure. NOTE: once
+    # sent, a lost link / dead driver does NOT stop a CRI move (abort_t_cut sends Move Stop).
+    # Values are doubles (write 10.0, not 10). Caps in code: velocity <= 50, acceleration <= 40.
+    cri_transit_enabled: false
+    cri_transit_velocity_percent: 10.0
+    cri_transit_acceleration_percent: 30.0
+    # Leaves whose largest joint change is below this stay on the JTC. [0.01, 6.3] rad.
+    cri_transit_min_length_rad: 0.05
+    # Driver action: /<hardware node_name, default igus_rebel>/move_joint.
+    cri_transit_action: /igus_rebel/move_joint
+    controller_manager_ns: /controller_manager
+    # The arm JTC to deactivate around a CRI move (driver default name).
+    cri_transit_trajectory_controller: rebel_arm_trajectory_controller

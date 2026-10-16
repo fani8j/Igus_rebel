@@ -75,6 +75,8 @@ void Rebel::LatchHardwareError(const std::string & reason)
   // Latch first, then zero: write() re-checks the latch after storing a command.
   const bool wasLatched = hardwareErrorLatched_.exchange(true);
   ZeroJog();
+  // Zero jog does not stop a robot-side joint move; only CMD Move Stop does.
+  RequestMoveStop();
   if (wasLatched || !faultMember_) {
     // Already latched (by an earlier root cause, or by a peer): not a new root-cause fault.
     return;
@@ -95,9 +97,11 @@ void Rebel::OnPeerFault(const std::string & originName, const std::string & reas
   }
   // Latch first, then zero (see LatchHardwareError). Takes no lock: it may run on any thread
   // that reports a fault, including the message thread of the peer.
+  peerFaulted_ = true;
   const bool wasLatched = hardwareErrorLatched_.exchange(true);
   ZeroJog();
   lastWriteNs = 0;
+  RequestMoveStop();
   if (wasLatched) {
     return;
   }
@@ -219,7 +223,9 @@ void Rebel::AliveThreadFunction()
   bool wasStale = true;
   auto next = Safety::SteadyClock::now();
 
+  Safety::SteadyClock::time_point stopRetryAfter{};
   while (continueAlive) {
+    ConsumeMoveStopRequest(stopRetryAfter);
     if (aliveTransmit) {
       if (!announced) {
         RCLCPP_INFO(logger_, "Starting to send ALIVEJOG");
@@ -234,8 +240,9 @@ void Rebel::AliveThreadFunction()
       // Transmit-boundary inhibit: never send a non-zero jog while latched or held, even if a
       // write() stored one just before the latch/hold took effect. A STATUS coast (not latched,
       // not held) keeps sending the frozen jog.
+      // While a joint move is active jog is always zero (the robot owns the motion).
       const bool inhibited = hardwareErrorLatched_.load() || holdJogZero_.load() ||
-        statusHold_.load();
+        statusHold_.load() || moveState_.load() != kMoveIdle;
       if (!stale && !inhibited) {
         for (std::size_t i = 0; i < currentJog.size(); ++i) {
           currentJog[i] = jog[i].load();
@@ -264,7 +271,24 @@ void Rebel::AliveThreadFunction()
       next = now + Safety::kAlivePeriod;
     }
     std::unique_lock<std::mutex> lock(aliveWakeLock);
-    aliveWake.wait_until(lock, next, [this]() {return !continueAlive;});
+    // A Move Stop request ends the wait early so it goes out within a few ms; the ALIVEJOG
+    // period itself is not shifted (the wait resumes until `next`).
+    while (continueAlive) {
+      const bool woke = aliveWake.wait_until(
+        lock, next, [this, &stopRetryAfter]() {
+          return !continueAlive ||
+          (moveStopRequested_.load() && Safety::SteadyClock::now() >= stopRetryAfter);
+        });
+      if (!woke || !continueAlive) {
+        break;
+      }
+      lock.unlock();
+      ConsumeMoveStopRequest(stopRetryAfter);
+      lock.lock();
+      if (Safety::SteadyClock::now() >= next) {
+        break;
+      }
+    }
   }
 
   RCLCPP_WARN(logger_, "Stopped to send ALIVEJOG");
@@ -408,9 +432,27 @@ void Rebel::HandleMessage(const std::string & msg)
         break;
       }
 
+    case CriMessages::MessageType::MOVETOEXECACK:
+    case CriMessages::MessageType::MOVETOEXECEND:
+      {
+        const auto & event = std::get<CriMessages::ExecEvent>(parsed.payload);
+        RecordMoveEvent(event, parsed.type == CriMessages::MessageType::MOVETOEXECEND);
+        break;
+      }
+
+    case CriMessages::MessageType::EXECACK:
+    case CriMessages::MessageType::EXECEND:
+      RCLCPP_DEBUG(logger_, "Ignoring program execution message: %s", Truncate(msg).c_str());
+      break;
+
     case CriMessages::MessageType::CMDERROR:
       {
         const auto & error = std::get<CriMessages::CmdError>(parsed.payload);
+        if (error.recjectedCmd == moveCommandCounter_.load() && moveGoalBusy_.load()) {
+          std::lock_guard<std::mutex> eventLock(moveEventLock_);
+          moveEvents_.cmdError = true;
+          moveEvents_.cmdErrorText = error.error;
+        }
         std::string command;
         {
           std::lock_guard<std::mutex> lock(commandsLock);
@@ -435,6 +477,10 @@ void Rebel::HandleMessage(const std::string & msg)
     case CriMessages::MessageType::CMDACK:
       {
         const auto & ack = std::get<CriMessages::CmdAck>(parsed.payload);
+        if (ack.acceptedCmd == moveCommandCounter_.load() && moveGoalBusy_.load()) {
+          std::lock_guard<std::mutex> eventLock(moveEventLock_);
+          moveEvents_.cmdAck = true;
+        }
         std::string command;
         {
           std::lock_guard<std::mutex> lock(commandsLock);
@@ -491,7 +537,7 @@ bool Rebel::SetDigitalOut(const int & output, const bool & is_on)
   return Command(cmd.str());
 }
 
-bool Rebel::Command(const std::string & command)
+bool Rebel::Command(const std::string & command, bool quiet)
 {
   if (!rebelSocket) {
     return false;
@@ -509,7 +555,9 @@ bool Rebel::Command(const std::string & command)
   if (!rebelSocket->SendMessage(Safety::FormatCommand(commandCount, command))) {
     std::lock_guard<std::mutex> lock(commandsLock);
     unacknowledgedCommands.erase(commandCount);
-    RCLCPP_WARN(logger_, "Could not send command '%s': not connected", command.c_str());
+    if (!quiet) {
+      RCLCPP_WARN(logger_, "Could not send command '%s': not connected", command.c_str());
+    }
     return false;
   }
   return true;
@@ -540,6 +588,13 @@ void Rebel::OnConnected(bool reconnect)
       return !stopping && Command(command);
     };
 
+  // A robot-side joint move survives a lost link, a closed socket and zero jog, and the
+  // controller only accepts SetActive/Reset/Enable while idle: stop whatever may still be
+  // running, unconditionally, before anything else. (A pending stop request is satisfied by
+  // this one; cleared first so a request that arrives meanwhile is not lost.)
+  moveStopRequested_ = false;
+  send(CriKeywords::COMMAND_MOVE_STOP);
+
   // The CRI "Connect" command is intentionally not sent: CRI_V17 answers it with CMDERROR.
   send(CriKeywords::COMMAND_SETACTIVE + " true");
   send(CriKeywords::COMMAND_RESET);
@@ -564,7 +619,8 @@ void Rebel::OnConnected(bool reconnect)
   if (reconnect) {
     RCLCPP_WARN(
       logger_,
-      "Reconnected to ReBeL: re-sent SetActive, Reset, Enable, MotionTypeJoint and Override");
+      "Reconnected to ReBeL: sent Move Stop, then re-sent SetActive, Reset, Enable, "
+      "MotionTypeJoint and Override");
   }
   RCLCPP_INFO(logger_, "Rebel now controlled by velocity control.");
   connectedAtNs_ = ToNs(Safety::SteadyClock::now());
@@ -623,6 +679,7 @@ void Rebel::ProcessStatus(const CriMessages::Status & status)
     }
   }
   drivesDisabledMask_.store(disabledMask);
+  kinstateValue_.store(static_cast<int>(currentKinstate));
   CheckFaultGroupStatus(currentKinstate, currentErrorJoints);
 
   lastKinstate = currentKinstate;
@@ -752,6 +809,44 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
   }
   readName("digital_output_service", digitalOutputService_);
   readName("trajectory_controller_name", trajectoryControllerName_);
+  // Joint move caps: lowering is allowed, exceeding the hard caps is not (clamped, with a warning).
+  const auto readPercent = [&](const char * key, double hardCap, double & target) {
+      const auto it = params.find(key);
+      if (it == params.end() || it->second.empty()) {
+        return true;
+      }
+      double parsed = 0.0;
+      try {
+        std::size_t used = 0;
+        parsed = std::stod(it->second, &used);
+        if (used != it->second.size()) {
+          parsed = std::nan("");
+        }
+      } catch (const std::exception &) {
+        parsed = std::nan("");
+      }
+      if (!std::isfinite(parsed) || parsed <= 0.0) {
+        RCLCPP_FATAL(logger_, "Invalid %s '%s' (expected a number > 0)", key, it->second.c_str());
+        return false;
+      }
+      if (parsed > hardCap) {
+        RCLCPP_WARN(
+          logger_, "%s %.1f exceeds the hard cap %.1f: using %.1f", key, parsed, hardCap, hardCap);
+        parsed = hardCap;
+      }
+      target = parsed;
+      return true;
+    };
+  moveMaxVelocityPercent_ = Move::kDefaultMaxVelocityPercent;
+  moveMaxAccelerationPercent_ = Move::kDefaultMaxAccelerationPercent;
+  if (!readPercent(
+      "move_joint_max_velocity_percent", Move::kHardMaxVelocityPercent, moveMaxVelocityPercent_) ||
+    !readPercent(
+      "move_joint_max_acceleration_percent", Move::kHardMaxAccelerationPercent,
+      moveMaxAccelerationPercent_))
+  {
+    return CallbackReturn::ERROR;
+  }
   std::string faultGroup;
   readName("fault_group", faultGroup);
   const bool validGroup = std::all_of(
@@ -771,8 +866,25 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
   if (!ValidateJoints(hardware_info)) {
     return CallbackReturn::ERROR;
   }
+  jointLimits_ = Move::HardwareJointLimits();
   for (std::size_t i = 0; i < 6; ++i) {
     jointNames_[i] = hardware_info.joints[i].name;
+    // The ros2_control tag normally carries no position limits (the URDF <limit> is not passed
+    // to the plugin); if the position state interface declares min/max, those win.
+    for (const auto & state : hardware_info.joints[i].state_interfaces) {
+      if (state.name == hardware_interface::HW_IF_POSITION && !state.min.empty() &&
+        !state.max.empty())
+      {
+        try {
+          const double lower = std::stod(state.min);
+          const double upper = std::stod(state.max);
+          if (std::isfinite(lower) && std::isfinite(upper) && lower < upper) {
+            jointLimits_[i] = {lower, upper};
+          }
+        } catch (const std::exception &) {
+        }
+      }
+    }
   }
 
   ZeroJog();
@@ -817,6 +929,20 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
   lastFreshStamp_ = {};
   gapCount_ = 0;
   gapMaxMs_ = 0.0;
+  moveState_ = kMoveIdle;
+  moveGoalBusy_ = false;
+  moveCancelRequested_ = false;
+  moveStopRequested_ = false;
+  peerFaulted_ = false;
+  activated_ = false;
+  kinstateValue_ = 0;
+  moveCommandCounter_ = -1;
+  velocityClaimMask_ = 0;
+  claimPendingUntilNs_ = 0;
+  {
+    std::lock_guard<std::mutex> lock(moveEventLock_);
+    moveEvents_ = MoveEvents{};
+  }
 
   try {
     node_ = std::make_shared<rclcpp::Node>(nodeName_);
@@ -830,10 +956,23 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
     digital_output_srv_ = node_->create_service<igus_rebel_msgs::srv::SetDigitalOutput>(
       digitalOutputService_,
       std::bind(&Rebel::dio_callback, this, std::placeholders::_1, std::placeholders::_2));
+    // Own callback group: a cancel or goal request is never blocked by reset_and_enable.
+    moveGroup_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    moveServer_ = rclcpp_action::create_server<MoveJointAction>(
+      node_, "~/move_joint",
+      [this](const rclcpp_action::GoalUUID & uuid,
+      std::shared_ptr<const MoveJointAction::Goal> goal) {
+        return OnMoveGoal(uuid, std::move(goal));
+      },
+      [this](const std::shared_ptr<MoveGoalHandle> goalHandle) {return OnMoveCancel(goalHandle);},
+      [this](const std::shared_ptr<MoveGoalHandle> goalHandle) {OnMoveAccepted(goalHandle);},
+      rcl_action_server_get_default_options(), moveGroup_);
   } catch (const std::exception & error) {
     RCLCPP_FATAL(
       logger_, "Cannot create ROS node '%s' or its services ('%s'): %s", nodeName_.c_str(),
       digitalOutputService_.c_str(), error.what());
+    moveServer_.reset();
+    moveGroup_.reset();
     digital_output_srv_.reset();
     reset_enable_srv_.reset();
     node_.reset();
@@ -844,8 +983,9 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
   rebelSocket = std::make_shared<RebelSocket>(ip, port, logger_);
   rebelSocket->SetConnectedCallback([this](bool reconnect) {OnConnected(reconnect);});
 
-  // Service callbacks run on their own executor thread instead of inside write().
-  executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
+  // Service/action callbacks run on their own executor threads instead of inside write().
+  executor_ = std::make_shared<rclcpp::executors::MultiThreadedExecutor>(
+    rclcpp::ExecutorOptions(), 2);
   executor_->add_node(node_);
   executorThread = std::thread([this]() {executor_->spin();});
 
@@ -932,6 +1072,7 @@ CallbackReturn Rebel::on_activate(const rclcpp_lifecycle::State &)
   }
   ZeroJog();
   lastWriteNs = 0;
+  activated_ = false;
 
   if (hardwareErrorLatched_) {
     BlockingFault blocking;
@@ -990,6 +1131,7 @@ CallbackReturn Rebel::on_activate(const rclcpp_lifecycle::State &)
     lastMovingNs_ = 0;
 
     OnConnected(true);
+    peerFaulted_ = false;
     hardwareErrorLatched_ = false;
     RCLCPP_WARN(
       logger_,
@@ -1002,16 +1144,19 @@ CallbackReturn Rebel::on_activate(const rclcpp_lifecycle::State &)
       componentName_.c_str(), trajectoryControllerName_.c_str());
   }
 
+  activated_ = true;
   return CallbackReturn::SUCCESS;
 }
 
 CallbackReturn Rebel::on_deactivate(const rclcpp_lifecycle::State &)
 {
+  activated_ = false;
   for (double & command : vel_cmd) {
     command = 0.0;
   }
   ZeroJog();
   lastWriteNs = 0;
+  RequestMoveStop();
   RCLCPP_INFO(logger_, "Hardware deactivated: jog set to zero");
   return CallbackReturn::SUCCESS;
 }
@@ -1023,8 +1168,10 @@ CallbackReturn Rebel::on_error(const rclcpp_lifecycle::State &)
   // The latch is fail-closed: it is never cleared here or by any automatic retry, only by
   // on_activate() after an operator-driven lifecycle reset confirms STATUS is fresh again.
   LatchHardwareError("on_error() was called for this component (read()/write() reported ERROR)");
+  activated_ = false;
   ZeroJog();
   lastWriteNs = 0;
+  RequestMoveStop();
   RCLCPP_ERROR(
     logger_,
     "Hardware error on component '%s': jog forced to zero and latched. Recover with "
@@ -1075,6 +1222,7 @@ return_type Rebel::read(const rclcpp::Time &, const rclcpp::Duration &)
     // freshness. Only on_activate() (after an operator-driven lifecycle reset) can clear
     // this, and only once it confirms STATUS is fresh again.
     ZeroJog();
+    RequestMoveStop();
     RCLCPP_ERROR_THROTTLE(
       logger_, throttleClock_, 1000,
       "Hardware error latched on component '%s': read() returns ERROR until an operator "
@@ -1112,6 +1260,7 @@ return_type Rebel::read(const rclcpp::Time &, const rclcpp::Duration &)
     // Do not let the controllers resume motion on their own: fail closed. An operator
     // lifecycle reset resumes control after checking the robot.
     ZeroJog();
+    RequestMoveStop();
     LatchHardwareError("connection to the ReBeL was re-established after a drop");
     statusHold_ = false;
     statusCoast_ = false;
@@ -1135,6 +1284,7 @@ return_type Rebel::read(const rclcpp::Time &, const rclcpp::Duration &)
     const double ageMs = latest.sequence == 0 ?
       -1.0 : std::chrono::duration<double, std::milli>(age).count();
     ZeroJog();
+    RequestMoveStop();
     {
       char buffer[96];
       std::snprintf(
@@ -1174,6 +1324,8 @@ return_type Rebel::read(const rclcpp::Time &, const rclcpp::Duration &)
     // Soft stale, tier 2: hold at zero jog, keep last-known position with zero velocity.
     ZeroJog();
     if (!statusHold_.exchange(true)) {
+      // The 400 ms hold tier and above must stop a robot-side move (zero jog does not).
+      RequestMoveStop();
       statusCoast_ = false;
       for (double & v : vel) {
         v = 0.0;
@@ -1285,6 +1437,14 @@ return_type Rebel::write(const rclcpp::Time &, const rclcpp::Duration &)
 {
   bool nonFinite = false;
   bool saturated = false;
+  // While a joint move is active the robot owns the motion: jog is zero whatever the
+  // controllers command, and the cycle counts as "moving" so that any STATUS gap during the
+  // move takes the stop + latch path (never an auto-resume).
+  const bool moveActive = moveState_.load() != kMoveIdle;
+  if (moveActive) {
+    lastMovingCmd_.store(0.0);
+    lastMovingNs_.store(ToNs(Safety::SteadyClock::now()));
+  }
   {
     double maxAbs = 0.0;
     for (const double command : vel_cmd) {
@@ -1296,7 +1456,7 @@ return_type Rebel::write(const rclcpp::Time &, const rclcpp::Duration &)
     }
   }
   // Decide the inhibit BEFORE storing so a non-zero jog is never published while latched/held.
-  const bool inhibited = holdJogZero_ || statusHold_ || hardwareErrorLatched_;
+  const bool inhibited = holdJogZero_ || statusHold_ || hardwareErrorLatched_ || moveActive;
   for (std::size_t i = 0; i < 6; ++i) {
     const Safety::JogCommand command = Safety::JogPercentFromVelocity(vel_cmd[i]);
     nonFinite = nonFinite || command.nonFinite;
@@ -1307,7 +1467,9 @@ return_type Rebel::write(const rclcpp::Time &, const rclcpp::Duration &)
       jog[i].store(command.percent);  // frozen during a STATUS coast (last jog keeps going)
     }
   }
-  if (holdJogZero_ || statusHold_ || hardwareErrorLatched_) {
+  if (holdJogZero_ || statusHold_ || hardwareErrorLatched_ ||
+    moveState_.load() != kMoveIdle)
+  {
     // Re-checked after the store so a concurrent ResetAndEnable() or a latch set by another thread
     // (fault-group stop, message thread) can never be overtaken.
     ZeroJog();
@@ -1336,6 +1498,10 @@ bool Rebel::ResetAndEnable(std::string & message)
   if (hardwareErrorLatched_) {
     message = "refused: hardware error is latched; recover with 'ros2 control "
       "set_hardware_component_state " + componentName_ + " inactive' then 'active'";
+    return false;
+  }
+  if (moveState_.load() != kMoveIdle || moveGoalBusy_.load()) {
+    message = "refused: a joint move (move_joint action) is active";
     return false;
   }
   JointSnapshot latest;
@@ -1396,6 +1562,591 @@ void Rebel::dio_callback(
   }
 }
 
+//
+// Robot-side joint move (CRI "CMD Move Joint")
+//
+// The controller plans and executes a synchronized joint-space line from the current joints to
+// the goal. Once the command is sent the robot owns the motion: zero jog, a paused ALIVEJOG and a
+// closed socket do NOT stop it, only "CMD Move Stop" (or an e-stop) does. Every fault path of this
+// driver therefore ends in RequestMoveStop().
+//
+void Rebel::RequestMoveStop()
+{
+  // Lock-free and allocation-free: called from read()/write() threads, the fault-group callback
+  // of another arm's message thread and the lifecycle callbacks. A stop while no move is active
+  // is not needed (zero jog does the job) and must not change the idle command stream.
+  if (moveState_.load() == kMoveIdle) {
+    return;
+  }
+  moveStopSeq_.fetch_add(1);
+  moveStopRequested_.store(true);
+  aliveWake.notify_all();
+}
+
+bool Rebel::SendMoveStopNow()
+{
+  return Command(CriKeywords::COMMAND_MOVE_STOP, true);
+}
+
+void Rebel::ConsumeMoveStopRequest(Safety::SteadyClock::time_point & retryAfter)
+{
+  if (!moveStopRequested_.load()) {
+    return;
+  }
+  const auto now = Safety::SteadyClock::now();
+  if (now < retryAfter) {
+    return;
+  }
+  if (!moveStopRequested_.exchange(false)) {
+    return;
+  }
+  if (!SendMoveStopNow()) {
+    // Not connected right now: keep the request. The reconnect sends Move Stop first anyway.
+    moveStopRequested_.store(true);
+    retryAfter = now + std::chrono::milliseconds(5);
+  }
+}
+
+void Rebel::RecordMoveEvent(const CriMessages::ExecEvent & event, bool isEnd)
+{
+  if (moveState_.load() == kMoveIdle) {
+    RCLCPP_INFO(
+      logger_, "Ignoring %s %d %d %s %s (no joint move active)", isEnd ? "MOVETOEXECEND" :
+      "MOVETOEXECACK", event.code, event.sub, event.program.c_str(), event.reason.c_str());
+    return;
+  }
+  std::lock_guard<std::mutex> lock(moveEventLock_);
+  if (isEnd) {
+    if (!moveEvents_.moveAck) {
+      // The ACK always precedes the END of the same move on the stream: this END belongs to an
+      // earlier move.
+      RCLCPP_WARN(logger_, "Ignoring MOVETOEXECEND before MOVETOEXECACK of the current move");
+      return;
+    }
+    moveEvents_.endSeen = true;
+    moveEvents_.endCode = event.code;
+    moveEvents_.endReason = event.reason;
+    RCLCPP_INFO(
+      logger_, "Robot move ended: code %d reason '%s'", event.code, event.reason.c_str());
+  } else {
+    moveEvents_.moveAck = true;
+  }
+}
+
+return_type Rebel::prepare_command_mode_switch(
+  const std::vector<std::string> & start_interfaces, const std::vector<std::string> &)
+{
+  bool claimsOurs = false;
+  for (const auto & key : start_interfaces) {
+    for (const auto & joint : jointNames_) {
+      if (key == joint + "/" + hardware_interface::HW_IF_VELOCITY) {
+        claimsOurs = true;
+      }
+    }
+  }
+  if (!claimsOurs) {
+    return return_type::OK;
+  }
+  std::lock_guard<std::mutex> lock(claimLock_);
+  if (moveState_.load() != kMoveIdle) {
+    RCLCPP_ERROR(
+      logger_,
+      "Refusing to let a controller claim the velocity command interfaces of '%s' while a "
+      "joint move (move_joint action) is active",
+      componentName_.c_str());
+    return return_type::ERROR;
+  }
+  // Until perform_command_mode_switch() records the claim, a goal must not slip in.
+  claimPendingUntilNs_.store(
+    ToNs(Safety::SteadyClock::now() + std::chrono::seconds(2)));
+  return return_type::OK;
+}
+
+return_type Rebel::perform_command_mode_switch(
+  const std::vector<std::string> & start_interfaces,
+  const std::vector<std::string> & stop_interfaces)
+{
+  const auto indexOf = [this](const std::string & key) {
+      for (std::size_t i = 0; i < jointNames_.size(); ++i) {
+        if (key == jointNames_[i] + "/" + hardware_interface::HW_IF_VELOCITY) {
+          return static_cast<int>(i);
+        }
+      }
+      return -1;
+    };
+  unsigned mask = velocityClaimMask_.load();
+  for (const auto & key : stop_interfaces) {
+    const int index = indexOf(key);
+    if (index >= 0) {
+      mask &= ~(1u << index);
+    }
+  }
+  for (const auto & key : start_interfaces) {
+    const int index = indexOf(key);
+    if (index >= 0) {
+      mask |= (1u << index);
+    }
+  }
+  velocityClaimMask_.store(mask);
+  claimPendingUntilNs_.store(0);
+  return return_type::OK;
+}
+
+rclcpp_action::GoalResponse Rebel::OnMoveGoal(
+  const rclcpp_action::GoalUUID &, std::shared_ptr<const MoveJointAction::Goal>)
+{
+  if (stopping) {
+    return rclcpp_action::GoalResponse::REJECT;
+  }
+  // One goal at a time. Everything else is validated by the move thread, which answers with a
+  // result carrying the specific error code.
+  if (moveGoalBusy_.exchange(true)) {
+    RCLCPP_WARN(logger_, "move_joint goal rejected: another joint move is active");
+    return rclcpp_action::GoalResponse::REJECT;
+  }
+  moveCancelRequested_ = false;
+  return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+}
+
+rclcpp_action::CancelResponse Rebel::OnMoveCancel(const std::shared_ptr<MoveGoalHandle>)
+{
+  RCLCPP_WARN(logger_, "move_joint cancel requested: sending CMD Move Stop");
+  moveCancelRequested_ = true;
+  RequestMoveStop();
+  return rclcpp_action::CancelResponse::ACCEPT;
+}
+
+void Rebel::OnMoveAccepted(const std::shared_ptr<MoveGoalHandle> goalHandle)
+{
+  std::lock_guard<std::mutex> lock(moveThreadLock_);
+  if (moveThread_.joinable()) {
+    moveThread_.join();
+  }
+  if (stopping) {
+    auto result = std::make_shared<MoveJointAction::Result>();
+    result->error_code = MoveJointAction::Result::REJECTED;
+    result->message = "driver is stopping";
+    try {
+      goalHandle->abort(result);
+    } catch (...) {
+    }
+    moveGoalBusy_ = false;
+    return;
+  }
+  moveThread_ = std::thread([this, goalHandle]() {ExecuteMoveGoal(goalHandle);});
+}
+
+std::uint8_t Rebel::CheckMoveAcceptable(
+  const MoveJointAction::Goal & goal, Move::Joints & measured, Move::Joints & start,
+  Move::Joints & target, std::string & reason)
+{
+  using Result = MoveJointAction::Result;
+  if (stopping) {
+    reason = "driver is stopping";
+    return Result::REJECTED;
+  }
+  if (hardwareErrorLatched_) {
+    reason = "hardware error is latched; recover via the hardware lifecycle reset";
+    return Result::LATCHED;
+  }
+  if (!activated_) {
+    reason = "hardware component is not active";
+    return Result::REJECTED;
+  }
+  BlockingFault blocking;
+  if (faultMember_ &&
+    (faultMember_->HasRootFault() || FindBlockingRootFault(faultMember_, blocking)))
+  {
+    reason = "fault group '" + faultGroup_ + "' holds an un-recovered root-cause fault";
+    return Result::FAULT;
+  }
+
+  Move::GoalRequest request;
+  request.jointNames = goal.joint_names;
+  request.startPositions = goal.start_positions;
+  request.goalPositions = goal.goal_positions;
+  request.velocityPercent = goal.velocity_percent;
+  request.accelerationPercent = goal.acceleration_percent;
+  request.startTolerance = goal.start_tolerance;
+  request.pathTolerance = goal.path_tolerance;
+  request.goalTolerance = goal.goal_tolerance;
+  request.timeoutS = goal.timeout_s;
+  Move::Caps caps;
+  caps.maxVelocityPercent = moveMaxVelocityPercent_;
+  caps.maxAccelerationPercent = moveMaxAccelerationPercent_;
+  caps.jointLimits = jointLimits_;
+  if (!Move::ValidateGoalRequest(request, jointNames_, caps, start, target, reason)) {
+    return Result::REJECTED;
+  }
+
+  // The JTC (or any controller) holding the velocity interfaces would fight the robot-side move.
+  const auto nowNs = ToNs(Safety::SteadyClock::now());
+  if (velocityClaimMask_.load() != 0 || claimPendingUntilNs_.load() > nowNs) {
+    reason = "a controller claims (or is about to claim) the velocity command interfaces of this "
+      "arm; deactivate it (e.g. '" + trajectoryControllerName_ + "') first";
+    return Result::CONTROLLER_ACTIVE;
+  }
+
+  JointSnapshot latest;
+  {
+    std::lock_guard<std::mutex> lock(snapshotLock);
+    latest = snapshot;
+  }
+  const auto now = Safety::SteadyClock::now();
+  if (latest.sequence == 0 ||
+    Safety::IsStatusStale(latest.stamp, now, Safety::kStatusStaleTimeout))
+  {
+    reason = "STATUS is stale or missing";
+    return Result::STATUS_GAP;
+  }
+  if (statusHold_ || statusCoast_) {
+    reason = "STATUS gap in progress (coast/hold)";
+    return Result::STATUS_GAP;
+  }
+  if (rebelSocket->ConnectionCount() != initialConnectionCount) {
+    reason = "connection was re-established; recover via the hardware lifecycle reset";
+    return Result::STATUS_GAP;
+  }
+  if (connectedAtNs_.load() == 0 || holdJogZero_) {
+    reason = "start-up sequence or reset_and_enable in progress";
+    return Result::REJECTED;
+  }
+  if (drivesDisabledMask_.load() != 0) {
+    reason = "drives are not enabled (call reset_and_enable)";
+    return Result::REJECTED;
+  }
+  if (!Safety::IsOverrideAsExpected(latest.overridePercent)) {
+    reason = "velocity override is " + std::to_string(latest.overridePercent) +
+      " %, expected 100 %";
+    return Result::REJECTED;
+  }
+  if (kinstateValue_.load() != static_cast<int>(CriMessages::Kinstate::NO_ERROR)) {
+    reason = std::string("kinematics state is not NO_ERROR: ") +
+      CriMessages::KinstateToString(CriMessages::Status::KinstateFromInt(kinstateValue_.load()));
+    return Result::FAULT;
+  }
+  measured = latest.positionRad;
+  const double startError = Move::MaxAbsDifference(start, measured);
+  if (startError > goal.start_tolerance) {
+    reason = "measured joints differ from start_positions by " + std::to_string(startError) +
+      " rad (start_tolerance " + std::to_string(goal.start_tolerance) + ")";
+    return Result::START_DEVIATION;
+  }
+  if (Move::MaxAbsDifference(measured, target) < Move::kMinMoveDistance) {
+    reason = "the arm is already at the goal: nothing to move";
+    return Result::REJECTED;
+  }
+  return Result::SUCCESS;
+}
+
+void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
+{
+  using Result = MoveJointAction::Result;
+  using Clock = Safety::SteadyClock;
+  const auto goal = goalHandle->get_goal();
+  auto result = std::make_shared<Result>();
+  bool stopSent = false;
+  bool stopConfirmed = false;
+  std::string endReason;
+
+  const auto latestSnapshot = [this]() {
+      std::lock_guard<std::mutex> lock(snapshotLock);
+      return snapshot;
+    };
+
+  // Ends the goal. State goes back to Idle BEFORE the client sees the result, so a controller
+  // can be activated as soon as it has it.
+  const auto finish = [&](std::uint8_t code, const std::string & message) {
+      result->error_code = code;
+      result->message = message;
+      result->end_reason = endReason;
+      result->stop_sent = stopSent;
+      result->stop_confirmed = stopConfirmed;
+      const JointSnapshot last = latestSnapshot();
+      result->final_positions.assign(last.positionRad.begin(), last.positionRad.end());
+      if (!stopSent || stopConfirmed) {
+        moveStopRequested_ = false;  // unconfirmed: keep asking (the alive thread retries)
+      }
+      moveState_ = kMoveIdle;
+      // Also free BEFORE the result: a client may send its next goal the moment it has the
+      // result (OnMoveAccepted joins this thread before starting the next one).
+      moveGoalBusy_ = false;
+      if (code == Result::SUCCESS) {
+        RCLCPP_INFO(logger_, "move_joint finished: %s", message.c_str());
+      } else {
+        RCLCPP_WARN(
+          logger_, "move_joint ended with error %u: %s (stop sent %d, confirmed %d)", code,
+          message.c_str(), stopSent, stopConfirmed);
+      }
+      try {
+        if (code == Result::SUCCESS) {
+          goalHandle->succeed(result);
+        } else if (code == Result::CANCELED && goalHandle->is_canceling()) {
+          goalHandle->canceled(result);
+        } else {
+          goalHandle->abort(result);
+        }
+      } catch (const std::exception & error) {
+        RCLCPP_WARN(logger_, "Could not report the move_joint result: %s", error.what());
+      }
+    };
+
+  //
+  // 1. Validate and claim: under claimLock_ so a controller cannot be activated in between.
+  //
+  Move::Joints measured{};
+  Move::Joints start{};
+  Move::Joints target{};
+  std::string reason;
+  std::uint8_t code;
+  std::uint64_t stopSeqAtStart = 0;
+  {
+    std::lock_guard<std::mutex> lock(claimLock_);
+    code = CheckMoveAcceptable(*goal, measured, start, target, reason);
+    if (code == Result::SUCCESS && moveCancelRequested_) {
+      code = Result::CANCELED;
+      reason = "canceled before the move was sent";
+    }
+    if (code == Result::SUCCESS) {
+      moveStopRequested_ = false;
+      stopSeqAtStart = moveStopSeq_.load();
+      moveState_ = kMoveSending;
+    }
+  }
+  if (code != Result::SUCCESS) {
+    finish(code, reason);
+    return;
+  }
+
+  // A latch/fault/cancel that raced the checks above (their stop request was ignored while idle).
+  if (stopping || !activated_ || hardwareErrorLatched_ || moveCancelRequested_ ||
+    statusHold_ || statusCoast_)
+  {
+    finish(
+      moveCancelRequested_ ? Result::CANCELED : Result::LATCHED,
+      "aborted before sending: driver stopped, latched, deactivated or canceled");
+    return;
+  }
+
+  //
+  // 2. Send. The line is supervised from the MEASURED start (the robot moves from there).
+  //
+  Move::MoveSupervisor supervisor(
+    measured, target, goal->velocity_percent, goal->acceleration_percent, goal->path_tolerance,
+    goal->goal_tolerance, goal->timeout_s);
+  Move::Joints targetDeg{};
+  for (std::size_t i = 0; i < 6; ++i) {
+    targetDeg[i] = target[i] / Safety::kDegToRad;
+  }
+  const std::string commandText = Safety::MoveJointCommandText(
+    targetDeg, goal->velocity_percent, goal->acceleration_percent);
+  {
+    std::lock_guard<std::mutex> lock(moveEventLock_);
+    moveEvents_ = MoveEvents{};
+  }
+  const int counter = Ccnt();
+  moveCommandCounter_ = counter;
+  {
+    std::lock_guard<std::mutex> lock(commandsLock);
+    if (unacknowledgedCommands.size() >= kMaxUnacknowledgedCommands) {
+      unacknowledgedCommands.clear();
+    }
+    unacknowledgedCommands[counter] = commandText;
+  }
+  RCLCPP_WARN(
+    logger_, "move_joint: sending '%s' (model %.2f s, timeout %.2f s)", commandText.c_str(),
+    supervisor.ModelDurationS(), supervisor.TimeoutS());
+  const auto sentAt = Clock::now();
+  if (commandText.empty() ||
+    !rebelSocket->SendMessage(Safety::FormatCommand(counter, commandText)))
+  {
+    // Not delivered, or not known to be: make sure nothing runs (reconnect sends Move Stop too).
+    stopSent = true;
+    RequestMoveStop();
+    finish(Result::CMD_ERROR, "could not send CMD Move Joint (not connected)");
+    return;
+  }
+
+  //
+  // 3. Supervise: Sending -> Moving -> (Stopping) -> Idle.
+  //
+  constexpr auto kPollPeriod = std::chrono::milliseconds(5);
+  constexpr auto kAckTimeout = std::chrono::milliseconds(500);
+  constexpr auto kStillWindow = std::chrono::milliseconds(200);
+  constexpr auto kStopStillWindow = std::chrono::milliseconds(300);
+  constexpr auto kStopRepeat = std::chrono::milliseconds(100);
+  constexpr auto kStopLimit = std::chrono::milliseconds(1000);
+  constexpr auto kStopLimitShutdown = std::chrono::milliseconds(300);
+  constexpr int kStopRepeats = 3;
+  constexpr double kStillEpsilonRad = 0.0005;
+
+  bool stopPhase = false;
+  std::uint8_t abortCode = Result::SUCCESS;
+  std::string abortMessage;
+  Clock::time_point stopFirstAt{};
+  Clock::time_point stopLastAt{};
+  int stopRepeatsSent = 0;
+  double maxDeviation = 0.0;
+  std::uint64_t lastSequence = 0;
+  Move::Joints stillRef = measured;
+  auto stillSince = sentAt;
+  auto lastFeedbackAt = sentAt - std::chrono::seconds(1);
+
+  const auto beginStop = [&](std::uint8_t abortWith, const std::string & message) {
+      stopPhase = true;
+      abortCode = abortWith;
+      abortMessage = message;
+      stopSent = true;
+      stopFirstAt = Clock::now();
+      stopLastAt = stopFirstAt;
+      moveState_ = kMoveStopping;
+      RCLCPP_ERROR(logger_, "move_joint: stopping the move (%s)", message.c_str());
+      RequestMoveStop();
+    };
+
+  while (true) {
+    std::this_thread::sleep_for(kPollPeriod);
+    const auto now = Clock::now();
+    const JointSnapshot latest = latestSnapshot();
+    MoveEvents events;
+    {
+      std::lock_guard<std::mutex> lock(moveEventLock_);
+      events = moveEvents_;
+    }
+    if (events.endSeen) {
+      endReason = events.endReason;
+    }
+    const auto age = now - latest.stamp;
+    const double elapsed = std::chrono::duration<double>(now - sentAt).count();
+
+    if (latest.sequence != lastSequence) {
+      lastSequence = latest.sequence;
+      const Move::Sample sample = supervisor.Evaluate(latest.positionRad);
+      maxDeviation = std::max(maxDeviation, sample.deviation);
+      if (Move::MaxAbsDifference(latest.positionRad, stillRef) > kStillEpsilonRad) {
+        stillRef = latest.positionRad;
+        stillSince = latest.stamp;
+      }
+      if (now - lastFeedbackAt >= std::chrono::milliseconds(50)) {
+        lastFeedbackAt = now;
+        auto feedback = std::make_shared<MoveJointAction::Feedback>();
+        feedback->state =
+          stopPhase ? "STOPPING" : (moveState_.load() == kMoveSending ? "SENDING" : "MOVING");
+        feedback->progress = sample.progress;
+        feedback->max_path_deviation = maxDeviation;
+        feedback->actual_positions.assign(latest.positionRad.begin(), latest.positionRad.end());
+        try {
+          goalHandle->publish_feedback(feedback);
+        } catch (...) {
+        }
+      }
+    }
+    const bool statusFresh = latest.sequence != 0 && age <= Safety::kStatusStaleTimeout;
+    const bool still = statusFresh && (now - stillSince) >= kStillWindow;
+
+    if (!stopPhase) {
+      if (events.moveAck && moveState_.load() == kMoveSending) {
+        moveState_ = kMoveMoving;
+      }
+
+      // Aborts, in priority order.
+      if (stopping) {
+        beginStop(Result::FAULT, "driver is shutting down");
+      } else if (moveCancelRequested_) {
+        beginStop(Result::CANCELED, "canceled by the client");
+      } else if (hardwareErrorLatched_) {
+        beginStop(
+          peerFaulted_ ? Result::FAULT : Result::LATCHED,
+          peerFaulted_ ? "a fault-group peer faulted" : "hardware error latched");
+      } else if (!activated_) {
+        beginStop(Result::FAULT, "hardware component deactivated");
+      } else if (events.cmdError) {
+        beginStop(Result::CMD_ERROR, "robot rejected CMD Move Joint: " + events.cmdErrorText);
+      } else if (rebelSocket->ConnectionCount() != initialConnectionCount) {
+        beginStop(Result::STATUS_GAP, "connection to the robot was re-established");
+        LatchHardwareError("connection lost during a joint move");
+      } else if (latest.sequence == 0 || age > Safety::kStatusCoastTimeout) {
+        beginStop(Result::STATUS_GAP, "no STATUS during the move (hold tier)");
+        LatchHardwareError("STATUS gap during a joint move");
+      } else if (moveStopSeq_.load() != stopSeqAtStart) {
+        beginStop(Result::FAULT, "a stop was requested (hold tier, deactivate or shutdown)");
+      } else if (!events.moveAck && !events.endSeen && now - sentAt > kAckTimeout) {
+        beginStop(Result::ACK_TIMEOUT, "no MOVETOEXECACK within 0.5 s");
+      } else if (drivesDisabledMask_.load() != 0) {
+        beginStop(Result::FAULT, "drives reported 'Motor not enabled' during the move");
+      } else if (kinstateValue_.load() != static_cast<int>(CriMessages::Kinstate::NO_ERROR)) {
+        beginStop(Result::FAULT, "kinematics error during the move");
+      } else {
+        const Move::Verdict verdict = supervisor.Check(latest.positionRad, elapsed);
+        if (verdict == Move::Verdict::PathDeviation || verdict == Move::Verdict::ProgressOverrun) {
+          char text[160];
+          const Move::Sample sample = supervisor.Evaluate(latest.positionRad);
+          std::snprintf(
+            text, sizeof(text), "%s (deviation %.4f rad, progress %.3f)",
+            Move::VerdictName(verdict), sample.deviation, sample.progress);
+          beginStop(Result::PATH_DEVIATION, text);
+        } else if (verdict == Move::Verdict::Timeout) {
+          char text[96];
+          std::snprintf(text, sizeof(text), "no completion within %.2f s", supervisor.TimeoutS());
+          beginStop(Result::MOTION_TIMEOUT, text);
+        }
+      }
+      if (stopPhase) {
+        continue;
+      }
+
+      if (events.endSeen) {
+        // The robot says the move is over. PLAN = it reached its goal.
+        if (events.endReason != "PLAN") {
+          finish(
+            Result::ROBOT_ENDED, "the robot ended the move on its own (reason '" +
+            events.endReason + "')");
+          return;
+        }
+        if (still) {
+          if (supervisor.AtGoal(latest.positionRad)) {
+            finish(Result::SUCCESS, "goal reached");
+          } else {
+            finish(
+              Result::GOAL_DEVIATION,
+              "the robot reported the move done but the joints are " +
+              std::to_string(Move::MaxAbsDifference(latest.positionRad, target)) +
+              " rad from the goal (goal_tolerance " + std::to_string(goal->goal_tolerance) + ")");
+          }
+          return;
+        }
+      }
+      continue;
+    }
+
+    // Stopping.
+    bool confirmed = events.endSeen;
+    if (!confirmed && statusFresh && (now - stillSince) >= kStopStillWindow &&
+      now - stopFirstAt >= kStopStillWindow)
+    {
+      confirmed = true;  // standstill observed
+    }
+    if (confirmed) {
+      stopConfirmed = true;
+      finish(abortCode, abortMessage);
+      return;
+    }
+    if (now - stopFirstAt >= (stopping ? kStopLimitShutdown : kStopLimit)) {
+      LatchHardwareError("CMD Move Stop was not confirmed during a joint move");
+      stopConfirmed = false;
+      finish(
+        abortCode, abortMessage + " [CMD Move Stop NOT confirmed within 1 s: hardware latched; "
+        "check the robot, e-stop if it is still moving]");
+      return;
+    }
+    if (stopRepeatsSent < kStopRepeats && now - stopLastAt >= kStopRepeat) {
+      ++stopRepeatsSent;
+      stopLastAt = now;
+      RequestMoveStop();
+    }
+  }
+}
+
 void Rebel::Start()
 {
   stopping = false;
@@ -1419,11 +2170,25 @@ void Rebel::Stop()
   }
   stopping = true;
 
+  // Robot-side joint move first: zero jog / Disable do not stop it, only Move Stop does.
+  RequestMoveStop();
+  if (moveState_.load() != kMoveIdle && rebelSocket && rebelSocket->IsConnected()) {
+    SendMoveStopNow();
+  }
+
   // Leave the fault group before anything is shut down: waits for a peer callback that is
   // running, after which this instance is never called back, and the Disable below (drives
   // reporting 'Motor not enabled') cannot count as a fault.
   if (faultMember_) {
     LeaveFaultGroup(faultMember_);
+  }
+
+  // The move thread sees `stopping`, confirms the stop (bounded) and ends its goal.
+  {
+    std::lock_guard<std::mutex> lock(moveThreadLock_);
+    if (moveThread_.joinable()) {
+      moveThread_.join();
+    }
   }
 
   // Service callbacks must not send commands while shutting down.

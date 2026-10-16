@@ -13,6 +13,7 @@ find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(moveit_msgs REQUIRED)
 find_package(igus_rebel_msgs REQUIRED)
+find_package(controller_manager_msgs REQUIRED)
 find_package(shape_msgs REQUIRED)
 find_package(moveit_core REQUIRED)
 find_package(moveit_ros_planning REQUIRED)
@@ -32,6 +33,15 @@ target_include_directories(rebel_analytic_ik PUBLIC
 )
 ament_target_dependencies(rebel_analytic_ik Eigen3)
 target_compile_features(rebel_analytic_ik PUBLIC cxx_std_17)
+
+# Pure helpers deciding which planned transit leaves may run as a robot-side CRI joint move
+# (opt-in cri_transit_enabled). No ROS/MoveIt dependency; unit-tested in test/.
+add_library(transit_split src/transit_split.cpp)
+target_include_directories(transit_split PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+target_compile_features(transit_split PUBLIC cxx_std_17)
 
 add_executable(rebel_servo_teleop_keyboard src/rebel_servo_teleop_keyboard.cpp)
 ament_target_dependencies(rebel_servo_teleop_keyboard
@@ -68,9 +78,12 @@ ament_target_dependencies(box_h_cut_executor
   visualization_msgs
   moveit_task_constructor_core
   moveit_task_constructor_msgs
+  rclcpp_action
+  igus_rebel_msgs
+  controller_manager_msgs
 )
 # boost::property_tree (header-only) parses the external snapshot JSON.
-target_link_libraries(box_h_cut_executor Boost::boost rebel_analytic_ik)
+target_link_libraries(box_h_cut_executor Boost::boost rebel_analytic_ik transit_split)
 target_compile_features(box_h_cut_executor PUBLIC cxx_std_17)
 
 add_executable(calibration_verification src/calibration_verification.cpp)
@@ -89,6 +102,7 @@ install(TARGETS
 )
 install(TARGETS
   rebel_analytic_ik
+  transit_split
   EXPORT rebel_analytic_ik_targets
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
@@ -118,6 +132,9 @@ if(BUILD_TESTING)
   ament_add_gtest(test_rebel_analytic_ik test/test_rebel_analytic_ik.cpp)
   target_link_libraries(test_rebel_analytic_ik rebel_analytic_ik)
   ament_target_dependencies(test_rebel_analytic_ik ament_index_cpp)
+
+  ament_add_gtest(test_transit_split test/test_transit_split.cpp)
+  target_link_libraries(test_transit_split transit_split)
 
   if(kdl_parser_FOUND AND orocos_kdl_FOUND AND urdf_FOUND AND igus_rebel_description_FOUND)
     message(STATUS "igus_rebel_moveit_config: KDL comparison IK test enabled")

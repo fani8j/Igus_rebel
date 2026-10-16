@@ -223,3 +223,32 @@ TEST(Formatting, CommandMatchesOriginalWireFormat)
       "SetActive true"),
     "CRISTART 1 CMD SetActive true CRIEND\n");
 }
+
+TEST(Formatting, MoveJointMatchesTheRecordedRealRobotCommand)
+{
+  // From raw_messages.log of the real-robot characterization (degrees, 3 decimals, e1..e3 = 0).
+  EXPECT_EQ(
+    Igus::Safety::FormatMoveJoint(82, {5.0, 0.01, 0.0, 0.02, 0.0, 0.0}, 10, 20),
+    "CRISTART 82 CMD Move Joint 5.000 0.010 0.000 0.020 0.000 0.000 0 0 0 10 20 CRIEND\n");
+  EXPECT_EQ(
+    Igus::Safety::MoveJointCommandText({-0.0004, 0.01, 0.0, 0.02, 0.0, 0.0}, 30, 40),
+    "Move Joint -0.000 0.010 0.000 0.020 0.000 0.000 0 0 0 30 40");
+  EXPECT_EQ(
+    Igus::Safety::MoveJointCommandText({1.23456, -179.9996, 90.0, 0.0, 0.0, 12.0005}, 25, 40),
+    "Move Joint 1.235 -180.000 90.000 0.000 0.000 12.001 0 0 0 25 40");
+  // Non-integral percentages keep 3 decimals.
+  EXPECT_EQ(
+    Igus::Safety::MoveJointCommandText({0, 0, 0, 0, 0, 0}, 12.5, 7.25),
+    "Move Joint 0.000 0.000 0.000 0.000 0.000 0.000 0 0 0 12.500 7.250");
+}
+
+TEST(Formatting, MoveJointRejectsNonFiniteValues)
+{
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  const double inf = std::numeric_limits<double>::infinity();
+  EXPECT_TRUE(Igus::Safety::FormatMoveJoint(1, {nan, 0, 0, 0, 0, 0}, 10, 20).empty());
+  EXPECT_TRUE(Igus::Safety::FormatMoveJoint(1, {0, 0, 0, 0, 0, inf}, 10, 20).empty());
+  EXPECT_TRUE(Igus::Safety::FormatMoveJoint(1, {0, 0, 0, 0, 0, 0}, nan, 20).empty());
+  EXPECT_TRUE(Igus::Safety::FormatMoveJoint(1, {0, 0, 0, 0, 0, 0}, 10, -inf).empty());
+  EXPECT_TRUE(Igus::Safety::MoveJointCommandText({0, 0, 0, 0, 0, nan}, 10, 20).empty());
+}

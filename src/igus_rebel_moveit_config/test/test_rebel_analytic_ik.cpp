@@ -90,6 +90,104 @@ TEST(RebelAnalyticIk, EverySolutionFkMatchesTargetAndOriginalIsRecovered)
     static_cast<double>(total_solutions) / static_cast<double>(kSamples)));
 }
 
+namespace
+{
+// Explicit knife_c chain (igus_rebel_xeg32_wrapper.urdf.xacro, tool_variant:=knife_c):
+// link6 -> igus_tool0 (xyz 0,0,0.0527; rpy 0,0,pi) -> knife_c_tcp_point (xyz -0.042069,
+// -0.089590, 0.104551) -> xeg32_tool_tip (rpy 0,-30deg,0).
+Eigen::Isometry3d knifeCToolExplicit()
+{
+  Eigen::Isometry3d a = Eigen::Isometry3d::Identity();
+  a.translation() = Eigen::Vector3d(0, 0, 0.0527);
+  a.linear() = Eigen::AngleAxisd(M_PI, Eigen::Vector3d::UnitZ()).toRotationMatrix();
+  Eigen::Isometry3d b = Eigen::Isometry3d::Identity();
+  b.translation() = Eigen::Vector3d(-0.042069, -0.089590, 0.104551);
+  Eigen::Isometry3d c = Eigen::Isometry3d::Identity();
+  c.linear() = Eigen::AngleAxisd(-0.5235987755982988, Eigen::Vector3d::UnitY()).toRotationMatrix();
+  return a * b * c;
+}
+
+void roundTrip(const Eigen::Isometry3d& tool, unsigned seed, std::size_t samples)
+{
+  const auto limits = rebel_analytic_ik::defaultJointLimits();
+  std::mt19937 rng(seed);
+  for (std::size_t i = 0; i < samples; ++i) {
+    rebel_analytic_ik::JointVector q{};
+    for (std::size_t j = 0; j < 6; ++j) {
+      std::uniform_real_distribution<double> dist(limits[j].lower, limits[j].upper);
+      q[j] = dist(rng);
+    }
+    const auto target = rebel_analytic_ik::forwardKinematics(q, tool);
+    const auto solutions = rebel_analytic_ik::solve(target, limits, tool);
+    ASSERT_FALSE(solutions.empty()) << "sample " << i;
+    bool recovered = false;
+    for (const auto& cand : solutions) {
+      const auto fk = rebel_analytic_ik::forwardKinematics(cand, tool);
+      ASSERT_LT((fk.translation() - target.translation()).norm(), kPositionTolM) << i;
+      ASSERT_LT(Eigen::AngleAxisd(fk.linear().transpose() * target.linear()).angle(),
+        kOrientationTolRad) << i;
+      bool m = true;
+      for (std::size_t j = 0; j < 6; ++j) {
+        double d = cand[j] - q[j];
+        while (d > M_PI) d -= 2.0 * M_PI;
+        while (d < -M_PI) d += 2.0 * M_PI;
+        if (std::abs(d) > 1e-6) { m = false; break; }
+      }
+      recovered = recovered || m;
+    }
+    ASSERT_TRUE(recovered) << "sample " << i << " original q not recovered";
+  }
+}
+}  // namespace
+
+TEST(RebelAnalyticIk, DefaultToolIsLegacyConstant)
+{
+  const auto t = rebel_analytic_ik::defaultTool();
+  EXPECT_NEAR(t.translation().x(), -0.005937, 1e-12);
+  EXPECT_NEAR(t.translation().y(), -0.094121, 1e-12);
+  EXPECT_NEAR(t.translation().z(), 0.183399, 1e-12);
+  EXPECT_NEAR(t.linear()(0, 0), -1.0, 1e-12);  // Rz(pi)
+}
+
+TEST(RebelAnalyticIk, KnifeCToolFkEqualsExplicitChainComposition)
+{
+  const Eigen::Isometry3d tool = knifeCToolExplicit();
+  // Sanity: the 30 deg tilt is really present.
+  EXPECT_NEAR(Eigen::AngleAxisd(tool.linear() * Eigen::AngleAxisd(
+    M_PI, Eigen::Vector3d::UnitZ()).toRotationMatrix().transpose()).angle(),
+    0.5235987755982988, 1e-9);
+  // q = 0: FK of tool = FK(link6, identity tool) * tool.
+  const rebel_analytic_ik::JointVector q{0.3, -0.4, 0.9, 1.1, 0.7, -2.0};
+  Eigen::Isometry3d id = Eigen::Isometry3d::Identity();
+  const Eigen::Isometry3d link6 = rebel_analytic_ik::forwardKinematics(q, id);
+  const Eigen::Isometry3d expected = link6 * tool;
+  const Eigen::Isometry3d actual = rebel_analytic_ik::forwardKinematics(q, tool);
+  EXPECT_LT((expected.translation() - actual.translation()).norm(), 1e-12);
+  EXPECT_LT((expected.linear() - actual.linear()).norm(), 1e-12);
+}
+
+TEST(RebelAnalyticIk, KnifeCToolRoundTrip)
+{
+  roundTrip(knifeCToolExplicit(), 777U, 5000);
+  const auto r = rebel_analytic_ik::selfCheck(
+    3000, kPositionTolM, kOrientationTolRad, 31U, rebel_analytic_ik::defaultJointLimits(),
+    knifeCToolExplicit());
+  EXPECT_TRUE(r.ok) << r.failure_detail;
+}
+
+TEST(RebelAnalyticIk, RandomRotatedToolsRoundTrip)
+{
+  std::mt19937 rng(4242U);
+  std::uniform_real_distribution<double> u(-1.0, 1.0);
+  for (int k = 0; k < 8; ++k) {
+    Eigen::Isometry3d tool = Eigen::Isometry3d::Identity();
+    tool.linear() = Eigen::Quaterniond(u(rng), u(rng), u(rng), u(rng) + 1e-3).normalized()
+      .toRotationMatrix();
+    tool.translation() = 0.15 * Eigen::Vector3d(u(rng), u(rng), u(rng));
+    roundTrip(tool, 100U + static_cast<unsigned>(k), 1500);
+  }
+}
+
 TEST(RebelAnalyticIk, UnreachablePosesReturnEmptyFast)
 {
   const auto limits = rebel_analytic_ik::defaultJointLimits();

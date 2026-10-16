@@ -152,6 +152,18 @@ std::string FormatAliveJog(int counter, const std::array<float, 6> & jogPercent)
 
 // "CRISTART <counter> CMD <command> CRIEND\n"
 std::string FormatCommand(int counter, const std::string & command);
+
+// Command text (without counter/framing) of the CRI joint move:
+// "Move Joint a1 a2 a3 a4 a5 a6 0 0 0 <vel%> <acc%>". Angles in DEGREES with 3 decimals, the
+// external axes e1..e3 are 0. vel/acc are written as integers when integral, else 3 decimals.
+// Returns an empty string if any value is not finite.
+std::string MoveJointCommandText(
+  const std::array<double, 6> & jointsDeg, double velocityPercent, double accelerationPercent);
+
+// "CRISTART <counter> CMD Move Joint ... CRIEND\n"; empty if any value is not finite.
+std::string FormatMoveJoint(
+  int counter, const std::array<double, 6> & jointsDeg, double velocityPercent,
+  double accelerationPercent);
 }  // namespace Safety
 }  // namespace Igus
 

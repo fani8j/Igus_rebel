@@ -40,8 +40,9 @@ constexpr double kJ4Z = 0.105479407401356 + 0.052;  // = 0.157479407401356
 constexpr double kJ5Z = 0.142;
 // link5 -> joint6 axis: joint6 origin (0,0,0.0768).
 constexpr double kJ6Z = 0.0768;
-// link6 -> igus_tool0 (0,0,0.0527; rpy (0,0,pi)) -> xeg32_tool_tip (0.005937,0.094121,
-// 0.130699; rpy 0). Folded into a single rotation (Rz(pi)) + translation offset from link6.
+// Former hard-coded link6 -> TCP (see defaultTool()): link6 -> igus_tool0 (0,0,0.0527; rpy
+// (0,0,pi)) -> old xeg32_tool_tip (0.005937,0.094121,0.130699; rpy 0), folded into Rz(pi) +
+// translation. The live tool now comes from the caller.
 constexpr double kToolX = -0.005937;
 constexpr double kToolY = -0.094121;
 constexpr double kToolZ = 0.183399;  // 0.0527 + 0.130699
@@ -109,7 +110,15 @@ std::array<JointLimits, 6> defaultJointLimits()
   }};
 }
 
-Eigen::Isometry3d forwardKinematics(const JointVector& q)
+Eigen::Isometry3d defaultTool()
+{
+  Eigen::Isometry3d tool = Eigen::Isometry3d::Identity();
+  tool.linear() = rotZ(kPi);
+  tool.translation() = Eigen::Vector3d(kToolX, kToolY, kToolZ);
+  return tool;
+}
+
+Eigen::Isometry3d forwardKinematics(const JointVector& q, const Eigen::Isometry3d& tool_in_link6)
 {
   const double t1 = q[0], t2 = q[1], t3 = q[2], t4 = q[3], t5 = q[4], t6 = q[5];
   Eigen::Isometry3d acc = Eigen::Isometry3d::Identity();
@@ -127,27 +136,27 @@ Eigen::Isometry3d forwardKinematics(const JointVector& q)
   acc.linear() = acc.linear() * rotY(-t5);
   acc.translation() += acc.linear() * Eigen::Vector3d(0, 0, kJ6Z);
   acc.linear() = acc.linear() * rotZ(t6);
-  // link6 -> xeg32_tool_tip
-  acc.translation() += acc.linear() * Eigen::Vector3d(kToolX, kToolY, kToolZ);
-  acc.linear() = acc.linear() * rotZ(kPi);
+  // link6 -> TCP
+  acc.translation() += acc.linear() * tool_in_link6.translation();
+  acc.linear() = acc.linear() * tool_in_link6.linear();
   return acc;
 }
 
-std::vector<JointVector> solve(const Eigen::Isometry3d& target, const std::array<JointLimits, 6>& limits)
+std::vector<JointVector> solve(
+  const Eigen::Isometry3d& target, const std::array<JointLimits, 6>& limits,
+  const Eigen::Isometry3d& tool_in_link6)
 {
   std::vector<JointVector> solutions;
   const double L1 = kL1;
   const double L2 = effectiveL2();
   const double beta = effectiveBeta();
 
-  // Undo the fixed link6 -> xeg32_tool_tip transform to get link6's desired pose, then the
-  // wrist-center position by walking back 0.0768 m along joint6's axis, which is always the
-  // world z-column of R0_6 regardless of theta6 (see header derivation note).
-  const Eigen::Matrix3d r_offset = rotZ(kPi);
-  const Eigen::Vector3d t_offset(kToolX, kToolY, kToolZ);
-  // R0_6 = R_tcp * R_offset^-1, R_offset (a pure Z-flip) is self-inverse.
-  const Eigen::Matrix3d r06 = target.linear() * r_offset.transpose();
-  const Eigen::Vector3d p06 = target.translation() - r06 * t_offset;
+  // Undo the fixed link6 -> TCP transform: T_0_6 = target * tool^-1 (valid for any rigid
+  // tool, rotated or not), then the wrist-center position by walking back 0.0768 m along
+  // joint6's axis, which is always the z-column of R0_6 regardless of theta6.
+  const Eigen::Isometry3d t06 = target * tool_in_link6.inverse();
+  const Eigen::Matrix3d r06 = t06.linear();
+  const Eigen::Vector3d p06 = t06.translation();
   const Eigen::Vector3d wrist = p06 - kJ6Z * r06.col(2);
 
   // --- Position sub-problem (theta1, theta2, theta3) -------------------------------------
@@ -254,7 +263,7 @@ std::vector<JointVector> solve(const Eigen::Isometry3d& target, const std::array
 
 SelfCheckResult selfCheck(
   std::size_t num_samples, double position_tol_m, double orientation_tol_rad, unsigned seed,
-  const std::array<JointLimits, 6>& limits)
+  const std::array<JointLimits, 6>& limits, const Eigen::Isometry3d& tool_in_link6)
 {
   SelfCheckResult result;
   result.samples = num_samples;
@@ -265,8 +274,8 @@ SelfCheckResult selfCheck(
       std::uniform_real_distribution<double> dist(limits[j].lower, limits[j].upper);
       q[j] = dist(rng);
     }
-    const Eigen::Isometry3d target = forwardKinematics(q);
-    const auto solutions = solve(target, limits);
+    const Eigen::Isometry3d target = forwardKinematics(q, tool_in_link6);
+    const auto solutions = solve(target, limits, tool_in_link6);
     if (solutions.empty()) {
       result.failure_detail = "sample " + std::to_string(i) +
         ": solve() returned no solutions for a reachable FK pose";
@@ -275,7 +284,7 @@ SelfCheckResult selfCheck(
     }
     bool recovered = false;
     for (const auto& candidate : solutions) {
-      const Eigen::Isometry3d fk = forwardKinematics(candidate);
+      const Eigen::Isometry3d fk = forwardKinematics(candidate, tool_in_link6);
       const double pos_err = (fk.translation() - target.translation()).norm();
       const double ang_err =
         Eigen::AngleAxisd(fk.linear().transpose() * target.linear()).angle();

@@ -299,3 +299,50 @@ TEST(CriParse, MalformedInputNeverEscapesParseMessage)
   // An empty MESSAGE body is still a MESSAGE.
   EXPECT_TRUE(ParseMessage("1 MESSAGE").ok);
 }
+
+TEST(CriParse, ParsesMoveToExecMessagesFromTheRealRobot)
+{
+  using Igus::CriMessages::ExecEvent;
+  using Igus::CriMessages::ParseMessage;
+
+  // Exact bodies recorded on the real ReBeL (RobotControl V980-15), 2026-10-12.
+  auto parsed = ParseMessage("225 MOVETOEXECACK 0 0 MoveTo");
+  ASSERT_TRUE(parsed.ok) << parsed.error;
+  EXPECT_EQ(parsed.type, MessageType::MOVETOEXECACK);
+  auto event = std::get<ExecEvent>(parsed.payload);
+  EXPECT_EQ(event.code, 0);
+  EXPECT_EQ(event.sub, 0);
+  EXPECT_EQ(event.program, "MoveTo");
+  EXPECT_EQ(event.reason, "");
+
+  parsed = ParseMessage("273 MOVETOEXECEND -1 0 MoveTo PLAN");
+  ASSERT_TRUE(parsed.ok) << parsed.error;
+  EXPECT_EQ(parsed.type, MessageType::MOVETOEXECEND);
+  event = std::get<ExecEvent>(parsed.payload);
+  EXPECT_EQ(event.code, -1);
+  EXPECT_EQ(event.sub, 0);
+  EXPECT_EQ(event.program, "MoveTo");
+  EXPECT_EQ(event.reason, "PLAN");
+
+  parsed = ParseMessage(" 9 MOVETOEXECEND 0 0 MoveTo USER ");
+  ASSERT_TRUE(parsed.ok) << parsed.error;
+  EXPECT_EQ(std::get<ExecEvent>(parsed.payload).reason, "USER");
+
+  // EXECACK / EXECEND have the same shape and are recognised (not "unknown").
+  parsed = ParseMessage("3 EXECACK 0 0 Prog");
+  EXPECT_TRUE(parsed.ok);
+  EXPECT_EQ(parsed.type, MessageType::EXECACK);
+  parsed = ParseMessage("4 EXECEND -1 0 Prog PLAN");
+  EXPECT_TRUE(parsed.ok);
+  EXPECT_EQ(parsed.type, MessageType::EXECEND);
+
+  // Malformed ones never throw and are not "unknown message type".
+  for (const char * bad : {"1 MOVETOEXECACK", "1 MOVETOEXECEND x y MoveTo PLAN",
+      "1 MOVETOEXECEND 0", "1 MOVETOEXECEND 0 0"})
+  {
+    Igus::CriMessages::ParsedMessage result;
+    EXPECT_NO_THROW(result = ParseMessage(bad)) << bad;
+    EXPECT_FALSE(result.ok) << bad;
+    EXPECT_NE(result.type, MessageType::UNKNOWN) << bad;
+  }
+}

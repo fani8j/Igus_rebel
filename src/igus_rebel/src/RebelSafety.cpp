@@ -154,5 +154,43 @@ std::string FormatCommand(int counter, const std::string & command)
   return CriKeywords::START + " " + std::to_string(counter) + " " + CriKeywords::TYPE_CMD + " " +
          command + " " + CriKeywords::END + "\n";
 }
+
+std::string MoveJointCommandText(
+  const std::array<double, 6> & jointsDeg, double velocityPercent, double accelerationPercent)
+{
+  const auto finite = [](double v) {return std::isfinite(v);};
+  if (!std::all_of(jointsDeg.begin(), jointsDeg.end(), finite) || !finite(velocityPercent) ||
+    !finite(accelerationPercent))
+  {
+    return std::string();
+  }
+  const auto percent = [](double v) {
+      char buffer[40];
+      if (v == std::floor(v) && std::fabs(v) < 1e6) {
+        std::snprintf(buffer, sizeof(buffer), "%d", static_cast<int>(v));
+      } else {
+        std::snprintf(buffer, sizeof(buffer), "%.3f", v);
+      }
+      return std::string(buffer);
+    };
+  char buffer[256];
+  const int written = std::snprintf(
+    buffer, sizeof(buffer), "%s %.3f %.3f %.3f %.3f %.3f %.3f 0 0 0 ",
+    CriKeywords::COMMAND_MOVE_JOINT.c_str(), jointsDeg[0], jointsDeg[1], jointsDeg[2],
+    jointsDeg[3], jointsDeg[4], jointsDeg[5]);
+  if (written <= 0 || written >= static_cast<int>(sizeof(buffer))) {
+    return std::string();
+  }
+  return std::string(buffer, static_cast<std::size_t>(written)) + percent(velocityPercent) + " " +
+         percent(accelerationPercent);
+}
+
+std::string FormatMoveJoint(
+  int counter, const std::array<double, 6> & jointsDeg, double velocityPercent,
+  double accelerationPercent)
+{
+  const std::string text = MoveJointCommandText(jointsDeg, velocityPercent, accelerationPercent);
+  return text.empty() ? std::string() : FormatCommand(counter, text);
+}
 }  // namespace Safety
 }  // namespace Igus

@@ -14,6 +14,9 @@
         <link name="xeg32_right_carriage_link" />
         <link name="xeg32_knife_handpiece" />
         <link name="xeg32_knife_holder" />
+        <link name="knife_c_holder" />
+        <link name="knife_c_handpiece" />
+        <link name="knife_c_wrist_camera" />
     </group>
     <group_state name="home" group="igus_rebel_arm">
         <joint name="joint1" value="0" />
@@ -138,27 +141,86 @@
       three new links (for example base_link/link1/motor1/motor2 against any of the three)
       collided in at least one sample and stays checked.
     -->
+    <!-- 2026-10-12 (knife hulls translated with the provisional TCP, URDF): TIGHTENING ONLY.
+         Re-sampling the translated hulls (computeDefaultCollisions 100000 + 20000 seed 20261012,
+         scan_results/knife_relocation_20261012/) found link2 (19), link4 (95) and motor4 (192 of
+         20000) now colliding with xeg32_knife_holder, and xeg32_knife_holder-xeg32_right_carriage_link
+         no longer overlapping (78 mm clearance): those four disables were REMOVED. Nothing was added
+         or loosened. Provisional: the installed tool may be the new variant-C holder, which needs its
+         own meshes and a full re-run. -->
     <disable_collisions link1="link6" link2="xeg32_knife_handpiece" reason="Adjacent" />
     <disable_collisions link1="link6" link2="xeg32_knife_holder" reason="Adjacent" />
     <disable_collisions link1="xeg32_knife_handpiece" link2="xeg32_knife_holder" reason="Adjacent" />
     <disable_collisions link1="xeg32_base_link" link2="xeg32_knife_holder" reason="Adjacent" />
     <disable_collisions link1="xeg32_knife_holder" link2="xeg32_right_carriage_link" reason="Adjacent" />
     <disable_collisions link1="link2" link2="xeg32_knife_handpiece" reason="Never" />
-    <disable_collisions link1="link2" link2="xeg32_knife_holder" reason="Never" />
     <disable_collisions link1="link3" link2="xeg32_knife_handpiece" reason="Never" />
     <disable_collisions link1="link3" link2="xeg32_knife_holder" reason="Never" />
     <disable_collisions link1="link4" link2="xeg32_knife_handpiece" reason="Never" />
-    <disable_collisions link1="link4" link2="xeg32_knife_holder" reason="Never" />
     <disable_collisions link1="link5" link2="xeg32_knife_handpiece" reason="Never" />
     <disable_collisions link1="link5" link2="xeg32_knife_holder" reason="Never" />
     <disable_collisions link1="motor3" link2="xeg32_knife_handpiece" reason="Never" />
     <disable_collisions link1="motor3" link2="xeg32_knife_holder" reason="Never" />
     <disable_collisions link1="motor4" link2="xeg32_knife_handpiece" reason="Never" />
-    <disable_collisions link1="motor4" link2="xeg32_knife_holder" reason="Never" />
     <disable_collisions link1="motor5" link2="xeg32_knife_handpiece" reason="Never" />
     <disable_collisions link1="motor5" link2="xeg32_knife_holder" reason="Never" />
     <disable_collisions link1="xeg32_base_link" link2="xeg32_knife_handpiece" reason="Never" />
     <disable_collisions link1="xeg32_knife_handpiece" link2="xeg32_left_carriage_link" reason="Never" />
     <disable_collisions link1="xeg32_knife_handpiece" link2="xeg32_right_carriage_link" reason="Never" />
     <disable_collisions link1="xeg32_knife_holder" link2="xeg32_left_carriage_link" reason="Never" />
+    <!--
+      Variant-C knife tool (URDF tool_variant:=knife_c, the default; 2026-10-12): collision matrix for
+      knife_c_holder, knife_c_handpiece, knife_c_wrist_camera, regenerated with the same method as
+      above (moveit_setup computeDefaultCollisions, 100000 random states, min_collision_fraction
+      0.95; plus an independent 20000-sample frequency count, seed 20261012, EMPTY allowed
+      collision matrix, and the default/home-state collision flag). Tool: scan_results/
+      knife_relocation_20261012/regen_tool/srdf_regen.cpp. Raw table and pair counts:
+      scan_results/knife_c_model_20261012/regen/matrix_knife_c.tsv and README.md. The three links
+      are fixed to igus_tool0 with identity origins.
+      Rules applied: "Adjacent" = rigidly connected (the three links and link6/igus_tool0 are one
+      rigid body for planning; includes pairs that never touch); "Never" only where the tool's
+      100000 samples AND the 20000 count both saw 0 contacts; a pair is disabled as a rigid overlap
+      only if it collides in ALL samples and at the default state. Pairs that collided in at least
+      one sample STAY CHECKED - notably knife_c_wrist_camera-link5 (8022 of 20000 samples, and at
+      the home state: the camera bracket touches link5's coarse 0.1 x 0.03 x 0.1 m collision box
+      although the camera hull is 20.3 mm from the real link5 visual mesh at home; tool reason "Default" is NOT
+      applied because it is not all samples) and knife_c_holder-link5 (1201 of 20000; 6.5 mm
+      clearance to the link5 box at home). Nothing was loosened for any pair that does not involve the new links.
+      2026-10-12 later: link5's collision is now the convex hull of its real mesh (igus_rebel2.urdf), which removed
+      that false home collision; both pairs stay checked (0 hits in 50000 samples, >= 16.8 mm over the full joint6
+      range) and no link5 pair needed re-enabling (scan_results/link5_collision_20261012/).
+      The xeg32 / old-knife entries above are unchanged (they apply to tool_variant:=xeg32_knife_v1;
+      MoveIt only warns about links that are not in the URDF). Re-sampling the v1 (HEAD) hulls on
+      2026-10-12 (scan_results/knife_c_model_20261012/regen/matrix_xeg32_knife_v1.tsv) confirmed
+      every v1 disable above, except that link2-xeg32_knife_holder saw 1 contact in 20000 (that
+      HEAD disable stays removed). xeg32_knife_holder-xeg32_right_carriage_link (Adjacent) is
+      RESTORED: the provisional translated-hull edit had removed it, but tool_variant:=xeg32_knife_v1
+      uses the HEAD hulls again, where the pair collides in 20000/20000 samples and at the home
+      state (without it the v1 home state is invalid). link4/motor4-xeg32_knife_holder (Never) are
+      also valid for the HEAD hulls but stay removed (tighter, no effect on feasibility).
+    -->
+    <disable_collisions link1="link6" link2="knife_c_holder" reason="Adjacent" />
+    <disable_collisions link1="link6" link2="knife_c_handpiece" reason="Adjacent" />
+    <disable_collisions link1="link6" link2="knife_c_wrist_camera" reason="Adjacent" />
+    <disable_collisions link1="knife_c_handpiece" link2="knife_c_holder" reason="Adjacent" />
+    <disable_collisions link1="knife_c_holder" link2="knife_c_wrist_camera" reason="Adjacent" />
+    <disable_collisions link1="knife_c_handpiece" link2="knife_c_wrist_camera" reason="Adjacent" />
+    <disable_collisions link1="link2" link2="knife_c_handpiece" reason="Never" />
+    <disable_collisions link1="link3" link2="knife_c_handpiece" reason="Never" />
+    <disable_collisions link1="link4" link2="knife_c_handpiece" reason="Never" />
+    <disable_collisions link1="link5" link2="knife_c_handpiece" reason="Never" />
+    <disable_collisions link1="motor3" link2="knife_c_handpiece" reason="Never" />
+    <disable_collisions link1="motor4" link2="knife_c_handpiece" reason="Never" />
+    <disable_collisions link1="motor5" link2="knife_c_handpiece" reason="Never" />
+    <disable_collisions link1="link2" link2="knife_c_holder" reason="Never" />
+    <disable_collisions link1="link3" link2="knife_c_holder" reason="Never" />
+    <disable_collisions link1="link4" link2="knife_c_holder" reason="Never" />
+    <disable_collisions link1="motor3" link2="knife_c_holder" reason="Never" />
+    <disable_collisions link1="motor4" link2="knife_c_holder" reason="Never" />
+    <disable_collisions link1="motor5" link2="knife_c_holder" reason="Never" />
+    <disable_collisions link1="link2" link2="knife_c_wrist_camera" reason="Never" />
+    <disable_collisions link1="link3" link2="knife_c_wrist_camera" reason="Never" />
+    <disable_collisions link1="motor3" link2="knife_c_wrist_camera" reason="Never" />
+    <disable_collisions link1="motor4" link2="knife_c_wrist_camera" reason="Never" />
+    <disable_collisions link1="motor5" link2="knife_c_wrist_camera" reason="Never" />
 </robot>

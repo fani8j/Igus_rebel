@@ -1,0 +1,41 @@
+# Robot-side joint move (CRI "CMD Move Joint"): the controller plans and executes a
+# synchronized joint-space straight line from the CURRENT joints to goal_positions.
+# Served by the igus_rebel hardware plugin on /<node_name>/move_joint. The goal is refused
+# while any controller claims this arm's velocity command interfaces (deactivate the JTC first).
+# Cancel = CMD Move Stop. NOTE: once sent, a lost link / dead driver does NOT stop the robot.
+
+string[] joint_names            # must equal the hardware's joint names, in order
+float64[] start_positions       # rad; the measured joints must be within start_tolerance
+float64[] goal_positions        # rad
+float64 velocity_percent        # CRI vel %, capped by the driver
+float64 acceleration_percent    # CRI acc %, capped by the driver
+float64 start_tolerance         # rad, max |measured - start| per joint before sending
+float64 path_tolerance          # rad, max per-joint deviation from the start->goal line while moving
+float64 goal_tolerance          # rad, max |measured - goal| per joint at the end
+float64 timeout_s               # 0 = driver computes from its duration model
+---
+uint8 SUCCESS=0
+uint8 REJECTED=1
+uint8 CONTROLLER_ACTIVE=2
+uint8 START_DEVIATION=3
+uint8 CMD_ERROR=4
+uint8 ACK_TIMEOUT=5
+uint8 MOTION_TIMEOUT=6
+uint8 PATH_DEVIATION=7
+uint8 STATUS_GAP=8
+uint8 LATCHED=9
+uint8 FAULT=10
+uint8 CANCELED=11
+uint8 ROBOT_ENDED=12
+uint8 GOAL_DEVIATION=13
+uint8 error_code
+string message
+string end_reason               # last MOVETOEXECEND reason (PLAN, USER, ...) or empty
+float64[] final_positions       # rad
+bool stop_sent                  # CMD Move Stop was sent during this goal
+bool stop_confirmed             # robot reported the stop (END USER) or standstill was observed
+---
+string state                    # SENDING, MOVING, STOPPING
+float64 progress                # 0..1 along the start->goal line
+float64 max_path_deviation      # rad, so far
+float64[] actual_positions      # rad

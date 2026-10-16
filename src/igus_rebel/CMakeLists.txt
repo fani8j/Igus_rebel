@@ -13,8 +13,12 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
+find_package(rclcpp_action REQUIRED)
 find_package(igus_rebel_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(controller_manager_msgs REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 
@@ -25,6 +29,7 @@ add_library(${PROJECT_NAME}_cri STATIC
   src/CriFraming.cpp
   src/RebelSafety.cpp
   src/RebelSocket.cpp
+  src/MoveSupervisor.cpp
 )
 set_target_properties(${PROJECT_NAME}_cri PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(${PROJECT_NAME}_cri PUBLIC
@@ -39,7 +44,15 @@ add_library(${PROJECT_NAME} SHARED
 )
 target_link_libraries(${PROJECT_NAME} ${PROJECT_NAME}_cri)
 ament_target_dependencies(${PROJECT_NAME}
-  rclcpp rclcpp_lifecycle pluginlib hardware_interface igus_rebel_msgs std_srvs
+  rclcpp rclcpp_action rclcpp_lifecycle pluginlib hardware_interface igus_rebel_msgs std_srvs
+)
+
+# Mock of the robot-side joint move for hardware_protocol:=mock_hardware (see rebel.launch.py,
+# mock_move_joint:=true).
+add_executable(mock_move_joint_server src/mock_move_joint_server.cpp)
+target_link_libraries(mock_move_joint_server ${PROJECT_NAME}_cri)
+ament_target_dependencies(mock_move_joint_server
+  rclcpp rclcpp_action igus_rebel_msgs std_msgs sensor_msgs controller_manager_msgs
 )
 
 pluginlib_export_plugin_description_file(hardware_interface rebel.xml)
@@ -49,6 +62,9 @@ install(TARGETS ${PROJECT_NAME}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
+)
+install(TARGETS mock_move_joint_server
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
 # Install the plugin description xml file
@@ -76,12 +92,15 @@ if(BUILD_TESTING)
   ament_add_gtest(test_rebel_safety test/test_rebel_safety.cpp)
   target_link_libraries(test_rebel_safety ${PROJECT_NAME}_cri)
 
+  ament_add_gtest(test_move_supervisor test/test_move_supervisor.cpp)
+  target_link_libraries(test_move_supervisor ${PROJECT_NAME}_cri)
+
   # Socket and full driver against a fake CRI server on 127.0.0.1 (never the real robot).
   ament_add_gtest(test_rebel_driver test/test_rebel_driver.cpp
     TIMEOUT 180 SKIP_LINKING_MAIN_LIBRARIES)
   target_link_libraries(test_rebel_driver ${PROJECT_NAME})
   ament_target_dependencies(test_rebel_driver
-    rclcpp rclcpp_lifecycle hardware_interface igus_rebel_msgs std_srvs
+    rclcpp rclcpp_action rclcpp_lifecycle hardware_interface igus_rebel_msgs std_srvs
   )
 
   find_package(ament_lint_auto REQUIRED)

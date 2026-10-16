@@ -5,6 +5,9 @@
 #include <geometry_msgs/msg/pose_array.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/vector3_stamped.hpp>
+#include <controller_manager_msgs/srv/switch_controller.hpp>
+#include <igus_rebel_msgs/action/move_joint.hpp>
+#include <moveit/utils/message_checks.h>
 #include <moveit/planning_scene/planning_scene.h>
 #include <moveit/robot_state/cartesian_interpolator.h>
 #include <moveit/robot_state/robot_state.h>
@@ -20,7 +23,9 @@
 #include <moveit/task_constructor/stages/move_to.h>
 #include <moveit/task_constructor/stages/move_relative.h>
 #include <moveit/task_constructor/task.h>
+#include <moveit_task_constructor_msgs/action/execute_task_solution.hpp>
 #include <moveit_task_constructor_msgs/msg/solution.hpp>
+#include <rclcpp_action/rclcpp_action.hpp>
 #include <moveit_msgs/msg/collision_object.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
@@ -30,6 +35,7 @@
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include "igus_rebel_moveit_config/rebel_analytic_ik.hpp"
+#include "igus_rebel_moveit_config/transit_split.hpp"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -323,6 +329,91 @@ private:
   double max_total_s_;
 };
 
+// Provenance of free-space transit trajectories: which trajectories were produced by the
+// JointInterpolationPlanner (a straight joint-space line whose start, every interpolated
+// state at <= max_step and goal are collision-checked against the planning scene). MultiPlanner
+// does not report which inner planner succeeded, so the direct planner is wrapped in a
+// TaggingPlanner that registers each successful output here. Entries are weak: a trajectory
+// that is freed (task discarded) drops out, and a recycled address can never be mistaken for a
+// registered one because the weak_ptr of the old object is then expired. Thread-safe.
+class TransitProvenance
+{
+public:
+  void record(const robot_trajectory::RobotTrajectoryPtr& trajectory)
+  {
+    if (!trajectory) return;
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (auto it = entries_.begin(); it != entries_.end();) {
+      it = it->second.expired() ? entries_.erase(it) : std::next(it);
+    }
+    entries_[trajectory.get()] = trajectory;
+  }
+  bool contains(const robot_trajectory::RobotTrajectoryConstPtr& trajectory) const
+  {
+    if (!trajectory) return false;
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto it = entries_.find(trajectory.get());
+    if (it == entries_.end()) return false;
+    const auto alive = it->second.lock();
+    return alive && alive.get() == trajectory.get();
+  }
+  void clear()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    entries_.clear();
+  }
+
+private:
+  mutable std::mutex mutex_;
+  std::map<const robot_trajectory::RobotTrajectory*, std::weak_ptr<robot_trajectory::RobotTrajectory>>
+    entries_;
+};
+
+// Delegates everything to `inner` (a JointInterpolationPlanner) and registers the output
+// trajectory of every SUCCESSFUL plan in the provenance registry. Behaviour of the planning
+// stack is otherwise unchanged.
+class TaggingPlanner : public mtc::solvers::PlannerInterface
+{
+public:
+  TaggingPlanner(mtc::solvers::PlannerInterfacePtr inner, std::shared_ptr<TransitProvenance> registry)
+  : inner_(std::move(inner)), registry_(std::move(registry)) {}
+
+  void init(const moveit::core::RobotModelConstPtr& robot_model) override
+  {
+    inner_->init(robot_model);
+  }
+
+  Result plan(
+    const planning_scene::PlanningSceneConstPtr& from,
+    const planning_scene::PlanningSceneConstPtr& to,
+    const moveit::core::JointModelGroup* jmg, double timeout,
+    robot_trajectory::RobotTrajectoryPtr& result,
+    const moveit_msgs::msg::Constraints& path_constraints) override
+  {
+    const Result r = inner_->plan(from, to, jmg, timeout, result, path_constraints);
+    if (r.success && registry_) registry_->record(result);
+    return r;
+  }
+
+  Result plan(
+    const planning_scene::PlanningSceneConstPtr& from, const moveit::core::LinkModel& link,
+    const Eigen::Isometry3d& offset, const Eigen::Isometry3d& target,
+    const moveit::core::JointModelGroup* jmg, double timeout,
+    robot_trajectory::RobotTrajectoryPtr& result,
+    const moveit_msgs::msg::Constraints& path_constraints) override
+  {
+    const Result r = inner_->plan(from, link, offset, target, jmg, timeout, result, path_constraints);
+    if (r.success && registry_) registry_->record(result);
+    return r;
+  }
+
+  std::string getPlannerId() const override { return inner_->getPlannerId(); }
+
+private:
+  mtc::solvers::PlannerInterfacePtr inner_;
+  std::shared_ptr<TransitProvenance> registry_;
+};
+
 enum class CutKind : std::uint8_t { kNone, kLeft, kMiddle, kRight };
 struct CutSegment {
   std::string name;
@@ -384,6 +475,10 @@ struct SegmentPlanOptions {
   // kept) right after the current state, BEFORE any free-space transit, so the arm leaves the
   // left-cut withdraw pose upward instead of swinging low over the table (not in the scene).
   double pre_transit_lift_m{0.0};
+  // If set, planCutSegments stores here the free-space transit stages of the plan it returns
+  // (cleared first; left empty on failure). They are owned by the returned task and are what
+  // the opt-in CRI transit execution is allowed to consider.
+  std::vector<const mtc::Stage*>* transit_stages_out{nullptr};
 };
 // The candidate the left_parallel search last selected (angles relative to F0).
 struct LeftParallelSelection {
@@ -547,6 +642,8 @@ struct PlannerSettings {
   bool top_cut_continue_check_snapshot_age{true};
   double top_cut_pre_transit_lift_m{0.10};
   double top_cut_post_penetration_dwell_s{1.0};
+  double t_cut_settle_timeout_s{5.0};
+  double side_cut_post_penetration_dwell_s{1.0};
   bool top_cut_allow_shortened_cut{true};
   double top_cut_lift_min_clearance_m{0.001};
   double side_tape_withdraw_min_clearance_m{0.001};
@@ -583,6 +680,20 @@ struct PlannerSettings {
     cut_debug_correction_enabled{false}, left_adaptive_orientation_enabled{true},
     left_parallel_orientation_enabled{false};
 };
+// Opt-in robot-side (CRI "Move Joint") execution of proven joint-linear free-space transits in
+// the one-call T cut. Runtime parameters (see parameterTable); a copy is captured at dispatch.
+struct CriTransitConfig {
+  bool enabled{false};
+  double velocity_percent{10.0};
+  double acceleration_percent{30.0};
+  double min_length_rad{0.05};
+  std::string action{"/igus_rebel/move_joint"};
+  std::string controller_manager_ns{"/controller_manager"};
+  std::string trajectory_controller{"rebel_arm_trajectory_controller"};
+};
+// Hard caps, deliberately not parameters: percentages above these are rejected.
+constexpr double kCriMaxVelocityPercent = 50.0;
+constexpr double kCriMaxAccelerationPercent = 40.0;
 class BoxHCutExecutor : public rclcpp::Node
 {
 public:
@@ -601,6 +712,9 @@ public:
       const auto value = declare_parameter(spec.name, default_value, descriptor);
       const rclcpp::Parameter parameter(spec.name, value);
       if (spec.scope == ParamScope::kRuntime) {
+        if (const auto error = validateCriParameter(parameter)) {
+          throw std::invalid_argument("invalid CRI transit parameter: " + *error);
+        }
         applyRuntimeParameter(parameter);
       } else {
         spec.apply(settings_, parameter);
@@ -673,6 +787,8 @@ public:
       "~/side_tape_handoff", rclcpp::QoS(1).reliable().transient_local());
     top_cut_pub_ = create_publisher<std_msgs::msg::String>(
       "~/top_cut_staged", rclcpp::QoS(1).reliable().transient_local());
+    t_cut_status_pub_ = create_publisher<std_msgs::msg::String>(
+      "~/t_cut_status", rclcpp::QoS(1).reliable().transient_local());
     // Watched only to refuse side_tape_retract while Servo looks active (never
     // paused/stopped from here). Topic names are read-only (fixed at startup).
     servo_twist_sub_ = create_subscription<geometry_msgs::msg::TwistStamped>(
@@ -714,6 +830,36 @@ public:
       "~/plan_side_tape_handoff",
       "cannot plan while another planning or execution operation is active",
       [this](std::string& message) { return planSideTapeHandoff(message); });
+    t_cut_plan_service_ = guardedTrigger(
+      "~/plan_t_cut", "cannot plan while another planning or execution operation is active",
+      [this](std::string& message) { return planTCut(message); });
+    t_cut_execute_service_ = guardedTrigger(
+      "~/execute_t_cut", "cannot start while another planning or execution operation is active",
+      [this](std::string& message) { return executeTCut(message); });
+    // Not guarded: the sequencer holds plan_mutex_ while it plans a step, and abort must never
+    // wait for that. It only sets an atomic flag.
+    t_cut_abort_service_ = create_service<std_srvs::srv::Trigger>(
+      "~/abort_t_cut",
+      [this](
+        const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+        std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+        if (!t_cut_running_.load()) {
+          response->success = false;
+          response->message = "no T cut sequence is running";
+          return;
+        }
+        t_cut_abort_ = true;
+        const bool cri_cancelled = cancelCriTransit();
+        response->success = true;
+        response->message = std::string("T cut abort requested: no further step will start. ") +
+          (cri_cancelled ?
+          "The active CRI joint transit was CANCELLED (the driver sends Move Stop; check the "
+          "arm). " : "") +
+          "A JTC/MoveIt trajectory that is already executing is NOT cancelled by this node: use "
+          "the e-stop if it must stop now; side_tape_retract / top_cut_retract recover once the "
+          "sequence has ended";
+      },
+      rmw_qos_profile_services_default, callback_group_);
     side_tape_retract_service_ = guardedTrigger(
       "~/side_tape_retract", "another H-cut plan operation is active",
       [this](std::string& message) { return planAndExecuteSideTapeRetract(message); },
@@ -812,6 +958,9 @@ public:
 
   ~BoxHCutExecutor() override
   {
+    t_cut_abort_ = true;
+    cancelCriTransit();
+    if (t_cut_thread_.joinable()) t_cut_thread_.join();
     if (execution_thread_.joinable()) execution_thread_.join();
   }
 
@@ -856,6 +1005,17 @@ private:
       field<str>("pilz_pipeline", kRO, "pilz_industrial_motion_planner", &S::pilz_pipeline),
       field<str>("motion_profile", kPlan, "ompl_pilz", &S::motion_profile),
       runtime("external_snapshot_file", rclcpp::ParameterValue(str())),
+      // Opt-in robot-side joint move for proven joint-linear transits of the one-call T cut.
+      // Runtime scope, but changes are rejected while a T cut or a CRI transit is running.
+      runtime("cri_transit_enabled", rclcpp::ParameterValue(false)),
+      runtime("cri_transit_velocity_percent", rclcpp::ParameterValue(10.0)),
+      runtime("cri_transit_acceleration_percent", rclcpp::ParameterValue(30.0)),
+      runtime("cri_transit_min_length_rad", rclcpp::ParameterValue(0.05)),
+      runtime("cri_transit_action", rclcpp::ParameterValue(str("/igus_rebel/move_joint"))),
+      runtime("controller_manager_ns", rclcpp::ParameterValue(str("/controller_manager"))),
+      runtime(
+        "cri_transit_trajectory_controller",
+        rclcpp::ParameterValue(str("rebel_arm_trajectory_controller"))),
       field<double>("external_snapshot_max_age_s", kRO, 30.0, &S::external_snapshot_max_age_s),
       field<bool>("debug_allow_stale_snapshot", kPlan, false, &S::debug_allow_stale_snapshot),
       field<str>("carton_collision_id", kRO, "detected_carton", &S::carton_collision_id),
@@ -1024,6 +1184,9 @@ private:
       field<double>("top_cut_pre_transit_lift_m", kRO, 0.10, &S::top_cut_pre_transit_lift_m),
       field<double>(
         "top_cut_post_penetration_dwell_s", kRO, 1.0, &S::top_cut_post_penetration_dwell_s),
+      field<double>("t_cut_settle_timeout_s", kRO, 5.0, &S::t_cut_settle_timeout_s),
+      field<double>(
+        "side_cut_post_penetration_dwell_s", kRO, 1.0, &S::side_cut_post_penetration_dwell_s),
       field<bool>("top_cut_allow_shortened_cut", kRO, true, &S::top_cut_allow_shortened_cut),
       field<double>(
         "top_cut_lift_min_clearance_m", kRO, 0.001, &S::top_cut_lift_min_clearance_m),
@@ -1317,7 +1480,78 @@ private:
     } else if (name == "external_snapshot_file") {
       std::lock_guard<std::mutex> lock(runtime_parameter_mutex_);
       external_snapshot_file_ = parameter.as_string();
+    } else if (isCriParameterName(name)) {
+      std::lock_guard<std::mutex> lock(runtime_parameter_mutex_);
+      if (name == "cri_transit_enabled") {
+        cri_config_.enabled = parameter.as_bool();
+      } else if (name == "cri_transit_velocity_percent") {
+        cri_config_.velocity_percent = parameter.as_double();
+      } else if (name == "cri_transit_acceleration_percent") {
+        cri_config_.acceleration_percent = parameter.as_double();
+      } else if (name == "cri_transit_min_length_rad") {
+        cri_config_.min_length_rad = parameter.as_double();
+      } else if (name == "cri_transit_action") {
+        cri_config_.action = parameter.as_string();
+      } else if (name == "controller_manager_ns") {
+        cri_config_.controller_manager_ns = parameter.as_string();
+      } else if (name == "cri_transit_trajectory_controller") {
+        cri_config_.trajectory_controller = parameter.as_string();
+      }
     }
+  }
+  static bool isCriParameterName(const std::string& name)
+  {
+    return name.rfind("cri_transit_", 0) == 0U || name == "controller_manager_ns";
+  }
+  // Value rules for the CRI transit parameters; nullopt for any other parameter.
+  static std::optional<std::string> validateCriParameter(const rclcpp::Parameter& parameter)
+  {
+    const auto& name = parameter.get_name();
+    if (!isCriParameterName(name)) return std::nullopt;
+    try {
+      return validateCriParameterValue(parameter);
+    } catch (const std::exception&) {
+      return name + " has the wrong parameter type";
+    }
+  }
+  static std::optional<std::string> validateCriParameterValue(const rclcpp::Parameter& parameter)
+  {
+    const auto& name = parameter.get_name();
+    if (name == "cri_transit_velocity_percent") {
+      const double value = parameter.as_double();
+      if (!std::isfinite(value) || value <= 0.0 || value > kCriMaxVelocityPercent) {
+        return name + " must be finite and within (0," +
+          formatDouble(kCriMaxVelocityPercent, 0) + "] percent";
+      }
+    } else if (name == "cri_transit_acceleration_percent") {
+      const double value = parameter.as_double();
+      if (!std::isfinite(value) || value <= 0.0 || value > kCriMaxAccelerationPercent) {
+        return name + " must be finite and within (0," +
+          formatDouble(kCriMaxAccelerationPercent, 0) + "] percent";
+      }
+    } else if (name == "cri_transit_min_length_rad") {
+      const double value = parameter.as_double();
+      if (!std::isfinite(value) || value < 0.01 || value > 6.3) {
+        return name + " must be finite and within [0.01, 6.3] rad";
+      }
+    } else if (name == "cri_transit_action" || name == "controller_manager_ns") {
+      const auto& value = parameter.as_string();
+      if (value.size() < 2U || value.front() != '/' || value.find(' ') != std::string::npos) {
+        return name + " must be an absolute name starting with '/'";
+      }
+    } else if (name == "cri_transit_trajectory_controller") {
+      const auto& value = parameter.as_string();
+      if (value.empty() || value.find('/') != std::string::npos ||
+          value.find(' ') != std::string::npos) {
+        return name + " must be a plain controller name";
+      }
+    }
+    return std::nullopt;
+  }
+  CriTransitConfig criConfig()
+  {
+    std::lock_guard<std::mutex> lock(runtime_parameter_mutex_);
+    return cri_config_;
   }
   std::string externalSnapshotFile()
   {
@@ -1347,6 +1581,17 @@ private:
       if (spec->scope == ParamScope::kPlanning) {
         planning.emplace_back(spec, &parameter);
       } else {
+        if (isCriParameterName(parameter.get_name())) {
+          if (t_cut_running_.load() || cri_transit_active_.load()) {
+            result.reason = "cannot change '" + parameter.get_name() +
+              "' while a T cut sequence or a CRI transit is running";
+            return result;
+          }
+          if (const auto error = validateCriParameter(parameter)) {
+            result.reason = *error;
+            return result;
+          }
+        }
         runtime_changes.push_back(&parameter);
       }
     }
@@ -1357,9 +1602,9 @@ private:
           "busy: planning/execution active; H-cut planning parameters were not changed; retry after the active service call returns";
         return result;
       }
-      if (execution_in_progress_) {
+      if (execution_in_progress_ || t_cut_running_.load()) {
         result.reason =
-          "busy: planning/execution active; cannot change planning parameters during trajectory execution";
+          "busy: planning/execution active; cannot change planning parameters during trajectory execution or a T cut sequence";
         return result;
       }
       if (cut_debug_stage_ != CutDebugStage::kNone) {
@@ -1410,6 +1655,14 @@ private:
         if (!lock.owns_lock() || (reject_during_execution && execution_in_progress_)) {
           response->success = false;
           response->message = busy_message;
+          return;
+        }
+        // While a T cut sequence runs (it releases plan_mutex_ between steps) every other
+        // service refuses; only abort_t_cut is accepted.
+        if (t_cut_running_.load()) {
+          response->success = false;
+          response->message = "a T cut sequence is running (execute_t_cut); only abort_t_cut is "
+            "accepted until it finishes or stops";
           return;
         }
         response->success = body(response->message);
@@ -1496,15 +1749,24 @@ private:
     side_tape_handoff_pending_ = false;
     const bool dispatched_is_top_cut = top_cut_pending_;
     top_cut_pending_ = false;
+    // CRI joint transits are considered only for the approach of the running one-call T cut,
+    // and only when enabled; decided (and the config captured) here, under plan_mutex_.
+    const CriTransitConfig cri_config = criConfig();
+    const bool dispatched_use_cri = cri_config.enabled && t_cut_running_.load() &&
+      dispatched_is_side_tape_handoff && !in_debug_session;
+    auto transit_stages = std::move(planned_transit_stages_);
+    planned_transit_stages_.clear();
     auto task = std::move(planned_task_);
     planned_snapshot_.reset();
     execution_thread_ = std::thread(
       [this, task = std::move(task), dispatched_stage, dispatched_cut,
-       dispatched_is_side_tape_handoff, dispatched_is_top_cut]() mutable {
+       dispatched_is_side_tape_handoff, dispatched_is_top_cut, cri_config, dispatched_use_cri,
+       transit_stages = std::move(transit_stages)]() mutable {
         bool succeeded = false;
         std::string failure_detail;
         try {
-          const auto result = task->execute(*task->solutions().front());
+          const auto result = executeSolutionSplit(
+            *task, transit_stages, dispatched_use_cri, cri_config);
           succeeded = (result == moveit::core::MoveItErrorCode::SUCCESS);
           if (succeeded) {
             RCLCPP_INFO(get_logger(), "H-cut trajectory execution completed");
@@ -1580,6 +1842,7 @@ private:
   void clearRetainedPlan()
   {
     planned_task_.reset();
+    planned_transit_stages_.clear();
     planned_snapshot_.reset();
     retained_with_stale_override_ = false;
     // A retained-but-not-yet-dispatched hand-off plan must never survive into (be mistaken
@@ -1587,6 +1850,7 @@ private:
     // hand-off is currently in progress.
     side_tape_handoff_pending_ = false;
     top_cut_pending_ = false;
+    t_cut_plan_ready_ = false;
     if (!topCutStagedInProgress()) {
       top_cut_info_ = TopCutStagedInfo{};
       top_cut_snapshot_.reset();
@@ -2526,8 +2790,58 @@ private:
           analytic_ik_available_.store(false);
           return;
         }
+        // TCP transform from the live model: link6 -> tool_link must be a chain of fixed
+        // joints only (so it is configuration independent); read it from a default state.
+        {
+          const moveit::core::LinkModel* link6_model = robot_model_->getLinkModel("link6");
+          const moveit::core::LinkModel* tool_model = robot_model_->getLinkModel(settings_.tool_link);
+          bool chain_ok = link6_model != nullptr && tool_model != nullptr;
+          for (const moveit::core::LinkModel* link = tool_model;
+               chain_ok && link != link6_model;) {
+            const moveit::core::JointModel* joint = link->getParentJointModel();
+            if (joint == nullptr || joint->getType() != moveit::core::JointModel::FIXED ||
+                link->getParentLinkModel() == nullptr) {
+              chain_ok = false;
+              RCLCPP_ERROR(
+                get_logger(),
+                "Analytic IK self-check refused: path from link6 to '%s' is not fixed-joint "
+                "only (blocked at link '%s', joint '%s'); disabling the analytic left-search "
+                "backend and falling back to kdl",
+                settings_.tool_link.c_str(), link->getName().c_str(),
+                joint ? joint->getName().c_str() : "<none>");
+              break;
+            }
+            link = link->getParentLinkModel();
+          }
+          if (!chain_ok) {
+            if (link6_model == nullptr || tool_model == nullptr) {
+              RCLCPP_ERROR(
+                get_logger(),
+                "Analytic IK self-check refused: robot model lacks link6 or tool_link '%s'; "
+                "falling back to kdl", settings_.tool_link.c_str());
+            }
+            analytic_ik_available_.store(false);
+            return;
+          }
+          moveit::core::RobotState default_state(robot_model_);
+          default_state.setToDefaultValues();
+          default_state.update();
+          analytic_tool_in_link6_ =
+            default_state.getGlobalLinkTransform(link6_model).inverse() *
+            default_state.getGlobalLinkTransform(tool_model);
+          const Eigen::Vector3d rpy =
+            analytic_tool_in_link6_.linear().eulerAngles(0, 1, 2);
+          RCLCPP_INFO(
+            get_logger(),
+            "Analytic IK tool transform link6 -> %s: xyz (%.6f, %.6f, %.6f) m, rpy (%.6f, "
+            "%.6f, %.6f) rad",
+            settings_.tool_link.c_str(), analytic_tool_in_link6_.translation().x(),
+            analytic_tool_in_link6_.translation().y(), analytic_tool_in_link6_.translation().z(),
+            rpy.x(), rpy.y(), rpy.z());
+        }
         const auto library_result =
-          rebel_analytic_ik::selfCheck(2000, 1e-6, 1e-6, 20260928U, limits);
+          rebel_analytic_ik::selfCheck(
+            2000, 1e-6, 1e-6, 20260928U, limits, analytic_tool_in_link6_);
         if (!library_result.ok) {
           RCLCPP_ERROR(
             get_logger(),
@@ -2573,7 +2887,7 @@ private:
           const Eigen::Isometry3d moveit_fk =
             state.getGlobalLinkTransform(base_link_model).inverse() *
             state.getGlobalLinkTransform(settings_.tool_link);
-          const Eigen::Isometry3d analytic_fk = rebel_analytic_ik::forwardKinematics(q);
+          const Eigen::Isometry3d analytic_fk = rebel_analytic_ik::forwardKinematics(q, analytic_tool_in_link6_);
           const double pos_err = (moveit_fk.translation() - analytic_fk.translation()).norm();
           const double ang_err =
             Eigen::AngleAxisd(moveit_fk.linear().transpose() * analytic_fk.linear()).angle();
@@ -2606,7 +2920,7 @@ private:
   // joint limits, mapped into the group's variable order. Empty (not an error) for an
   // unreachable target; check analytic_ik_available_ / analyticJointLimitsFor separately to
   // distinguish "unreachable" from "analytic backend unusable for this group".
-  static std::vector<std::vector<double> > analyticIkBranches(
+  std::vector<std::vector<double> > analyticIkBranches(
     const moveit::core::JointModelGroup* group, const Eigen::Isometry3d& target)
   {
     std::array<rebel_analytic_ik::JointLimits, 6> limits;
@@ -2614,7 +2928,7 @@ private:
     if (!analyticJointLimitsFor(group, limits)) return branches;
     const auto index = analyticVariableIndex(group);
     const auto& names = group->getVariableNames();
-    for (const auto& solution : rebel_analytic_ik::solve(target, limits)) {
+    for (const auto& solution : rebel_analytic_ik::solve(target, limits, analytic_tool_in_link6_)) {
       std::vector<double> values(names.size());
       for (std::size_t j = 0; j < 6U; ++j) values[index[j]] = solution[j];
       branches.push_back(std::move(values));
@@ -3422,6 +3736,7 @@ private:
     cut_debug_created_stamp_ns_ = 0;
     planned_snapshot_ = *snapshot;
     planned_task_ = std::move(task);
+    planned_transit_stages_.clear();
     retained_with_stale_override_ = settings_.debug_allow_stale_snapshot;
     cut_debug_stage_ = CutDebugStage::kStartPlanned;
     message = "cut debug session started for cut " + cut_debug_session_cut_ +
@@ -3506,7 +3821,7 @@ private:
   // start pose does not satisfy the configured side_tape tool-frame convention
   // (side_tape_handoff_*_axis_tool), this fails closed and reports the measured axis mapping
   // instead of rotating anything.
-  bool planSideTapeHandoff(std::string& message)
+  bool planSideTapeHandoff(std::string& message, const std::string& variant_override = "")
   {
     if (!settings_.side_tape_handoff_enabled) {
       message = "side_tape_handoff_enabled is false";
@@ -3527,7 +3842,8 @@ private:
         "; call clear_plan before planning a side-tape hand-off";
       return false;
     }
-    const std::string variant = settings_.side_tape_handoff_variant;
+    const std::string variant =
+      variant_override.empty() ? settings_.side_tape_handoff_variant : variant_override;
     if (variant != "in_material" && variant != "standoff") {
       message = "side_tape_handoff_variant must be in_material or standoff";
       return false;
@@ -3645,6 +3961,8 @@ private:
     exec_options.cut_debug_start = true;
     exec_options.side_tape_handoff = true;
     exec_options.left_roll_cache = &handoff_roll_cache;
+    std::vector<const mtc::Stage*> exec_transit_stages;
+    exec_options.transit_stages_out = &exec_transit_stages;
     geometry_msgs::msg::PoseStamped standoff_target;
     if (variant == "standoff") {
       const double retreat_m = settings_.side_tape_handoff_standoff_mm / 1000.0 + depth_into_face_m;
@@ -3744,7 +4062,7 @@ private:
       return false;
     }
 
-    retainPlan(snapshot, {exec_segment}, exec_targets, std::move(exec_task));
+    retainPlan(snapshot, {exec_segment}, exec_targets, std::move(exec_task), exec_transit_stages);
     side_tape_handoff_snapshot_ = snapshot;
     side_tape_handoff_info_ = SideTapeHandoffInfo{};
     side_tape_handoff_info_.face = "left";
@@ -4490,6 +4808,13 @@ private:
     geometry_msgs::msg::PoseStamped stroke_target = current_pose;
     stroke_target.header.frame_id = settings_.planning_frame;
     stroke_target.pose.position = toPoint(stroke_end);
+    // Operator 2026-10-02: hold in the material for side_cut_post_penetration_dwell_s before
+    // the left cut stroke so the blade/arm settles after penetrating.
+    if (settings_.side_cut_post_penetration_dwell_s > 0.0) {
+      task->add(std::make_unique<StationaryDwell>(
+        "hold at penetration before left cut", settings_.planning_group,
+        settings_.side_cut_post_penetration_dwell_s));
+    }
     addMoveTo(
       *task, "side-tape continue: cut stroke parallel to planned line [" +
       settings_.motion_profile + "]", slow_planners.stroke, stroke_target);
@@ -4581,6 +4906,246 @@ private:
       formatDouble(withdraw_m * 1000.0, 1) + " mm + return transit)" + measured.str() +
       "; monitor controller execution";
     return true;
+  }
+  // ---- One-call T cut: plan_t_cut / execute_t_cut / abort_t_cut / t_cut_status.
+  // plan_t_cut = plan_side_tape_handoff with variant standoff (retains the left approach plan)
+  // PLUS a top-cut feasibility check of the SAME capture (unshifted snapshot, taught offsets,
+  // reversed blade, shortening allowed per the top_cut_* parameters), planned into a separate,
+  // discarded task: top_cut_info_/top_cut_snapshot_/the retained plan are not touched. It
+  // fails closed (never changes parameters) unless side_tape_handoff_enabled and
+  // left_parallel_orientation_enabled are already true, because silently flipping planning
+  // parameters would clear plans and hide a mis-configuration; set them with `ros2 param set`.
+  bool planTCut(std::string& message)
+  {
+    t_cut_plan_ready_ = false;
+    if (!settings_.side_tape_handoff_enabled || !settings_.left_parallel_orientation_enabled) {
+      message = "plan_t_cut refused: side_tape_handoff_enabled and "
+        "left_parallel_orientation_enabled must both be true (set them with ros2 param set; "
+        "this call never changes parameters)";
+      return false;
+    }
+    std::string handoff_message;
+    if (!planSideTapeHandoff(handoff_message, "standoff")) {
+      message = "plan_t_cut refused, left approach (standoff) not planned: " + handoff_message;
+      return false;
+    }
+    const auto abandon = [this]() {
+      // Nothing may stay retained after a refusal: drop the hand-off plan and its record.
+      side_tape_handoff_info_ = SideTapeHandoffInfo{};
+      side_tape_handoff_snapshot_.reset();
+      clearRetainedPlan();
+    };
+    std::string top_message;
+    double top_cut_fraction = 1.0;
+    double top_cut_length_mm = 0.0;
+    try {
+      const auto loaded = loadExternalSnapshot(externalSnapshotFile(), top_message);
+      if (!loaded) {
+        abandon();
+        message = "plan_t_cut refused, top cut snapshot: " + top_message;
+        return false;
+      }
+      Snapshot snapshot = *loaded;
+      std::string validation;
+      if (!validateSnapshot(snapshot, validation)) {
+        abandon();
+        message = "plan_t_cut refused, top cut snapshot rejected: " + validation;
+        return false;
+      }
+      if (snapshot.snapshot_id != side_tape_handoff_info_.snapshot_id) {
+        abandon();
+        message = "plan_t_cut refused: snapshot_id changed while planning";
+        return false;
+      }
+      SegmentPlanOptions options;
+      geometry_msgs::msg::PoseStamped hover_pose;
+      std::unique_ptr<mtc::Task> task;
+      std::vector<geometry_msgs::msg::PoseStamped> targets;
+      const bool ok = planTopCutWithShortening(
+        snapshot, options, hover_pose, task, targets, top_cut_fraction,
+        "plan_t_cut top-cut feasibility", top_message, /*skip_pre_transit_lift=*/true);
+      // planTopCutWithShortening published the unshifted carton; put the hand-off's
+      // (shifted) carton back so the scene matches the retained approach plan.
+      if (side_tape_handoff_snapshot_) publishCartonGeometry(*side_tape_handoff_snapshot_);
+      if (!ok) {
+        abandon();
+        message = "plan_t_cut refused, top cut not feasible: " + top_message;
+        return false;
+      }
+      top_cut_length_mm =
+        (toEigen(targets[1].pose.position) - toEigen(targets[0].pose.position)).norm() * 1000.0;
+      task.reset();  // feasibility only: discarded
+    } catch (const std::exception& exception) {
+      abandon();
+      message = std::string("plan_t_cut refused, top cut feasibility threw: ") + exception.what();
+      return false;
+    }
+    const auto& sel = side_tape_handoff_info_.left_parallel;
+    t_cut_plan_ready_ = true;
+    message = "T cut planned. LEFT: standoff approach retained (cut_length=" +
+      formatDouble(side_tape_handoff_info_.cut_length_mm, 1) + " mm, left angles tilt/pitch/yaw=" +
+      formatDouble(sel.tilt_deg, 1) + "/" + formatDouble(sel.pitch_deg, 1) + "/" +
+      formatDouble(sel.yaw_deg, 1) + " deg, rotation_from_F0=" +
+      formatDouble(sel.rotation_from_f0_deg, 1) + " deg). TOP: feasible (cut_length=" +
+      formatDouble(top_cut_length_mm, 1) + " mm, " + formatDouble(top_cut_fraction * 100.0, 0) +
+      " % of the seam, " + (top_cut_fraction < 1.0 ? "SHORTENED" : "not shortened") +
+      "); the top plan is discarded and is re-planned from the live state at its step. "
+      "Execute via execute_t_cut with execution_enabled";
+    return true;
+  }
+  void publishTCutStatus(
+    int step_index, const std::string& step, const std::string& status,
+    const std::string& message)
+  {
+    std::ostringstream json;
+    json << "{\"step_index\": " << step_index << ", \"step\": \"" << jsonEscape(step) <<
+      "\", \"status\": \"" << status << "\", \"message\": \"" << jsonEscape(message) <<
+      "\", \"stamp_ns\": " << now().nanoseconds() << "}";
+    std_msgs::msg::String topic_message;
+    topic_message.data = json.str();
+    t_cut_status_pub_->publish(topic_message);
+    RCLCPP_INFO(
+      get_logger(), "T cut step %d '%s': %s%s%s", step_index, step.c_str(), status.c_str(),
+      message.empty() ? "" : " - ", message.c_str());
+  }
+  bool executeTCut(std::string& message)
+  {
+    if (!t_cut_plan_ready_ || !planned_task_ || !planned_snapshot_ || !side_tape_handoff_pending_ ||
+        planned_task_->solutions().empty()) {
+      t_cut_plan_ready_ = false;
+      message = "execute_t_cut refused: no retained plan from plan_t_cut (call plan_t_cut first)";
+      return false;
+    }
+    if (settings_.debug_allow_stale_snapshot || retained_with_stale_override_ ||
+        side_tape_handoff_info_.stale_override) {
+      message = "execute_t_cut refused: planned/loaded under debug_allow_stale_snapshot "
+        "(plan-only override)";
+      return false;
+    }
+    if (!execution_enabled_.load()) {
+      message = "execution service is disabled by execution_enabled";
+      return false;
+    }
+    if (settings_.debug_fixed_orientation) {
+      message = "execution is blocked while debug_fixed_orientation is enabled";
+      return false;
+    }
+    if (execution_in_progress_) {
+      message = "an H-cut trajectory execution is already active";
+      return false;
+    }
+    std::string servo_error;
+    if (!sideTapeServoIsQuiescent(servo_error)) {
+      message = "execute_t_cut refused: " + servo_error;
+      return false;
+    }
+    // t_cut_running_ is false and plan_mutex_ is held: the previous sequencer (if any) has
+    // already left its last locked section, so joining cannot deadlock.
+    if (t_cut_thread_.joinable()) t_cut_thread_.join();
+    t_cut_plan_ready_ = false;
+    t_cut_abort_ = false;
+    t_cut_running_ = true;
+    publishTCutStatus(0, "sequence", "running", "T cut sequence dispatched (4 steps)");
+    t_cut_thread_ = std::thread([this]() { runTCutSequence(); });
+    message = "T cut dispatch accepted: approach_standoff -> side_cut_penetrate -> "
+      "continue_side_cut -> continue_top_cut; watch ~/t_cut_status; abort_t_cut stops further steps";
+    return true;
+  }
+  // Runs on t_cut_thread_. Every step calls the SAME function the individual service calls,
+  // under plan_mutex_ (so all its gates apply), then waits with the mutex released for the
+  // dispatched execution to finish (its completion handler needs plan_mutex_). Success is read
+  // from the state the completion handler leaves. Any failure stops the sequence at once and
+  // leaves the state exactly as the failing individual service would.
+  void runTCutSequence()
+  {
+    struct Step {
+      const char* name;
+      std::function<bool(std::string&)> body;
+      std::function<bool()> succeeded;
+      const char* expectation;
+    };
+    const std::vector<Step> steps = {
+      {"approach_standoff", [this](std::string& m) { return executeRetainedPlan(m); },
+       [this]() { return side_tape_handoff_info_.status == SideTapeHandoffStatus::kActive; },
+       "hand-off status active"},
+      {"side_cut_penetrate", [this](std::string& m) { return sideCutPenetrate(m); },
+       [this]() { return side_tape_handoff_info_.status == SideTapeHandoffStatus::kActive; },
+       "hand-off status still active (not cut_failed)"},
+      {"continue_side_cut", [this](std::string& m) { return continueSideCut(m); },
+       [this]() { return side_tape_handoff_info_.status == SideTapeHandoffStatus::kRetracted; },
+       "hand-off status retracted"},
+      {"continue_top_cut", [this](std::string& m) { return continueTopCut(m); },
+       [this]() { return top_cut_info_.status == TopCutStagedStatus::kDone; },
+       "top cut status done"},
+    };
+    std::string failure;
+    int failed_index = 0;
+    std::string failed_name = "sequence";
+    for (std::size_t i = 0; i < steps.size() && failure.empty(); ++i) {
+      const int index = static_cast<int>(i) + 1;
+      const Step& step = steps[i];
+      publishTCutStatus(index, step.name, "running", "");
+      // The arm settles slowly after each move (JTC reports success while it still creeps
+      // in): wait up to t_cut_settle_timeout_s for joints at rest / Servo quiet before the
+      // next step, whose own quiescence gate would otherwise refuse it.
+      if (i > 0) {
+        const auto settle_deadline = std::chrono::steady_clock::now() +
+          std::chrono::duration<double>(settings_.t_cut_settle_timeout_s);
+        std::string settle_message;
+        while (!t_cut_abort_ && rclcpp::ok() && !sideTapeServoIsQuiescent(settle_message) &&
+          std::chrono::steady_clock::now() < settle_deadline)
+        {
+          std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+      }
+      std::string step_message;
+      bool dispatched = false;
+      {
+        std::unique_lock<std::mutex> lock(plan_mutex_);
+        if (t_cut_abort_ || !rclcpp::ok()) {
+          failure = "aborted before this step started";
+        } else {
+          try {
+            dispatched = step.body(step_message);
+          } catch (const std::exception& exception) {
+            step_message = std::string("threw: ") + exception.what();
+          }
+          if (!dispatched) failure = "refused/planning failed: " + step_message;
+        }
+      }
+      if (failure.empty()) {
+        bool done = false;
+        while (!done) {
+          {
+            std::lock_guard<std::mutex> lock(plan_mutex_);
+            if (!execution_in_progress_) {
+              done = true;
+              if (!step.succeeded()) {
+                failure = std::string("execution did not complete (expected ") +
+                  step.expectation + ")";
+              }
+            }
+          }
+          if (!done) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+      }
+      if (!failure.empty()) {
+        failed_index = index;
+        failed_name = step.name;
+        break;
+      }
+      publishTCutStatus(index, step.name, "done", step_message);
+    }
+    if (failure.empty()) {
+      publishTCutStatus(5, "sequence", "done", "all 4 steps completed");
+    } else {
+      publishTCutStatus(
+        failed_index, failed_name, "failed",
+        failure + "; state left as the individual service leaves it (recover with "
+        "side_tape_retract or top_cut_retract)");
+    }
+    std::lock_guard<std::mutex> lock(plan_mutex_);
+    t_cut_running_ = false;
   }
   // ---- Staged top (middle seam) cut: approach -> penetrate -> cut_and_lift (see CONTEXT.md).
   static const char* topCutStatusName(TopCutStagedStatus status)
@@ -4740,19 +5305,506 @@ private:
     publishSolution(*task);
     return task;
   }
+  // ---- Opt-in robot-side (CRI "Move Joint") execution of free-space transits ----------------
+  // Used ONLY by the T-cut sequencer paths (approach_standoff, continue_top_cut) and only when
+  // cri_transit_enabled. The planned solution is split into runs: every leaf proven to be a
+  // collision-checked joint-linear transit becomes one CRI move; everything else is sent
+  // unchanged, in order, as partial Solutions through the same execute_task_solution action
+  // that Task::execute uses. Skipping a CRI leaf's scene_diff is correct because eligibility
+  // requires that diff to carry nothing but robot state, and ExecuteTaskSolution never applies
+  // joint state from a scene_diff (it blanks it; the monitored state comes from /joint_states).
+  struct CriTransitLeaf {
+    std::string name;
+    std::vector<std::string> joint_names;  // arm order
+    std::vector<double> start, goal;
+  };
+  static std::string joinNames(const std::vector<std::string>& names)
+  {
+    std::string out;
+    for (const auto& name : names) out += (out.empty() ? "" : ",") + name;
+    return out;
+  }
+  // True while t_cut_abort_ / shutdown should stop waiting.
+  bool criShouldStop() const { return t_cut_abort_.load() || !rclcpp::ok(); }
+  std::vector<std::string> armJointNames() const
+  {
+    if (!robot_model_) return {};
+    const auto* group = robot_model_->getJointModelGroup(settings_.planning_group);
+    return group != nullptr ? group->getVariableNames() : std::vector<std::string>{};
+  }
+  // Latest measured positions of `names` (fresh within 1 s); false with `error` otherwise.
+  bool measuredArmPositions(
+    const std::vector<std::string>& names, std::vector<double>& positions, std::string& error)
+  {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    if (!current_joint_state_) {
+      error = "no /joint_states received";
+      return false;
+    }
+    const double age_s = (now() - joint_state_received_).seconds();
+    if (!(age_s <= 1.0)) {
+      error = "/joint_states is stale (" + formatDouble(age_s, 2) + " s)";
+      return false;
+    }
+    positions.clear();
+    for (const auto& name : names) {
+      const auto it = std::find(
+        current_joint_state_->name.begin(), current_joint_state_->name.end(), name);
+      const auto index = static_cast<std::size_t>(
+        std::distance(current_joint_state_->name.begin(), it));
+      if (it == current_joint_state_->name.end() || index >= current_joint_state_->position.size() ||
+          !std::isfinite(current_joint_state_->position[index])) {
+        error = "joint '" + name + "' missing or non-finite in /joint_states";
+        return false;
+      }
+      positions.push_back(current_joint_state_->position[index]);
+    }
+    return true;
+  }
+  // Activates/deactivates the arm trajectory controller (STRICT, 2 s controller-manager
+  // timeout). A timed-out or failed call is reported false; the caller must still assume the
+  // switch may have happened and re-activate on its failure path.
+  bool switchTrajectoryController(
+    const CriTransitConfig& config, bool activate, std::string& error)
+  {
+    rclcpp::Client<controller_manager_msgs::srv::SwitchController>::SharedPtr client;
+    {
+      std::lock_guard<std::mutex> lock(cri_mutex_);
+      if (!switch_client_ || switch_client_ns_ != config.controller_manager_ns) {
+        switch_client_ = create_client<controller_manager_msgs::srv::SwitchController>(
+          config.controller_manager_ns + "/switch_controller", rmw_qos_profile_services_default,
+          callback_group_);
+        switch_client_ns_ = config.controller_manager_ns;
+      }
+      client = switch_client_;
+    }
+    if (!client->wait_for_service(std::chrono::seconds(2))) {
+      error = config.controller_manager_ns + "/switch_controller is not available";
+      return false;
+    }
+    auto request = std::make_shared<controller_manager_msgs::srv::SwitchController::Request>();
+    (activate ? request->activate_controllers : request->deactivate_controllers)
+      .push_back(config.trajectory_controller);
+    request->strictness = controller_manager_msgs::srv::SwitchController::Request::STRICT;
+    request->activate_asap = activate;
+    request->timeout.sec = 2;
+    request->timeout.nanosec = 0;
+    auto future = client->async_send_request(request);
+    if (future.wait_for(std::chrono::seconds(6)) != std::future_status::ready) {
+      error = std::string("switch_controller (") + (activate ? "activate" : "deactivate") +
+        ") timed out";
+      return false;
+    }
+    if (!future.get()->ok) {
+      error = std::string("switch_controller refused to ") + (activate ? "activate " : "deactivate ") +
+        config.trajectory_controller;
+      return false;
+    }
+    return true;
+  }
+  // Cancels the active CRI goal, if any (the driver then sends CMD Move Stop). Called from
+  // abort_t_cut and the destructor; safe from any thread. Returns true if a goal was cancelled.
+  bool cancelCriTransit()
+  {
+    std::lock_guard<std::mutex> lock(cri_mutex_);
+    if (!cri_goal_handle_ || !cri_client_) return false;
+    cri_client_->async_cancel_goal(cri_goal_handle_);
+    return true;
+  }
+  // One CRI joint move, including the JTC deactivate/re-activate bracket. Returns true only if
+  // the move completed AND the measured arm is within 0.005 rad of the goal AND the JTC was
+  // re-activated. On any failure the goal is cancelled (waiting up to 2 s for the result), the
+  // JTC is re-activated, and false is returned.
+  bool runCriTransit(const CriTransitLeaf& leaf, const CriTransitConfig& config, std::string& error)
+  {
+    using MoveJoint = igus_rebel_msgs::action::MoveJoint;
+    constexpr double kStartToleranceRad = 0.01;
+    constexpr double kGoalToleranceRad = 0.005;
+    // 1. The arm must be at rest before the controller deactivation and the move.
+    {
+      const auto deadline = std::chrono::steady_clock::now() +
+        std::chrono::duration<double>(settings_.t_cut_settle_timeout_s);
+      std::string quiet_message;
+      while (!sideTapeServoIsQuiescent(quiet_message)) {
+        if (criShouldStop()) {
+          error = "aborted before the CRI move started";
+          return false;
+        }
+        if (std::chrono::steady_clock::now() >= deadline) {
+          error = "arm did not settle before the CRI move: " + quiet_message;
+          return false;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      }
+    }
+    // 2. The measured joints must equal the planned start of this leaf.
+    std::vector<double> measured;
+    if (!measuredArmPositions(leaf.joint_names, measured, error)) return false;
+    const double start_error = rebel_transit_split::MaxJointChange(measured, leaf.start);
+    if (!(start_error <= kStartToleranceRad)) {
+      error = "measured joints are " + formatDouble(start_error, 4) +
+        " rad from the planned transit start (limit " + formatDouble(kStartToleranceRad, 3) + ")";
+      return false;
+    }
+    // 3. Action client for the driver's Move Joint.
+    rclcpp_action::Client<MoveJoint>::SharedPtr client;
+    {
+      std::lock_guard<std::mutex> lock(cri_mutex_);
+      if (!cri_client_ || cri_client_action_ != config.action) {
+        cri_client_ = rclcpp_action::create_client<MoveJoint>(
+          this, config.action, callback_group_);
+        cri_client_action_ = config.action;
+      }
+      client = cri_client_;
+    }
+    if (!client->wait_for_action_server(std::chrono::seconds(2))) {
+      error = "CRI move_joint action server " + config.action + " is not available";
+      return false;
+    }
+    const double largest_delta = rebel_transit_split::MaxJointChange(leaf.start, leaf.goal);
+    MoveJoint::Goal goal;
+    goal.joint_names = leaf.joint_names;
+    goal.start_positions = leaf.start;
+    goal.goal_positions = leaf.goal;
+    goal.velocity_percent = config.velocity_percent;
+    goal.acceleration_percent = config.acceleration_percent;
+    goal.start_tolerance = kStartToleranceRad;
+    goal.path_tolerance = rebel_transit_split::PathToleranceRad(largest_delta);
+    goal.goal_tolerance = kGoalToleranceRad;
+    goal.timeout_s = 0.0;  // the driver computes it from its duration model
+    // Rough bound for our own wait (the driver enforces its own timeout); the controller's
+    // percent-of-maximum scale is not known here, so the joint_limits.yaml maxima are used as
+    // the reference and the bound is generous.
+    const double estimate_s = rebel_transit_split::EstimateDurationS(
+      largest_delta, config.velocity_percent, config.acceleration_percent, 0.785, 5.24);
+    const double wait_limit_s = std::isfinite(estimate_s) ? std::max(30.0, 5.0 * estimate_s + 10.0) : 120.0;
+
+    bool ok = false;
+    std::string failure;
+    cri_transit_active_ = true;
+    // Set BEFORE the request: a timed-out request may still have been applied.
+    bool controller_possibly_off = true;
+    do {
+      if (!switchTrajectoryController(config, false, failure)) {
+        failure = "could not deactivate the trajectory controller: " + failure;
+        break;
+      }
+      if (criShouldStop()) {
+        failure = "aborted before the CRI goal was sent";
+        break;
+      }
+      auto goal_future = client->async_send_goal(goal);
+      if (goal_future.wait_for(std::chrono::seconds(10)) != std::future_status::ready) {
+        // The goal may still be accepted later: cancel everything this client owns so the arm
+        // can never move after we gave up and re-activated the controller.
+        client->async_cancel_all_goals();
+        goal_future.wait_for(std::chrono::seconds(2));
+        failure = "no response to the CRI goal within 10 s (cancel requested)";
+        break;
+      }
+      const auto handle = goal_future.get();
+      if (!handle) {
+        failure = "the CRI goal was rejected by the driver";
+        break;
+      }
+      {
+        std::lock_guard<std::mutex> lock(cri_mutex_);
+        cri_goal_handle_ = handle;
+      }
+      auto result_future = client->async_get_result(handle);
+      const auto deadline = std::chrono::steady_clock::now() +
+        std::chrono::duration<double>(wait_limit_s);
+      bool cancelled = false;
+      while (result_future.wait_for(std::chrono::milliseconds(20)) != std::future_status::ready) {
+        if (criShouldStop() || std::chrono::steady_clock::now() >= deadline) {
+          failure = criShouldStop() ? "aborted while the CRI move was running (cancel sent)" :
+            "CRI move did not finish within " + formatDouble(wait_limit_s, 0) + " s (cancel sent)";
+          client->async_cancel_goal(handle);
+          cancelled = true;
+          break;
+        }
+      }
+      if (cancelled) {
+        if (result_future.wait_for(std::chrono::seconds(2)) != std::future_status::ready) {
+          RCLCPP_ERROR(
+            get_logger(), "CRI transit '%s': no result 2 s after cancel; the robot stop is NOT "
+            "confirmed", leaf.name.c_str());
+        } else {
+          const auto wrapped = result_future.get();
+          if (wrapped.result) {
+            RCLCPP_WARN(
+              get_logger(), "CRI transit '%s' after cancel: code=%u stop_sent=%d stop_confirmed=%d",
+              leaf.name.c_str(), static_cast<unsigned>(wrapped.result->error_code),
+              wrapped.result->stop_sent ? 1 : 0, wrapped.result->stop_confirmed ? 1 : 0);
+          }
+        }
+        break;
+      }
+      const auto wrapped = result_future.get();
+      if (wrapped.code != rclcpp_action::ResultCode::SUCCEEDED || !wrapped.result ||
+          wrapped.result->error_code != MoveJoint::Result::SUCCESS) {
+        failure = "CRI move failed";
+        if (wrapped.result) {
+          failure += ": error_code=" + std::to_string(static_cast<unsigned>(wrapped.result->error_code)) +
+            " message='" + wrapped.result->message + "' end_reason='" + wrapped.result->end_reason +
+            "' stop_sent=" + (wrapped.result->stop_sent ? "true" : "false") + " stop_confirmed=" +
+            (wrapped.result->stop_confirmed ? "true" : "false");
+        } else {
+          failure += " (no result, action code " + std::to_string(static_cast<int>(wrapped.code)) + ")";
+        }
+        break;
+      }
+      // The measured arm must be at the goal (the joint state may lag the result briefly).
+      const auto reach_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+      double goal_error = std::numeric_limits<double>::infinity();
+      std::string measure_error;
+      while (true) {
+        if (measuredArmPositions(leaf.joint_names, measured, measure_error)) {
+          goal_error = rebel_transit_split::MaxJointChange(measured, leaf.goal);
+          if (goal_error <= kGoalToleranceRad) break;
+        }
+        if (std::chrono::steady_clock::now() >= reach_deadline) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+      }
+      if (!(goal_error <= kGoalToleranceRad)) {
+        failure = "CRI move reported success but the measured joints are " +
+          (std::isfinite(goal_error) ? formatDouble(goal_error, 4) + " rad" : "unknown (" + measure_error + ")") +
+          " from the goal (limit " + formatDouble(kGoalToleranceRad, 3) + ")";
+        break;
+      }
+      ok = true;
+    } while (false);
+    {
+      std::lock_guard<std::mutex> lock(cri_mutex_);
+      cri_goal_handle_.reset();
+    }
+    if (controller_possibly_off) {
+      std::string reactivate_error;
+      if (switchTrajectoryController(config, true, reactivate_error)) {
+        // Let the controller's action server come back before the next JTC run.
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+      } else {
+        ok = false;
+        failure += (failure.empty() ? "" : "; ") + std::string("re-activating the trajectory "
+          "controller FAILED (") + reactivate_error + "); verify " + config.trajectory_controller +
+          " is active (ros2 control list_controllers) and re-activate it manually (ros2 control "
+          "switch_controllers --activate), or cycle the hardware component inactive -> active "
+          "and then the controllers, before any further motion";
+      }
+    }
+    cri_transit_active_ = false;
+    if (!ok) error = failure;
+    return ok;
+  }
+
+  moveit::core::MoveItErrorCode executeSolutionPart(
+    const moveit_task_constructor_msgs::msg::Solution& part, std::string& error)
+  {
+    using ExecuteTaskSolution = moveit_task_constructor_msgs::action::ExecuteTaskSolution;
+    moveit::core::MoveItErrorCode failure(moveit_msgs::msg::MoveItErrorCodes::FAILURE);
+    rclcpp_action::Client<ExecuteTaskSolution>::SharedPtr client;
+    {
+      std::lock_guard<std::mutex> lock(cri_mutex_);
+      if (!execute_solution_client_) {
+        execute_solution_client_ = rclcpp_action::create_client<ExecuteTaskSolution>(
+          this, "/execute_task_solution", callback_group_);
+      }
+      client = execute_solution_client_;
+    }
+    if (!client->wait_for_action_server(std::chrono::milliseconds(500))) {
+      error = "failed to connect to the 'execute_task_solution' action server";
+      return failure;
+    }
+    ExecuteTaskSolution::Goal goal;
+    goal.solution = part;
+    auto goal_future = client->async_send_goal(goal);
+    if (goal_future.wait_for(std::chrono::seconds(10)) != std::future_status::ready) {
+      client->async_cancel_all_goals();
+      error = "no response to the execute_task_solution goal";
+      return failure;
+    }
+    const auto handle = goal_future.get();
+    if (!handle) {
+      error = "execute_task_solution goal was rejected";
+      return failure;
+    }
+    auto result_future = client->async_get_result(handle);
+    result_future.wait();  // like Task::execute: the server always finishes the goal
+    const auto wrapped = result_future.get();
+    if (wrapped.code != rclcpp_action::ResultCode::SUCCEEDED || !wrapped.result) {
+      error = "execute_task_solution goal was aborted or canceled";
+      return failure;
+    }
+    return moveit::core::MoveItErrorCode(wrapped.result->error_code);
+  }
+
+  // Replaces task.execute(solution) in the T-cut sequencer paths. With use_cri == false (or
+  // nothing eligible) this IS task.execute(solution), unchanged.
+  moveit::core::MoveItErrorCode executeSolutionSplit(
+    mtc::Task& task, const std::vector<const mtc::Stage*>& transit_stages, bool use_cri,
+    const CriTransitConfig& config)
+  {
+    const mtc::SolutionBase& solution = *task.solutions().front();
+    if (!use_cri) return task.execute(solution);
+    if (transit_stages.empty()) {
+      RCLCPP_INFO(get_logger(), "CRI transit: no recorded free-space transit in this plan; JTC only");
+      return task.execute(solution);
+    }
+    moveit_task_constructor_msgs::msg::Solution message;
+    std::vector<CriTransitLeaf> cri_leaves;
+    std::vector<bool> cri_flags;
+    std::vector<std::size_t> cri_leaf_of;  // leaf index -> index into cri_leaves
+    try {
+      solution.toMsg(message);
+      std::vector<const mtc::SubTrajectory*> leaves;
+      collectLeaves(&solution, leaves);
+      const auto arm_joints = armJointNames();
+      if (leaves.size() != message.sub_trajectory.size() || arm_joints.size() != 6U) {
+        RCLCPP_WARN(
+          get_logger(), "CRI transit: solution/leaf bookkeeping mismatch (%zu leaves, %zu "
+          "messages, %zu arm joints); JTC only", leaves.size(), message.sub_trajectory.size(),
+          arm_joints.size());
+        return task.execute(solution);
+      }
+      const std::set<const mtc::Stage*> recorded(transit_stages.begin(), transit_stages.end());
+      cri_flags.assign(leaves.size(), false);
+      cri_leaf_of.assign(leaves.size(), 0U);
+      for (std::size_t i = 0; i < leaves.size(); ++i) {
+        const mtc::Stage* creator = leaves[i]->creator();
+        if (recorded.count(creator) == 0U) continue;
+        const std::string name = creator != nullptr ? creator->name() : std::string();
+        const auto& sub = message.sub_trajectory[i];
+        const auto& joint_trajectory = sub.trajectory.joint_trajectory;
+        rebel_transit_split::LeafCandidate candidate;
+        candidate.recorded_transit = true;
+        candidate.provenance_registered = transit_provenance_->contains(leaves[i]->trajectory());
+        {
+          moveit_msgs::msg::PlanningScene diff = sub.scene_diff;
+          diff.robot_state.joint_state = sensor_msgs::msg::JointState();
+          diff.robot_state.multi_dof_joint_state = sensor_msgs::msg::MultiDOFJointState();
+          diff.robot_state.is_diff = true;
+          // MoveIt's PlanningScene::getPlanningSceneDiffMsg() always fills the scene name
+          // ("(noname)+++..." grows by one '+' per diff level), the robot model name and the
+          // scene-wide link_padding/link_scale vectors even when nothing changed (observed on
+          // Humble: 17 entries each), so isEmpty() was never true and no leaf was ever CRI
+          // eligible. These are not changes made by the stage; anything else (ACM, world
+          // objects, attached objects, colours, frames, octomap) must still be empty.
+          diff.name.clear();
+          diff.robot_model_name.clear();
+          diff.link_padding.clear();
+          diff.link_scale.clear();
+          candidate.scene_diff_robot_state_only =
+            moveit::core::isEmpty(diff) && diff.object_colors.empty() &&
+            diff.world.collision_objects.empty() && diff.robot_state.attached_collision_objects.empty();
+        }
+        candidate.joint_names = joint_trajectory.joint_names;
+        for (const auto& point : joint_trajectory.points) candidate.waypoints.push_back(point.positions);
+        std::string reason;
+        if (!sub.trajectory.multi_dof_joint_trajectory.joint_names.empty()) {
+          reason = "trajectory has multi-DOF joints";
+        } else {
+          // The message must agree with the planner trajectory the provenance refers to.
+          const auto& trajectory = leaves[i]->trajectory();
+          if (!trajectory || trajectory->getWayPointCount() != joint_trajectory.points.size()) {
+            reason = "message and planner trajectory differ in length";
+          } else if (!candidate.waypoints.empty()) {
+            for (std::size_t j = 0; j < candidate.joint_names.size() && reason.empty(); ++j) {
+              const auto& first_state = trajectory->getFirstWayPoint();
+              const auto& last_state = trajectory->getLastWayPoint();
+              if (!first_state.getRobotModel()->hasJointModel(candidate.joint_names[j]) ||
+                  std::abs(first_state.getVariablePosition(candidate.joint_names[j]) -
+                  candidate.waypoints.front()[j]) > 1e-6 ||
+                  std::abs(last_state.getVariablePosition(candidate.joint_names[j]) -
+                  candidate.waypoints.back()[j]) > 1e-6) {
+                reason = "message and planner trajectory endpoints differ";
+              }
+            }
+          }
+        }
+        rebel_transit_split::LeafVerdict verdict;
+        if (reason.empty()) {
+          verdict = rebel_transit_split::EvaluateLeaf(candidate, arm_joints, config.min_length_rad);
+          reason = verdict.reason;
+        }
+        if (reason.empty() && verdict.cri) {
+          CriTransitLeaf leaf;
+          leaf.name = name;
+          leaf.joint_names = arm_joints;
+          const auto ordered = rebel_transit_split::ReorderWaypoints(
+            candidate.joint_names, candidate.waypoints, arm_joints);
+          leaf.start = ordered.front();
+          leaf.goal = ordered.back();
+          cri_flags[i] = true;
+          cri_leaf_of[i] = cri_leaves.size();
+          cri_leaves.push_back(std::move(leaf));
+          RCLCPP_INFO(
+            get_logger(), "transit '%s': CRI move_joint (joint-linear, collision-checked "
+            "joint interpolation, max joint change %.3f rad)", name.c_str(),
+            rebel_transit_split::MaxJointChange(cri_leaves.back().start, cri_leaves.back().goal));
+        } else {
+          RCLCPP_INFO(
+            get_logger(), "transit '%s': JTC (not eligible for CRI: %s)", name.c_str(),
+            reason.c_str());
+        }
+      }
+    } catch (const std::exception& exception) {
+      RCLCPP_ERROR(
+        get_logger(), "CRI transit classification failed (%s); JTC only", exception.what());
+      return task.execute(solution);
+    }
+    const auto runs = rebel_transit_split::BuildDispatchPlan(cri_flags);
+    if (cri_leaves.empty()) {
+      RCLCPP_INFO(get_logger(), "CRI transit: no eligible transit leaf; JTC only");
+      return task.execute(solution);
+    }
+    RCLCPP_INFO(
+      get_logger(), "CRI transit: %zu of %zu trajectories run on CRI move_joint (%zu runs), the "
+      "rest on the JTC", cri_leaves.size(), cri_flags.size(), runs.size());
+    for (std::size_t r = 0; r < runs.size(); ++r) {
+      const auto& run = runs[r];
+      if (run.cri) {
+        const auto& leaf = cri_leaves[cri_leaf_of[run.begin]];
+        std::string error;
+        if (!runCriTransit(leaf, config, error)) {
+          RCLCPP_ERROR(
+            get_logger(), "CRI transit '%s' FAILED (run %zu/%zu): %s", leaf.name.c_str(), r + 1U,
+            runs.size(), error.c_str());
+          return moveit::core::MoveItErrorCode(moveit_msgs::msg::MoveItErrorCodes::CONTROL_FAILED);
+        }
+        RCLCPP_INFO(get_logger(), "CRI transit '%s' completed", leaf.name.c_str());
+      } else {
+        moveit_task_constructor_msgs::msg::Solution part = message;
+        part.sub_trajectory.assign(
+          message.sub_trajectory.begin() + static_cast<std::ptrdiff_t>(run.begin),
+          message.sub_trajectory.begin() + static_cast<std::ptrdiff_t>(run.end));
+        std::string error;
+        const auto code = executeSolutionPart(part, error);
+        if (code != moveit::core::MoveItErrorCode::SUCCESS) {
+          RCLCPP_ERROR(
+            get_logger(), "JTC run %zu/%zu (trajectories %zu-%zu) failed: code %d %s", r + 1U,
+            runs.size(), run.begin, run.end - 1U, code.val, error.c_str());
+          return code;
+        }
+      }
+    }
+    return moveit::core::MoveItErrorCode(moveit_msgs::msg::MoveItErrorCodes::SUCCESS);
+  }
+
   // Executes `task` on the execution thread; on_done(succeeded) runs under plan_mutex_ with
   // execution_in_progress_ already cleared.
   void dispatchTopCutTask(
     std::unique_ptr<mtc::Task> task, const std::string& label,
-    std::function<void(bool)> on_done)
+    std::function<void(bool)> on_done, std::vector<const mtc::Stage*> transit_stages = {},
+    bool use_cri = false, CriTransitConfig cri_config = CriTransitConfig{})
   {
     if (execution_thread_.joinable()) execution_thread_.join();
     execution_in_progress_ = true;
     execution_thread_ = std::thread(
-      [this, task = std::move(task), label, on_done = std::move(on_done)]() mutable {
+      [this, task = std::move(task), label, on_done = std::move(on_done),
+       transit_stages = std::move(transit_stages), use_cri, cri_config]() mutable {
         bool succeeded = false;
         try {
-          const auto result = task->execute(*task->solutions().front());
+          const auto result = executeSolutionSplit(*task, transit_stages, use_cri, cri_config);
           succeeded = (result == moveit::core::MoveItErrorCode::SUCCESS);
           if (!succeeded) {
             RCLCPP_ERROR(
@@ -4812,6 +5864,83 @@ private:
   {
     return toEigen(cut_start_target.pose.position) +
       (options.middle_start_extra_depth_m - settings_.middle_cut_clearance_m) * normal;
+  }
+  // Plans the whole top (middle seam) cut from the CURRENT robot state with the taught
+  // offsets, the staged speed factor and the pre-transit lift; shared by continue_top_cut and
+  // plan_t_cut's feasibility check so both compute identical poses. `snapshot` is modified in
+  // place (offsets, shortened seam end). Operator 2026-10-01 (like t_cut_handoff): if the full
+  // top cut cannot be planned (e.g. the wrist runs out of range near the seam end), retry with
+  // the cut END pulled back along the seam in 5 % steps down to top_cut_min_cut_fraction. Every
+  // stroke is still planned complete (min_fraction 1.0) to its shortened end; a partial
+  // Cartesian path is never accepted. Plans only; retains and dispatches nothing.
+  bool planTopCutWithShortening(
+    Snapshot& snapshot, SegmentPlanOptions& options, geometry_msgs::msg::PoseStamped& hover_pose,
+    std::unique_ptr<mtc::Task>& task, std::vector<geometry_msgs::msg::PoseStamped>& targets,
+    double& cut_fraction, const std::string& who, std::string& message,
+    bool skip_pre_transit_lift = false,
+    std::vector<const mtc::Stage*>* transit_stages_out = nullptr)
+  {
+    if (!applyTopCutTaughtOffsets(snapshot, options, message)) return false;
+    // Re-filled by every planCutSegments attempt, so it always describes the FINAL task.
+    options.transit_stages_out = transit_stages_out;
+    options.cut_stroke_speed_factor = settings_.top_cut_staged_speed_factor;
+    options.middle_finish_clearance_m = settings_.top_cut_lift_clearance_m;
+    // plan_t_cut checks feasibility from the CURRENT (e.g. home) pose, where the pre-transit
+    // lift may be impossible (arm already near full height); at run time continue_top_cut
+    // starts from the left-cut withdraw pose and applies the lift.
+    options.pre_transit_lift_m = skip_pre_transit_lift ? 0.0 : settings_.top_cut_pre_transit_lift_m;
+    options.hover_start_out = &hover_pose;
+    publishCartonGeometry(snapshot);
+    const auto corrections = loadAllActiveCorrections();
+    std::string plan_error;
+    const Snapshot full_snapshot = snapshot;
+    const SegmentPlanOptions full_options = options;
+    bool planned = false;
+    std::string first_error;
+    for (int step = 0; ; ++step) {
+      cut_fraction = 1.0 - 0.05 * step;
+      if (cut_fraction < settings_.top_cut_min_cut_fraction - 1e-9) break;
+      if (step > 0 && !settings_.top_cut_allow_shortened_cut) break;
+      snapshot = full_snapshot;
+      options = full_options;
+      snapshot.seam_end = toPoint(
+        toEigen(full_snapshot.seam_start) +
+        cut_fraction * (toEigen(full_snapshot.seam_end) - toEigen(full_snapshot.seam_start)));
+      options.middle_end_extra_depth_m = full_options.middle_start_extra_depth_m +
+        cut_fraction * (full_options.middle_end_extra_depth_m -
+        full_options.middle_start_extra_depth_m);
+      const CutSegment try_segment = segmentFor(snapshot, CutKind::kMiddle);
+      task.reset();
+      targets.clear();
+      plan_error.clear();
+      if (planCutSegments(
+            snapshot, {try_segment}, corrections, settings_.motion_profile,
+            "continue top cut (middle: transit, hover, descend, cut, lift)", options, task,
+            targets, plan_error)) {
+        planned = true;
+        break;
+      }
+      if (first_error.empty()) first_error = plan_error;
+      RCLCPP_WARN(
+        get_logger(), "%s: %.0f %% cut did not plan (%s); trying shorter", who.c_str(),
+        cut_fraction * 100.0, plan_error.c_str());
+    }
+    if (!planned) {
+      message = who + " planning failed; nothing moved (tried down to " +
+        formatDouble(settings_.top_cut_min_cut_fraction * 100.0, 0) + " % of the cut): " +
+        first_error;
+      return false;
+    }
+    if (cut_fraction < 1.0) {
+      RCLCPP_WARN(
+        get_logger(), "%s: SHORTENED cut, %.0f %% of the seam (the rest is not cut)",
+        who.c_str(), cut_fraction * 100.0);
+    }
+    if (targets.size() != 2U) {
+      message = who + ": unexpected target count for the middle segment";
+      return false;
+    }
+    return true;
   }
   // ~/continue_top_cut: ONE call for the whole top (middle seam) cut from the CURRENT robot
   // state: free-space transit to the taught-offset hover, stabilization dwell, scoped
@@ -4917,70 +6046,14 @@ private:
       top_cut_info_ = TopCutStagedInfo{};
       top_cut_snapshot_.reset();
       SegmentPlanOptions options;
-      if (!applyTopCutTaughtOffsets(snapshot, options, message)) return false;
-      options.cut_stroke_speed_factor = settings_.top_cut_staged_speed_factor;
-      options.middle_finish_clearance_m = settings_.top_cut_lift_clearance_m;
-      options.pre_transit_lift_m = settings_.top_cut_pre_transit_lift_m;
       geometry_msgs::msg::PoseStamped hover_pose;
-      options.hover_start_out = &hover_pose;
-      publishCartonGeometry(snapshot);
-      const auto corrections = loadAllActiveCorrections();
-      const CutSegment segment = segmentFor(snapshot, CutKind::kMiddle);
       std::unique_ptr<mtc::Task> task;
       std::vector<geometry_msgs::msg::PoseStamped> targets;
-      std::string plan_error;
-      // Operator 2026-10-01 (like t_cut_handoff): if the full top cut cannot be planned
-      // (e.g. the wrist runs out of range near the seam end), retry with the cut END pulled
-      // back along the seam in 5 % steps down to top_cut_min_cut_fraction, then lift there.
-      // Every stroke is still planned complete (min_fraction 1.0) to its shortened end; a
-      // partial Cartesian path is never accepted.
-      const Snapshot full_snapshot = snapshot;
-      const SegmentPlanOptions full_options = options;
       double cut_fraction = 1.0;
-      bool planned = false;
-      std::string first_error;
-      for (int step = 0; ; ++step) {
-        cut_fraction = 1.0 - 0.05 * step;
-        if (cut_fraction < settings_.top_cut_min_cut_fraction - 1e-9) break;
-        if (step > 0 && !settings_.top_cut_allow_shortened_cut) break;
-        snapshot = full_snapshot;
-        options = full_options;
-        snapshot.seam_end = toPoint(
-          toEigen(full_snapshot.seam_start) +
-          cut_fraction * (toEigen(full_snapshot.seam_end) - toEigen(full_snapshot.seam_start)));
-        options.middle_end_extra_depth_m = full_options.middle_start_extra_depth_m +
-          cut_fraction * (full_options.middle_end_extra_depth_m -
-          full_options.middle_start_extra_depth_m);
-        const CutSegment try_segment = segmentFor(snapshot, CutKind::kMiddle);
-        task.reset();
-        targets.clear();
-        plan_error.clear();
-        if (planCutSegments(
-              snapshot, {try_segment}, corrections, settings_.motion_profile,
-              "continue top cut (middle: transit, hover, descend, cut, lift)", options, task,
-              targets, plan_error)) {
-          planned = true;
-          break;
-        }
-        if (first_error.empty()) first_error = plan_error;
-        RCLCPP_WARN(
-          get_logger(), "continue_top_cut: %.0f %% cut did not plan (%s); trying shorter",
-          cut_fraction * 100.0, plan_error.c_str());
-      }
-      if (!planned) {
-        message = "continue_top_cut planning failed; nothing moved (tried down to " +
-          formatDouble(settings_.top_cut_min_cut_fraction * 100.0, 0) + " % of the cut): " +
-          first_error;
-        return false;
-      }
-      if (cut_fraction < 1.0) {
-        RCLCPP_WARN(
-          get_logger(), "continue_top_cut: SHORTENED cut, %.0f %% of the seam (the rest is not "
-          "cut)", cut_fraction * 100.0);
-      }
-      (void)segment;
-      if (targets.size() != 2U) {
-        message = "continue_top_cut: unexpected target count for the middle segment";
+      std::vector<const mtc::Stage*> top_transit_stages;
+      if (!planTopCutWithShortening(
+            snapshot, options, hover_pose, task, targets, cut_fraction, "continue_top_cut",
+            message, /*skip_pre_transit_lift=*/false, &top_transit_stages)) {
         return false;
       }
       top_cut_snapshot_ = snapshot;
@@ -5012,6 +6085,7 @@ private:
       publishTargetPoses(snapshot, {hover_pose, targets[0], targets[1], lift_pose});
       publishSolution(*task);
       writeTopCutStagedOutput();
+      const CriTransitConfig top_cri_config = criConfig();
       dispatchTopCutTask(std::move(task), "Top-cut continue", [this](bool ok) {
         top_cut_info_.status = ok ? TopCutStagedStatus::kDone : TopCutStagedStatus::kFailed;
         top_cut_info_.stamp = now();
@@ -5026,7 +6100,8 @@ private:
             get_logger(), "continue_top_cut did NOT complete; status 'failed', detected_carton "
             "kept; call top_cut_retract to lift straight up from the current pose");
         }
-      });
+      }, std::move(top_transit_stages), top_cri_config.enabled && t_cut_running_.load(),
+      top_cri_config);
       message = "continue_top_cut dispatch accepted (" + snapshot_origin + ", " +
         formatDouble(cut_fraction * 100.0, 0) + " % of the seam): transit to hover, "
         "dwell, descend, cut " +
@@ -6089,13 +7164,15 @@ private:
   void retainPlan(
     const Snapshot& snapshot, const std::vector<CutSegment>& segments,
     const std::vector<geometry_msgs::msg::PoseStamped>& cut_targets,
-    std::unique_ptr<mtc::Task> task)
+    std::unique_ptr<mtc::Task> task,
+    std::vector<const mtc::Stage*> transit_stages = {})
   {
     publishMarkers(cut_targets, segments);
     publishTargetPoses(snapshot, cut_targets);
     publishSolution(*task);
     planned_snapshot_ = snapshot;
     planned_task_ = std::move(task);
+    planned_transit_stages_ = std::move(transit_stages);
     retained_with_stale_override_ = settings_.debug_allow_stale_snapshot;
   }
   // Plans the first-arm T-cut handoff candidate: the full left cut plus the middle seam
@@ -6393,6 +7470,7 @@ private:
     const SegmentPlanOptions& options, std::unique_ptr<mtc::Task>& task,
     std::vector<geometry_msgs::msg::PoseStamped>& cut_targets, std::string& message)
   {
+    if (options.transit_stages_out != nullptr) options.transit_stages_out->clear();
     task = std::make_unique<mtc::Task>();
     task->stages()->setName(task_name);
     // The robot model (and with it MTC's cached planning pipelines) is loaded once.
@@ -6902,6 +7980,7 @@ private:
       message = wrist_error;
       return false;
     }
+    if (options.transit_stages_out != nullptr) *options.transit_stages_out = transit_stages;
     return true;
   }
 
@@ -7034,10 +8113,30 @@ private:
     direct->setMaxVelocityScalingFactor(settings_.transit_velocity_scaling);
     direct->setMaxAccelerationScalingFactor(settings_.transit_acceleration_scaling);
     auto multi = std::make_shared<mtc::solvers::MultiPlanner>();
-    multi->push_back(direct);
+    // Tagged so the opt-in CRI transit execution can tell joint-interpolation results (a
+    // collision-checked straight joint line) from the fallback planner's. No other effect.
+    multi->push_back(std::make_shared<TaggingPlanner>(direct, transit_provenance_));
     multi->push_back(fallback);
     // Pose goals are resolved to the nearest exact IK branch before either planner runs.
     return std::make_shared<NearestBranchTransitPlanner>(multi, settings_.planning_timeout_s);
+  }
+
+  // Depth-first collection of the SubTrajectory leaves of a solution tree, in execution order
+  // (the order Solution::toMsg serialises them). Shared by the wrist guard and the CRI
+  // transit split.
+  static void collectLeaves(
+    const mtc::SolutionBase* node, std::vector<const mtc::SubTrajectory*>& leaves)
+  {
+    if (node == nullptr) return;
+    if (const auto* wrapped = dynamic_cast<const mtc::WrappedSolution*>(node)) {
+      collectLeaves(wrapped->wrapped(), leaves);
+      return;
+    }
+    if (const auto* nested = dynamic_cast<const mtc::SolutionSequence*>(node)) {
+      for (const auto* child : nested->solutions()) collectLeaves(child, leaves);
+      return;
+    }
+    if (const auto* sub = dynamic_cast<const mtc::SubTrajectory*>(node)) leaves.push_back(sub);
   }
 
   // Fail-closed wrist guard for free-space transits: rejects the retained solution
@@ -7060,21 +8159,7 @@ private:
       return false;
     }
     std::vector<const mtc::SubTrajectory*> leaves;
-    std::function<void(const mtc::SolutionBase*)> collect = [&](const mtc::SolutionBase* node) {
-      if (node == nullptr) return;
-      if (const auto* wrapped = dynamic_cast<const mtc::WrappedSolution*>(node)) {
-        collect(wrapped->wrapped());
-        return;
-      }
-      if (const auto* nested = dynamic_cast<const mtc::SolutionSequence*>(node)) {
-        for (const auto* child : nested->solutions()) collect(child);
-        return;
-      }
-      if (const auto* sub = dynamic_cast<const mtc::SubTrajectory*>(node)) {
-        leaves.push_back(sub);
-      }
-    };
-    for (const auto* child : sequence->solutions()) collect(child);
+    for (const auto* child : sequence->solutions()) collectLeaves(child, leaves);
     if (leaves.size() != solution_message.sub_trajectory.size()) {
       error = prefix + "solution trajectory count does not match planned stages; refusing to guess";
       return false;
@@ -7309,7 +8394,24 @@ private:
   // logged once.
   std::once_flag analytic_self_check_once_;
   std::atomic<bool> analytic_ik_available_{false};
+  // link6 -> tool_link from the live RobotModel; written once inside analytic_self_check_once_
+  // before analytic_ik_available_ is stored true (release/acquire via the atomic).
+  Eigen::Isometry3d analytic_tool_in_link6_{Eigen::Isometry3d::Identity()};
   std::string external_snapshot_file_;
+  // CRI transit (runtime parameters), guarded by runtime_parameter_mutex_.
+  CriTransitConfig cri_config_;
+  // Which trajectories came from the JointInterpolationPlanner (see TransitProvenance).
+  std::shared_ptr<TransitProvenance> transit_provenance_{std::make_shared<TransitProvenance>()};
+  // True from before the trajectory controller is deactivated until it is re-activated.
+  std::atomic<bool> cri_transit_active_{false};
+  std::mutex cri_mutex_;  // guards the clients and cri_goal_handle_
+  rclcpp_action::Client<igus_rebel_msgs::action::MoveJoint>::SharedPtr cri_client_;
+  std::string cri_client_action_;
+  rclcpp_action::ClientGoalHandle<igus_rebel_msgs::action::MoveJoint>::SharedPtr cri_goal_handle_;
+  rclcpp::Client<controller_manager_msgs::srv::SwitchController>::SharedPtr switch_client_;
+  std::string switch_client_ns_;
+  rclcpp_action::Client<moveit_task_constructor_msgs::action::ExecuteTaskSolution>::SharedPtr
+    execute_solution_client_;
   std::optional<sensor_msgs::msg::JointState> current_joint_state_;
   std::optional<moveit_msgs::msg::CollisionObject> camera_pole_;
   rclcpp::Time joint_state_received_;
@@ -7349,6 +8451,8 @@ private:
   std::string cut_debug_record_path_;
   std::int64_t cut_debug_created_stamp_ns_{0};
   std::unique_ptr<mtc::Task> planned_task_;
+  // Free-space transit stages of planned_task_ (owned by it); empty unless planned with them.
+  std::vector<const mtc::Stage*> planned_transit_stages_;
   std::thread execution_thread_;
   bool execution_in_progress_{false};
   // Side-tape hand-off (left only). side_tape_handoff_pending_ marks a retained plan (in
@@ -7367,6 +8471,16 @@ private:
   TriggerService::SharedPtr side_tape_retract_service_;
   TriggerService::SharedPtr side_tape_continue_service_;
   TriggerService::SharedPtr side_cut_penetrate_service_;
+  // One-call T cut (plan_t_cut / execute_t_cut). t_cut_plan_ready_: the retained plan is a
+  // plan_t_cut result (cleared by clearRetainedPlan and consumed by execute_t_cut).
+  // t_cut_running_ is written under plan_mutex_ only; the sequencer thread releases
+  // plan_mutex_ while it waits for a trajectory so completion handlers can take it.
+  bool t_cut_plan_ready_{false};
+  std::atomic<bool> t_cut_running_{false};
+  std::atomic<bool> t_cut_abort_{false};
+  std::thread t_cut_thread_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr t_cut_status_pub_;
+  TriggerService::SharedPtr t_cut_plan_service_, t_cut_execute_service_, t_cut_abort_service_;
   TopCutStagedInfo top_cut_info_;
   std::optional<Snapshot> top_cut_snapshot_;
   bool top_cut_pending_{false};

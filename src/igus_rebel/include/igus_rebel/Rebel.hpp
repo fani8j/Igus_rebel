@@ -14,7 +14,9 @@
 #include <vector>
 
 #include "rclcpp/rclcpp.hpp"
+#include "rclcpp_action/rclcpp_action.hpp"
 #include "rclcpp_lifecycle/state.hpp"
+#include "igus_rebel_msgs/action/move_joint.hpp"
 #include "igus_rebel_msgs/msg/digital_output.hpp"
 #include "igus_rebel_msgs/srv/set_digital_output.hpp"
 #include "std_srvs/srv/trigger.hpp"
@@ -23,6 +25,7 @@
 #include "igus_rebel/RebelSocket.hpp"
 #include "igus_rebel/CriMessages.hpp"
 #include "igus_rebel/FaultGroup.hpp"
+#include "igus_rebel/MoveSupervisor.hpp"
 #include "igus_rebel/RebelSafety.hpp"
 
 using namespace hardware_interface;
@@ -53,7 +56,9 @@ private:
   };
 
   rclcpp::Node::SharedPtr node_;
-  std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
+  // Two threads: the move_joint cancel callback must never wait behind reset_and_enable (which
+  // blocks up to 3 s). The action server has its own callback group.
+  std::shared_ptr<rclcpp::executors::MultiThreadedExecutor> executor_;
   std::thread executorThread;
 
   std::shared_ptr<RebelSocket> rebelSocket;
@@ -168,13 +173,78 @@ private:
   // ROS2 communication
   rclcpp::Service<igus_rebel_msgs::srv::SetDigitalOutput>::SharedPtr digital_output_srv_;
 
+  // ---- Robot-side joint move (CRI "CMD Move Joint"), see ExecuteMoveGoal() ----
+  // Once a Move Joint is sent the robot owns the motion: zero jog, a paused ALIVEJOG or a closed
+  // socket do NOT stop it, only "CMD Move Stop" does. Hence every stop/fault path calls
+  // RequestMoveStop().
+  using MoveJointAction = igus_rebel_msgs::action::MoveJoint;
+  using MoveGoalHandle = rclcpp_action::ServerGoalHandle<MoveJointAction>;
+  enum MoveState : int {kMoveIdle = 0, kMoveSending = 1, kMoveMoving = 2, kMoveStopping = 3};
+  // Events of the current move, filled by the message thread, read by the move thread.
+  struct MoveEvents
+  {
+    bool moveAck = false;     // MOVETOEXECACK
+    bool cmdAck = false;      // CMDACK for the Move Joint counter
+    bool cmdError = false;    // CMDERROR for the Move Joint counter
+    std::string cmdErrorText;
+    bool endSeen = false;     // MOVETOEXECEND
+    int endCode = 0;
+    std::string endReason;
+  };
+
+  std::atomic<int> moveState_{kMoveIdle};
+  // One goal at a time: set when a goal is accepted, cleared when its result was sent.
+  std::atomic<bool> moveGoalBusy_{false};
+  std::atomic<bool> moveCancelRequested_{false};
+  // "CMD Move Stop" wanted: consumed by the ALIVEJOG thread (sent within ~10 ms).
+  std::atomic<bool> moveStopRequested_{false};
+  // Incremented by every RequestMoveStop() while a move is active; the move thread compares it
+  // with the value at the start of its goal, so no request is ever lost.
+  std::atomic<std::uint64_t> moveStopSeq_{0};
+  std::atomic<bool> peerFaulted_{false};
+  // Between on_activate() and on_deactivate()/on_error(): read()/write() are being called.
+  std::atomic<bool> activated_{false};
+  std::atomic<int> kinstateValue_{0};
+  std::atomic<int> moveCommandCounter_{-1};
+  std::mutex moveEventLock_;
+  MoveEvents moveEvents_;
+  std::mutex moveThreadLock_;
+  std::thread moveThread_;
+  // Velocity command interfaces of this arm that are claimed by an active controller (bit i =
+  // joint i), tracked through perform_command_mode_switch(). claimLock_ makes "accept a goal"
+  // and "prepare a claim" mutually exclusive; the pending deadline covers prepare -> perform.
+  std::mutex claimLock_;
+  std::atomic<unsigned> velocityClaimMask_{0};
+  std::atomic<std::int64_t> claimPendingUntilNs_{0};
+  double moveMaxVelocityPercent_ = Move::kDefaultMaxVelocityPercent;
+  double moveMaxAccelerationPercent_ = Move::kDefaultMaxAccelerationPercent;
+  std::array<std::array<double, 2>, 6> jointLimits_ = Move::HardwareJointLimits();
+  rclcpp::CallbackGroup::SharedPtr moveGroup_;
+  rclcpp_action::Server<MoveJointAction>::SharedPtr moveServer_;
+
+  void RequestMoveStop();
+  bool SendMoveStopNow();
+  void ConsumeMoveStopRequest(Safety::SteadyClock::time_point & retryAfter);
+  rclcpp_action::GoalResponse OnMoveGoal(
+    const rclcpp_action::GoalUUID & uuid, std::shared_ptr<const MoveJointAction::Goal> goal);
+  rclcpp_action::CancelResponse OnMoveCancel(const std::shared_ptr<MoveGoalHandle> goalHandle);
+  void OnMoveAccepted(const std::shared_ptr<MoveGoalHandle> goalHandle);
+  void ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle);
+  // Returns 0 (SUCCESS) if the goal may be sent, otherwise the result error code; `reason` says
+  // why. Called with claimLock_ held. Fills the supervisor inputs.
+  std::uint8_t CheckMoveAcceptable(
+    const MoveJointAction::Goal & goal, Move::Joints & measured, Move::Joints & start,
+    Move::Joints & target, std::string & reason);
+  void RecordMoveEvent(const CriMessages::ExecEvent & event, bool isEnd);
+
   // Thread functions
   void AliveThreadFunction();
   void MessageThreadFunction();
 
   // Other functions
   int Ccnt();
-  bool Command(const std::string &);
+  // quiet: no warning when the send fails (used by the repeated Move Stop retry).
+  bool Command(const std::string &, bool quiet = false);
   void OnConnected(bool reconnect);
   void ZeroJog();
   // Latches the hardware error. If it was not latched yet and this instance is in a fault group,
@@ -225,6 +295,11 @@ public:
   // Bit i set = joint i (0..5) reports "Motor not enabled" in the latest STATUS.
   unsigned DrivesDisabledMask() const {return drivesDisabledMask_.load();}
   bool StatusHoldActive() const {return statusHold_.load();}
+  // Joint move state for tests/diagnostics: 0 idle, 1 sending, 2 moving, 3 stopping.
+  int MoveStateValue() const {return moveState_.load();}
+  bool MoveGoalBusy() const {return moveGoalBusy_.load();}
+  // Bit i set = the velocity command interface of joint i is claimed by a controller.
+  unsigned VelocityClaimMask() const {return velocityClaimMask_.load();}
   bool StatusCoastActive() const {return statusCoast_.load();}
   bool HardwareErrorLatched() const {return hardwareErrorLatched_.load();}
   // Fault groups: drive/kinematics errors are only monitored once armed (see RebelSafety.hpp),
@@ -241,6 +316,16 @@ public:
   CallbackReturn on_activate(const rclcpp_lifecycle::State & previous_state) override;
   CallbackReturn on_deactivate(const rclcpp_lifecycle::State & previous_state) override;
   CallbackReturn on_error(const rclcpp_lifecycle::State & previous_state) override;
+
+  // The joint move needs this arm's velocity command interfaces unclaimed: these track the
+  // claims, and prepare refuses a claim while a move is active (so the JTC cannot be activated
+  // mid-move).
+  return_type prepare_command_mode_switch(
+    const std::vector<std::string> & start_interfaces,
+    const std::vector<std::string> & stop_interfaces) override;
+  return_type perform_command_mode_switch(
+    const std::vector<std::string> & start_interfaces,
+    const std::vector<std::string> & stop_interfaces) override;
 
   std::vector<StateInterface> export_state_interfaces() override;
   std::vector<CommandInterface> export_command_interfaces() override;

@@ -1,0 +1,9 @@
+<library path="rebel_servo_relay_filter">
+  <class type="rebel_servo_relay::PassThroughFilterPlugin" base_class_type="online_signal_smoothing::SmoothingBaseClass">
+    <description>
+    Smoothing plugin that leaves Servo's joint positions untouched. MoveIt Servo 2.5.10 always runs a smoothing
+    plugin and derives its output velocity from the smoothed position; with this one the velocity equals the
+    commanded (collision/singularity/limit scaled) joint velocity.
+    </description>
+  </class>
+</library>

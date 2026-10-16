@@ -142,6 +142,10 @@ MessageType CriMessage::GetMessageType(const std::string & msg)
     {&CriKeywords::TYPE_CMDERROR, MessageType::CMDERROR},
     {&CriKeywords::TYPE_CMDACK, MessageType::CMDACK},
     {&CriKeywords::TYPE_CYCLESTAT, MessageType::CYCLESTAT},
+    {&CriKeywords::TYPE_MOVETOEXECACK, MessageType::MOVETOEXECACK},
+    {&CriKeywords::TYPE_MOVETOEXECEND, MessageType::MOVETOEXECEND},
+    {&CriKeywords::TYPE_EXECACK, MessageType::EXECACK},
+    {&CriKeywords::TYPE_EXECEND, MessageType::EXECEND},
   };
 
   for (const auto & entry : kTypes) {
@@ -458,6 +462,20 @@ Cyclestat::Cyclestat(const std::string & messageString)
   }
 }
 
+ExecEvent::ExecEvent(const std::string & messageString, const std::string & typeKeyword)
+{
+  // "<counter> <TYPE> <code> <sub> <program> [<reason>]"
+  const std::string payload = PayloadAfterType(messageString, typeKeyword);
+  const auto tokens = Tokenize(payload);
+  if (tokens.size() < 3 || !ParseInt(tokens[0].first, code) || !ParseInt(tokens[1].first, sub)) {
+    throw std::invalid_argument(typeKeyword + " without code, sub and program");
+  }
+  program = tokens[2].first;
+  if (tokens.size() >= 4) {
+    reason = tokens[3].first;
+  }
+}
+
 ParsedMessage ParseMessage(const std::string & msg) noexcept
 {
   ParsedMessage result;
@@ -494,6 +512,18 @@ ParsedMessage ParseMessage(const std::string & msg) noexcept
         break;
       case MessageType::CYCLESTAT:
         result.payload = Cyclestat(msg);
+        break;
+      case MessageType::MOVETOEXECACK:
+        result.payload = ExecEvent(msg, CriKeywords::TYPE_MOVETOEXECACK);
+        break;
+      case MessageType::MOVETOEXECEND:
+        result.payload = ExecEvent(msg, CriKeywords::TYPE_MOVETOEXECEND);
+        break;
+      case MessageType::EXECACK:
+        result.payload = ExecEvent(msg, CriKeywords::TYPE_EXECACK);
+        break;
+      case MessageType::EXECEND:
+        result.payload = ExecEvent(msg, CriKeywords::TYPE_EXECEND);
         break;
       case MessageType::UNKNOWN:
         result.error = "unknown message type";

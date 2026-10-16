@@ -24,6 +24,13 @@ const std::string TYPE_VARIABLES = "VARIABLES";
 const std::string TYPE_CMDERROR = "CMDERROR";
 const std::string TYPE_CMDACK = "CMDACK";
 const std::string TYPE_CYCLESTAT = "CYCLESTAT";
+// Robot-side program execution (CMD Move Joint): "MOVETOEXECACK <code> <sub> <program>" when a
+// move starts, "MOVETOEXECEND <code> <sub> <program> <reason>" when it ends (PLAN = reached its
+// goal, USER = stopped by CMD Move Stop). EXECACK/EXECEND are the same for programs.
+const std::string TYPE_MOVETOEXECACK = "MOVETOEXECACK";
+const std::string TYPE_MOVETOEXECEND = "MOVETOEXECEND";
+const std::string TYPE_EXECACK = "EXECACK";
+const std::string TYPE_EXECEND = "EXECEND";
 
 const std::string STATUS_MODE = "MODE";
 const std::string STATUS_POSJOINTSETPOINT = "POSJOINTSETPOINT";
@@ -49,6 +56,9 @@ const std::string COMMAND_SETACTIVE = "SetActive";
 const std::string COMMAND_DOUT = "DOUT";
 // CRI V17: "CMD Override <percent>" sets the global velocity override.
 const std::string COMMAND_OVERRIDE = "Override";
+// CRI "CMD Move Joint a1..a6 e1 e2 e3 vel% acc%" (degrees) and "CMD Move Stop".
+const std::string COMMAND_MOVE_JOINT = "Move Joint";
+const std::string COMMAND_MOVE_STOP = "Move Stop";
 
 const std::string TYPE_ALIVEJOG = "ALIVEJOG";
 

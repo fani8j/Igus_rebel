@@ -42,10 +42,20 @@ struct JointLimits
 // bounds; these defaults exist for standalone use and tests.
 std::array<JointLimits, 6> defaultJointLimits();
 
-// Forward kinematics of the xeg32_tool_tip TCP in base_link, matching the URDF chain
-// exactly (base_link -> ... -> link6 -> igus_tool0 -> xeg32_tool_tip). Does not apply or
-// check joint limits.
-Eigen::Isometry3d forwardKinematics(const JointVector& q);
+// Tool transform: link6 -> TCP (full rotation + translation, expressed in link6). The caller
+// supplies it from the live robot model (fixed joints between link6 and the tool link).
+// Solving goes through the flange: T_0_6 = target * tool^-1, then Pieper on link6; the wrist
+// centre (joint5 origin, on the joint6 axis) is fixed in link6, so any rigid tool is handled.
+//
+// defaultTool() is the former hard-coded TCP: pure translation (-0.005937, -0.094121,
+// 0.183399) in link6 (link6 -> igus_tool0 (z 0.0527, yaw pi) -> old tip xyz 0.005937 0.094121
+// 0.130699, rpy 0). Kept so existing behaviour/tests are reproducible.
+Eigen::Isometry3d defaultTool();
+
+// Forward kinematics of the TCP in base_link: base_link -> ... -> link6 -> tool_in_link6.
+// Does not apply or check joint limits.
+Eigen::Isometry3d forwardKinematics(
+  const JointVector& q, const Eigen::Isometry3d& tool_in_link6 = defaultTool());
 
 // Returns every IK solution for the given TCP pose (base_link frame) that lies within
 // `limits` (checking the raw solution and, where the joint's range allows, the +-2*pi
@@ -55,7 +65,8 @@ Eigen::Isometry3d forwardKinematics(const JointVector& q);
 // (no iterative search) for unreachable poses: wrist center out of the arm's reach
 // envelope, or an orientation solve with no valid wrist decomposition.
 std::vector<JointVector> solve(
-  const Eigen::Isometry3d& target, const std::array<JointLimits, 6>& limits = defaultJointLimits());
+  const Eigen::Isometry3d& target, const std::array<JointLimits, 6>& limits = defaultJointLimits(),
+  const Eigen::Isometry3d& tool_in_link6 = defaultTool());
 
 struct SelfCheckResult
 {
@@ -78,6 +89,7 @@ struct SelfCheckResult
 // configuration is not recovered.
 SelfCheckResult selfCheck(
   std::size_t num_samples, double position_tol_m, double orientation_tol_rad,
-  unsigned seed, const std::array<JointLimits, 6>& limits = defaultJointLimits());
+  unsigned seed, const std::array<JointLimits, 6>& limits = defaultJointLimits(),
+  const Eigen::Isometry3d& tool_in_link6 = defaultTool());
 
 }  // namespace rebel_analytic_ik

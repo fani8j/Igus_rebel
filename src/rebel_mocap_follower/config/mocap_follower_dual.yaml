@@ -1,0 +1,61 @@
+# Parameters of the two dual-arm mocap follower nodes (mocap_follower_left / mocap_follower_right), each fully
+# independent: when one arm holds, latches or refuses, the other keeps following. Hard caps are enforced in code.
+# Safety values are identical to mocap_follower.yaml.
+/**:
+  ros__parameters:
+    input_topic: /dual_arm/isaac_joint_commands   # carries both arms + lift/slider/gripper joints (ignored)
+    enable_topic: /mocap/enable                   # ONE deadman for both arms
+    joint_states_topic: /joint_states
+    loop_rate_hz: 100.0
+    input_timeout_s: 0.2
+    enable_timeout_s: 0.3
+    joint_states_timeout_s: 0.2
+    check_stamp: false
+    max_stamp_skew_s: 1.0
+    limit_margin_rad: 0.05
+    clamp_to_limits: true
+    max_input_step_rad: 0.2
+    max_engage_error_rad: 0.5
+    catchup_velocity: 0.3
+    catchup_acceleration: 0.5
+    catchup_done_rad: 0.03
+    max_catchup_error_rad: 1.75
+    max_velocity: 0.3
+    max_acceleration: 0.5
+    stop_deceleration: 1.0
+    kp: 2.0
+    deadband_rad: 0.002
+    zero_publish_s: 0.5
+    joy_enable_button: -1
+    refuse_if_other_servo_publishers: true
+    require_servo_status: true       # hold when this arm's Servo status is silent (Servo not started)
+    robot_description_node: /robot_state_publisher   # dual_table.launch.py's robot_state_publisher
+    # dual-arm interlocks (all off by default in the code)
+    coordinator_status_topic: /dual_cut_coordinator/status   # hold while WAITING_BARRIER/EXECUTING or silent
+    coordinator_timeout_s: 2.0
+    controller_manager: /controller_manager
+    # The coordinator publishes its trajectories on the JTC topic; it is excluded from the exclusivity check
+    # because coordinator_status_topic already holds the arms whenever it executes (or is silent).
+    exclusive_allowed_publishers: [/dual_cut_coordinator]
+
+mocap_follower_left:
+  ros__parameters:
+    joint_names: [arm_left_joint1, arm_left_joint2, arm_left_joint3, arm_left_joint4, arm_left_joint5, arm_left_joint6]
+    input_joint_names: [arm_left_joint1, arm_left_joint2, arm_left_joint3, arm_left_joint4, arm_left_joint5, arm_left_joint6]
+    servo_joint_topic: /mocap/arm_left/servo/delta_joint_cmds
+    servo_twist_topic: /mocap/arm_left/servo/delta_twist_cmds
+    servo_status_topic: /mocap/arm_left/servo/status
+    trajectory_controller: arm_left_trajectory_controller      # hold unless active
+    exclusive_command_topic: /arm_left_trajectory_controller/joint_trajectory   # hold if anyone but our Servo publishes
+    own_servo_node: /mocap/arm_left/servo   # also covers /mocap/arm_left/servo/trajectory_relay (servo_relay:=true)
+
+mocap_follower_right:
+  ros__parameters:
+    joint_names: [arm_right_joint1, arm_right_joint2, arm_right_joint3, arm_right_joint4, arm_right_joint5, arm_right_joint6]
+    input_joint_names: [arm_right_joint1, arm_right_joint2, arm_right_joint3, arm_right_joint4, arm_right_joint5, arm_right_joint6]
+    servo_joint_topic: /mocap/arm_right/servo/delta_joint_cmds
+    servo_twist_topic: /mocap/arm_right/servo/delta_twist_cmds
+    servo_status_topic: /mocap/arm_right/servo/status
+    trajectory_controller: arm_right_trajectory_controller      # hold unless active
+    exclusive_command_topic: /arm_right_trajectory_controller/joint_trajectory   # hold if anyone but our Servo publishes
+    own_servo_node: /mocap/arm_right/servo

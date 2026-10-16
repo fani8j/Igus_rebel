@@ -1,0 +1,49 @@
+# Parameters of the mocap_follower node. Hard caps (max_velocity <= 0.6, accelerations <= 1.5)
+# are enforced in code: larger values make the node refuse to start.
+mocap_follower:
+  ros__parameters:
+    # Mocap / Isaac dual-arm joint commands (sensor_msgs/JointState, both arms + gripper joints).
+    input_topic: /dual_arm/isaac_joint_commands
+    # Message names that drive joint_names, in the same order; other names are ignored.
+    # Right arm: [arm_right_joint1, ..., arm_right_joint6].
+    input_joint_names: [arm_left_joint1, arm_left_joint2, arm_left_joint3, arm_left_joint4, arm_left_joint5, arm_left_joint6]
+    enable_topic: /mocap/enable
+    joint_names: [joint1, joint2, joint3, joint4, joint5, joint6]
+    joint_states_topic: /joint_states
+    servo_joint_topic: /delta_joint_cmds   # Servo's joint_command_in_topic (relative name, no namespace)
+    servo_twist_topic: /delta_twist_cmds
+    servo_status_topic: /status
+    loop_rate_hz: 100.0
+
+    input_timeout_s: 0.2          # latest mocap message must be received this recently
+    enable_timeout_s: 0.3         # /mocap/enable true must be received this recently
+    joint_states_timeout_s: 0.2
+    check_stamp: false            # the Isaac publisher stamps with sim time (e.g. 117 s); true only with synced wall clocks.
+    # reject messages whose header.stamp is > max_stamp_skew_s off our clock
+    max_stamp_skew_s: 1.0
+    limit_margin_rad: 0.05        # targets must be this far inside the URDF limits (Servo's own margin is 0.026)
+    clamp_to_limits: true         # target beyond (URDF limit - margin) is clamped there and followed; false = hold (reject)
+
+    max_input_step_rad: 0.2       # between consecutive input messages; exceeding it starts slow catch-up
+    max_engage_error_rad: 0.5     # |target - current| above this (on enable, or while following) -> slow catch-up
+    # Slow catch-up: synchronized straight-line joint motion toward the (live) target until
+    # max |error| < catchup_done_rad, then normal following resumes.
+    catchup_velocity: 0.3         # rad/s on the leading joint (<= max_velocity)
+    catchup_acceleration: 0.5     # rad/s^2 (<= max_acceleration)
+    catchup_done_rad: 0.03        # catch-up ends below this error (< max_engage_error_rad, < max_input_step_rad)
+    max_catchup_error_rad: 1.75   # above this: REFUSED on enable / latched HOLD while enabled (<= pi)
+
+    max_velocity: 0.3             # rad/s per joint (cap 0.6; JTC gains verified on the real arm up to 0.3)
+    max_acceleration: 0.5         # rad/s^2 while following (cap 1.5)
+    stop_deceleration: 1.0        # rad/s^2 when holding / disabled (cap 1.5)
+    kp: 2.0
+    deadband_rad: 0.002
+    zero_publish_s: 0.5           # keep sending zero JointJog this long after the last nonzero command
+
+    joy_topic: /joy
+    joy_enable_button: -1         # -1 = disabled; else index of a /joy button that also acts as deadman
+    joy_timeout_s: 0.3
+
+    refuse_if_other_servo_publishers: true   # hold if another node publishes Servo joint/twist commands
+    require_servo_status: false              # if true, hold when Servo's status topic is silent for >1 s
+    robot_description_node: /robot_state_publisher   # source of the URDF joint limits

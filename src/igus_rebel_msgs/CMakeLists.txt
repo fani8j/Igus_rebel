@@ -13,6 +13,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/DigitalOutput.msg"
   "srv/SetDigitalOutput.srv"
   "srv/SetCartesianIncrement.srv"
+  "action/MoveJoint.action"
 )
 
 ament_export_dependencies(rosidl_default_runtime)

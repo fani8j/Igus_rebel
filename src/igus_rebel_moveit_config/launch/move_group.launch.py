@@ -72,6 +72,8 @@ def opaque_func(context, *args, **kwargs):
             package_file("igus_rebel_description", "urdf", "igus_rebel_xeg32_wrapper.urdf.xacro"),
             " hardware_protocol:=",
             hardware_protocol,
+            " tool_variant:=",
+            LaunchConfiguration("tool_variant"),
         ]
     ).perform(context)
     robot_description_semantic = Path(
@@ -259,6 +261,8 @@ def generate_launch_description():
             choices=["mock_hardware", "gazebo", "rebel"],
             description="Which hardware protocol or mock hardware should be used",
         ),
+        DeclareLaunchArgument("tool_variant", default_value="knife_c",
+                              choices=["knife_c", "xeg32_knife_v1"]),
         DeclareLaunchArgument("use_gui", default_value="true"),
         DeclareLaunchArgument("rviz_config",
                               default_value=os.path.join(share, "launch", "moveit.rviz")),

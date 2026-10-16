@@ -73,8 +73,18 @@
 #include <conio.h>
 #endif
 
-// A keypress holds one velocity command for this long; Servo's own input timeout is shorter.
+// A single keypress (a tap) holds one velocity command for this long; Servo's own input timeout is shorter.
 constexpr double KEYPRESS_DURATION_S = 0.3;
+// Terminal auto-repeat sends the held key every ~30-40 ms. A key event that follows the same key
+// within REPEAT_GAP_S is a repeat: it only extends the command by REPEAT_HOLD_S, so the arm stops
+// at most that long after the key is released (a full KEYPRESS_DURATION_S overran every release).
+constexpr double REPEAT_GAP_S = 0.1;
+constexpr double REPEAT_HOLD_S = 0.12;
+// When a command ends, a zero command is streamed this long. Without it Servo just goes quiet and
+// the controller keeps its last point, whose velocity is still nonzero: with the velocity
+// interface (ff_velocity_scale 0.4, p 1.0) the arm then crept 0.4 * v past the target and settled
+// over ~1 s (the "floaty" stop). A zero command makes Servo send its last position with zero velocity.
+constexpr double STOP_PUBLISH_S = 0.2;
 constexpr double DEFAULT_CARTESIAN_INCREMENT_M = 0.005;
 constexpr double MAX_CARTESIAN_INCREMENT_M = 0.03;
 constexpr double DEFAULT_LINEAR_VELOCITY_MPS =
@@ -85,6 +95,11 @@ constexpr double MAX_LINEAR_VELOCITY_MPS = 0.10;
 constexpr double MIN_ANGULAR_VELOCITY_RPS = 0.01;
 constexpr double MAX_ANGULAR_VELOCITY_RPS = 0.5;
 constexpr double SPEED_SCALE_FACTOR = 1.25;
+// Joint jog speed (rad/s). It was a fixed 1.0 rad/s (= the 0.785 rad/s joint limit) that '-' / '='
+// did not change; with the robot's ~0.5 rad/s^2 deceleration that alone is ~30 deg of stopping travel.
+constexpr double DEFAULT_JOINT_VELOCITY_RPS = 0.1;
+constexpr double MIN_JOINT_VELOCITY_RPS = 0.01;
+constexpr double MAX_JOINT_VELOCITY_RPS = 0.4;
 
 // Define used keys
 namespace
@@ -233,8 +248,8 @@ private:
     std::shared_ptr<igus_rebel_msgs::srv::SetCartesianIncrement::Response> response);
   void stopSpinning();
   void publishActiveCommand();
-  void queueTwist(const geometry_msgs::msg::TwistStamped& command);
-  void queueJoint(const control_msgs::msg::JointJog& command);
+  void queueTwist(const geometry_msgs::msg::TwistStamped& command, double hold_s);
+  void queueJoint(const control_msgs::msg::JointJog& command, double hold_s);
 #if IGUS_REBEL_HAS_SERVO_COMMAND_TYPE
   void switchCommandType(int8_t command_type, const char* label);
 #else
@@ -256,6 +271,8 @@ private:
   geometry_msgs::msg::TwistStamped active_twist_;
   control_msgs::msg::JointJog active_joint_;
   std::chrono::steady_clock::time_point command_deadline_;
+  std::chrono::steady_clock::time_point stop_deadline_;
+  bool stopping_{ false };
 #if IGUS_REBEL_HAS_SERVO_COMMAND_TYPE
   rclcpp::Client<moveit_msgs::srv::ServoCommandType>::SharedPtr switch_input_;
 #else
@@ -265,14 +282,15 @@ private:
 #endif
   std::atomic<double> cartesian_velocity_mps_;
   std::atomic<double> angular_velocity_rps_;
-  double joint_vel_cmd_;
+  double joint_speed_rps_;
+  double joint_direction_;
   std::string command_frame_id_;
 };
 
 KeyboardServo::KeyboardServo()
   : cartesian_velocity_mps_(DEFAULT_LINEAR_VELOCITY_MPS),
     angular_velocity_rps_(DEFAULT_ANGULAR_VELOCITY_RPS),
-    joint_vel_cmd_(1.0), command_frame_id_{ PLANNING_FRAME_ID }
+    joint_speed_rps_(DEFAULT_JOINT_VELOCITY_RPS), joint_direction_(1.0), command_frame_id_{ PLANNING_FRAME_ID }
 {
   nh_ = rclcpp::Node::make_shared("servo_keyboard_input");
 
@@ -412,23 +430,30 @@ void KeyboardServo::setCartesianIncrement(
   RCLCPP_INFO(nh_->get_logger(), "%s", response->message.c_str());
 }
 
-void KeyboardServo::queueTwist(const geometry_msgs::msg::TwistStamped& command)
+namespace
+{
+std::chrono::steady_clock::time_point afterSeconds(double seconds)
+{
+  return std::chrono::steady_clock::now() +
+         std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(seconds));
+}
+}  // namespace
+
+void KeyboardServo::queueTwist(const geometry_msgs::msg::TwistStamped& command, double hold_s)
 {
   std::lock_guard<std::mutex> lock(command_mutex_);
   active_twist_ = command;
-  command_deadline_ = std::chrono::steady_clock::now() +
-                      std::chrono::duration_cast<std::chrono::steady_clock::duration>(
-                        std::chrono::duration<double>(KEYPRESS_DURATION_S));
+  command_deadline_ = afterSeconds(hold_s);
+  stopping_ = false;
   active_type_ = CommandType::TWIST;
 }
 
-void KeyboardServo::queueJoint(const control_msgs::msg::JointJog& command)
+void KeyboardServo::queueJoint(const control_msgs::msg::JointJog& command, double hold_s)
 {
   std::lock_guard<std::mutex> lock(command_mutex_);
   active_joint_ = command;
-  command_deadline_ = std::chrono::steady_clock::now() +
-                      std::chrono::duration_cast<std::chrono::steady_clock::duration>(
-                        std::chrono::duration<double>(KEYPRESS_DURATION_S));
+  command_deadline_ = afterSeconds(hold_s);
+  stopping_ = false;
   active_type_ = CommandType::JOINT;
 }
 
@@ -437,8 +462,18 @@ void KeyboardServo::publishActiveCommand()
   std::lock_guard<std::mutex> lock(command_mutex_);
   if (active_type_ == CommandType::NONE)
     return;
-  if (std::chrono::steady_clock::now() >= command_deadline_)
+  const auto now = std::chrono::steady_clock::now();
+  if (!stopping_ && now >= command_deadline_)
   {
+    // The command ended: stream zeros of the same type so Servo commands zero velocity.
+    stopping_ = true;
+    stop_deadline_ = afterSeconds(STOP_PUBLISH_S);
+    active_twist_.twist = geometry_msgs::msg::Twist();
+    active_joint_.velocities.assign(active_joint_.velocities.size(), 0.0);
+  }
+  if (stopping_ && now >= stop_deadline_)
+  {
+    stopping_ = false;
     active_type_ = CommandType::NONE;
     return;
   }
@@ -477,6 +512,10 @@ int KeyboardServo::keyLoop(KeyboardReader& input)
   char c;
   bool publish_twist = false;
   bool publish_joint = false;
+  // Last key that produced a motion command (arrow keys arrive as ESC '[' 'A', so only the final
+  // byte of a motion key is compared).
+  char last_motion_key = 0;
+  auto last_motion_key_time = std::chrono::steady_clock::time_point();
 
 #if !IGUS_REBEL_HAS_SERVO_COMMAND_TYPE
   startServo();
@@ -487,7 +526,7 @@ int KeyboardServo::keyLoop(KeyboardReader& input)
   puts("Twist commands use the selected command frame ('w': base_link, 'e': xeg32_tool_tip)");
   puts("Use arrow keys and the '.' and ';' keys to Cartesian jog");
   puts("Use i/k for TCP roll, n/m for TCP pitch, and u/o for TCP yaw (press 'e' first)");
-  puts("Use '-' and '=' to decrease/increase Cartesian linear and angular speed");
+  puts("Use '-' and '=' to decrease/increase the speed (Cartesian and joint)");
   puts("Use 1|2|3|4|5|6 keys to joint jog. 'r' to reverse the direction of jogging.");
   puts("Use 'j' to select joint jog. ");
   puts("Use 't' to select twist ");
@@ -496,6 +535,8 @@ int KeyboardServo::keyLoop(KeyboardReader& input)
          "(default %.3f m, max %.3f m)\n",
          DEFAULT_CARTESIAN_INCREMENT_M, MAX_CARTESIAN_INCREMENT_M);
   puts("'q' or Ctrl-C to quit.");
+  printf("Speeds: %.4f m/s, %.3f rad/s, joint %.3f rad/s (%.1f deg/s)\n", cartesian_velocity_mps_.load(),
+         angular_velocity_rps_.load(), joint_speed_rps_, joint_speed_rps_ * 180.0 / M_PI);
 
   while (!g_quit_requested && rclcpp::ok())
   {
@@ -605,45 +646,47 @@ int KeyboardServo::keyLoop(KeyboardReader& input)
           cartesian_velocity_mps * scale, MIN_LINEAR_VELOCITY_MPS, MAX_LINEAR_VELOCITY_MPS);
         const double angular_speed = std::clamp(
           angular_velocity_rps * scale, MIN_ANGULAR_VELOCITY_RPS, MAX_ANGULAR_VELOCITY_RPS);
+        joint_speed_rps_ = std::clamp(joint_speed_rps_ * scale, MIN_JOINT_VELOCITY_RPS, MAX_JOINT_VELOCITY_RPS);
         cartesian_velocity_mps_.store(linear_speed, std::memory_order_relaxed);
         angular_velocity_rps_.store(angular_speed, std::memory_order_relaxed);
-        RCLCPP_INFO(
-          nh_->get_logger(), "Cartesian speeds: %.4f m/s, %.3f rad/s", linear_speed, angular_speed);
+        RCLCPP_INFO(nh_->get_logger(), "Speeds: %.4f m/s, %.3f rad/s, joint %.3f rad/s (%.1f deg/s)", linear_speed,
+                    angular_speed, joint_speed_rps_, joint_speed_rps_ * 180.0 / M_PI);
         break;
       }
       case KEYCODE_1:
         RCLCPP_DEBUG(nh_->get_logger(), "1");
-        joint_msg->velocities[0] = joint_vel_cmd_;
+        joint_msg->velocities[0] = joint_direction_ * joint_speed_rps_;
         publish_joint = true;
         break;
       case KEYCODE_2:
         RCLCPP_DEBUG(nh_->get_logger(), "2");
-        joint_msg->velocities[1] = joint_vel_cmd_;
+        joint_msg->velocities[1] = joint_direction_ * joint_speed_rps_;
         publish_joint = true;
         break;
       case KEYCODE_3:
         RCLCPP_DEBUG(nh_->get_logger(), "3");
-        joint_msg->velocities[2] = joint_vel_cmd_;
+        joint_msg->velocities[2] = joint_direction_ * joint_speed_rps_;
         publish_joint = true;
         break;
       case KEYCODE_4:
         RCLCPP_DEBUG(nh_->get_logger(), "4");
-        joint_msg->velocities[3] = joint_vel_cmd_;
+        joint_msg->velocities[3] = joint_direction_ * joint_speed_rps_;
         publish_joint = true;
         break;
       case KEYCODE_5:
         RCLCPP_DEBUG(nh_->get_logger(), "5");
-        joint_msg->velocities[4] = joint_vel_cmd_;
+        joint_msg->velocities[4] = joint_direction_ * joint_speed_rps_;
         publish_joint = true;
         break;
       case KEYCODE_6:
         RCLCPP_DEBUG(nh_->get_logger(), "6");
-        joint_msg->velocities[5] = joint_vel_cmd_;
+        joint_msg->velocities[5] = joint_direction_ * joint_speed_rps_;
         publish_joint = true;
         break;
       case KEYCODE_R:
         RCLCPP_DEBUG(nh_->get_logger(), "r");
-        joint_vel_cmd_ *= -1;
+        joint_direction_ *= -1;
+        RCLCPP_INFO(nh_->get_logger(), "Joint jog direction: %s", joint_direction_ > 0 ? "+" : "-");
         break;
       case KEYCODE_J:
         RCLCPP_DEBUG(nh_->get_logger(), "j");
@@ -673,16 +716,26 @@ int KeyboardServo::keyLoop(KeyboardReader& input)
     }
 
     // A new key replaces the active velocity and extends its deadline.
+    double hold_s = KEYPRESS_DURATION_S;
+    if (publish_twist || publish_joint)
+    {
+      const auto key_time = std::chrono::steady_clock::now();
+      if (c == last_motion_key &&
+          std::chrono::duration<double>(key_time - last_motion_key_time).count() < REPEAT_GAP_S)
+        hold_s = REPEAT_HOLD_S;
+      last_motion_key = c;
+      last_motion_key_time = key_time;
+    }
     if (publish_twist)
     {
       twist_msg->header.frame_id = command_frame_id_;
-      queueTwist(*twist_msg);
+      queueTwist(*twist_msg, hold_s);
       publish_twist = false;
     }
     else if (publish_joint)
     {
       joint_msg->header.frame_id = PLANNING_FRAME_ID;
-      queueJoint(*joint_msg);
+      queueJoint(*joint_msg, hold_s);
       publish_joint = false;
     }
   }
