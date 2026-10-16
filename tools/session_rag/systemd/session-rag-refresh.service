@@ -1,0 +1,18 @@
+# Example only: nothing installs this. To use it:
+#   mkdir -p ~/.config/systemd/user
+#   cp tools/session_rag/systemd/session-rag-refresh.{service,timer} ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now session-rag-refresh.timer
+# Adjust WorkingDirectory/--repo-root if the checkout is not ~/igus_rebel_ros2.
+[Unit]
+Description=Refresh the igus_rebel_ros2 session/source RAG index (incremental)
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/igus_rebel_ros2
+# Low priority: cameras and perception run on this machine.
+Nice=19
+CPUSchedulingPolicy=idle
+IOSchedulingClass=idle
+TimeoutStartSec=1h
+# refresh exits 0 and skips if another refresh holds the lock.
+ExecStart=/usr/bin/nice -n 19 /usr/bin/python3 %h/igus_rebel_ros2/tools/session_rag/session_rag.py --repo-root %h/igus_rebel_ros2 refresh --quiet

@@ -1,0 +1,15 @@
+# Example only, see session-rag-refresh.service for install steps.
+[Unit]
+Description=Refresh the igus_rebel_ros2 RAG index every 2 hours and nightly
+
+[Timer]
+# First run shortly after login/boot, then every 2 hours after the previous run finished.
+OnStartupSec=10min
+OnUnitInactiveSec=2h
+# Nightly full-day catch-up even if the machine slept through the interval.
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

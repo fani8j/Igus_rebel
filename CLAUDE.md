@@ -75,4 +75,5 @@ The camera TF (`base_link -> camera_link -> camera_color_optical_frame`) must ex
 
 - Never dispatch motion on the physical robot without explicit operator approval in the current conversation.
 - `HANDOFF.md` holds the current work state and open questions; keep it accurate when finishing a work session.
-- `python3 tools/session_rag/session_rag.py query "<question>" --format prompt` searches prior agent sessions and source for context; session evidence can be stale, so verify against current code.
+- `python3 tools/session_rag/session_rag.py query "<question>" --format prompt` searches source (chunked by function) and prior omp/Claude/Orca-worktree sessions; filter with `--kind source|docs|session` and `--since YYYY-MM-DD`. Run `refresh` first (incremental, ~1 s). Session evidence can be stale, so verify against current code. See `tools/session_rag/README.md`.
+- C++ navigation: `.clangd` (local, git-excluded) points clangd at `~/.cache/igus_clangd/compile_commands.json` (configure-only CMake output); re-run the configure if packages or include paths change.
