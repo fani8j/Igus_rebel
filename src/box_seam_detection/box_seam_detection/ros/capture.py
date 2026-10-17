@@ -7,6 +7,9 @@ driver's coloured point cloud (34 MB, ~1 core of driver CPU, ~0.6 s topic lag wh
 Freshness: ``grab(after_ns, timeout_s)`` returns the first synced (colour, depth) set whose BOTH image stamps are
 > after_ns + margin (stamps are host-clock, same clock as ``now_ns()``); older sets are never returned, a missing
 fresh set raises ``CaptureTimeout``. The consumed set (and every older one) is dropped, so a frame is used once.
+Sets whose depth size differs from the colour size are skipped (the Orbbec driver publishes the raw, unregistered
+depth when software alignment finds no colour frame in the frameset, e.g. when auto exposure drops the colour rate);
+``write_capture`` still validates the registration of the set that is returned.
 """
 
 from __future__ import annotations
@@ -46,6 +49,10 @@ class FrameSet:
     def depth_stamp_ns(self) -> int:
         return cloud.stamp_ns(self.depth.header)
 
+    @property
+    def depth_aligned(self) -> bool:
+        return (self.depth.width, self.depth.height) == (self.color.width, self.color.height)
+
 
 @dataclasses.dataclass
 class LocalCaptureFiles:
@@ -65,7 +72,8 @@ class SceneCapture:
                  sync_slop_s: float = 0.04, queue_size: int = 10, margin_s: float = 0.0,
                  prefix: str = "frame", driver_parent_frame: str = "camera_link",
                  use_tf: bool = True, extrinsic_required: bool = False, tf_timeout_s: float = 2.0,
-                 files_cls: Callable[..., Any] | None = None, callback_group=None, tf_buffer=None):
+                 files_cls: Callable[..., Any] | None = None, callback_group=None, tf_buffer=None,
+                 staged: bool = False):
         import message_filters
         from rclpy.qos import qos_profile_sensor_data
         from sensor_msgs.msg import CameraInfo, Image
@@ -78,6 +86,7 @@ class SceneCapture:
         self.extrinsic_required = extrinsic_required
         self.tf_timeout_s = tf_timeout_s
         self.files_cls = files_cls or LocalCaptureFiles
+        self.staged = staged    # output_root is a RAM staging dir: a failed write must not leave partial files
         root = Path(str(output_root)).expanduser()
         self.dirs = {n: root / n for n in ("rgb", "pointcloud", "captures")}
         for d in self.dirs.values():
@@ -86,7 +95,7 @@ class SceneCapture:
         self._cond = threading.Condition()
         self._sets: collections.deque[FrameSet] = collections.deque(maxlen=4)
         self._info = None
-        self._counts = {"rgb": 0, "depth": 0, "camera_info": 0, "synced": 0}
+        self._counts = {"rgb": 0, "depth": 0, "camera_info": 0, "synced": 0, "skipped_unaligned": 0}
         self._last_stamp_ns = {"rgb": 0, "depth": 0}
 
         self._color_sub = message_filters.Subscriber(
@@ -142,6 +151,10 @@ class SceneCapture:
             while True:
                 if abort is not None and abort():
                     raise CaptureAborted("capture wait aborted (cancel / shutdown)")
+                aligned = [fs for fs in self._sets if fs.depth_aligned]
+                if len(aligned) != len(self._sets):
+                    self._counts["skipped_unaligned"] += len(self._sets) - len(aligned)
+                    self._sets = collections.deque(aligned, maxlen=self._sets.maxlen)
                 for i, fs in enumerate(self._sets):
                     if fs.color_stamp_ns > threshold and fs.depth_stamp_ns > threshold and self._info is not None:
                         for _ in range(i + 1):
@@ -153,8 +166,11 @@ class SceneCapture:
                 self._cond.wait(min(remaining, 0.1))
             d = {"counts": dict(self._counts), "last_stamp_ns": dict(self._last_stamp_ns),
                  "have_camera_info": self._info is not None}
+        unaligned = (f"; {d['counts']['skipped_unaligned']} synced set(s) skipped because the depth is not aligned "
+                     "to the colour image (driver alignment failing - colour frame rate / exposure?)"
+                     if d["counts"]["skipped_unaligned"] else "")
         raise CaptureTimeout(
-            f"no fresh synced colour+depth frame (stamps > {threshold}) within {timeout_s:g} s; "
+            f"no fresh synced colour+depth frame (stamps > {threshold}) within {timeout_s:g} s{unaligned}; "
             f"received {d['counts']}, camera_info={'yes' if d['have_camera_info'] else 'NO'}, "
             f"newest stamps {d['last_stamp_ns']}")
 
@@ -198,12 +214,18 @@ class SceneCapture:
             raise cloud.CaptureError("aligned depth image has no valid pixel")
         self._seq += 1
         cid = f"{self.prefix}_{self._seq:06d}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S_%f')}"
-        image_path = cloud.write_png(str(self.dirs["rgb"] / f"{cid}.png"), rgb)
-        pcd_path = cloud.write_pcd(str(self.dirs["pointcloud"] / f"{cid}.pcd"), points)
-        ext = self.driver_extrinsic(fs.color.header.frame_id, fs.color_stamp_ns)
-        manifest = cloud.build_manifest(cid, image_path, pcd_path, fs.color, fs.depth, info, k,
-                                        int(points.shape[0]), self.topics, ext, k_scaled_from=scaled_from)
-        mpath = cloud.write_manifest(str(self.dirs["captures"] / f"{cid}.json"), manifest)
+        try:
+            image_path = cloud.write_png(str(self.dirs["rgb"] / f"{cid}.png"), rgb)
+            pcd_path = cloud.write_pcd(str(self.dirs["pointcloud"] / f"{cid}.pcd"), points)
+            ext = self.driver_extrinsic(fs.color.header.frame_id, fs.color_stamp_ns)
+            manifest = cloud.build_manifest(cid, image_path, pcd_path, fs.color, fs.depth, info, k,
+                                            int(points.shape[0]), self.topics, ext, k_scaled_from=scaled_from)
+            mpath = cloud.write_manifest(str(self.dirs["captures"] / f"{cid}.json"), manifest)
+        except BaseException:
+            if self.staged:     # RAM staging: drop what this capture wrote (nothing else would ever archive it)
+                for sub, ext_ in (("rgb", ".png"), ("pointcloud", ".pcd"), ("captures", ".json")):
+                    (self.dirs[sub] / f"{cid}{ext_}").unlink(missing_ok=True)
+            raise
         return self.files_cls(capture_id=cid, image_path=Path(image_path), pcd_path=Path(pcd_path),
                               manifest_path=Path(mpath), stamp_ns=fs.color_stamp_ns)
 

@@ -61,6 +61,18 @@ LIVE_DEFAULTS: dict = {
     # missing height when the independent depth check confirmed the top and every
     # top edge is depth-supported (detector.evaluate_cut_permission)
     "generic_cut_without_height": False,
+    # hard top-size gate: {long: [min, max], short: [min, max]} in mm (long = mean of the longer
+    # opposite-side pair of the FINAL 3-D top quad, short = the other pair); a top outside it is
+    # rejected (top_size_out_of_range, retryable) regardless of --allow-* flags. null = gate off.
+    "top_size_range_mm": None,
+    # robot work area (core/work_area.py): {frame: base_link, polygon_xy_m, top_z_range_m, outside_keep_every,
+    # margin_m?}. The capture cloud is cropped to it (speed), SAM3 candidates outside it are ignored, and a box
+    # top with any corner outside it is a hard reject (work_area, not bypassable). null = feature off.
+    "work_area": None,
+    # fixed floor / support reference plane (core/fixed_floor.py): {frame: base_link, normal, offset_m,
+    # tolerance_m, ...}. hidden_stand scenes only: the floor is this measured plane instead of a per-frame
+    # RANSAC facet; a cloud that contradicts it fails closed (depth_fixed_floor_mismatch). null = off.
+    "fixed_floor": None,
     # recorded_constant | null | explicit block (see module docstring)
     "driver_extrinsic": {
         "reference": "recorded_constant",
@@ -132,6 +144,22 @@ class Scene:
         return self.live.get("generic_cut_without_height") is True
 
     @property
+    def top_size_range_mm(self) -> dict | None:
+        """``{"long": [min, max], "short": [min, max]}`` (floats, validated at load) or None."""
+        v = self.live.get("top_size_range_mm")
+        return None if v is None else {k: [float(x) for x in v[k]] for k in ("long", "short")}
+
+    @property
+    def work_area(self) -> dict | None:
+        """Normalised ``live.work_area`` mapping (validated at load, see core/work_area.py) or None (off)."""
+        return self.live.get("work_area")
+
+    @property
+    def fixed_floor(self) -> dict | None:
+        """Normalised ``live.fixed_floor`` mapping (validated at load, see core/fixed_floor.py) or None (off)."""
+        return self.live.get("fixed_floor")
+
+    @property
     def seam_soft_range_deg(self) -> float:
         return float(self.live.get("seam_direction_soft_range_deg", 45.0))
 
@@ -198,6 +226,28 @@ def resolve_scene_path(spec: str) -> Path:
     raise SceneError(f"scene config not found: {spec!r}")
 
 
+def _validate_top_size_range(value) -> dict | None:
+    """Normalised ``{"long": [lo, hi], "short": [lo, hi]}`` (floats) or None (gate off)."""
+    if value is None:
+        return None
+    what = "live.top_size_range_mm"
+    if not isinstance(value, dict) or set(value) != {"long", "short"}:
+        raise SceneError(f"{what} must be a mapping with exactly the keys long and short "
+                         f"(each [min, max] in mm) or null, got {value!r}")
+    out = {}
+    for key in ("long", "short"):
+        pair = value[key]
+        if (not isinstance(pair, (list, tuple)) or len(pair) != 2
+                or any(isinstance(x, bool) or not isinstance(x, (int, float))
+                       or not math.isfinite(float(x)) for x in pair)):
+            raise SceneError(f"{what}.{key} must be [min, max] with two finite numbers, got {pair!r}")
+        lo, hi = float(pair[0]), float(pair[1])
+        if not (0.0 < lo < hi):
+            raise SceneError(f"{what}.{key} must satisfy 0 < min < max, got [{lo:g}, {hi:g}]")
+        out[key] = [lo, hi]
+    return out
+
+
 def _from_mapping(data: dict, path: str | None, sha: str | None) -> Scene:
     if not isinstance(data, dict):
         raise SceneError("scene config must be a mapping")
@@ -217,6 +267,20 @@ def _from_mapping(data: dict, path: str | None, sha: str | None) -> Scene:
         if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float))
                               or not math.isfinite(float(v))):
             raise SceneError(f"live.{key} must be a finite number or null, got {v!r}")
+    live["top_size_range_mm"] = _validate_top_size_range(live.get("top_size_range_mm"))
+    from .work_area import WorkAreaError, validate_work_area  # noqa: PLC0415
+    try:
+        live["work_area"] = validate_work_area(live.get("work_area"))
+    except WorkAreaError as error:
+        raise SceneError(str(error)) from error
+    from .fixed_floor import FixedFloorError, validate_fixed_floor  # noqa: PLC0415
+    try:
+        live["fixed_floor"] = validate_fixed_floor(live.get("fixed_floor"))
+    except FixedFloorError as error:
+        raise SceneError(str(error)) from error
+    if live["fixed_floor"] is not None and (
+            (data.get("depth_top") or {}).get("support") != "hidden_stand"):
+        raise SceneError("live.fixed_floor requires depth_top.support: hidden_stand")
     if not isinstance(live.get("generic_cut_without_height"), bool):
         raise SceneError("live.generic_cut_without_height must be true or false")
     if live["driver_extrinsic"].get("fallback") is None:

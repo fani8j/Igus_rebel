@@ -3,6 +3,7 @@ import os
 # Isolated DDS domain; never the robot's domain 11. Set before rclpy is imported anywhere.
 os.environ["ROS_DOMAIN_ID"] = "87"
 os.environ["ROS_LOCALHOST_ONLY"] = "1"
+os.environ["BOX_SEAM_CAPTURE_STAGING"] = "off"  # node tests write straight into their tmp output_root
 
 _SHM = os.path.join(os.path.dirname(__file__), "..", "e2e", "fastdds_shm_only.xml")
 if os.path.exists(_SHM):  # loopback UDP drops multi-MB images under ROS_LOCALHOST_ONLY on Humble

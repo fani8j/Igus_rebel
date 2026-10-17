@@ -36,6 +36,7 @@ from visualization_msgs.msg import MarkerArray
 
 from compal_box_msgs.action import DetectBox
 
+from ..live import capture_staging
 from . import markers as markers_mod
 from .capture import CaptureAborted, SceneCapture
 
@@ -43,6 +44,8 @@ DEFAULT_SNAPSHOT = "/home/farhan/Igus_rebel/outputs/seam_3d_base_link.json"
 DEFAULT_OUTPUT_ROOT = "/home/farhan/Igus_rebel/outputs/rgbd_captures"
 DEFAULT_SAM3_PYTHON = "/home/farhan/miniconda3/envs/book_grasping/bin/python"
 DEFAULT_CALIB = "~/.ros2/easy_handeye2/calibrations/rebel_handeye_h_v2.calib"
+
+ARCHIVE_SHUTDOWN_TIMEOUT_S = 30.0   # destroy_node waits at most this long for pending capture archiving
 
 LATCHED = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.TRANSIENT_LOCAL)
 
@@ -97,6 +100,9 @@ class DetectNode(Node):
         for k, v in self.DETECT_PARAMS.items():
             p(k, v)
         p("capture_source", "node")  # node | recorder
+        # RAM staging dir for rgb/pointcloud/captures (archived to output_root after the result is known);
+        # "off" = write straight into output_root; env BOX_SEAM_CAPTURE_STAGING is the fallback of the default
+        p("capture_staging_dir", capture_staging.DEFAULT_STAGING_ROOT)
         p("color_topic", "/camera/color/image_raw")
         p("depth_topic", "/camera/depth/image_raw")
         p("camera_info_topic", "/camera/color/camera_info")
@@ -117,6 +123,12 @@ class DetectNode(Node):
         if self.capture_source not in ("node", "recorder"):
             raise ValueError("capture_source must be 'node' or 'recorder'")
         self.output_root = Path(str(gp("output_root"))).expanduser()
+        # captures are written to the RAM staging session (if usable) and archived into output_root afterwards
+        self._staging = capture_staging.open_staging(
+            capture_staging.resolve_staging_setting(str(gp("capture_staging_dir"))), self.output_root,
+            log=lambda m: self.get_logger().info(m), warn=lambda m: self.get_logger().warn(m))
+        self._capture_root = self._staging.root if self._staging is not None else self.output_root
+        self._run_capture_ids: list[str] = []
         sp = str(gp("snapshot_path")).strip()
         self.snapshot_path: Path | None = Path(sp).expanduser() if sp else None  # empty = never publish
 
@@ -145,7 +157,8 @@ class DetectNode(Node):
         if self.capture_source == "node":
             self.capture = SceneCapture(
                 self, color_topic=gp("color_topic"), depth_topic=gp("depth_topic"),
-                info_topic=gp("camera_info_topic"), output_root=self.output_root,
+                info_topic=gp("camera_info_topic"), output_root=self._capture_root,
+                staged=self._staging is not None,
                 sync_slop_s=float(gp("sync_slop_s")), queue_size=int(gp("sync_queue_size")),
                 margin_s=float(gp("capture_margin_s")), driver_parent_frame=gp("driver_parent_frame"),
                 use_tf=bool(gp("use_tf")), extrinsic_required=bool(gp("extrinsic_required")),
@@ -210,6 +223,8 @@ class DetectNode(Node):
             from ..core import scene as _scene  # noqa: PLC0415
             vals["calib_file"] = _scene.load_scene(scene).calib_file
         vals["output_root"] = self.output_root
+        if self._staging is not None:
+            vals["capture_staging_dir"] = self._staging.root   # pipeline dirs stay under output_root
         vals["snapshot_path"] = self.snapshot_path  # None = no publish
         if goal is not None:
             if int(goal.max_attempts) > 0:
@@ -227,7 +242,8 @@ class DetectNode(Node):
         with self._lock:
             d = {"state": "busy" if self._busy else "idle", "progress": dict(self._progress),
                  "last_result": self._last_result, "daemon": dict(self._daemon),
-                 "capture_source": self.capture_source, "snapshot_path": str(self.snapshot_path or "")}
+                 "capture_source": self.capture_source, "snapshot_path": str(self.snapshot_path or ""),
+                 "capture_staging_dir": str(self._staging.root) if self._staging is not None else ""}
         d["camera"] = self.capture.diagnostics() if self.capture is not None else None
         d["stamp_ns"] = time.time_ns()
         return d
@@ -297,7 +313,25 @@ class DetectNode(Node):
 
     def destroy_node(self):
         self._shutdown.set()
+        if self._staging is not None:
+            self._staging.close(ARCHIVE_SHUTDOWN_TIMEOUT_S)   # bounded wait for pending capture archiving
         return super().destroy_node()
+
+    def _archive_captures(self, cfg, res):
+        """Queue the archiving of this run's staged captures (background thread; the snapshot is already
+        published when run_detection returned). res None = the run raised."""
+        if self._staging is None:
+            return
+        try:
+            present = set(capture_staging.staged_capture_ids(self._staging.root))
+            ids = list(dict.fromkeys(
+                i for i in [*self._run_capture_ids,
+                            *[e.get("capture_id") for e in (getattr(res, "attempts", None) or [])
+                              if isinstance(e, dict)]] if i in present))
+            if ids:
+                self._staging.submit_archive(res, ids, **capture_staging.run_archive_kwargs(cfg, res))
+        except Exception as exc:  # noqa: BLE001 - archiving must never break the action result
+            self.get_logger().error(f"capture archiving not started: {type(exc).__name__}: {exc}")
 
     def _set_progress(self, stage: str, attempt: int, message: str, goal_handle=None):
         with self._lock:
@@ -321,6 +355,7 @@ class DetectNode(Node):
                 self._set_progress("capture", attempt, "waiting for a fresh frame")
                 files = self.capture.capture(after_ns=self.capture.now_ns(), timeout_s=timeout,
                                              abort=self._aborting)
+                self._run_capture_ids.append(str(files.capture_id))
                 self._set_progress("capture", attempt, f"captured {files.capture_id}")
                 return files
             return next_capture
@@ -335,7 +370,9 @@ class DetectNode(Node):
             if self._cancel:
                 raise DetectionCancelled("cancelled before capture")
             self._set_progress("capture", attempt, "recorder capture")
-            return capture_once(self.output_root, attempt, timeout)
+            files = capture_once(self._capture_root, attempt, timeout)
+            self._run_capture_ids.append(str(files.capture_id))
+            return files
         return next_capture
 
     def _fail_closed_snapshot_removal(self, dry_run: bool):
@@ -353,6 +390,8 @@ class DetectNode(Node):
         result = DetectBox.Result()
         self._goal_handle = goal_handle
         res = None
+        cfg = None
+        self._run_capture_ids = []
         error = ""
         cancelled = False
         cancelled_exc = False
@@ -379,6 +418,7 @@ class DetectNode(Node):
             error = f"{type(exc).__name__}: {exc}"
             self.get_logger().error(f"detection failed: {error}")
             self._fail_closed_snapshot_removal(eff_dry)
+        self._archive_captures(cfg, res)   # after the result is known (the snapshot is already published)
         try:
             if res is not None:
                 summary = _result_summary(res)

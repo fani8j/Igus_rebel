@@ -76,11 +76,37 @@ def test_unaligned_depth_refused_and_nothing_written(tmp_path, spinner):
     cam = SyntheticCamera(depth_size=(W * 2, H * 2))
     node, cap = _capture(tmp_path, "cap5")
     spinner(cam, node)
-    # colour/depth stamps are identical so they sync; the capture itself must refuse the pair
-    with pytest.raises(cloud.CaptureError, match="not aligned"):
-        cap.capture(after_ns=cap.now_ns(), timeout_s=5.0)
+    # colour/depth stamps are identical so they sync; unaligned sets are skipped until the timeout
+    with pytest.raises(CaptureTimeout, match="not aligned"):
+        cap.capture(after_ns=cap.now_ns(), timeout_s=1.0)
+    assert cap.diagnostics()["counts"]["skipped_unaligned"] > 0
     assert not list((tmp_path / "pointcloud").glob("*"))
     assert not list((tmp_path / "captures").glob("*"))
+
+
+def test_unaligned_sets_skipped_until_an_aligned_one(tmp_path, spinner):
+    # the Orbbec driver publishes raw depth when SW alignment finds no colour frame: mostly unaligned sets
+    cam = SyntheticCamera(depth_size=(W * 2, H * 2), aligned_every=5)
+    node, cap = _capture(tmp_path, "cap5b")
+    spinner(cam, node)
+    files = cap.capture(after_ns=cap.now_ns(), timeout_s=5.0)
+    man = json.loads(files.manifest_path.read_text())
+    assert (man["image"]["width"], man["image"]["height"]) == (W, H)
+    assert man["pointcloud"]["point_count"] == int((make_images()[1] > 0).sum())  # the aligned depth
+    assert cap.diagnostics()["counts"]["skipped_unaligned"] > 0
+
+
+def test_unaligned_depth_rejected_by_registration_check():
+    # write_capture's own check still refuses an unaligned pair handed to it directly
+    rgb, _ = make_images()
+    from sensor_msgs.msg import CameraInfo, Image
+    c = Image(height=H, width=W, encoding="rgb8", step=W * 3, data=rgb.tobytes())
+    d = Image(height=H * 2, width=W * 2, encoding="16UC1", step=W * 4, data=bytes(W * H * 8))
+    i = CameraInfo(width=W, height=H, k=K)
+    for m in (c, d, i):
+        m.header.frame_id = "camera_color_optical_frame"
+    with pytest.raises(cloud.CaptureError, match="not aligned"):
+        cloud.validate_registration(c, d, i)
 
 
 def test_float_depth_and_bgr_colour(tmp_path, spinner):

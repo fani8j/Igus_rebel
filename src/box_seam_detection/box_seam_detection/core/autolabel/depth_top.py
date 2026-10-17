@@ -512,6 +512,41 @@ def _polish_plane_top(cropped: np.ndarray, top: dict, thresh: float) -> dict:
     return polished
 
 
+def _converge_plane_top(cropped: np.ndarray, top: dict, thresh: float, iters: int,
+                        tol_deg: float) -> dict:
+    """Start-independent top plane (deterministic): refit the plane on its own ``thresh``-band inliers,
+    at most ``iters`` times, until the normal moves less than ``tol_deg``.
+
+    The seeded RANSAC (+ core polish) leaves the plane tilted by up to a few tenths of a degree off the true
+    top, so a band of ``thresh`` cuts part of the far corners out of the inliers and the support hull / quad
+    changes with the seed or tiny data changes. The band refit pulls every start to the same plane (a box
+    top has ~3 mm noise, so the band holds ~98 % of it); the result is re-expanded at ``thresh`` exactly like
+    :func:`_polish_plane_top` and gated by the same ``top_rms_max`` afterwards. Falls back to the input when
+    the band empties."""
+    n, d = np.asarray(top["n"], dtype=np.float64), float(top["d"])
+    steps = 0
+    for _ in range(int(iters)):
+        m = np.abs(cropped @ n + d) < thresh
+        if int(m.sum()) < 100:
+            break
+        n_new, d_new = _fit_plane_svd(cropped[m])
+        if float(n_new @ n) < 0:
+            n_new, d_new = -n_new, -d_new
+        moved = float(np.degrees(np.arccos(min(1.0, float(n_new @ n)))))
+        n, d = n_new, float(d_new)
+        steps += 1
+        if moved < float(tol_deg):
+            break
+    mask = np.abs(cropped @ n + d) < thresh
+    if steps == 0 or int(mask.sum()) < 3:
+        return top
+    rms = float(np.sqrt(np.mean((cropped[mask] @ n + d) ** 2)))
+    out = dict(top)
+    out.update({"n": n, "d": d, "mask": mask, "n_inliers": int(mask.sum()), "rms": rms,
+                "centroid": cropped[mask].mean(axis=0), "refit_steps": steps})
+    return out
+
+
 def _merge_top_candidates(cropped: np.ndarray, cands: list,
                           dcfg: dict) -> tuple[list, dict | None]:
     """Merge same-height adjacent top patches (two flaps, one face).
@@ -696,6 +731,9 @@ def identify_table_top(planes: list[dict], cropped: np.ndarray,
     order = sorted(range(len(planes)), key=lambda i: -planes[i]["n_inliers"])
     hidden = is_hidden_stand(dcfg)
     hinted = bool(hidden and support_hint is not None)
+    # scene option live.fixed_floor (core/fixed_floor.py): the floor is a measured plane, not a RANSAC facet
+    fixed_cam = dcfg.get("fixed_floor") if hidden else None
+    fixed = bool(fixed_cam) or bool(hinted and support_hint.get("fixed"))
     if hinted:
         table = {"n": np.asarray(support_hint["n"], dtype=np.float64),
                  "d": float(support_hint["d"]),
@@ -705,6 +743,16 @@ def identify_table_top(planes: list[dict], cropped: np.ndarray,
         rest = list(order)
         diag["support_hint"] = True
         table_xyz = cropped[:0]
+    elif fixed_cam:
+        from .. import fixed_floor as _ff  # noqa: PLC0415
+        table, fdiag = _ff.evaluate(cropped, fixed_cam)
+        diag["fixed_floor"] = fdiag
+        if table is None:
+            diag["table_reject"] = "fixed_floor_mismatch"
+            return None, None, front, diag, f"depth_fixed_floor_mismatch({fdiag['mismatch']})"
+        diag["support_source"] = "fixed_floor"
+        rest = list(order)
+        table_xyz = cropped[table["mask"]]
     else:
         k0 = order[0]
         if hidden:
@@ -730,7 +778,11 @@ def identify_table_top(planes: list[dict], cropped: np.ndarray,
     tmax = table_xyz.max(axis=0) if table_xyz.shape[0] else np.zeros(3)
     expand = float(dcfg["support_expand_m"])
     floor_hull = None
-    if hidden and not hinted:
+    if fixed_cam and not hinted:
+        # every floor point of the measured plane (not a facet): the top must project inside its footprint
+        floor_hull = _plane_footprint(table, table_xyz)
+        diag["floor_points"] = int(table_xyz.shape[0])
+    elif hidden and not hinted:
         # footprint of the visible floor = the dominant plane plus its coplanar
         # fragments (sequential RANSAC splits a noisy far floor into pieces)
         floor_pts = [table_xyz]
@@ -748,6 +800,10 @@ def identify_table_top(planes: list[dict], cropped: np.ndarray,
     for i in rest:
         p = planes[i]
         angle, offset = plane_angle_offset(table["n"], table["d"], p["n"], p["d"])
+        if fixed:
+            # facets of a tilted far floor differ in plane offset by up to ~0.15 m from the true floor: the
+            # height of the plane's centroid above the fixed floor is the offset that matters
+            offset = _signed_height_above(table, p["centroid"])
         note: dict = {"rank": int(i), "n_inliers": p["n_inliers"],
                       "rms_mm": round(p["rms"] * 1000.0, 2),
                       "angle_deg": round(angle, 2), "offset_mm": round(offset * 1000.0, 1)}
@@ -839,8 +895,14 @@ def identify_table_top(planes: list[dict], cropped: np.ndarray,
     # Core polish: tight-core refit, re-expanded. Pure planes move sub-mm.
     top = _polish_plane_top(cropped, top, float(dcfg["ransac_thresh"]))
     diag["top_polished"] = bool(top.get("polished"))
+    if int(dcfg.get("top_refit_iters", 0)) > 0:
+        top = _converge_plane_top(cropped, top, float(dcfg["ransac_thresh"]),
+                                  int(dcfg["top_refit_iters"]), float(dcfg.get("top_refit_tol_deg", 0.01)))
+        diag["top_refit_steps"] = int(top.get("refit_steps", 0))
     top_angle, top_offset = plane_angle_offset(table["n"], table["d"],
                                                top["n"], top["d"])
+    if fixed:
+        top_offset = _signed_height_above(table, top["centroid"])
     diag["top_angle_deg"] = round(float(top_angle), 2)
     diag["top_offset_mm"] = round(float(top_offset) * 1000.0, 1)
     # Polish must not diverge: the polished fit keeps the same ceiling.

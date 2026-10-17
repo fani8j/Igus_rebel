@@ -326,6 +326,19 @@ def estimate_table_plane(depth_ctx: dict) -> dict | None:
         xyz = np.asarray(depth_ctx["xyz"], dtype=np.float64)
         cropped = xyz[_depth.workspace_mask(xyz, dcfg)]
         hidden = support_hidden(depth_ctx)
+        fixed_cam = dcfg.get("fixed_floor") if hidden else None
+        if fixed_cam:
+            # scene option live.fixed_floor: the support is the measured plane, checked against this cloud
+            # (fail closed: None + the diagnostics when the floor points do not sit on it)
+            from . import fixed_floor as _ff  # noqa: PLC0415
+            ftab, fdiag = _ff.evaluate(cropped, fixed_cam)
+            depth_ctx["_table_fixed_floor"] = fdiag
+            if ftab is not None:
+                table = {"n": np.asarray(ftab["n"], dtype=np.float64), "d": float(ftab["d"]),
+                         "n_inliers": int(ftab["n_inliers"]),
+                         "rms_mm": float(ftab["rms"]) * 1000.0, "fixed": True}
+            depth_ctx["_table"] = table
+            return table
         if not hidden:
             dcfg["max_planes"] = 1
             dcfg["top_min_inliers"] = int(dcfg["table_min_inliers"])
@@ -444,6 +457,12 @@ def measure_box_height(depth_ctx: dict | None, plane, corners_xyz,
                         out["support_clearance_mm"] = round(float(clr), 1)
                     if tbl.get("support_gravity_unchecked"):
                         out["support_gravity_unchecked"] = True
+                    if tbl.get("fixed"):
+                        out["support_source"] = "fixed_floor"
+                elif tbl is None and depth_ctx.get("_table_fixed_floor") is not None:
+                    # fixed floor configured but the cloud contradicts it: no support, say why
+                    out["support_unavailable"] = "fixed_floor_mismatch"
+                    out["fixed_floor"] = depth_ctx["_table_fixed_floor"]
             except Exception:  # noqa: BLE001
                 pass
             return out
@@ -1502,9 +1521,28 @@ def _alternate_candidates(prov: dict, checkpoint_sha) -> list[dict]:
     return out
 
 
+def _drop_candidates_outside_work_area(cands: list, cand_filter) -> None:
+    """Scene work area: a SAM3 candidate (live / archived) whose quad lies mostly outside the
+    work-area prism in the image is ignored before ranking (``coarse`` None + a reason, recorded in
+    the attempts like any other unusable candidate). In place."""
+    from .work_area import CANDIDATE_DROP_REASON  # noqa: PLC0415
+
+    for cand in cands:
+        if (cand.get("source") not in ("sam3_live", "sam3_archived") or cand.get("skipped")
+                or cand.get("coarse") is None):
+            continue
+        keep, info = cand_filter(cand["coarse"])
+        cand.setdefault("prov", {})["work_area"] = info
+        if not keep:
+            cand["reason"] = (f"{CANDIDATE_DROP_REASON}(inside={info['inside_frac']:.2f}"
+                              f"<{info['min_inside_frac']:.2f})")
+            cand["coarse"] = None
+
+
 def _gather_coarse_candidates(capture_id: str, want: str, image_path: str,
                               session, archive_dir, depth_est, depth_err,
-                              cfg: dict, depth_join=None) -> list[dict]:
+                              cfg: dict, depth_join=None,
+                              cand_filter=None) -> list[dict]:
     """Return ordered coarse candidates for the fallback chain.
 
     Each entry: {"source", "coarse"|None, "prov", "reason"|None,
@@ -1546,6 +1584,8 @@ def _gather_coarse_candidates(capture_id: str, want: str, image_path: str,
                 "concept_score": sam3info.get("concept_score"),
                 "prompt": sam3info.get("prompt"),
                 "checkpoint_sha": sam3info.get("checkpoint_sha256")})
+    if cand_filter is not None:
+        _drop_candidates_outside_work_area(cands, cand_filter)
     if want in ("auto", "depth_only"):
         if depth_join is not None:
             depth_est, depth_err = depth_join()
@@ -1743,11 +1783,17 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
         return box["res"]["est"], box["res"]["err"]
 
     # ---- 1. coarse candidates + fallback chain ------------------------
+    cand_filter = None
+    wa_runtime = cfg.get("work_area_runtime")
+    if wa_runtime and cam is not None:
+        from .work_area import CandidateFilter  # noqa: PLC0415
+        cand_filter = CandidateFilter(wa_runtime, cam, W, H)
     try:
         if _forced is None:
             cands = _gather_coarse_candidates(
                 capture_id, source, str(image_path), session, archive_dir,
-                depth_est, depth_err, cfg, depth_join=_depth_join)
+                depth_est, depth_err, cfg, depth_join=_depth_join,
+                cand_filter=cand_filter)
         else:
             cands = []
     finally:

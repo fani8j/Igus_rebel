@@ -39,6 +39,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
+from .capture_staging import (link_or_copy as _link_or_copy, open_staging, resolve_staging_setting,
+                              run_archive_kwargs, write_manifest_atomically as _write_manifest_atomically)
 from .snapshot import (SIDE_CUTTING_POINT_NAMES, SIDE_SEED_REJECTED_SUFFIX,  # noqa: F401
                        _quarantine_planner_snapshot, _snapshot_xyz, _write_json_atomically,
                        add_side_cutting_points, remove_snapshot, side_seed_rejected_path,
@@ -64,6 +66,7 @@ RETRY_SAME_DIFF_TOL_MM = 3.0     # failing-pair diff must agree within this
 RETRY_SAME_CORNER_PX = 5.0       # every top-face corner must agree within this
 RETRY_SAME_SKEW_DEG = 1.0     # rectangle_skewed: same max corner deviation (deg)
 RETRY_DEFAULT_RECT_TOL_MM = 3.0  # used when the reject JSON has no tol_mm
+RETRY_SAME_TOP_SIZE_MM = 8.0     # top_size_out_of_range: long and short each agree within this
 HINT_HIGH_YAW_DEG = 20.0         # yaw above this -> "rotate the box" hint
 HINT_IMAGE_EDGE_MARGIN_PX = 40.0 # corner closer than this to the image border
 DEFAULT_AUTOLABEL_V2_AVERAGE = 1  # live burst frames averaged per attempt (1 = single capture; averaging showed no gain live 2026-09-28)
@@ -128,6 +131,9 @@ class DetectConfig:
     # It supplies the default calib file, the driver extrinsic reference, the seam-direction prior and
     # the depth-top / gate overrides of the detector.
     scene_config: Optional[str] = None
+    # RAM staging session dir (live.capture_staging) the captures were written to, or None = captures live
+    # directly in ``output_root``. pipeline/<capture>/<run>/ stays under output_root either way.
+    capture_staging_dir: Optional[Path] = None
 
     def __post_init__(self):
         # "" / "." (Path("")) from a caller means "no snapshot path": never publish to Path('.')
@@ -647,25 +653,6 @@ def _atomic_write_png(path, image):
         raise
 
 
-def _link_or_copy(source, destination):
-    """Hard-link ``source`` at ``destination`` (same bytes, no extra 27 MB); copy if linking fails."""
-    import shutil  # noqa: PLC0415
-
-    destination = Path(destination)
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path = destination.with_name(f".{destination.name}.tmp-{os.getpid()}")
-    temporary_path.unlink(missing_ok=True)
-    try:
-        try:
-            os.link(source, temporary_path)
-        except OSError:
-            shutil.copyfile(source, temporary_path)
-        os.replace(temporary_path, destination)
-    except BaseException:
-        temporary_path.unlink(missing_ok=True)
-        raise
-
-
 def build_averaged_capture(records, max_diff, rgb_dir=None, pcd_dir=None, manifest_dir=None):
     """Average a burst of N synced captures into ONE new rgbd_capture/v1 capture.
 
@@ -732,8 +719,7 @@ def build_averaged_capture(records, max_diff, rgb_dir=None, pcd_dir=None, manife
     manifest["pointcloud"]["path"] = str(pcd_path)
     manifest["averaging"] = dict(averaging, source_manifests=[
         str(record["manifest_path"]) for record in records])
-    _write_json_atomically(manifest_path, manifest)
-    os.chmod(manifest_path, 0o644)  # like rgbd_recorder.py manifests (temp files are 0600)
+    _write_manifest_atomically(manifest_path, manifest)   # tmp + fsync + replace, 0o644 like rgbd_recorder.py
     manifest = load_capture_manifest(manifest_path, str(image_path), str(pcd_path))
     return {"status": "ok", "image_path": str(image_path), "pcd_path": str(pcd_path),
             "manifest_path": manifest_path, "manifest": manifest, "averaging": averaging}
@@ -776,8 +762,10 @@ def pipeline_output_paths(cfg, manifest_path, manifest, output_dir):
     The planner snapshot is built at <pipeline_dir>/planner_snapshot.json; run_detection publishes it
     to ``cfg.snapshot_path`` only when everything passed.
     """
+    staging_dir = getattr(cfg, "capture_staging_dir", None)
+    staged = staging_dir is not None and Path(staging_dir).resolve() in Path(manifest_path).resolve().parents
     pipeline_root = Path(cfg.pipeline_root).resolve() if cfg.pipeline_root else (
-        manifest_path.parent.parent if manifest_path.parent.name == "captures" else output_dir)
+        manifest_path.parent.parent if manifest_path.parent.name == "captures" and not staged else output_dir)
     pipeline_dir = detection_output_directory(pipeline_root, manifest["capture_id"])
     camera_geometry_path = Path(cfg.camera_geometry_path).resolve() if cfg.camera_geometry_path else (
         pipeline_dir / "camera_geometry.json")
@@ -1243,6 +1231,27 @@ def cut_permission_signature(reject):
     return codes or None
 
 
+def top_size_signature(reject):
+    """{"long_mm", "short_mm"} of a stage-top_size ``top_size_out_of_range`` reject, else None."""
+    if not isinstance(reject, dict) or reject.get("stage") != "top_size":
+        return None
+    if not any(str(r).startswith("top_size_out_of_range") for r in reject.get("reasons") or []):
+        return None
+    check = (reject.get("details") or {}).get("top_size_check")
+    try:
+        return {"long_mm": float(check["long_mm"]), "short_mm": float(check["short_mm"])}
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def same_top_size_failure(first, second, tol_mm=RETRY_SAME_TOP_SIZE_MM):
+    """True when two top-size signatures describe the same (deterministic) wrong-size top."""
+    if not first or not second:
+        return False
+    return (abs(first["long_mm"] - second["long_mm"]) <= tol_mm
+            and abs(first["short_mm"] - second["short_mm"]) <= tol_mm)
+
+
 def same_rectangle_failure(first, second, diff_tol_mm=RETRY_SAME_DIFF_TOL_MM,
                            corner_tol_px=RETRY_SAME_CORNER_PX):
     """True when two failure signatures describe the same deterministic failure."""
@@ -1354,6 +1363,11 @@ def build_operator_hint(reject, top, consistent, image_size=None):
         else:
             hints.append(f"box damaged/irregular top (opposite sides differ {worst:.0f} mm "
                          f"consistently)")
+    size_sig = top_size_signature(reject)
+    if size_sig is not None:
+        hints.append(f"detected top is {size_sig['long_mm']:.0f} x {size_sig['short_mm']:.0f} mm, outside "
+                     f"the expected box size: only part of the top (e.g. one flap of a cut/drooping "
+                     f"carton) was found, or the box is not one of the cell's boxes")
     detector_hint = (reject or {}).get("operator_hint")
     if isinstance(detector_hint, dict) and detector_hint.get("suggestion"):
         hints.append(f"detector hint: {detector_hint['suggestion']}")
@@ -1596,6 +1610,7 @@ def _run_detection(next_capture, cfg, progress, ctx, abort_check=None):
     retry_policy = cfg.retry_policy or DEFAULT_AUTOLABEL_V2_RETRY_POLICY
     failure_sigs = {}   # attempt number -> rectangle failure signature
     cut_sigs = {}       # attempt number -> sorted cut_permission reason codes
+    size_sigs = {}      # attempt number -> top_size_out_of_range signature
     last_evidence = {"reject": None, "top": None, "size": None, "consistent": False}
 
     def _stop_all_rejected(early=False):
@@ -1716,6 +1731,11 @@ def _run_detection(next_capture, cfg, progress, ctx, abort_check=None):
             cut_sigs[attempt] = cut_sig
             entry["failure_signature"] = {"cut_permission_codes": cut_sig}
             same_as_prev = same_as_prev or cut_sigs.get(attempt - 1) == cut_sig
+        size_sig = top_size_signature(reject)
+        if size_sig is not None:
+            size_sigs[attempt] = size_sig
+            entry["failure_signature"] = {"top_size_mm": size_sig}
+            same_as_prev = same_as_prev or same_top_size_failure(size_sigs.get(attempt - 1), size_sig)
         image_size = None
         try:
             image_size = (int(manifest["image"]["width"]), int(manifest["image"]["height"]))
@@ -1773,17 +1793,24 @@ def _run_detection(next_capture, cfg, progress, ctx, abort_check=None):
         raise DetectionAbort(1, f"cannot read the detector seam JSON: {error}") from error
     cut_permission = seam_doc.get("cut_permission")
     status = cut_permission.get("status") if isinstance(cut_permission, dict) else None
+    if status not in ("allowed", "blocked"):
+        # A missing / malformed / unknown cut_permission is a contract violation of the detector,
+        # never a real "blocked": --allow-cut-blocked must not promote it to an override.
+        raise DetectionAbort(
+            1, f"detector seam JSON has a missing or invalid cut_permission "
+               f"(status {status!r}; expected 'allowed' or 'blocked'): contract violation, "
+               f"aborting regardless of allow_cut_blocked",
+            status="error", reasons=["cut_permission missing or invalid"])
     if status != "allowed":
         if not cfg.allow_cut_blocked:
             raise DetectionAbort(
-                1, f"cut permission is {status or 'missing'}, not allowed (allow_cut_blocked not set)",
+                1, f"cut permission is {status}, not allowed (allow_cut_blocked not set)",
                 status="blocked",
                 reasons=[f"cut_blocked({r.get('code')}: {r.get('detail')})"
-                         for r in (cut_permission or {}).get("reasons", []) if isinstance(r, dict)]
-                or ["cut_permission missing"],
-                cut_permission=cut_permission if isinstance(cut_permission, dict) else None)
-        cut_permission = {**(cut_permission if isinstance(cut_permission, dict) else {"status": "blocked"}),
-                          "override": "allow_cut_blocked"}
+                         for r in cut_permission.get("reasons", []) if isinstance(r, dict)]
+                or ["cut_permission blocked"],
+                cut_permission=cut_permission)
+        cut_permission = {**cut_permission, "override": "allow_cut_blocked"}
 
     # ---- downstream (3-6), built at the pipeline-dir staging path
     say("query_depth", attempt, "camera-frame geometry")
@@ -1971,6 +1998,12 @@ def _build_parser():
                         help="persistent SAM3 daemon: auto = live (an already set "
                              "AUTOLABEL_V2_SAM3_DAEMON wins), on = also offline, off = per-run worker")
     parser.add_argument("--no-side-seed", action="store_true")
+    parser.add_argument("--capture-staging-dir", default=None, metavar="PATH|off",
+                        help="live: write the captures to this RAM dir first and archive them to --output-dir "
+                             "after the snapshot is published (the accepted capture -> rgb/pointcloud/captures, "
+                             "every other one -> failed_recent/, last 3). 'off' = write straight into "
+                             "--output-dir. Default: env BOX_SEAM_CAPTURE_STAGING, else "
+                             "/dev/shm/box_seam_detection/staging. Ignored with --from-image.")
     parser.add_argument("--dry-run", action="store_true",
                         help="run everything but never touch the --planner-output-json path")
     return parser
@@ -2070,7 +2103,7 @@ def _offline_capture(parser, args):
 
 def _live_capture_source(cfg):
     """next_capture of the CLI's live mode: the recorder subprocess (single frame or averaged burst)."""
-    output_dir = Path(cfg.output_root)
+    output_dir = Path(getattr(cfg, "capture_staging_dir", None) or cfg.output_root)   # RAM staging when on
     seen_sources = set()
     average_frames = int(cfg.average_frames)
 
@@ -2105,12 +2138,24 @@ def _live_capture_source(cfg):
     return next_capture
 
 
+def _archive_staged_captures(staging, cfg, result):
+    """CLI: archive the staged captures synchronously, right before exit (prints one line); never raises."""
+    try:
+        report = staging.archive_run(result, **run_archive_kwargs(cfg, result))
+        if report.success_ids or report.failed_ids or report.discarded_ids or report.errors:
+            print(report.summary())
+        staging.close()
+    except Exception as error:  # noqa: BLE001 — archiving must not change the run's exit code
+        print(f"capture 歸檔失敗: {type(error).__name__}: {error}（staging 檔案留給下次啟動歸檔）", file=sys.stderr)
+
+
 def main(argv=None) -> int:
     parser = _build_parser()
     args, extra_query_args = parser.parse_known_args(sys.argv[1:] if argv is None else list(argv))
     _check_cli_args(parser, args)
     cfg = config_from_args(args)
     cfg.extra_query_args = tuple(extra_query_args)
+    staging = None      # RAM capture staging (live only; offline --from-image never moves or deletes anything)
     if not cfg.live:
         if args.autolabel_v2_attempts not in (None, 1, DEFAULT_AUTOLABEL_V2_ATTEMPTS):
             print("→ 離線 --from-image 模式：--autolabel-v2-attempts 不適用，只跑一次")
@@ -2119,12 +2164,21 @@ def main(argv=None) -> int:
         offline_files = _offline_capture(parser, args)
         next_capture = lambda attempt: offline_files  # noqa: E731
     else:
+        staging = open_staging(resolve_staging_setting(args.capture_staging_dir), cfg.output_root)
+        if staging is not None:
+            cfg.capture_staging_dir = staging.root
+            print(f"→ capture staging（RAM）: {staging.root} → 歸檔到 {cfg.output_root}")
         next_capture = _live_capture_source(cfg)
+    result = None
     try:
         result = run_detection(next_capture, cfg)
     except Exception as error:  # noqa: BLE001 — e.g. a recorder failure raised by next_capture
         print(f"detection failed: {type(error).__name__}: {error}", file=sys.stderr)
         return 2
+    finally:
+        # The snapshot (if any) was published inside run_detection; archiving only starts now.
+        if staging is not None:
+            _archive_staged_captures(staging, cfg, result)
     if not result.success:
         print(f"[{result.status}] {result.reason}", file=sys.stderr)
         return result.exit_code or 1

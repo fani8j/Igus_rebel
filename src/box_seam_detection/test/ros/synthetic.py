@@ -19,13 +19,16 @@ def make_images(w=W, h=H, seed=1):
 
 class SyntheticCamera(Node):
     def __init__(self, prefix="/camera", rate=20.0, stamp_offset_s=0.0, frame="camera_color_optical_frame",
-                 encoding="rgb8", depth_encoding="16UC1", depth_size=None, info_size=None, auto=True):
+                 encoding="rgb8", depth_encoding="16UC1", depth_size=None, info_size=None, auto=True,
+                 aligned_every=None):
         super().__init__("synthetic_camera")
         self.offset = stamp_offset_s
         self.frame = frame
         self.encoding = encoding
         self.depth_encoding = depth_encoding
         self.rgb, self.depth = make_images()
+        # aligned_every=N: only every Nth frame carries the aligned depth, the others the depth_size (unaligned) one
+        self.aligned_every, self.ticks, self.aligned_depth = aligned_every, 0, self.depth
         if depth_size:
             self.depth = np.zeros((depth_size[1], depth_size[0]), dtype=np.uint16) + 800
         self.info_size = info_size or (W, H)
@@ -40,11 +43,13 @@ class SyntheticCamera(Node):
         img = self.rgb if self.encoding == "rgb8" else self.rgb[:, :, ::-1]
         c = Image(height=H, width=W, encoding=self.encoding, step=W * 3, data=np.ascontiguousarray(img).tobytes())
         c.header.stamp, c.header.frame_id = stamp, self.frame
-        dh, dw = self.depth.shape
+        self.ticks += 1
+        depth = self.aligned_depth if self.aligned_every and self.ticks % self.aligned_every == 0 else self.depth
+        dh, dw = depth.shape
         if self.depth_encoding == "32FC1":
-            data, step = (self.depth.astype(np.float32) * 0.001).tobytes(), dw * 4
+            data, step = (depth.astype(np.float32) * 0.001).tobytes(), dw * 4
         else:
-            data, step = self.depth.tobytes(), dw * 2
+            data, step = depth.tobytes(), dw * 2
         d = Image(height=dh, width=dw, encoding=self.depth_encoding, step=step, data=data)
         d.header.stamp, d.header.frame_id = stamp, self.frame
         i = CameraInfo(width=self.info_size[0], height=self.info_size[1], distortion_model="plumb_bob",

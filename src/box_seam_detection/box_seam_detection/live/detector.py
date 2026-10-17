@@ -54,6 +54,22 @@ request runs exactly the one-shot per-capture code (same files, same exit
 code as ``exit_code``); only the SAM3 worker is reused across requests.
 EOF or {"type": "shutdown"} stops it. See :func:`serve`.
 
+Top-size gate (scene option ``live.top_size_range_mm``, off when absent): the FINAL
+3-D top quad's long/short side-pair means must lie in the scene's ranges, else exit 1
+``top_size_out_of_range(long=..mm,short=..mm,range=..)`` (stage ``top_size``, retryable)
+or ``top_size_unmeasurable`` (fail closed). Applies to every profile (generic too) and
+is NOT bypassable by --allow-needs-review / --allow-cut-blocked; the measurement is
+recorded under ``autolabel_v2.top_size_check``.
+
+Work area (scene option ``live.work_area``, off when absent; see core/work_area.py and DESIGN.md): the
+capture cloud is cropped to the robot work area before the pipeline runs (``work_area_check.crop``), SAM3
+candidates mostly outside the area prism are ignored (``sam3_candidate_outside_work_area`` in the
+attempts), and after the top-size gate all four final top corners must lie inside the polygon and the
+z range in base_link, else exit 1 ``box_outside_work_area(...)`` (stage ``work_area``, not retryable,
+NOT bypassable by --allow-needs-review / --allow-cut-blocked). A configured work area with no usable
+base_link transform fails closed (``work_area_transform_unavailable``). Recorded under
+``autolabel_v2.work_area_check``.
+
 Rectangle gate (default on; --no-rect-check disables): a real box top is a
 rectangle, so opposite 3-D side lengths of ``top_face.corners_xyz_camera_m``
 (rule names) must agree: pair A = |BL-BR| vs |FL-FR| (back vs front), pair
@@ -509,6 +525,125 @@ def rectangle_check(record: dict, tol_mm: float,
         raise Reject("rectangle", [f"rectangle_skewed(max_dev={max_dev:.2f}deg)"],
                      retryable=True, details=result)
     return result
+
+
+def top_size_check(record: dict, size_range) -> dict:
+    """Hard top-size gate (scene option ``live.top_size_range_mm``), any profile.
+
+    ``size_range``: ``{"long": [min, max], "short": [min, max]}`` in mm or None
+    (gate disabled -> ``{"enabled": False}``). Measures the FINAL 3-D top quad
+    (the MEASURED RGB quad when the published one is the gap-anchored K1 quad,
+    like :func:`_final_top_dims_dev_mm`): long = mean of the longer opposite-side
+    pair, short = mean of the shorter pair, so the result is rotation-invariant.
+    Raises Reject("top_size", ["top_size_out_of_range(long=..mm,short=..mm,range=...)"],
+    retryable=True) when either dimension is outside its range (a fresh capture may
+    segment the whole top), and Reject("top_size", ["top_size_unmeasurable(...)"],
+    retryable=False) when the range is configured but the 3-D size cannot be
+    measured (fail closed). Not affected by --allow-needs-review / --allow-cut-blocked.
+    """
+    if not size_range:
+        return {"enabled": False}
+    rng = {k: [float(size_range[k][0]), float(size_range[k][1])] for k in ("long", "short")}
+    range_txt = (f"long {rng['long'][0]:g}-{rng['long'][1]:g}mm,"
+                 f"short {rng['short'][0]:g}-{rng['short'][1]:g}mm")
+    xyz = (record.get("top_face") or {}).get("corners_xyz_camera_m")
+    xyz = _gap_anchored_rgb_xyz(record) or xyz
+    try:
+        pts = [[float(v) for v in xyz[k]] for k in RING]
+        if any(len(p) != 3 or not all(math.isfinite(c) for c in p) for p in pts):
+            raise ValueError("non-finite or non-3-D corner")
+    except (KeyError, TypeError, ValueError, IndexError) as error:
+        raise Reject("top_size",
+                     [f"top_size_unmeasurable({type(error).__name__}: no valid 3-D top quad; "
+                      f"range={range_txt})"],
+                     retryable=False, details={"top_size_check": {
+                         "enabled": True, "range_mm": rng, "measured": False, "pass": False}})
+    sides = [1000.0 * math.dist(pts[i], pts[(i + 1) % 4]) for i in range(4)]
+    long_mm, short_mm = sorted((0.5 * (sides[0] + sides[2]), 0.5 * (sides[1] + sides[3])),
+                               reverse=True)
+    ok = (rng["long"][0] <= long_mm <= rng["long"][1]
+          and rng["short"][0] <= short_mm <= rng["short"][1])
+    result = {"enabled": True, "range_mm": rng, "measured": True,
+              "long_mm": round(long_mm, 2), "short_mm": round(short_mm, 2),
+              "sides_mm": [round(v, 2) for v in sides], "pass": ok}
+    if not ok:
+        raise Reject("top_size",
+                     [f"top_size_out_of_range(long={long_mm:.1f}mm,short={short_mm:.1f}mm,"
+                      f"range={range_txt})"],
+                     retryable=True, details={"top_size_check": result})
+    return result
+
+
+def work_area_check(record: dict, work_area, camera_to_base, crop: dict = None,
+                    candidates_dropped: list = None) -> dict:
+    """Hard work-area gate (scene option ``live.work_area``), any profile.
+
+    ``work_area``: the validated scene mapping or None (feature off -> ``{"enabled": False}``).
+    All four FINAL top corners (the published quad and, for a gap-anchored K1 record, also the measured
+    RGB quad) are moved to base_link with ``camera_to_base`` (the detector's seam-direction transform) and
+    must lie inside the polygon (no margin) with z inside ``top_z_range_m``. Raises
+    Reject("work_area", ["box_outside_work_area(...)"], retryable=False) otherwise, and
+    Reject("work_area", ["work_area_transform_unavailable(...)" | "work_area_unmeasurable(...)"]) when the
+    corners cannot be put in base_link (fail closed). Not affected by --allow-needs-review /
+    --allow-cut-blocked.
+    """
+    if not work_area:
+        return {"enabled": False}
+    import numpy as np  # noqa: PLC0415
+
+    from ..core import work_area as wa_mod  # noqa: PLC0415
+
+    phash = wa_mod.polygon_hash(work_area)
+    extra = {"crop": crop, "candidates_dropped": list(candidates_dropped or [])}
+    failed = {"enabled": True, "measured": False, "pass": False, "polygon_hash": phash, **extra}
+    if camera_to_base is None:
+        raise Reject("work_area", [f"work_area_transform_unavailable(no base_link<-camera transform; "
+                                   f"polygon={phash})"],
+                     retryable=False, details={"work_area_check": failed})
+    xyz = (record.get("top_face") or {}).get("corners_xyz_camera_m")
+    rgb = _gap_anchored_rgb_xyz(record)
+    try:
+        sets = {"": {k: [float(v) for v in xyz[k]] for k in RING}}
+        if rgb is not None:
+            sets["rgb_"] = rgb
+        if any(len(p) != 3 or not all(math.isfinite(c) for c in p)
+               for pts in sets.values() for p in pts.values()):
+            raise ValueError("non-finite or non-3-D corner")
+    except (KeyError, TypeError, ValueError, IndexError) as error:
+        raise Reject("work_area", [f"work_area_unmeasurable({type(error).__name__}: no valid 3-D top quad; "
+                                   f"polygon={phash})"],
+                     retryable=False, details={"work_area_check": failed})
+    base = {}
+    for prefix, pts in sets.items():
+        names = list(pts)
+        moved = wa_mod.transform_points(camera_to_base, np.asarray([pts[n] for n in names]))
+        base.update({prefix + n: [float(c) for c in moved[i]] for i, n in enumerate(names)})
+    result = {**wa_mod.corners_check(base, work_area, phash), **extra}
+    if not result["pass"]:
+        parts = []
+        if result["xy_outside"]:
+            parts.append("xy: " + ", ".join(f"{n}=({base[n][0]:.3f},{base[n][1]:.3f})"
+                                            for n in result["xy_outside"]))
+        if result["z_outside"]:
+            lo, hi = work_area["top_z_range_m"]
+            parts.append("z: " + ", ".join(f"{n}={base[n][2]:.3f}" for n in result["z_outside"])
+                         + f" not in [{lo:g},{hi:g}]")
+        raise Reject("work_area", [f"box_outside_work_area({'; '.join(parts)}; polygon={phash})"],
+                     retryable=False, details={"work_area_check": result})
+    return result
+
+
+def work_area_dropped_candidates(record: dict) -> list:
+    """SAM3 candidates the pipeline ignored for lying outside the work area (from the record's attempts)."""
+    from ..core.work_area import CANDIDATE_DROP_REASON  # noqa: PLC0415
+
+    out = []
+    for attempt in (record.get("provenance") or {}).get("attempts") or []:
+        reason = str((attempt or {}).get("reason") or "")
+        if reason.startswith(CANDIDATE_DROP_REASON):
+            out.append({"source": attempt.get("source"), "alternate_rank": attempt.get("alternate_rank"),
+                        "reason": reason})
+    return out
 
 
 # ---------------------------------------------------------------- depth edge
@@ -2358,7 +2493,9 @@ def build_canonical_seam_doc(record: dict, image_path: str, width: int, height: 
                              rect_repair: dict = None,
                              seam_geometry: dict = None,
                              cut_permission: dict = None,
-                             box_profile: dict = None) -> dict:
+                             box_profile: dict = None,
+                             top_size_check: dict = None,
+                             work_area_check: dict = None) -> dict:
     corners = relabel["corners"]
     top = record.get("top_face") or {}
     checks = record.get("checks") or {}
@@ -2428,6 +2565,8 @@ def build_canonical_seam_doc(record: dict, image_path: str, width: int, height: 
             "confidence_seam": record.get("confidence_seam"),
             "plane": top.get("plane"),
             "rect_check": rect_check,
+            "top_size_check": top_size_check,
+            "work_area_check": work_area_check if work_area_check is not None else {"enabled": False},
             "depth_edge": depth_edge,
             "seam_direction": seam_direction,
             "rect_repair": rect_repair,
@@ -2770,6 +2909,8 @@ def run_request(args, sam3) -> dict:
     box_profile = None
     box_profile_info = None
     est_cfg = None
+    work_area_state = None      # {"crop": ..., ...} once the scene work area was applied
+    work_area_files = []        # cropped cloud + manifest written to work_dir (removed unless --debug)
     timing = {}
     result["timing"] = timing
     try:
@@ -2801,6 +2942,55 @@ def run_request(args, sam3) -> dict:
         if [probe.shape[1], probe.shape[0]] != [width, height]:
             raise Prerequisite(f"real image size {[probe.shape[1], probe.shape[0]]} != "
                                f"manifest {[width, height]}")
+
+        # Scene work area: crop the cloud BEFORE the pipeline (and before SAM3 is touched: a missing
+        # transform fails closed without a SAM3 query). The pipeline / depth-edge fix then read the
+        # cropped, unorganized cloud; the hint and the manifest binding checks above use the originals.
+        pcd_pipeline, manifest_pipeline = pcd_path, manifest_path
+        work_area_cfg = scene_arg.work_area if scene_arg is not None else None
+        c2b_wa = None
+        if work_area_cfg is not None:
+            from ..core import work_area as wa_mod  # noqa: PLC0415
+            from ..core.autolabel.pcd import read_pcd_xyz  # noqa: PLC0415
+            c2b_wa = _camera_to_base_matrix(calib_arg, manifest, scene_arg)
+            if c2b_wa is None:
+                work_area_state = {"enabled": True, "measured": False, "pass": False,
+                                   "polygon_hash": wa_mod.polygon_hash(work_area_cfg), "crop": None}
+                raise Reject("work_area", [
+                    f"work_area_transform_unavailable(no base_link<-camera transform from "
+                    f"{calib_arg or 'the default calibration'}; polygon={work_area_state['polygon_hash']})"],
+                    retryable=False, details={"work_area_check": work_area_state})
+            t_crop = time.monotonic()
+            try:
+                cloud_xyz, _pcd_info = read_pcd_xyz(str(pcd_path))
+                pcd_pipeline, manifest_pipeline, crop_stats = wa_mod.crop_capture(
+                    cloud_xyz, c2b_wa, work_area_cfg, manifest, work_dir, capture_id)
+            except (OSError, ValueError, RuntimeError) as error:
+                raise Prerequisite(f"work-area crop failed: {type(error).__name__}: {error}") from error
+            work_area_files = [pcd_pipeline, manifest_pipeline]
+            del cloud_xyz
+            crop_stats["time_s"] = round(time.monotonic() - t_crop, 3)
+            timing["work_area_crop"] = crop_stats["time_s"]
+            work_area_state = {"enabled": True, "polygon_hash": wa_mod.polygon_hash(work_area_cfg),
+                               "crop": crop_stats}
+            if args.debug:
+                _say(f"debug: work-area crop {crop_stats}")
+
+        # Scene fixed floor (core/fixed_floor.py): the measured base_link floor plane expressed in the camera
+        # frame; a missing/invalid transform fails closed BEFORE SAM3 is touched.
+        fixed_floor_cfg = scene_arg.fixed_floor if scene_arg is not None else None
+        fixed_floor_cam = None
+        if fixed_floor_cfg is not None:
+            from ..core import fixed_floor as ff_mod  # noqa: PLC0415
+            c2b_ff = c2b_wa if c2b_wa is not None else _camera_to_base_matrix(calib_arg, manifest, scene_arg)
+            if c2b_ff is None:
+                raise Reject("fixed_floor", [
+                    f"fixed_floor_transform_unavailable(no base_link<-camera transform from "
+                    f"{calib_arg or 'the default calibration'})"], retryable=False)
+            try:
+                fixed_floor_cam = ff_mod.to_camera(fixed_floor_cfg, c2b_ff)
+            except ff_mod.FixedFloorError as error:
+                raise Reject("fixed_floor", [f"fixed_floor_invalid({error})"], retryable=False) from error
 
         t0 = time.monotonic()
         session = sam3.acquire(Sam3Worker, args, work_dir, capture_id)
@@ -2843,9 +3033,13 @@ def run_request(args, sam3) -> dict:
                         cfg["depth_top"]["gravity_cam"] = [round(float(v), 6) for v in up / _np.linalg.norm(up)]
                 except Exception as _error:  # noqa: BLE001 - optional, falls back to unchecked
                     _say(f"WARNING: gravity direction unavailable ({type(_error).__name__}: {_error})")
+            if fixed_floor_cam is not None:
+                cfg.setdefault("depth_top", {})["fixed_floor"] = fixed_floor_cam
             est_cfg = cfg.get("seam_estimator") if isinstance(cfg, dict) else None
-            paths = {"image": str(image_path), "pcd": str(pcd_path),
-                     "manifest": str(manifest_path)}
+            if work_area_cfg is not None:
+                cfg["work_area_runtime"] = wa_mod.runtime_config(work_area_cfg, c2b_wa)
+            paths = {"image": str(image_path), "pcd": str(pcd_pipeline),
+                     "manifest": str(manifest_pipeline)}
             t1 = time.monotonic()
             record, debug = pipeline.process_capture(
                 capture_id, paths, cfg, source="sam3_live", session=session)
@@ -2888,7 +3082,7 @@ def run_request(args, sam3) -> dict:
         else:
             gray = cv2.cvtColor(probe, cv2.COLOR_BGR2GRAY).astype("float64")
             record, seam, depth_edge = apply_depth_edge(
-                record, seam, manifest, pcd_path, gray=gray,
+                record, seam, manifest, pcd_pipeline, gray=gray,
                 profile=box_profile)
         timing["depth_edge"] = depth_edge.get("time_s")
         record["depth_edge"] = depth_edge
@@ -2917,6 +3111,17 @@ def run_request(args, sam3) -> dict:
                     write_json_atomically(record_path, record)
                 except (OSError, TypeError, ValueError) as error:
                     raise Prerequisite(f"cannot write record {record_path}: {error}") from error
+        # Hard top-size gate on the FINAL quad (after truncation recovery, depth edge fix
+        # and R9): every profile, never bypassed by --allow-needs-review / --allow-cut-blocked.
+        top_size = top_size_check(record, scene_arg.top_size_range_mm
+                                  if scene_arg is not None else None)
+        record["top_size_check"] = top_size
+        # Hard work-area gate on the same final quad (stage work_area, never bypassed by the --allow-* flags).
+        work_area_result = work_area_check(
+            record, work_area_cfg, c2b_wa,
+            crop=(work_area_state or {}).get("crop"),
+            candidates_dropped=work_area_dropped_candidates(record) if work_area_cfg else None)
+        record["work_area_check"] = work_area_result
         if seam_reject is not None:
             if ("r10" in rules_off() or not seam_reject.reasons
                     or not str(seam_reject.reasons[0]).startswith("seam_status_ambiguous")
@@ -3000,7 +3205,8 @@ def run_request(args, sam3) -> dict:
                                        depth_edge=depth_edge, seam_direction=seam_direction,
                                        rect_repair=rect_repair, seam_geometry=seam_geometry,
                                        cut_permission=cut_permission,
-                                       box_profile=box_profile_info)
+                                       box_profile=box_profile_info, top_size_check=top_size,
+                                       work_area_check=work_area_result)
         if overlay_dir is not None:
             bgr = debug.get("bgr") if isinstance(debug, dict) else None
             if bgr is None:
@@ -3025,6 +3231,8 @@ def run_request(args, sam3) -> dict:
                       "retryable": error.retryable}
         if error.details:
             diagnostic["rectangle" if error.stage == "rectangle" else "details"] = error.details
+        if work_area_state is not None:
+            diagnostic["work_area_check"] = error.details.get("work_area_check", work_area_state)
         if depth_edge is not None:
             diagnostic["depth_edge"] = depth_edge
         if seam_direction is not None:
@@ -3062,6 +3270,10 @@ def run_request(args, sam3) -> dict:
             traceback.print_exc()
         _remove_partial_output(out_path)
         return result
+    finally:
+        if not getattr(args, "debug", False):
+            for leftover in work_area_files:       # the cropped cloud + manifest (kept with --debug)
+                Path(leftover).unlink(missing_ok=True)
     rect_note = (f"rect=A{rect['diffs_mm']['A']:.2f}/B{rect['diffs_mm']['B']:.2f}mm "
                  if rect.get("enabled") else "rect=off ")
     edge_note = (f"depth_edge={'applied' if depth_edge.get('applied') else 'no'}"

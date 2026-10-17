@@ -13,7 +13,7 @@ import pytest
 
 _RESTORE = ("AUTOLABEL_V2_SAM3_DAEMON", "OPENBLAS_NUM_THREADS",
             "AUTOLABEL_V2_BLAS_PINNED", "AUTOLABEL_V2_SAM3_DAEMON_DIR",
-            "AUTOLABEL_V2_SAM3_DAEMON_LOCK_NAME")
+            "AUTOLABEL_V2_SAM3_DAEMON_LOCK_NAME", "BOX_SEAM_CAPTURE_STAGING")
 
 
 @pytest.fixture(autouse=True)
@@ -22,6 +22,7 @@ def _isolate_sam3_daemon_env():
     # short path: AF_UNIX socket paths are limited to ~100 bytes
     d = tempfile.mkdtemp(prefix="s3i")
     os.environ["AUTOLABEL_V2_SAM3_DAEMON_DIR"] = d
+    os.environ["BOX_SEAM_CAPTURE_STAGING"] = "off"     # tests never stage into the real /dev/shm
     os.environ["AUTOLABEL_V2_SAM3_DAEMON_LOCK_NAME"] = \
         f"test-autolabel_v2_sam3-{uuid.uuid4().hex}"
     try:

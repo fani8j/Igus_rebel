@@ -51,6 +51,7 @@ def make_fake_orchestrator():
         side_seed: bool = True
         output_root: Path = Path(".")
         snapshot_path: Path = Path("snap.json")
+        capture_staging_dir: Path | None = None
 
     @dataclasses.dataclass
     class DetectResult:
@@ -331,3 +332,66 @@ def test_parameter_validation(tmp_path):
         DetectNode(orchestrator=make_fake_orchestrator(), parameter_overrides=[
             rclpy.parameter.Parameter("capture_timeout_s", value=0.0),
             rclpy.parameter.Parameter("warm_daemon", value=False)])
+
+
+def _wait_for(predicate, timeout=10.0):
+    t0 = time.monotonic()
+    while not predicate():
+        if time.monotonic() - t0 > timeout:
+            return False
+        time.sleep(0.05)
+    return True
+
+
+def test_staged_captures_are_archived_after_the_result(tmp_path, spinner):
+    stage = tmp_path / "stage"
+    h = Harness(tmp_path, spinner, capture_staging_dir=str(stage))
+    out = tmp_path / "out"
+    seen = {}
+
+    def behaviour(next_capture, cfg, progress):
+        seen["cfg_dir"] = cfg.capture_staging_dir
+        rejected = next_capture(1)
+        winner = next_capture(2)
+        seen["staged"] = (rejected.image_path, winner.manifest_path)
+        return h.orch.DetectResult(capture_id=winner.capture_id,
+                                   attempts=[{"attempt": 1, "capture_id": rejected.capture_id},
+                                             {"attempt": 2, "capture_id": winner.capture_id}])
+    h.orch.behaviour = behaviour
+    _, res, _ = h.run()
+    assert res.result.success
+    cid = res.result.capture_id
+    assert seen["cfg_dir"] is not None and Path(seen["cfg_dir"]) in seen["staged"][0].parents
+    assert _wait_for(lambda: (out / "captures" / f"{cid}.json").is_file()
+                     and len(list((out / "failed_recent" / "captures").glob("*.json"))) == 1)
+    from box_seam_detection.live.orchestrator import load_capture_manifest
+    load_capture_manifest(out / "captures" / f"{cid}.json", str(out / "rgb" / f"{cid}.png"),
+                          str(out / "pointcloud" / f"{cid}.pcd"))
+    assert not list(Path(seen["cfg_dir"]).glob("*/*.*"))           # RAM staging emptied
+    assert h.node._status_dict()["capture_staging_dir"] == str(seen["cfg_dir"])
+
+
+def test_staged_capture_of_a_run_that_raised_goes_to_failed_recent(tmp_path, spinner):
+    h = Harness(tmp_path, spinner, capture_staging_dir=str(tmp_path / "stage"))
+    out = tmp_path / "out"
+
+    def boom(next_capture, cfg, progress):
+        next_capture(1)
+        raise RuntimeError("detector exploded")
+    h.orch.behaviour = boom
+    _, res, _ = h.run()
+    assert res.result.status == "error"
+    assert _wait_for(lambda: len(list((out / "failed_recent" / "captures").glob("*.json"))) == 1)
+    assert not (out / "captures").exists() or not list((out / "captures").glob("*.json"))
+
+
+def test_staging_off_param_writes_directly_to_output_root(tmp_path, spinner):
+    h = Harness(tmp_path, spinner, capture_staging_dir="off")
+
+    def behaviour(next_capture, cfg, progress):
+        files = next_capture(1)
+        assert tmp_path / "out" in files.image_path.parents
+        return h.orch.DetectResult(capture_id=files.capture_id)
+    h.orch.behaviour = behaviour
+    assert h.run()[1].result.success
+    assert h.node._staging is None and h.orch.calls[0].capture_staging_dir is None

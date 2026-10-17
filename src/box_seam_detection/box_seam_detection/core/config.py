@@ -183,6 +183,13 @@ V2_DEFAULTS: dict = {
         "front_adjacency_max_m": 0.8,
         "top_merge_max_offset": 0.01,
         "top_merge_max_gap": 0.01,
+        # after the LO polish: refit the top plane on its own ransac_thresh-band inliers up to this many
+        # times (stops below top_refit_tol_deg of normal change). 0 = off (today's behaviour). The seeded
+        # 300-iteration RANSAC starts from a plane tilted 0.3-2.4 deg off the true top depending on the seed /
+        # tiny data changes, which cut a 7 mm band out of the far corners and moved the depth quad IoU
+        # 0.87-0.97 for the same box; the converged refit does not depend on the start (DESIGN.md "Fixed floor")
+        "top_refit_iters": 0,
+        "top_refit_tol_deg": 0.01,
         "min_hull_area_frac": 0.01,
         "min_support_dominance": 0.5,
         "quad_approx_eps": [0.005, 0.01, 0.015, 0.02, 0.03, 0.05],

@@ -21,6 +21,11 @@ box_seam_detector:
     use_tf: true
     extrinsic_required: false       # true = refuse the capture when the tf lookup fails
     output_root: /home/farhan/Igus_rebel/outputs/rgbd_captures   # rgb/ pointcloud/ captures/ + pipeline/ outputs
+    # RAM-first capture staging: captures are written here first and archived to output_root after the result is
+    # known (accepted capture -> rgb/pointcloud/captures, every other one -> output_root/failed_recent, last 3).
+    # "off" = write straight into output_root; env BOX_SEAM_CAPTURE_STAGING is the fallback of this default;
+    # falls back to direct writes (with a warning) if unusable or < 512 MB free.
+    capture_staging_dir: /dev/shm/box_seam_detection/staging
     # ---- DetectConfig (live.orchestrator) -------------------------------------------------------------------
     max_attempts: 4                 # goal.max_attempts > 0 overrides
     retry_policy: smart

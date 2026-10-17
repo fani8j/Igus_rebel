@@ -138,10 +138,19 @@ def test_blocked_cut_is_rejected_without_the_override(tmp_path, monkeypatch):
     assert not snapshot.exists()
 
 
-def test_missing_cut_permission_is_blocked(tmp_path, monkeypatch):
-    cfg, files, snapshot = _setup(tmp_path, monkeypatch, cut_permission=None)
+@pytest.mark.parametrize("allow_cut_blocked", [False, True])
+@pytest.mark.parametrize("bad", [None, {}, {"status": "unknown", "reasons": []}, {"reasons": []},
+                                 "allowed", {"status": None}])
+def test_missing_or_malformed_cut_permission_aborts_regardless_of_flags(
+        tmp_path, monkeypatch, bad, allow_cut_blocked):
+    # contract violation of the detector: never promoted to blocked + override
+    cfg, files, snapshot = _setup(tmp_path, monkeypatch, cut_permission=bad)
+    cfg.allow_cut_blocked = allow_cut_blocked
+    _stale(snapshot)
     result = orch.run_detection(lambda attempt: files, cfg)
-    assert result.status == "blocked" and not snapshot.exists()
+    assert not result.success and result.status == "error" and result.exit_code == 1
+    assert "missing or invalid cut_permission" in result.reason
+    assert result.cut_permission is None and not snapshot.exists()
 
 
 def test_override_publishes_with_the_override_recorded(tmp_path, monkeypatch):
