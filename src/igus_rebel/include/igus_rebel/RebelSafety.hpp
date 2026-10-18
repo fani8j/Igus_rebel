@@ -2,6 +2,7 @@
 #define IGUS_REBEL__REBEL_SAFETY_HPP_
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <string>
@@ -44,6 +45,48 @@ constexpr std::chrono::milliseconds kStatusStaleTimeout{200};
 // STATUS by one TCP RTO (~200 ms), which must not require an operator reset.
 constexpr std::chrono::milliseconds kStatusCoastTimeout{400};
 constexpr std::chrono::milliseconds kStatusLatchTimeout{1000};
+
+// A robot-owned joint move (CRI "CMD Move Joint") keeps running on the controller regardless of
+// this driver, so there is no coasting through a STATUS gap: the supervisor cannot see a path
+// deviation or a stall while STATUS is missing, and only CMD Move Stop (which also needs the
+// link) ends it. The move is therefore aborted (Move Stop + latch) as soon as STATUS is stale,
+// i.e. at the tighter kStatusStaleTimeout instead of the jog "coast" tier kStatusCoastTimeout.
+constexpr std::chrono::milliseconds kMoveStatusAbortTimeout = kStatusStaleTimeout;
+
+// CMD Move Stop is re-sent at this period until STATUS confirms the robot stands still (a TCP
+// write that succeeded is not a confirmation: the controller may be in the middle of a retransmit
+// or may ignore the command).
+constexpr std::chrono::milliseconds kMoveStopResendPeriod{100};
+// Standstill (joint change below the supervisor's epsilon on fresh STATUS) for this long
+// confirms a stop.
+constexpr std::chrono::milliseconds kMoveStopStillWindow{300};
+// Largest joint change [rad] between two STATUS that still counts as standing still.
+constexpr double kMoveStillEpsilonRad = 0.0005;
+// Bit i = joint i reports 'Motor not enabled': all six joints (see Rebel::drivesDisabledMask_).
+constexpr unsigned kAllDrivesDisabledMask = 0x3Fu;
+
+// Next-send deadline of a repeated command (CMD Move Stop) with an explicit "send now" that a
+// concurrent deadline update can never overwrite. The sender observes the timer BEFORE it sends
+// and defers with that token afterwards; ArmNow() (a new request) changes the value to a fresh
+// negative number, so the compare-and-swap of a sender that started earlier fails and the
+// "send now" survives. Negative values are always due; deadlines are steady-clock ns (> 0).
+class ResendTimer
+{
+public:
+  using Token = std::int64_t;
+  void ArmNow() {value_.store(-(resets_.fetch_add(1) + 1));}
+  Token Observe() const {return value_.load();}
+  bool Due(std::int64_t nowNs) const {return value_.load() <= nowNs;}
+  // False if ArmNow() (or another Defer) happened since Observe().
+  bool Defer(Token observed, std::int64_t deadlineNs)
+  {
+    return value_.compare_exchange_strong(observed, deadlineNs);
+  }
+
+private:
+  std::atomic<std::int64_t> value_{0};
+  std::atomic<std::int64_t> resets_{0};
+};
 
 // A STATUS hold may only auto-resume if the arm was idle. write() commands whose largest joint
 // |velocity| exceeds this [rad/s] count as motion (normal idle JTC hold commands are ~P*1e-3).

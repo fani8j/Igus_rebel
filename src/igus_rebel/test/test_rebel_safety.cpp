@@ -252,3 +252,54 @@ TEST(Formatting, MoveJointRejectsNonFiniteValues)
   EXPECT_TRUE(Igus::Safety::FormatMoveJoint(1, {0, 0, 0, 0, 0, 0}, 10, -inf).empty());
   EXPECT_TRUE(Igus::Safety::MoveJointCommandText({0, 0, 0, 0, 0, nan}, 10, 20).empty());
 }
+
+// A robot-owned joint move uses the tighter STATUS-gap tier than the jog hold tier.
+TEST(MoveStatusGap, AbortThresholdIsTheStaleLimitNotTheHoldTier)
+{
+  EXPECT_EQ(Igus::Safety::kMoveStatusAbortTimeout, Igus::Safety::kStatusStaleTimeout);
+  EXPECT_EQ(Igus::Safety::kMoveStatusAbortTimeout.count(), 200);
+  EXPECT_LT(Igus::Safety::kMoveStatusAbortTimeout, Igus::Safety::kStatusCoastTimeout);
+}
+
+TEST(MoveStop, ResendPeriodIsBoundedAndStillWindowCoversTheStopResends)
+{
+  EXPECT_EQ(Igus::Safety::kMoveStopResendPeriod.count(), 100);
+  EXPECT_GT(Igus::Safety::kMoveStopStillWindow, Igus::Safety::kMoveStopResendPeriod);
+}
+
+// ---- ResendTimer: a new request ("send now") is never overwritten by a slower sender ----
+TEST(ResendTimer, StartsDueAndDefersToTheDeadline)
+{
+  Igus::Safety::ResendTimer timer;
+  EXPECT_TRUE(timer.Due(1000));
+  const auto token = timer.Observe();
+  EXPECT_TRUE(timer.Defer(token, 5000));
+  EXPECT_FALSE(timer.Due(4999));
+  EXPECT_TRUE(timer.Due(5000));
+}
+
+TEST(ResendTimer, ArmNowWhileASendIsInFlightSurvivesTheDeferral)
+{
+  Igus::Safety::ResendTimer timer;
+  ASSERT_TRUE(timer.Defer(timer.Observe(), 9000000000LL));  // previous deadline far in the future
+  EXPECT_FALSE(timer.Due(1000));
+
+  // The sender observes, starts sending ...
+  const auto token = timer.Observe();
+  // ... meanwhile a new request arrives (false -> true transition) ...
+  timer.ArmNow();
+  EXPECT_TRUE(timer.Due(1000));
+  // ... and the sender's deferral must NOT overwrite the "send now".
+  EXPECT_FALSE(timer.Defer(token, 9000000000LL));
+  EXPECT_TRUE(timer.Due(1000));
+}
+
+TEST(ResendTimer, ArmNowTwiceInARowIsStillDetectedByTheSender)
+{
+  Igus::Safety::ResendTimer timer;
+  timer.ArmNow();
+  const auto token = timer.Observe();  // "send now" #1 observed
+  timer.ArmNow();                      // "send now" #2 while sending (same logical state, new value)
+  EXPECT_FALSE(timer.Defer(token, 9000000000LL));
+  EXPECT_TRUE(timer.Due(0));
+}

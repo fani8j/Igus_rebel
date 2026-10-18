@@ -11,6 +11,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -30,6 +31,13 @@ struct RelayParams
   double joint_state_timeout_s = 0.2;   // measured positions older than this are "stale"
   double silence_hold_s = -1.0;         // no valid Servo message for this long while active -> hold; <= 0: 2 x period
   double zero_velocity_eps = 1e-4;      // rad/s; all |v| below this = Servo halted
+  // Caps on what is forwarded to the JTC, per joint (all ReBeL joints share igus_rebel_moveit_config
+  // joint_limits.yaml: 0.785 rad/s, 5.24 rad/s^2). Commands above are CLAMPED (never passed through), and the output
+  // reports it. The acceleration cap bounds the velocity step between two consecutive published trajectories
+  // (|v_new - v_executing| <= max_accel * dt; a reseed starts from rest) and the final stop segment (|v| / stop_time),
+  // so the effective velocity cap is min(max_joint_velocity, max_joint_accel * stop_time_s).
+  double max_joint_velocity_rad_s = 0.785;
+  double max_joint_accel_rad_s2 = 5.24;
 
   // Fills the derived defaults; throws std::invalid_argument on a non-positive/non-finite parameter.
   void resolve();
@@ -62,6 +70,8 @@ struct RelayOutput
   Action action = Action::kNone;
   std::string reason;
   bool fault = false;  // kHold caused by a fault/silence (joint names = the active reference's names)
+  bool velocity_clamped = false;  // kForward: some |velocity| was reduced to the velocity cap
+  bool accel_clamped = false;     // kForward: some velocity step was reduced to the acceleration cap
   // kForward: three points. Per joint: start r (v'), mid r + v' H (v'), end r + v' (H + T_stop / 2) (0), where v' is v
   // scaled down so that the end point does not pass limit -/+ margin: v' = sign(v) min(|v|, d / (H + T_stop/2)) with d the
   // distance to that bound in the direction of v. The last segment is a constant deceleration (a cubic Hermite
@@ -107,6 +117,7 @@ private:
     std::vector<double> p0, v0, p1, v1, p2;  // times 0, H, H + T_stop; velocity at p2 is 0
   };
   double evaluate(std::size_t joint, double elapsed_s) const;
+  double evaluateVelocity(std::size_t joint, double elapsed_s) const;
   RelayOutput reject(const std::string& reason);
   RelayOutput fault(double now_s, const std::vector<std::string>& names, const Measured& measured,
                     const std::string& reason);
@@ -118,5 +129,22 @@ private:
   std::vector<double> reference_;
   Trajectory traj_;
 };
+
+// A Servo message that sat in a queue while the watchdog hold ran must not restart the arm (see
+// servo_trajectory_relay.cpp). Pure decision, fail closed:
+//  - no watchdog hold so far: nothing can predate one -> false.
+//  - middleware receipt time `rx_ns` plausible on the system or the steady clock: stale iff it was received before the
+//    last hold (delay since receipt > time since the hold).
+//  - receipt time unknown (0 / unsupported rmw / on neither clock): the message is stale unless it is dispatched at
+//    least `quarantine_s` after the hold (a stale queued message is dispatched right behind the timer callback).
+struct TripClocks
+{
+  bool seen = false;               // a watchdog hold happened
+  std::int64_t system_ns = 0;      // system clock at the hold
+  double steady_s = 0.0;           // steady clock at the hold
+};
+// *used_rmw_timestamp (optional) is set when the middleware timestamp was usable; *delay_s its delay.
+bool staleAfterTrip(const TripClocks& trip, std::int64_t rx_ns, std::int64_t system_now_ns, double steady_now_s,
+                    double quarantine_s, bool* used_rmw_timestamp = nullptr, double* delay_s = nullptr);
 
 }  // namespace rebel_servo_relay

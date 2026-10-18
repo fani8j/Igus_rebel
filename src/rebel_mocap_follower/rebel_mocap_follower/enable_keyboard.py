@@ -14,6 +14,22 @@ from std_msgs.msg import Bool
 _stop = False
 
 
+def wait_for_enter(stream) -> bool:
+    """True only if the operator pressed Enter on an interactive terminal.
+
+    Fails closed: EOF (closed/redirected stdin, `< /dev/null`, a detached terminal), an OSError,
+    a KeyboardInterrupt, a non-tty stdin or a line without a newline are NOT consent; the deadman
+    must never be pressed by the absence of an operator.
+    """
+    try:
+        if stream is None or not stream.isatty():
+            return False
+        line = stream.readline()
+    except (OSError, ValueError, KeyboardInterrupt):
+        return False
+    return line.endswith("\n")
+
+
 def _handler(_signum, _frame):
     global _stop
     _stop = True
@@ -36,10 +52,11 @@ def main(args=None):
     try:
         if not opts.no_prompt:
             print("Press Enter to ENABLE the mocap follower (Ctrl-C releases).", flush=True)
-            try:
-                sys.stdin.readline()
-            except (OSError, KeyboardInterrupt):
-                pass
+            if not wait_for_enter(sys.stdin) or _stop:
+                print("No Enter from an interactive terminal (EOF, no tty, error or signal): "
+                      "NOT enabling. Use --no-prompt to publish true without a prompt.",
+                      file=sys.stderr, flush=True)
+                return
         print(f"Publishing {opts.topic}=true at {opts.rate:.0f} Hz. Ctrl-C to release.", flush=True)
         period = 1.0 / opts.rate
         next_t = time.monotonic()

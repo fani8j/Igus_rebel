@@ -6,12 +6,14 @@
 // Joint limits come from robot_description (parameter, or the get_parameters service of robot_description_node).
 // Until limits are known nothing is forwarded (fail closed).
 #include <chrono>
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <stdexcept>
 #include <unordered_set>
 #include <vector>
 
@@ -52,6 +54,13 @@ public:
     p.joint_state_timeout_s = declare_parameter<double>("joint_state_timeout_s", p.joint_state_timeout_s);
     p.silence_hold_s = declare_parameter<double>("silence_hold_s", p.silence_hold_s);
     p.zero_velocity_eps = declare_parameter<double>("zero_velocity_eps", p.zero_velocity_eps);
+    // Caps on the forwarded commands (defaults = igus_rebel_moveit_config joint_limits.yaml).
+    p.max_joint_velocity_rad_s = declare_parameter<double>("max_joint_velocity_rad_s", p.max_joint_velocity_rad_s);
+    p.max_joint_accel_rad_s2 = declare_parameter<double>("max_joint_accel_rad_s2", p.max_joint_accel_rad_s2);
+    // Used only when the middleware gives no message receipt time (see receivedBeforeLastTrip).
+    post_trip_quarantine_s_ = declare_parameter<double>("post_trip_quarantine_s", post_trip_quarantine_s_);
+    if (!std::isfinite(post_trip_quarantine_s_) || post_trip_quarantine_s_ < 0.0)
+      throw std::invalid_argument("post_trip_quarantine_s must be >= 0");
     core_ = std::make_unique<RelayCore>(p);  // throws on invalid parameters: refuse to start
     horizon_ = core_->params().horizon_s;
     stop_time_ = core_->params().stop_time_s;
@@ -89,10 +98,12 @@ public:
     RCLCPP_INFO(get_logger(),
                 "relay %s -> %s (joint_states %s): publish_period %.3f s, horizon %.3f s, stop_time %.3f s, "
                 "reset_timeout %.3f s, silence_hold %.3f s, max_lead %.3f rad, lead %.2f s x |v| + %.4f rad, "
-                "limit margin %.4f rad",
+                "limit margin %.4f rad, caps %.3f rad/s (effective %.3f) and %.2f rad/s^2",
                 sub_->get_topic_name(), pub_->get_topic_name(), joint_states_topic.c_str(), p.publish_period_s,
                 horizon_, stop_time_, core_->params().reset_timeout_s, core_->params().silence_hold_s, p.max_lead_rad,
-                p.lead_time_s, p.lead_floor_rad, p.joint_limit_margin_rad);
+                p.lead_time_s, p.lead_floor_rad, p.joint_limit_margin_rad, p.max_joint_velocity_rad_s,
+                std::min(p.max_joint_velocity_rad_s, p.max_joint_accel_rad_s2 * stop_time_),
+                p.max_joint_accel_rad_s2);
   }
 
 private:
@@ -250,37 +261,37 @@ private:
                           out.action == Action::kHold ? ", holding" : "");
   }
 
-  // True if the middleware says this message was received before the last watchdog hold (it sat in a queue while the
-  // timer ran). received_timestamp is 0 when the rmw does not support it; the clock it uses is detected by plausibility.
+  // True if this message may have been received before the last watchdog hold (it sat in a queue while the timer ran)
+  // and must be dropped. Fail closed: with a usable middleware receipt time the check is exact; without one (0 =
+  // unsupported rmw, or a clock we cannot identify) every message dispatched within post_trip_quarantine_s of the hold
+  // is dropped, because a stale queued message is dispatched right behind the timer callback and no callback-time stamp
+  // can tell it from a fresh one. Before the first hold nothing can be stale.
   bool receivedBeforeLastTrip(const rclcpp::MessageInfo& info)
   {
-    const int64_t rx = info.get_rmw_message_info().received_timestamp;
-    if (rx <= 0 || last_trip_system_ns_ == 0)
-      return false;
-    const int64_t sys_now = systemNs();
-    const double steady_now = nowS();
-    double delay_s, since_trip_s;
-    if (std::llabs(sys_now - rx) < 5000000000LL)  // system clock
-    {
-      delay_s = (sys_now - rx) * 1e-9;
-      since_trip_s = (sys_now - last_trip_system_ns_) * 1e-9;
-    }
-    else if (std::fabs(steady_now - rx * 1e-9) < 5.0)  // steady clock
-    {
-      delay_s = steady_now - rx * 1e-9;
-      since_trip_s = steady_now - last_trip_steady_s_;
-    }
-    else
-    {
-      return false;
-    }
-    if (!rx_timestamp_logged_)
+    rebel_servo_relay::TripClocks trip;
+    trip.seen = last_trip_system_ns_ != 0;
+    trip.system_ns = last_trip_system_ns_;
+    trip.steady_s = last_trip_steady_s_;
+    bool used_rmw = false;
+    double delay_s = 0.0;
+    const bool stale = rebel_servo_relay::staleAfterTrip(trip, info.get_rmw_message_info().received_timestamp,
+                                                         systemNs(), nowS(), post_trip_quarantine_s_, &used_rmw,
+                                                         &delay_s);
+    if (used_rmw && !rx_timestamp_logged_)
     {
       rx_timestamp_logged_ = true;
       RCLCPP_INFO(get_logger(), "message receipt timestamps available (delay of the first message %.1f ms)",
                   delay_s * 1e3);
     }
-    return delay_s > since_trip_s;
+    else if (!used_rmw && trip.seen && !no_rx_timestamp_logged_)
+    {
+      no_rx_timestamp_logged_ = true;
+      RCLCPP_WARN(get_logger(),
+                  "no usable message receipt timestamps from the middleware: dropping Servo messages for %.0f ms "
+                  "after each watchdog hold instead",
+                  post_trip_quarantine_s_ * 1e3);
+    }
+    return stale;
   }
 
   void onServo(const trajectory_msgs::msg::JointTrajectory& msg, const rclcpp::MessageInfo& info)
@@ -338,6 +349,11 @@ private:
         return;
       case Action::kForward:
       {
+        if (out.velocity_clamped || out.accel_clamped)
+          RCLCPP_WARN_THROTTLE(get_logger(), clock, 2000, "limiting forwarded command: %s%s%s",
+                               out.velocity_clamped ? "velocity above the cap" : "",
+                               out.velocity_clamped && out.accel_clamped ? " and " : "",
+                               out.accel_clamped ? "acceleration above the cap" : "");
         trajectory_msgs::msg::JointTrajectory traj;  // header.stamp stays 0: the JTC starts it at its next update
         traj.joint_names = msg.joint_names;
         trajectory_msgs::msg::JointTrajectoryPoint a, b, c;
@@ -365,6 +381,8 @@ private:
   int64_t last_trip_system_ns_ = 0;
   double last_trip_steady_s_ = 0.0;
   bool rx_timestamp_logged_ = false;
+  bool no_rx_timestamp_logged_ = false;
+  double post_trip_quarantine_s_ = 0.1;
   bool require_stamped_ = true;
   std::string rsp_node_;
   std::unordered_map<std::string, Sample> state_;

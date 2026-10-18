@@ -6,6 +6,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -196,8 +197,24 @@ private:
   // One goal at a time: set when a goal is accepted, cleared when its result was sent.
   std::atomic<bool> moveGoalBusy_{false};
   std::atomic<bool> moveCancelRequested_{false};
-  // "CMD Move Stop" wanted: consumed by the ALIVEJOG thread (sent within ~10 ms).
+  // "CMD Move Stop" wanted. Sent by the ALIVEJOG thread (within ~10 ms of the request, then every
+  // Safety::kMoveStopResendPeriod) and PERSISTENT: a successful socket write is not a
+  // confirmation. While it is set jog is held at zero and new moves are refused. It is cleared
+  // ONLY when the robot is known to have stopped: (a) MOVETOEXECEND of the move, (b) standstill
+  // on fresh STATUS after motion was seen, or (c) all six drives disabled on fresh STATUS (the
+  // robot cannot move) -- or when a fresh start-up sequence / on_init resets the driver, or the
+  // move that owned it ended without a stop. Standstill without ever seeing motion does NOT
+  // confirm (the robot may not have started yet). Recovery of a never-confirmed stop: e-stop
+  // (or switch the drives off) -> "Pending CMD Move Stop confirmed" is logged -> inactive ->
+  // active (set_hardware_component_state) -> cycle the controllers.
   std::atomic<bool> moveStopRequested_{false};
+  // When the next CMD Move Stop may go out; ArmNow() on every false->true transition of
+  // moveStopRequested_ (see Safety::ResendTimer: a concurrent deadline update cannot overwrite it).
+  Safety::ResendTimer moveStopTimer_;
+  // Standstill tracking for a pending stop with no move thread (ALIVEJOG thread only).
+  Move::Joints stopStillRef_{};
+  bool stopStillRefValid_ = false;
+  Safety::SteadyClock::time_point stopStillSince_{};
   // Incremented by every RequestMoveStop() while a move is active; the move thread compares it
   // with the value at the start of its goal, so no request is ever lost.
   std::atomic<std::uint64_t> moveStopSeq_{0};
@@ -215,6 +232,21 @@ private:
   // and "prepare a claim" mutually exclusive; the pending deadline covers prepare -> perform.
   std::mutex claimLock_;
   std::atomic<unsigned> velocityClaimMask_{0};
+  // A controller claimed a velocity interface while a move was active (set under claimLock_ by
+  // perform_command_mode_switch, which cannot refuse the switch: Humble still activates the
+  // controllers). The move thread aborts and latches on it; cleared when a move starts.
+  std::atomic<bool> claimDuringMove_{false};
+  // Serializes the actual CMD Move Stop send (ALIVEJOG thread) with the CMD Move Joint send.
+  std::mutex moveSendLock_;
+  std::atomic<bool> failNextMoveSend_{false};
+  std::shared_ptr<std::function<void()>> beforeStopSendHook_;
+  std::shared_ptr<std::function<void()>> beforeMoveSendHook_;
+  // STATUS showed joint motion since the current/last CMD Move Joint was sent (see
+  // ExecuteMoveGoal): standstill only confirms a Move Stop for a robot that was moving.
+  std::atomic<bool> moveMotionSeen_{false};
+  bool stopDrivesOff_ = false;  // ALIVEJOG thread only: all drives disabled since stopDrivesOffSince_
+  Safety::SteadyClock::time_point stopDrivesOffSince_{};
+  bool stopMotionSeen_ = false;  // ALIVEJOG thread only: motion observed while a stop is pending
   std::atomic<std::int64_t> claimPendingUntilNs_{0};
   double moveMaxVelocityPercent_ = Move::kDefaultMaxVelocityPercent;
   double moveMaxAccelerationPercent_ = Move::kDefaultMaxAccelerationPercent;
@@ -224,7 +256,8 @@ private:
 
   void RequestMoveStop();
   bool SendMoveStopNow();
-  void ConsumeMoveStopRequest(Safety::SteadyClock::time_point & retryAfter);
+  void ConsumeMoveStopRequest();
+  bool MoveStopDue() const;
   rclcpp_action::GoalResponse OnMoveGoal(
     const rclcpp_action::GoalUUID & uuid, std::shared_ptr<const MoveJointAction::Goal> goal);
   rclcpp_action::CancelResponse OnMoveCancel(const std::shared_ptr<MoveGoalHandle> goalHandle);
@@ -300,6 +333,24 @@ public:
   bool MoveGoalBusy() const {return moveGoalBusy_.load();}
   // Bit i set = the velocity command interface of joint i is claimed by a controller.
   unsigned VelocityClaimMask() const {return velocityClaimMask_.load();}
+  // Test seams (never used by the plugin): the next CMD Move Joint send reports failure; a hook the
+  // ALIVEJOG thread runs between the check and the send of a CMD Move Stop (nullptr clears it).
+  void FailNextMoveJointSendForTest() {failNextMoveSend_ = true;}
+  void SetBeforeStopSendHookForTest(std::function<void()> hook)
+  {
+    std::atomic_store(
+      &beforeStopSendHook_,
+      hook ? std::make_shared<std::function<void()>>(std::move(hook)) :
+      std::shared_ptr<std::function<void()>>());
+  }
+  // Runs under the move/stop send lock just before the CMD Move Joint is written (nullptr clears).
+  void SetBeforeMoveSendHookForTest(std::function<void()> hook)
+  {
+    std::atomic_store(
+      &beforeMoveSendHook_,
+      hook ? std::make_shared<std::function<void()>>(std::move(hook)) :
+      std::shared_ptr<std::function<void()>>());
+  }
   bool StatusCoastActive() const {return statusCoast_.load();}
   bool HardwareErrorLatched() const {return hardwareErrorLatched_.load();}
   // Fault groups: drive/kinematics errors are only monitored once armed (see RebelSafety.hpp),

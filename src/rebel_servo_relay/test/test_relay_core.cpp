@@ -13,10 +13,24 @@ namespace
 {
 constexpr double kPeriod = 0.034;
 
+// The existing tests exercise the integration itself: the velocity/acceleration caps are out of the way here and
+// tested separately (cappedParams()).
 RelayParams params()
 {
   RelayParams p;
   p.publish_period_s = kPeriod;
+  p.max_joint_velocity_rad_s = 1e3;
+  p.max_joint_accel_rad_s2 = 1e6;
+  return p;
+}
+
+// Default caps (0.785 rad/s, 5.24 rad/s^2) and no lead bound in the way.
+RelayParams cappedParams()
+{
+  RelayParams p;
+  p.publish_period_s = kPeriod;
+  p.max_lead_rad = 10.0;
+  p.lead_time_s = 1000.0;
   return p;
 }
 
@@ -591,4 +605,161 @@ TEST(RelayCore, UnstampedJointStatesAreRejected)
   // Also a zero command is not held at an unstamped measurement.
   RelayCore c2(params());
   EXPECT_EQ(run(c2, 0.0, { 0.0 }, m, limits(1)).action, Action::kReject);
+}
+
+TEST(RelayCaps, DefaultsAreTheJointLimitsYaml)
+{
+  const RelayParams p;
+  EXPECT_DOUBLE_EQ(p.max_joint_velocity_rad_s, 0.785);
+  EXPECT_DOUBLE_EQ(p.max_joint_accel_rad_s2, 5.24);
+}
+
+TEST(RelayCaps, InvalidCapsThrow)
+{
+  for (double bad : {0.0, -1.0, std::nan(""), std::numeric_limits<double>::infinity()})
+  {
+    RelayParams p = cappedParams();
+    p.max_joint_velocity_rad_s = bad;
+    EXPECT_THROW(RelayCore{p}, std::invalid_argument) << bad;
+    p = cappedParams();
+    p.max_joint_accel_rad_s2 = bad;
+    EXPECT_THROW(RelayCore{p}, std::invalid_argument) << bad;
+  }
+}
+
+TEST(RelayCaps, VelocityAboveTheCapIsClampedAndReported)
+{
+  RelayParams p = cappedParams();
+  p.max_joint_accel_rad_s2 = 1e6;  // isolate the velocity cap
+  p.stop_time_s = 1.0;             // keep the stop-segment bound out of the way
+  RelayCore core(p);
+  const auto out = run(core, 0.0, { 3.0, -3.0, 0.1 }, measured({ 0, 0, 0 }), limits(3, -100, 100));
+  ASSERT_EQ(out.action, Action::kForward);
+  EXPECT_TRUE(out.velocity_clamped);
+  EXPECT_NEAR(out.velocity[0], 0.785, 1e-12);
+  EXPECT_NEAR(out.velocity[1], -0.785, 1e-12);
+  EXPECT_NEAR(out.velocity[2], 0.1, 1e-12);  // below the cap: untouched
+  // The published profile never exceeds the cap anywhere.
+  for (std::size_t i = 0; i < 3; ++i)
+    EXPECT_LE(sample(out, i, core.params()).max_abs_vel, 0.785 + 1e-9);
+}
+
+TEST(RelayCaps, WithinCapsIsNotReportedAsClamped)
+{
+  RelayCore core(cappedParams());
+  const auto out = run(core, 0.0, { 0.1, -0.1 }, measured({ 0, 0 }), limits(2, -100, 100));
+  ASSERT_EQ(out.action, Action::kForward);
+  EXPECT_FALSE(out.velocity_clamped);
+  EXPECT_FALSE(out.accel_clamped);
+  EXPECT_NEAR(out.velocity[0], 0.1, 1e-12);
+}
+
+TEST(RelayCaps, FirstMessageStartsFromRestWithinTheAccelerationCap)
+{
+  RelayCore core(cappedParams());
+  const auto out = run(core, 0.0, { 0.5 }, measured({ 0.0 }), limits(1, -100, 100));
+  ASSERT_EQ(out.action, Action::kForward);
+  EXPECT_TRUE(out.accel_clamped);
+  EXPECT_FALSE(out.velocity_clamped);
+  EXPECT_NEAR(out.velocity[0], 5.24 * kPeriod, 1e-12);
+}
+
+TEST(RelayCaps, VelocityStepBetweenMessagesNeverExceedsTheAccelerationCap)
+{
+  const RelayParams p = cappedParams();
+  RelayCore core(p);
+  double pos = 0.0, t = 0.0, prev_v = 0.0, max_step_acc = 0.0;
+  // Servo asks for a step of 0.7 rad/s and then for reversal at full speed.
+  for (int k = 0; k < 120; ++k)
+  {
+    const double want = k < 60 ? 0.7 : -0.7;
+    const auto out = run(core, t, { want }, measured({ pos }), limits(1, -100, 100));
+    ASSERT_EQ(out.action, Action::kForward);
+    EXPECT_LE(std::fabs(out.velocity[0]), 0.785 + 1e-12);
+    if (k > 0)
+      max_step_acc = std::max(max_step_acc, std::fabs(out.velocity[0] - prev_v) / kPeriod);
+    prev_v = out.velocity[0];
+    pos = out.start[0] + out.velocity[0] * kPeriod;  // the arm follows the reference
+    t += kPeriod;
+  }
+  EXPECT_LE(max_step_acc, 5.24 + 1e-9);
+  EXPECT_GT(max_step_acc, 1.0);  // and the cap was actually the limiting factor
+}
+
+TEST(RelayCaps, StopSegmentDecelerationStaysWithinTheAccelerationCap)
+{
+  const RelayParams p = cappedParams();  // stop_time = horizon = 0.102 s: 5.24 * 0.102 = 0.534 rad/s
+  RelayCore core(p);
+  double pos = 0.0, t = 0.0;
+  RelayOutput out;
+  for (int k = 0; k < 40; ++k)
+  {
+    out = run(core, t, { 0.785 }, measured({ pos }), limits(1, -100, 100));
+    ASSERT_EQ(out.action, Action::kForward);
+    pos = out.start[0] + out.velocity[0] * kPeriod;
+    t += kPeriod;
+  }
+  const double stop = core.params().stop_time_s;
+  EXPECT_LE(std::fabs(out.velocity[0]) / stop, 5.24 + 1e-9);
+  EXPECT_LE(sample(out, 0, core.params()).max_abs_acc, 5.24 + 1e-6);
+  EXPECT_TRUE(out.velocity_clamped);
+}
+
+TEST(StaleAfterTrip, NoHoldYetNothingIsStale)
+{
+  const TripClocks trip;  // seen == false
+  EXPECT_FALSE(staleAfterTrip(trip, 0, 1000000000000LL, 10.0, 0.1));
+  EXPECT_FALSE(staleAfterTrip(trip, 1000000000000LL, 1000000000000LL, 10.0, 0.1));
+}
+
+TEST(StaleAfterTrip, UsableReceiptTimeIsExact)
+{
+  const std::int64_t sys = 1700000000000000000LL;
+  TripClocks trip;
+  trip.seen = true;
+  trip.system_ns = sys - 50000000LL;  // hold 50 ms ago
+  trip.steady_s = 100.0;
+  bool used = false;
+  // Received 80 ms ago = before the hold: stale.
+  EXPECT_TRUE(staleAfterTrip(trip, sys - 80000000LL, sys, 100.05, 0.1, &used));
+  EXPECT_TRUE(used);
+  // Received 10 ms ago = after the hold: fresh, even inside the quarantine window.
+  EXPECT_FALSE(staleAfterTrip(trip, sys - 10000000LL, sys, 100.05, 0.1, &used));
+  EXPECT_TRUE(used);
+}
+
+TEST(StaleAfterTrip, SteadyClockReceiptTimeIsAlsoUsable)
+{
+  TripClocks trip;
+  trip.seen = true;
+  trip.system_ns = 1700000000000000000LL;
+  trip.steady_s = 100.0;
+  const std::int64_t sys_now = trip.system_ns + 50000000LL;
+  const double steady_now = 100.05;
+  bool used = false;
+  EXPECT_TRUE(staleAfterTrip(trip, static_cast<std::int64_t>(99.97e9), sys_now, steady_now, 0.1, &used));
+  EXPECT_TRUE(used);
+  EXPECT_FALSE(staleAfterTrip(trip, static_cast<std::int64_t>(100.04e9), sys_now, steady_now, 0.1, &used));
+  EXPECT_TRUE(used);
+}
+
+TEST(StaleAfterTrip, UnknownReceiptTimeFailsClosedInsideTheQuarantine)
+{
+  TripClocks trip;
+  trip.seen = true;
+  trip.system_ns = 1700000000000000000LL;
+  trip.steady_s = 100.0;
+  bool used = true;
+  // received_timestamp 0 (rmw without support): dispatched 5 ms after the hold -> dropped ...
+  EXPECT_TRUE(staleAfterTrip(trip, 0, trip.system_ns + 5000000LL, 100.005, 0.1, &used));
+  EXPECT_FALSE(used);
+  // ... and still dropped just inside the window, accepted after it: the relay does work in the normal case.
+  EXPECT_TRUE(staleAfterTrip(trip, 0, trip.system_ns, 100.099, 0.1));
+  EXPECT_FALSE(staleAfterTrip(trip, 0, trip.system_ns, 100.101, 0.1));
+  // Negative / implausible timestamps (on neither clock) are equally unknown.
+  EXPECT_TRUE(staleAfterTrip(trip, -5, trip.system_ns, 100.01, 0.1, &used));
+  EXPECT_FALSE(used);
+  EXPECT_TRUE(staleAfterTrip(trip, 42, trip.system_ns, 100.01, 0.1, &used));
+  EXPECT_FALSE(used);
+  EXPECT_FALSE(staleAfterTrip(trip, 42, trip.system_ns, 105.0, 0.1));
 }

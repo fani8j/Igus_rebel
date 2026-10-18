@@ -223,9 +223,8 @@ void Rebel::AliveThreadFunction()
   bool wasStale = true;
   auto next = Safety::SteadyClock::now();
 
-  Safety::SteadyClock::time_point stopRetryAfter{};
   while (continueAlive) {
-    ConsumeMoveStopRequest(stopRetryAfter);
+    ConsumeMoveStopRequest();
     if (aliveTransmit) {
       if (!announced) {
         RCLCPP_INFO(logger_, "Starting to send ALIVEJOG");
@@ -242,7 +241,7 @@ void Rebel::AliveThreadFunction()
       // not held) keeps sending the frozen jog.
       // While a joint move is active jog is always zero (the robot owns the motion).
       const bool inhibited = hardwareErrorLatched_.load() || holdJogZero_.load() ||
-        statusHold_.load() || moveState_.load() != kMoveIdle;
+        statusHold_.load() || moveState_.load() != kMoveIdle || moveStopRequested_.load();
       if (!stale && !inhibited) {
         for (std::size_t i = 0; i < currentJog.size(); ++i) {
           currentJog[i] = jog[i].load();
@@ -275,15 +274,12 @@ void Rebel::AliveThreadFunction()
     // period itself is not shifted (the wait resumes until `next`).
     while (continueAlive) {
       const bool woke = aliveWake.wait_until(
-        lock, next, [this, &stopRetryAfter]() {
-          return !continueAlive ||
-          (moveStopRequested_.load() && Safety::SteadyClock::now() >= stopRetryAfter);
-        });
+        lock, next, [this]() {return !continueAlive || MoveStopDue();});
       if (!woke || !continueAlive) {
         break;
       }
       lock.unlock();
-      ConsumeMoveStopRequest(stopRetryAfter);
+      ConsumeMoveStopRequest();
       lock.lock();
       if (Safety::SteadyClock::now() >= next) {
         break;
@@ -590,9 +586,10 @@ void Rebel::OnConnected(bool reconnect)
 
   // A robot-side joint move survives a lost link, a closed socket and zero jog, and the
   // controller only accepts SetActive/Reset/Enable while idle: stop whatever may still be
-  // running, unconditionally, before anything else. (A pending stop request is satisfied by
-  // this one; cleared first so a request that arrives meanwhile is not lost.)
-  moveStopRequested_ = false;
+  // running, unconditionally, before anything else. A pending stop request is NOT cleared by
+  // this (a written command is not a confirmation): the ALIVEJOG thread keeps re-sending until
+  // STATUS shows standstill. It cannot interleave with the sequence below (it skips its send
+  // while startupLock_ is held).
   send(CriKeywords::COMMAND_MOVE_STOP);
 
   // The CRI "Connect" command is intentionally not sent: CRI_V17 answers it with CMDERROR.
@@ -939,6 +936,7 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
   moveCommandCounter_ = -1;
   velocityClaimMask_ = 0;
   claimPendingUntilNs_ = 0;
+  claimDuringMove_ = false;
   {
     std::lock_guard<std::mutex> lock(moveEventLock_);
     moveEvents_ = MoveEvents{};
@@ -1456,7 +1454,17 @@ return_type Rebel::write(const rclcpp::Time &, const rclcpp::Duration &)
     }
   }
   // Decide the inhibit BEFORE storing so a non-zero jog is never published while latched/held.
-  const bool inhibited = holdJogZero_ || statusHold_ || hardwareErrorLatched_ || moveActive;
+  // A pending (unconfirmed) Move Stop also inhibits: after a lifecycle recovery the robot may
+  // still be running the old move, and controller jog on top of it must wait for the standstill
+  // confirmation (ConsumeMoveStopRequest).
+  const bool stopPending = moveStopRequested_.load();
+  const bool inhibited =
+    holdJogZero_ || statusHold_ || hardwareErrorLatched_ || moveActive || stopPending;
+  if (stopPending && !moveActive) {
+    RCLCPP_WARN_THROTTLE(
+      logger_, throttleClock_, 2000,
+      "Holding jog at zero: a CMD Move Stop is not confirmed yet (waiting for standstill)");
+  }
   for (std::size_t i = 0; i < 6; ++i) {
     const Safety::JogCommand command = Safety::JogPercentFromVelocity(vel_cmd[i]);
     nonFinite = nonFinite || command.nonFinite;
@@ -1468,7 +1476,7 @@ return_type Rebel::write(const rclcpp::Time &, const rclcpp::Duration &)
     }
   }
   if (holdJogZero_ || statusHold_ || hardwareErrorLatched_ ||
-    moveState_.load() != kMoveIdle)
+    moveState_.load() != kMoveIdle || moveStopRequested_.load())
   {
     // Re-checked after the store so a concurrent ResetAndEnable() or a latch set by another thread
     // (fault-group stop, message thread) can never be overtaken.
@@ -1579,7 +1587,9 @@ void Rebel::RequestMoveStop()
     return;
   }
   moveStopSeq_.fetch_add(1);
-  moveStopRequested_.store(true);
+  if (!moveStopRequested_.exchange(true)) {
+    moveStopTimer_.ArmNow();  // a new request goes out at once
+  }
   aliveWake.notify_all();
 }
 
@@ -1588,23 +1598,116 @@ bool Rebel::SendMoveStopNow()
   return Command(CriKeywords::COMMAND_MOVE_STOP, true);
 }
 
-void Rebel::ConsumeMoveStopRequest(Safety::SteadyClock::time_point & retryAfter)
+bool Rebel::MoveStopDue() const
+{
+  return moveStopRequested_.load() && moveStopTimer_.Due(ToNs(Safety::SteadyClock::now()));
+}
+
+// Runs on the ALIVEJOG thread only. The request is NOT consumed by a successful send: the
+// controller may have missed or ignored the command, so it is re-sent every
+// kMoveStopResendPeriod until the robot is known to stand still.
+void Rebel::ConsumeMoveStopRequest()
 {
   if (!moveStopRequested_.load()) {
+    stopStillRefValid_ = false;
+    stopMotionSeen_ = false;
+    stopDrivesOff_ = false;
     return;
   }
   const auto now = Safety::SteadyClock::now();
-  if (now < retryAfter) {
+
+  if (moveState_.load() == kMoveIdle) {
+    // No move thread to confirm the stop (e.g. an unconfirmed stop that latched the driver):
+    // fresh STATUS showing no joint motion for kMoveStopStillWindow confirms it.
+    const std::uint64_t seqBefore = moveStopSeq_.load();
+    JointSnapshot latest;
+    {
+      std::lock_guard<std::mutex> lock(snapshotLock);
+      latest = snapshot;
+    }
+    const bool fresh = latest.sequence != 0 &&
+      !Safety::IsStatusStale(latest.stamp, now, Safety::kStatusStaleTimeout);
+    // The way out for a stop that never saw motion or an END: every drive disabled (e-stop,
+    // drives off) on fresh STATUS for the still window.
+    bool drivesOffConfirmed = false;
+    if (fresh && drivesDisabledMask_.load() == Safety::kAllDrivesDisabledMask) {
+      if (!stopDrivesOff_) {
+        stopDrivesOff_ = true;
+        stopDrivesOffSince_ = now;
+      }
+      drivesOffConfirmed = now - stopDrivesOffSince_ >= Safety::kMoveStopStillWindow;
+    } else {
+      stopDrivesOff_ = false;
+    }
+    if (drivesOffConfirmed) {
+      moveStopRequested_.store(false);
+      if (moveStopSeq_.load() != seqBefore) {
+        moveStopRequested_.store(true);  // a request raced the check: keep it
+      } else {
+        stopStillRefValid_ = false;
+        stopMotionSeen_ = false;
+        stopDrivesOff_ = false;
+        RCLCPP_WARN(
+          logger_, "Pending CMD Move Stop confirmed: drives disabled (e-stop) on %s",
+          componentName_.c_str());
+        return;
+      }
+    } else if (!fresh) {
+      stopStillRefValid_ = false;
+    } else if (!stopStillRefValid_ ||
+      Move::MaxAbsDifference(latest.positionRad, stopStillRef_) > Safety::kMoveStillEpsilonRad)
+    {
+      if (stopStillRefValid_) {
+        stopMotionSeen_ = true;  // the robot is (still) moving: standstill later is meaningful
+      }
+      stopStillRef_ = latest.positionRad;
+      stopStillRefValid_ = true;
+      stopStillSince_ = latest.stamp;
+    } else if (latest.stamp - stopStillSince_ >= Safety::kMoveStopStillWindow &&
+      (stopMotionSeen_ || moveMotionSeen_.load()))
+    {
+      // Standstill confirms only a robot that was seen moving (during the move, or now): a robot
+      // that has not started yet, or never got the stop, would look the same.
+      moveStopRequested_.store(false);
+      if (moveStopSeq_.load() != seqBefore) {
+        moveStopRequested_.store(true);  // a request raced the check: keep it
+      } else {
+        stopStillRefValid_ = false;
+        stopMotionSeen_ = false;
+        RCLCPP_INFO(logger_, "Pending CMD Move Stop confirmed by standstill");
+        return;
+      }
+    }
+  } else {
+    stopStillRefValid_ = false;
+  }
+
+  if (!moveStopTimer_.Due(ToNs(now))) {
     return;
   }
-  if (!moveStopRequested_.exchange(false)) {
-    return;
+  // Observe BEFORE sending: a request that arrives while this send runs re-arms "send now" and
+  // the Defer below then fails instead of overwriting it.
+  const auto token = moveStopTimer_.Observe();
+  if (const auto hook = std::atomic_load(&beforeStopSendHook_)) {
+    (*hook)();  // tests only: pauses here to widen the check-to-send window
   }
-  if (!SendMoveStopNow()) {
-    // Not connected right now: keep the request. The reconnect sends Move Stop first anyway.
-    moveStopRequested_.store(true);
-    retryAfter = now + std::chrono::milliseconds(5);
+  bool sent = false;
+  {
+    // Serialized with the CMD Move Joint send: the request is re-checked under the lock, so a
+    // stop that was confirmed (and its goal finished) while this thread was paused is not sent
+    // behind the next goal's Move Joint.
+    std::lock_guard<std::mutex> sendGuard(moveSendLock_);
+    if (!moveStopRequested_.load()) {
+      return;
+    }
+    // OnConnected() sends its own Move Stop first and then the start-up sequence; do not
+    // interleave with it (it holds startupLock_). Retry shortly.
+    std::unique_lock<std::mutex> startupGuard(startupLock_, std::try_to_lock);
+    sent = startupGuard.owns_lock() && SendMoveStopNow();
   }
+  // Not connected / start-up in progress: retry soon.
+  moveStopTimer_.Defer(
+    token, ToNs(now + (sent ? Safety::kMoveStopResendPeriod : std::chrono::milliseconds(5))));
 }
 
 void Rebel::RecordMoveEvent(const CriMessages::ExecEvent & event, bool isEnd)
@@ -1674,21 +1777,47 @@ return_type Rebel::perform_command_mode_switch(
       }
       return -1;
     };
+  // Same lock as move acceptance (CheckMoveAcceptable/ExecuteMoveGoal): a claim is recorded
+  // either before a goal is checked (the goal is then refused) or after the move state was set
+  // (handled below), never in between.
+  std::unique_lock<std::mutex> claimGuard(claimLock_);
   unsigned mask = velocityClaimMask_.load();
   for (const auto & key : stop_interfaces) {
     const int index = indexOf(key);
     if (index >= 0) {
       mask &= ~(1u << index);
+      // A released interface keeps its last value: zero it so a later claim (or a stale reader of
+      // vel_cmd) never replays it before the new controller has written.
+      vel_cmd[static_cast<std::size_t>(index)] = 0.0;
     }
   }
+  bool claimsOurs = false;
   for (const auto & key : start_interfaces) {
     const int index = indexOf(key);
     if (index >= 0) {
       mask |= (1u << index);
+      claimsOurs = true;
     }
   }
   velocityClaimMask_.store(mask);
   claimPendingUntilNs_.store(0);
+  // prepare_command_mode_switch() refuses a claim during a move, but its 2 s reservation can
+  // have expired, and Humble's manage_switch() activates the controllers even when this returns
+  // ERROR. So do not refuse: record the claim truthfully, stop the robot-owned move and let the
+  // move thread abort and latch (a controller that holds the joints would fight it, or drive the
+  // arm back to its activation pose afterwards).
+  const bool claimDuring = claimsOurs && moveState_.load() != kMoveIdle;
+  if (claimDuring) {
+    claimDuringMove_.store(true);
+  }
+  claimGuard.unlock();
+  if (claimDuring) {
+    RequestMoveStop();
+    RCLCPP_ERROR(
+      logger_,
+      "A controller claimed the velocity command interfaces of '%s' during a joint move: "
+      "stopping the move", componentName_.c_str());
+  }
   return return_type::OK;
 }
 
@@ -1751,6 +1880,12 @@ std::uint8_t Rebel::CheckMoveAcceptable(
   }
   if (!activated_) {
     reason = "hardware component is not active";
+    return Result::REJECTED;
+  }
+  if (moveStopRequested_.load()) {
+    // A stop that STATUS has not confirmed yet (e.g. after an unconfirmed abort and a lifecycle
+    // recovery): the robot may still be running the old move.
+    reason = "a previous Move Stop is not confirmed yet";
     return Result::REJECTED;
   }
   BlockingFault blocking;
@@ -1864,8 +1999,23 @@ void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
       result->stop_confirmed = stopConfirmed;
       const JointSnapshot last = latestSnapshot();
       result->final_positions.assign(last.positionRad.begin(), last.positionRad.end());
-      if (!stopSent || stopConfirmed) {
-        moveStopRequested_ = false;  // unconfirmed: keep asking (the alive thread retries)
+      if (moveState_.load() != kMoveIdle) {
+        // A move was started by this goal (a goal refused up front must not touch a stop that an
+        // earlier, unconfirmed move left pending).
+        if (velocityClaimMask_.load() != 0 || claimDuringMove_.load()) {
+          // A controller took the joints while the move ran (the mask was 0 when it was
+          // accepted), also during the stopping phase where the abort checks do not run: it
+          // would drive the arm back to its activation pose. Latch BEFORE the stop bookkeeping
+          // below (the latch itself requests a stop while the state is not idle).
+          LatchHardwareError("a controller claimed the joints during a joint move");
+        }
+        if (!stopSent || stopConfirmed) {
+          moveStopRequested_ = false;  // nothing to stop, or the robot is known to stand still
+        } else {
+          // Unconfirmed: keep asking. The ALIVEJOG thread re-sends CMD Move Stop every
+          // kMoveStopResendPeriod until STATUS shows standstill (ConsumeMoveStopRequest).
+          RequestMoveStop();
+        }
       }
       moveState_ = kMoveIdle;
       // Also free BEFORE the result: a client may send its next goal the moment it has the
@@ -1908,7 +2058,9 @@ void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
       reason = "canceled before the move was sent";
     }
     if (code == Result::SUCCESS) {
-      moveStopRequested_ = false;
+      // (moveStopRequested_ is false here: CheckMoveAcceptable refused a pending stop.)
+      claimDuringMove_ = false;
+      moveMotionSeen_ = false;
       stopSeqAtStart = moveStopSeq_.load();
       moveState_ = kMoveSending;
     }
@@ -1956,16 +2108,37 @@ void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
   RCLCPP_WARN(
     logger_, "move_joint: sending '%s' (model %.2f s, timeout %.2f s)", commandText.c_str(),
     supervisor.ModelDurationS(), supervisor.TimeoutS());
-  const auto sentAt = Clock::now();
-  if (commandText.empty() ||
-    !rebelSocket->SendMessage(Safety::FormatCommand(counter, commandText)))
-  {
-    // Not delivered, or not known to be: make sure nothing runs (reconnect sends Move Stop too).
+  if (commandText.empty()) {
     stopSent = true;
     RequestMoveStop();
+    finish(Result::CMD_ERROR, "could not format CMD Move Joint");
+    return;
+  }
+  bool sendOk;
+  {
+    // Serialized with the ALIVEJOG thread's CMD Move Stop send (see ConsumeMoveStopRequest): an
+    // old stop request that passed its check earlier can never land behind this Move Joint.
+    std::lock_guard<std::mutex> sendGuard(moveSendLock_);
+    if (const auto hook = std::atomic_load(&beforeMoveSendHook_)) {
+      (*hook)();  // tests only: a slow send / a wait behind the stop send
+    }
+    sendOk = !failNextMoveSend_.exchange(false) &&
+      rebelSocket->SendMessage(Safety::FormatCommand(counter, commandText));
+  }
+  if (!sendOk) {
+    // A failed send can follow a partial transmission, so the robot may have received (and may
+    // run) the move: like every post-send abort, stop it and latch (stops the peer arm at once)
+    // instead of waiting for the reconnect check.
+    stopSent = true;
+    RequestMoveStop();
+    LatchHardwareError("CMD Move Joint could not be sent completely");
     finish(Result::CMD_ERROR, "could not send CMD Move Joint (not connected)");
     return;
   }
+  // Everything timed from the send (the 0.5 s MOVETOEXECACK window, the supervisor's progress and
+  // timeout clock, the standstill reference) starts only now: a slow send or a wait for
+  // moveSendLock_ behind a Move Stop send must not eat the robot's acknowledgement window.
+  const auto sentAt = Clock::now();
 
   //
   // 3. Supervise: Sending -> Moving -> (Stopping) -> Idle.
@@ -1974,18 +2147,27 @@ void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
   constexpr auto kAckTimeout = std::chrono::milliseconds(500);
   constexpr auto kStillWindow = std::chrono::milliseconds(200);
   constexpr auto kStopStillWindow = std::chrono::milliseconds(300);
-  constexpr auto kStopRepeat = std::chrono::milliseconds(100);
+  constexpr auto kStopRepeat = Safety::kMoveStopResendPeriod;
   constexpr auto kStopLimit = std::chrono::milliseconds(1000);
   constexpr auto kStopLimitShutdown = std::chrono::milliseconds(300);
-  constexpr int kStopRepeats = 3;
-  constexpr double kStillEpsilonRad = 0.0005;
+  constexpr double kStillEpsilonRad = Safety::kMoveStillEpsilonRad;
 
   bool stopPhase = false;
+  // Motion seen since the Move Joint was sent (STATUS differs from the start). Standstill only
+  // means "stopped" for a robot that was moving: before that it may simply not have started yet.
+  bool motionSeen = false;
+  // Reference for "motion": the first STATUS received at/after the send (not `measured`, the
+  // validation snapshot, which can differ from the arm by a settle that happened before the send).
+  Move::Joints motionRef{};
+  bool motionRefValid = false;
+  // All six drives report 'Motor not enabled' on fresh STATUS since (e-stop / drives off): the
+  // robot cannot execute a move, which confirms a stop even if no motion was ever seen.
+  bool drivesOff = false;
+  Clock::time_point drivesOffSince{};
   std::uint8_t abortCode = Result::SUCCESS;
   std::string abortMessage;
   Clock::time_point stopFirstAt{};
   Clock::time_point stopLastAt{};
-  int stopRepeatsSent = 0;
   double maxDeviation = 0.0;
   std::uint64_t lastSequence = 0;
   Move::Joints stillRef = measured;
@@ -2023,6 +2205,15 @@ void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
       lastSequence = latest.sequence;
       const Move::Sample sample = supervisor.Evaluate(latest.positionRad);
       maxDeviation = std::max(maxDeviation, sample.deviation);
+      if (!motionSeen && latest.stamp >= sentAt) {
+        if (!motionRefValid) {
+          motionRef = latest.positionRad;
+          motionRefValid = true;
+        } else if (Move::MaxAbsDifference(latest.positionRad, motionRef) > kStillEpsilonRad) {
+          motionSeen = true;
+          moveMotionSeen_.store(true);  // for the ALIVEJOG thread's pending-stop check
+        }
+      }
       if (Move::MaxAbsDifference(latest.positionRad, stillRef) > kStillEpsilonRad) {
         stillRef = latest.positionRad;
         stillSince = latest.stamp;
@@ -2042,6 +2233,14 @@ void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
       }
     }
     const bool statusFresh = latest.sequence != 0 && age <= Safety::kStatusStaleTimeout;
+    if (statusFresh && drivesDisabledMask_.load() == Safety::kAllDrivesDisabledMask) {
+      if (!drivesOff) {
+        drivesOff = true;
+        drivesOffSince = now;
+      }
+    } else {
+      drivesOff = false;
+    }
     const bool still = statusFresh && (now - stillSince) >= kStillWindow;
 
     if (!stopPhase) {
@@ -2060,22 +2259,30 @@ void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
           peerFaulted_ ? "a fault-group peer faulted" : "hardware error latched");
       } else if (!activated_) {
         beginStop(Result::FAULT, "hardware component deactivated");
+      } else if (velocityClaimMask_.load() != 0 || claimDuringMove_.load()) {
+        beginStop(Result::CONTROLLER_ACTIVE, "a controller claimed the joints during a joint move");
+        LatchHardwareError("a controller claimed the joints during a joint move");
       } else if (events.cmdError) {
         beginStop(Result::CMD_ERROR, "robot rejected CMD Move Joint: " + events.cmdErrorText);
+        LatchHardwareError("robot rejected CMD Move Joint: " + events.cmdErrorText);
       } else if (rebelSocket->ConnectionCount() != initialConnectionCount) {
         beginStop(Result::STATUS_GAP, "connection to the robot was re-established");
         LatchHardwareError("connection lost during a joint move");
-      } else if (latest.sequence == 0 || age > Safety::kStatusCoastTimeout) {
-        beginStop(Result::STATUS_GAP, "no STATUS during the move (hold tier)");
+      } else if (latest.sequence == 0 || age > Safety::kMoveStatusAbortTimeout) {
+        // 200 ms, not the 400 ms jog hold tier: see kMoveStatusAbortTimeout.
+        beginStop(Result::STATUS_GAP, "no STATUS during the move (200 ms)");
         LatchHardwareError("STATUS gap during a joint move");
       } else if (moveStopSeq_.load() != stopSeqAtStart) {
         beginStop(Result::FAULT, "a stop was requested (hold tier, deactivate or shutdown)");
       } else if (!events.moveAck && !events.endSeen && now - sentAt > kAckTimeout) {
         beginStop(Result::ACK_TIMEOUT, "no MOVETOEXECACK within 0.5 s");
+        LatchHardwareError("no MOVETOEXECACK within 0.5 s of CMD Move Joint");
       } else if (drivesDisabledMask_.load() != 0) {
         beginStop(Result::FAULT, "drives reported 'Motor not enabled' during the move");
+        LatchHardwareError("drives reported 'Motor not enabled' during a joint move");
       } else if (kinstateValue_.load() != static_cast<int>(CriMessages::Kinstate::NO_ERROR)) {
         beginStop(Result::FAULT, "kinematics error during the move");
+        LatchHardwareError("kinematics error during a joint move");
       } else {
         const Move::Verdict verdict = supervisor.Check(latest.positionRad, elapsed);
         if (verdict == Move::Verdict::PathDeviation || verdict == Move::Verdict::ProgressOverrun) {
@@ -2085,10 +2292,14 @@ void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
             text, sizeof(text), "%s (deviation %.4f rad, progress %.3f)",
             Move::VerdictName(verdict), sample.deviation, sample.progress);
           beginStop(Result::PATH_DEVIATION, text);
+          // The robot left the supervised line: not a clean stop. Latch (and so stop the other
+          // arms of the fault group); recovery is inactive -> active like any other latch.
+          LatchHardwareError(std::string("joint move aborted by the supervisor: ") + text);
         } else if (verdict == Move::Verdict::Timeout) {
           char text[96];
           std::snprintf(text, sizeof(text), "no completion within %.2f s", supervisor.TimeoutS());
           beginStop(Result::MOTION_TIMEOUT, text);
+          LatchHardwareError(std::string("joint move aborted by the supervisor: ") + text);
         }
       }
       if (stopPhase) {
@@ -2120,11 +2331,24 @@ void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
     }
 
     // Stopping.
+    // Confirmed by (a) the robot's MOVETOEXECEND of this move, or (b) standstill AFTER motion
+    // was seen. Not by standstill alone (the robot may not have started yet, or never received
+    // the stop and start later), and not by a CMDACK of the Move Stop: the controller
+    // acknowledges commands it did not act on. A stop that is not confirmed within the limit
+    // below latches the driver and stays pending.
     bool confirmed = events.endSeen;
-    if (!confirmed && statusFresh && (now - stillSince) >= kStopStillWindow &&
+    if (!confirmed && motionSeen && statusFresh && (now - stillSince) >= kStopStillWindow &&
       now - stopFirstAt >= kStopStillWindow)
     {
-      confirmed = true;  // standstill observed
+      confirmed = true;
+    }
+    if (!confirmed && drivesOff && now - drivesOffSince >= kStopStillWindow) {
+      // The way out for a stop that never saw motion or an END: with every drive disabled
+      // (e-stop, drives off) the robot cannot execute a move.
+      RCLCPP_WARN(
+        logger_, "Pending CMD Move Stop confirmed: drives disabled (e-stop) on %s",
+        componentName_.c_str());
+      confirmed = true;
     }
     if (confirmed) {
       stopConfirmed = true;
@@ -2135,12 +2359,15 @@ void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
       LatchHardwareError("CMD Move Stop was not confirmed during a joint move");
       stopConfirmed = false;
       finish(
-        abortCode, abortMessage + " [CMD Move Stop NOT confirmed within 1 s: hardware latched; "
-        "check the robot, e-stop if it is still moving]");
+        abortCode, abortMessage + " [CMD Move Stop NOT confirmed within 1 s: hardware latched, "
+        "the stop stays pending and jog is held at zero. E-stop the robot if it may still move. "
+        "Recovery: e-stop (or switch the drives off) so STATUS reports all drives disabled, wait "
+        "for 'Pending CMD Move Stop confirmed', then 'ros2 control set_hardware_component_state " +
+        componentName_ + " inactive' then 'active', then cycle the controllers]");
       return;
     }
-    if (stopRepeatsSent < kStopRepeats && now - stopLastAt >= kStopRepeat) {
-      ++stopRepeatsSent;
+    if (now - stopLastAt >= kStopRepeat) {
+      // Re-assert the (persistent) request: OnConnected() may have cleared it after a reconnect.
       stopLastAt = now;
       RequestMoveStop();
     }

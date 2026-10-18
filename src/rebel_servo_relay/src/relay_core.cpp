@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <stdexcept>
 #include <utility>
 
@@ -19,6 +20,15 @@ double hermite(double p0, double v0, double p1, double v1, double T, double t)
 {
   const double s = t / T, s2 = s * s, s3 = s2 * s;
   return (2 * s3 - 3 * s2 + 1) * p0 + (s3 - 2 * s2 + s) * T * v0 + (-2 * s3 + 3 * s2) * p1 + (s3 - s2) * T * v1;
+}
+
+// d/dt of hermite().
+double hermiteVelocity(double p0, double v0, double p1, double v1, double T, double t)
+{
+  const double s = t / T;
+  return ((6 * s * s - 6 * s) * p0 + (3 * s * s - 4 * s + 1) * T * v0 + (-6 * s * s + 6 * s) * p1 +
+          (3 * s * s - 2 * s) * T * v1) /
+         T;
 }
 }  // namespace
 
@@ -48,6 +58,10 @@ void RelayParams::resolve()
     throw std::invalid_argument("joint_state_timeout_s must be a positive number");
   if (!std::isfinite(zero_velocity_eps) || zero_velocity_eps < 0.0)
     throw std::invalid_argument("zero_velocity_eps must be >= 0");
+  if (!finitePositive(max_joint_velocity_rad_s))
+    throw std::invalid_argument("max_joint_velocity_rad_s must be a positive number");
+  if (!finitePositive(max_joint_accel_rad_s2))
+    throw std::invalid_argument("max_joint_accel_rad_s2 must be a positive number");
 }
 
 RelayCore::RelayCore(RelayParams params) : params_(std::move(params))
@@ -73,6 +87,18 @@ double RelayCore::evaluate(std::size_t j, double elapsed) const
   if (elapsed < H + Ts)
     return hermite(traj_.p1[j], traj_.v1[j], traj_.p2[j], 0.0, Ts, elapsed - H);
   return traj_.p2[j];
+}
+
+double RelayCore::evaluateVelocity(std::size_t j, double elapsed) const
+{
+  const double H = params_.horizon_s, Ts = params_.stop_time_s;
+  if (!(elapsed > 0.0))
+    return traj_.v0[j];
+  if (elapsed < H)
+    return hermiteVelocity(traj_.p0[j], traj_.v0[j], traj_.p1[j], traj_.v1[j], H, elapsed);
+  if (elapsed < H + Ts)
+    return hermiteVelocity(traj_.p1[j], traj_.v1[j], traj_.p2[j], 0.0, Ts, elapsed - H);
+  return 0.0;
 }
 
 RelayOutput RelayCore::reject(const std::string& reason)
@@ -201,9 +227,27 @@ RelayOutput RelayCore::process(double now_s, const std::vector<std::string>& nam
   t.p2.resize(n);
   t.v0.resize(n);
   t.v1.resize(n);
+  // Velocity cap: min(configured cap, the speed whose final stop segment (|v| / stop_time) stays within the
+  // acceleration cap).
+  const double vcap = std::min(params_.max_joint_velocity_rad_s, params_.max_joint_accel_rad_s2 * Ts);
+  const double dt_accel = reseed ? params_.publish_period_s : gap;
   for (std::size_t i = 0; i < n; ++i)
   {
-    const double v = velocity[i];
+    double v = velocity[i];
+    if (std::fabs(v) > vcap)
+    {
+      v = std::copysign(vcap, v);
+      out.velocity_clamped = true;
+    }
+    // Acceleration cap: the JTC switches from the previous trajectory (still executing at `gap`) to this one, so the
+    // velocity step is the acceleration the joint sees. A reseed starts from rest.
+    const double v_exec = reseed ? 0.0 : evaluateVelocity(i, gap);
+    const double dv_max = params_.max_joint_accel_rad_s2 * dt_accel;
+    if (std::fabs(v - v_exec) > dv_max)
+    {
+      v = v_exec + std::copysign(dv_max, v - v_exec);
+      out.accel_clamped = true;
+    }
     // Lead bound shrinks with the (Servo-scaled) velocity: near an obstacle no stale lead is kept.
     const double lead = std::min(params_.max_lead_rad, std::fabs(v) * params_.lead_time_s + params_.lead_floor_rad);
     double ri = std::clamp(r[i], measured.position[i] - lead, measured.position[i] + lead);
@@ -234,6 +278,45 @@ RelayOutput RelayCore::process(double now_s, const std::vector<std::string>& nam
   out.velocity = t.v0;
   out.velocity_mid = t.v1;
   return out;
+}
+
+
+bool staleAfterTrip(const TripClocks& trip, std::int64_t rx_ns, std::int64_t system_now_ns, double steady_now_s,
+                    double quarantine_s, bool* used_rmw_timestamp, double* delay_out)
+{
+  if (used_rmw_timestamp)
+    *used_rmw_timestamp = false;
+  if (!trip.seen)
+    return false;
+  if (rx_ns > 0)
+  {
+    double delay_s = 0.0, since_trip_s = 0.0;
+    bool known = true;
+    if (std::llabs(system_now_ns - rx_ns) < 5000000000LL)  // system clock
+    {
+      delay_s = static_cast<double>(system_now_ns - rx_ns) * 1e-9;
+      since_trip_s = static_cast<double>(system_now_ns - trip.system_ns) * 1e-9;
+    }
+    else if (std::fabs(steady_now_s - static_cast<double>(rx_ns) * 1e-9) < 5.0)  // steady clock
+    {
+      delay_s = steady_now_s - static_cast<double>(rx_ns) * 1e-9;
+      since_trip_s = steady_now_s - trip.steady_s;
+    }
+    else
+    {
+      known = false;
+    }
+    if (known)
+    {
+      if (used_rmw_timestamp)
+        *used_rmw_timestamp = true;
+      if (delay_out)
+        *delay_out = delay_s;
+      return delay_s > since_trip_s;
+    }
+  }
+  // Unknown receipt time: fail closed inside the quarantine window right after the hold.
+  return !(steady_now_s - trip.steady_s >= quarantine_s);
 }
 
 }  // namespace rebel_servo_relay
