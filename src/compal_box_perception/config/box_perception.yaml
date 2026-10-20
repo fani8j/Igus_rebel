@@ -11,7 +11,9 @@ box_perception:
     robot_base_frame: base_link
 
     use_auto_roi: true
-    manual_roi: [590, 90, 860, 300]
+    # Box on the floor at the bottom centre of the scene camera image (2026-10-20);
+    # the previous spot (back of the room) was [590, 90, 860, 300].
+    manual_roi: [380, 440, 740, 690]
     manual_roi_reference_size: [1280, 720]
     constrain_auto_roi: true
     auto_roi_search_margin_ratio: 0.25
