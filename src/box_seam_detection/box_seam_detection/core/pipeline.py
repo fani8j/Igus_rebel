@@ -26,6 +26,7 @@ just to fill a slot.
 
 from __future__ import annotations
 
+import copy
 import os
 import subprocess
 import threading
@@ -1690,6 +1691,16 @@ def _run_depth_work(_depth, read_pcd_xyz, paths: dict, cam, H: int, W: int,
     return {"xyz": xyz, "est": depth_est, "err": depth_err, "extra": extra}
 
 
+def _clone_depth_work(res: dict) -> dict:
+    """Private copy of a :func:`_run_depth_work` result: the mutable small
+    parts (``est``, the ``_table`` cache) are deep-copied, the big arrays
+    (``xyz``, ``_proj``) are shared because every consumer only reads them."""
+    extra = {k: (copy.deepcopy(v) if k == "_table" else v)
+             for k, v in (res.get("extra") or {}).items()}
+    return {"xyz": res["xyz"], "est": copy.deepcopy(res["est"]),
+            "err": res["err"], "extra": extra}
+
+
 def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
                     source: str = "auto", archive_dir=None,
                     session=None, _forced: dict | None = None
@@ -1707,6 +1718,10 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
     ``_forced`` (private, truncation recovery): ``{"winner", "reasons",
     "attempts"}`` of an already accepted candidate; the candidate search is
     skipped and the downstream stages (profile, seam, record) run on it.
+    The same dict may carry ``"depth"`` (a pristine :func:`_run_depth_work`
+    result of the first pass, same capture/cfg/camera: reused instead of
+    recomputing) and ``"bgr"`` (the first pass's decoded image: used instead
+    of decoding the file again).
     """
     import sys
 
@@ -1729,7 +1744,9 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
     img = manifest.get("image") or {}
     w, h = int(img.get("width", 0)), int(img.get("height", 0))
     image_path = img.get("path") or paths.get("image")
-    bgr = cv2.imread(str(image_path), cv2.IMREAD_COLOR) if image_path else None
+    bgr = (_forced.get("bgr") if _forced is not None else None)
+    if bgr is None:
+        bgr = cv2.imread(str(image_path), cv2.IMREAD_COLOR) if image_path else None
     if bgr is None:
         return _fail_record(capture_id, paths, cfg, "unreadable_image",
                             ["unreadable_image"], source,
@@ -1766,8 +1783,13 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
             box["exc"] = exc
 
     thread = None
+    reuse = _forced.get("depth") if _forced is not None else None
     if depth_err is None:
-        if s1:
+        if reuse is not None:
+            # truncation re-run: the SAM3-independent depth work of this very
+            # capture was already done by the first pass (deterministic)
+            box["res"] = _clone_depth_work(reuse)
+        elif s1:
             thread = threading.Thread(target=_depth_work, daemon=True,
                                       name="s1-depth")
             thread.start()
@@ -1801,6 +1823,11 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
             thread.join()
     depth_est, depth_err = _depth_join()
     xyz = box["res"]["xyz"]
+    # Pristine copy for the truncation re-run (taken before any consumer runs).
+    depth_snapshot = None
+    if (_forced is None and cam is not None and xyz is not None
+            and _truncation_mode(cfg) != "off"):
+        depth_snapshot = _clone_depth_work(box["res"])
     debug["depth_est"] = depth_est
     debug["cam"] = cam
     depth_ctx = ({"xyz": xyz, "cam": cam, "dcfg": cfg["depth_top"]}
@@ -2179,7 +2206,10 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
                 lambda w: process_capture(
                     capture_id, paths, cfg, source, archive_dir, session,
                     _forced={"winner": w, "reasons": list(reasons),
-                             "attempts": list(attempts)}))
+                             "attempts": list(attempts),
+                             "depth": depth_snapshot,
+                             # fresh copy: the re-run may draw on / alter it
+                             "bgr": bgr.copy()}))
         except Exception as exc:  # noqa: BLE001 — recovery never breaks the old path
             recovered = None
             trunc_block = {"mode": trunc_mode, "triggered": True, "recovered": False,

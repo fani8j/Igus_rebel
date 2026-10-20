@@ -232,6 +232,157 @@ def _finish_estimate(
 
 
 # ---------------------------------------------------------------------------
+# RANSAC hypothesis search (reference scan + exact early-abandoning scan)
+
+#: clouds smaller than this are always scored by the plain reference scan
+_PRUNE_MIN_POINTS = 4096
+#: contiguous row blocks the pruned scan scores in (block starts are multiples
+#: of 4 so every row sees the same gemv code path as in the full call)
+_PRUNE_BLOCKS = 8
+#: hypotheses fully counted up front (best after the first block) to get the
+#: abandon threshold
+_PRUNE_PILOT = 4
+
+
+def _iter_hypotheses(pts, rng, iters, cos_tol, align_unit):
+    """Yield ``(normal, d)`` for each non-degenerate, gate-passing triplet
+    hypothesis, in draw order (the original loop body, unchanged)."""
+    n = pts.shape[0]
+    for _ in range(iters):
+        i0, i1, i2 = rng.choice(n, 3, replace=False)
+        p0, p1, p2 = pts[i0], pts[i1], pts[i2]
+        normal = np.cross(p1 - p0, p2 - p0)
+        norm = float(np.linalg.norm(normal))
+        if not np.isfinite(norm) or norm < 1e-12:
+            continue  # degenerate (collinear/coincident) triplet
+        normal = normal / norm
+        if cos_tol is not None and align_unit is not None:
+            if abs(float(normal @ align_unit)) < cos_tol:
+                continue  # off-axis face: never ranked, however large
+        yield normal, float(-(normal @ p0))
+
+
+def _scan_reference(pts, hyps, thresh_m, n):
+    """The original scan: first hypothesis with the strictly largest inlier
+    count wins. Returns ``(count, normal, d, mask)`` (``(0, None, 0.0, None)``
+    when no hypothesis has an inlier)."""
+    best_n = None
+    best_d = 0.0
+    best_count = 0
+    best_mask = None
+    for normal, d in hyps:
+        mask = np.abs(pts @ normal + d) < thresh_m
+        count = int(np.count_nonzero(mask))
+        if count > best_count:
+            best_count = count
+            best_n = normal
+            best_d = d
+            best_mask = mask
+            if count == n:
+                break  # cannot be beaten; keeps full determinism
+    return best_count, best_n, best_d, best_mask
+
+
+def _blas_threads() -> Optional[int]:
+    """Thread count of the BLAS numpy is linked to (None = unknown)."""
+    try:
+        import ctypes
+
+        with open("/proc/self/maps") as fh:
+            libs = {ln.split()[-1] for ln in fh if "openblas" in ln}
+        for path in sorted(libs):
+            lib = ctypes.CDLL(path)
+            for sym in ("openblas_get_num_threads64_", "openblas_get_num_threads_",
+                        "openblas_get_num_threads"):
+                fn = getattr(lib, sym, None)
+                if fn is not None:
+                    fn.restype = ctypes.c_int
+                    return int(fn())
+    except Exception:  # noqa: BLE001 - unknown -> caller takes the reference path
+        pass
+    return None
+
+
+def _pruned_search_available(pts: np.ndarray) -> bool:
+    """The pruned scan scores row blocks with the same ``block @ normal`` call
+    the full scan uses, which is bit-identical to the full-array result only
+    when (measured, see tests) the BLAS is single-threaded (no thread-chunk
+    boundaries inside the array) and the block base addresses keep the
+    array's 16-byte alignment. Otherwise use the reference scan."""
+    return (pts.dtype == np.float64 and pts.flags["C_CONTIGUOUS"]
+            and pts.ctypes.data % 16 == 0 and _blas_threads() == 1)
+
+
+def _best_hypothesis_pruned(pts, hyps, thresh_m):
+    """Exact early-abandoning equivalent of :func:`_scan_reference`.
+
+    Residuals are computed per contiguous row block with the very expression
+    of the reference (``block @ normal + d``, ``abs``, ``< thresh``), so the
+    per-point inlier decision is identical; only the amount of work changes.
+    A hypothesis is dropped when its count so far plus the points left cannot
+    reach the best fully counted hypothesis (and, on an exact tie, only when
+    it comes after it: the first max-count hypothesis wins in the reference).
+    Returns ``(count, normal, d, mask)`` like the reference, or None when the
+    block residuals do not reproduce the full-array residuals (canary) or the
+    winner's full recount disagrees.
+    """
+    n = pts.shape[0]
+    if not hyps:
+        return 0, None, 0.0, None
+    step = -(-n // _PRUNE_BLOCKS)
+    step = (step + 3) // 4 * 4
+    starts = list(range(0, n, step))
+    bounds = starts + [n]
+    blocks = [pts[bounds[i]:bounds[i + 1]] for i in range(len(starts))]
+    nb = len(blocks)
+
+    def count(h: int, b: int) -> int:
+        normal, d = hyps[h]
+        r = blocks[b] @ normal
+        r += d
+        np.abs(r, out=r)
+        return int(np.count_nonzero(r < thresh_m))
+
+    # canary: block residuals of the first hypothesis must equal the full ones
+    n0, d0 = hyps[0]
+    full0 = pts @ n0 + d0
+    block0 = np.concatenate([blk @ n0 + d0 for blk in blocks])
+    if not np.array_equal(full0, block0):
+        return None
+
+    K = len(hyps)
+    cnt = [count(h, 0) for h in range(K)]
+    done: dict[int, int] = {}           # fully counted hypotheses
+    order = sorted(range(K), key=lambda h: (-cnt[h], h))[:_PRUNE_PILOT]
+    for h in order:
+        done[h] = cnt[h] + sum(count(h, b) for b in range(1, nb))
+    top = max(done.values())
+    top_idx = min(h for h, c in done.items() if c == top)
+
+    def alive(h: int, left: int) -> bool:
+        ub = cnt[h] + left
+        return ub > top or (ub == top and h < top_idx)
+
+    active = [h for h in range(K) if h not in done and alive(h, n - bounds[1])]
+    for b in range(1, nb):
+        for h in active:
+            cnt[h] += count(h, b)
+        left = n - bounds[b + 1]
+        active = [h for h in active if alive(h, left)]
+    for h in active:
+        done[h] = cnt[h]
+    best = max(done.values())
+    idx = min(h for h, c in done.items() if c == best)
+    if best == 0:
+        return 0, None, 0.0, None
+    normal, d = hyps[idx]
+    mask = np.abs(pts @ normal + d) < thresh_m  # the reference expression
+    if int(np.count_nonzero(mask)) != best:
+        return None
+    return best, normal, d, mask
+
+
+# ---------------------------------------------------------------------------
 # Core fitter
 
 
@@ -328,31 +479,17 @@ def fit_plane_ransac_irls(
             raise ValueError("orient_toward must be finite")
 
     rng = np.random.default_rng(int(seed))
-    best_n: Optional[np.ndarray] = None
-    best_d = 0.0
-    best_count = 0
-    best_mask: Optional[np.ndarray] = None
-    for _ in range(iters):
-        i0, i1, i2 = rng.choice(n, 3, replace=False)
-        p0, p1, p2 = pts[i0], pts[i1], pts[i2]
-        normal = np.cross(p1 - p0, p2 - p0)
-        norm = float(np.linalg.norm(normal))
-        if not np.isfinite(norm) or norm < 1e-12:
-            continue  # degenerate (collinear/coincident) triplet
-        normal = normal / norm
-        if cos_tol is not None and align_unit is not None:
-            if abs(float(normal @ align_unit)) < cos_tol:
-                continue  # off-axis face: never ranked, however large
-        d = float(-(normal @ p0))
-        mask = np.abs(pts @ normal + d) < thresh_m
-        count = int(np.count_nonzero(mask))
-        if count > best_count:
-            best_count = count
-            best_n = normal
-            best_d = d
-            best_mask = mask
-            if count == n:
-                break  # cannot be beaten; keeps full determinism
+    hyps: Any = _iter_hypotheses(pts, rng, iters, cos_tol, align_unit)
+    found = None
+    if n >= _PRUNE_MIN_POINTS and _pruned_search_available(pts):
+        # Same hypotheses in the same order (the rng stream does not depend on
+        # the scoring), scored with early abandoning; None = could not
+        # guarantee the reference result, so score the reference way.
+        hyps = list(hyps)
+        found = _best_hypothesis_pruned(pts, hyps, thresh_m)
+    if found is None:
+        found = _scan_reference(pts, hyps, thresh_m, n)
+    best_count, best_n, best_d, best_mask = found
 
     if best_n is None or best_mask is None or best_count < min_inliers:
         raise ValueError(
