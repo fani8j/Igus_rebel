@@ -1,6 +1,6 @@
 # Reproducing the shelf-pick results (Isaac Sim 5.1 + MoveIt mock)
 
-All commands run from `sim_assets/medical_box_tools/` unless noted. Simulation only; nothing here talks to a real robot.
+All commands run from `sim_assets/medical_box_tools/` unless noted. Grasp options, targets and pass checks: `GRASP.md`. Simulation only; nothing here talks to a real robot.
 
 **Safety:** every terminal sets an unused `ROS_DOMAIN_ID` and `ROS_LOCALHOST_ONLY=1` (the real robot uses domain 11). The Isaac
 tests force domain 170 themselves (`tests/isaac_common.py`) and enable no ROS bridge. Run heavy jobs with `nice -n 19`, at most 4 workers.

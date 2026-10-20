@@ -23,7 +23,7 @@ Sources (read-only): `cad/medical_box_tooling_v1/{suction_tool_v5,gripper_tool,c
     tools/tool_api.py                     helpers to command the tools inside Isaac (surface gripper, vacuum level, finger ramps)
     tests/*.py, run_all.sh, summarize_log.py   headless Isaac tests; tests/results/ = logs, json, screenshots
 
-Rebuild / verify / test:
+Rebuild / verify / test (full guide: `REPRODUCE.md`; grasp commands, targets and pass checks: `GRASP.md`):
 
     PY="/media/farhan/My Passport/igus_nvidia/venvs/usd/bin/python"
     nice -n 19 "$PY" tools/build_tool_usd.py && nice -n 19 "$PY" tools/verify_tool_usd.py
