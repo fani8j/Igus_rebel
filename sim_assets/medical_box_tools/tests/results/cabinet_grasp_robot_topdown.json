@@ -1,0 +1,45 @@
+{
+ "mode": "topdown",
+ "runs": [
+  {
+   "target": "T1",
+   "skipped": "top-down: no collision-free right-arm pose with the real arm at any parking pose (tests/results/amr_parking.md, amr_parking_topdown_diag.json)"
+  },
+  {
+   "target": "T2",
+   "skipped": "top-down: no collision-free right-arm pose with the real arm at any parking pose (tests/results/amr_parking.md, amr_parking_topdown_diag.json)"
+  },
+  {
+   "target": "T3",
+   "skipped": "top-down: no collision-free right-arm pose with the real arm at any parking pose (tests/results/amr_parking.md, amr_parking_topdown_diag.json)"
+  },
+  {
+   "target": "T4",
+   "skipped": "top-down: no collision-free right-arm pose with the real arm at any parking pose (tests/results/amr_parking.md, amr_parking_topdown_diag.json)"
+  },
+  {
+   "target": "T5",
+   "skipped": "top-down: no collision-free right-arm pose with the real arm at any parking pose (tests/results/amr_parking.md, amr_parking_topdown_diag.json)"
+  },
+  {
+   "target": "T6",
+   "skipped": "top-down: no collision-free right-arm pose with the real arm at any parking pose (tests/results/amr_parking.md, amr_parking_topdown_diag.json)"
+  },
+  {
+   "target": "T7",
+   "skipped": "top-down: no collision-free right-arm pose with the real arm at any parking pose (tests/results/amr_parking.md, amr_parking_topdown_diag.json)"
+  },
+  {
+   "target": "T8",
+   "skipped": "top-down: no collision-free right-arm pose with the real arm at any parking pose (tests/results/amr_parking.md, amr_parking_topdown_diag.json)"
+  },
+  {
+   "target": "E1",
+   "skipped": "top-down: no collision-free right-arm pose with the real arm at any parking pose (tests/results/amr_parking.md, amr_parking_topdown_diag.json)"
+  },
+  {
+   "target": "E2",
+   "skipped": "top-down: no collision-free right-arm pose with the real arm at any parking pose (tests/results/amr_parking.md, amr_parking_topdown_diag.json)"
+  }
+ ]
+}

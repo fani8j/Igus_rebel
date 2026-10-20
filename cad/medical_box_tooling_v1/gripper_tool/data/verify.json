@@ -1,0 +1,2318 @@
+{
+ "geometry": {
+  "z_flange_face_mm": 52.7,
+  "z_gripper_rear_face_mm": 67.0,
+  "stack_up_disc_plate_mm": 14.3,
+  "z_jaw_plane_mm": 150.0,
+  "z_gripper_body_end_face_mm": 145.70000000000002,
+  "z_jaw_top_mm": 150.0000001,
+  "z_fingertip_mm": 226.9,
+  "z_pad_zone_mm": [
+   170.7,
+   215.7
+  ],
+  "z_stop_face_mm": 167.5,
+  "z_tcp_mm": 193.2,
+  "tool_length_flange_to_tip_mm": 174.2,
+  "pad_gap_closed_mm": 8.0,
+  "pad_gap_open_mm": 56.0,
+  "stroke_total_mm": 48.0,
+  "pad_size_mm": {
+   "width_along_Y": 50.0,
+   "height_along_Z": 45.0
+  },
+  "catalog_L_mm": 43.2,
+  "catalog_H_mm": 0.0,
+  "H_plus_L_mm": 43.2,
+  "H_plus_L_limit_100pct_mm": 55.0,
+  "H_plus_L_limit_70pct_mm": 80.0,
+  "force_cap": "100 % allowed (H+L = 43.2 <= 55)",
+  "box_top_edge_below_jaw_plane_mm": 17.5,
+  "box_top_edge_below_gripper_body_end_mm": 21.799999999999983,
+  "handoff_top_clear_required_mm": 10.0,
+  "top_stop": {
+   "plate_x_thickness_mm": 3.0,
+   "plate_y_range_mm": [
+    -27.5,
+    27.5
+   ],
+   "plate_z_range_mm": [
+    160.0,
+    167.5
+   ],
+   "face_z_mm": 167.5,
+   "s_range_mm": [
+    15.0,
+    70.0
+   ],
+   "gap_to_pad_crest_closed_per_side_mm": 2.5,
+   "risers_abs_y_mm": [
+    22.5,
+    27.5
+   ],
+   "side_plates": {
+    "x_half": 19.0,
+    "abs_y": [
+     17.5,
+     24.0
+    ],
+    "z": [
+     104.0,
+     147.5
+    ]
+   },
+   "bolts": "M5x55 DIN 912 + M5 nyloc nut DIN 985 x2 at x = +-15, z = 113.0 (existing d5.2 body holes, no new holes)"
+  },
+  "stop_clearance_target_mm": 2.5,
+  "lead_in_chamfer_mm": {
+   "size": 8.0,
+   "angle_deg": 45,
+   "tip_gap_open_mm": 72.0,
+   "tip_gap_closed_mm": 24.0
+  },
+  "step_jaw_mount_face_x_range_closed_mm": {
+   "left": [
+    -29.0,
+    0.0
+   ],
+   "right": [
+    0.0,
+    29.0
+   ],
+   "note": "vendor STEP is in the fully closed state: the two jaw inner faces touch at x = 0 (catalog: closed 0 +0.1, open 48 +-1)"
+  },
+  "step_body_slot_end_x_mm": [
+   -53.8,
+   62.2
+  ],
+  "step_jaw_left_outer_end_x_at_full_open_mm": -53.0,
+  "step_jaw_travel_margin_to_body_end_mm": 0.7999999999999972,
+  "step_m3_pattern_left_jaw_x_mm": [
+   -23.5,
+   -5.5
+  ],
+  "step_m3_pattern_y_mm_link6": [
+   -7.5,
+   7.5
+  ],
+  "step_rear_face": {
+   "z_s": -46.0,
+   "m5_pattern": "40 x 22 at x=+-20, y=+-11 (link6), tap d4.13 x 7.6 deep (catalog M5x0.8x8)",
+   "dowels": "d4H9 x 3 at (0, +-11): round (+11) and slot (-11)",
+   "verified": "4 tapped holes + 2 dowel holes found on the face z_s = -46 (opposite the jaws, jaw end face z_s = +37) in the vendor STEP"
+  }
+ },
+ "interference": {
+  "open_56": {
+   "top_stop_min_distance_mm": {
+    "finger_left": 6.5,
+    "finger_right": 6.5,
+    "pad_left": 25.032,
+    "pad_right": 25.032,
+    "smc_jaw_left": 7.5,
+    "smc_jaw_right": 7.5,
+    "smc_body": 0.0
+   },
+   "jaw_opening_each_mm": 24.0,
+   "n_solids": 44,
+   "n_main_pairs": 45,
+   "main_pair_volume_mm3": {
+    "flange_disc": {
+     "gripper_plate": 0.0,
+     "smc_body": 0.0,
+     "smc_jaw_left": 0.0,
+     "smc_jaw_right": 0.0,
+     "top_stop": 0.0,
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "gripper_plate": {
+     "smc_body": 0.0,
+     "smc_jaw_left": 0.0,
+     "smc_jaw_right": 0.0,
+     "top_stop": 0.0,
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "smc_body": {
+     "smc_jaw_left": 0.0,
+     "smc_jaw_right": 0.0,
+     "top_stop": 0.0,
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "smc_jaw_left": {
+     "smc_jaw_right": 0.0,
+     "top_stop": 0.0,
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "smc_jaw_right": {
+     "top_stop": 0.0,
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "top_stop": {
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "finger_left": {
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "finger_right": {
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "pad_left": {
+     "pad_right": 0.0
+    },
+    "pad_right": {}
+   },
+   "violations": [],
+   "intended_thread_or_press_overlaps_excluded": [
+    [
+     "smc_body",
+     "m5x12_csk_0",
+     35.97
+    ],
+    [
+     "smc_body",
+     "m5x12_csk_1",
+     35.97
+    ],
+    [
+     "smc_body",
+     "m5x12_csk_2",
+     35.97
+    ],
+    [
+     "smc_body",
+     "m5x12_csk_3",
+     35.97
+    ],
+    [
+     "smc_jaw_left",
+     "m3x8_left_0",
+     7.35
+    ],
+    [
+     "smc_jaw_left",
+     "m3x8_left_1",
+     7.35
+    ],
+    [
+     "smc_jaw_left",
+     "m3x8_left_2",
+     7.35
+    ],
+    [
+     "smc_jaw_left",
+     "m3x8_left_3",
+     7.35
+    ],
+    [
+     "smc_jaw_right",
+     "m3x8_right_0",
+     7.35
+    ],
+    [
+     "smc_jaw_right",
+     "m3x8_right_1",
+     7.35
+    ],
+    [
+     "smc_jaw_right",
+     "m3x8_right_2",
+     7.35
+    ],
+    [
+     "smc_jaw_right",
+     "m3x8_right_3",
+     7.35
+    ]
+   ],
+   "n_thread_overlaps": 12
+  },
+  "closed_8": {
+   "top_stop_min_distance_mm": {
+    "finger_left": 2.5,
+    "finger_right": 2.5,
+    "pad_left": 4.319,
+    "pad_right": 4.319,
+    "smc_jaw_left": 7.5,
+    "smc_jaw_right": 7.5,
+    "smc_body": 0.0
+   },
+   "jaw_opening_each_mm": 0.0,
+   "n_solids": 44,
+   "n_main_pairs": 45,
+   "main_pair_volume_mm3": {
+    "flange_disc": {
+     "gripper_plate": 0.0,
+     "smc_body": 0.0,
+     "smc_jaw_left": 0.0,
+     "smc_jaw_right": 0.0,
+     "top_stop": 0.0,
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "gripper_plate": {
+     "smc_body": 0.0,
+     "smc_jaw_left": 0.0,
+     "smc_jaw_right": 0.0,
+     "top_stop": 0.0,
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "smc_body": {
+     "smc_jaw_left": 0.0,
+     "smc_jaw_right": 0.0,
+     "top_stop": 0.0,
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "smc_jaw_left": {
+     "smc_jaw_right": 0.0,
+     "top_stop": 0.0,
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "smc_jaw_right": {
+     "top_stop": 0.0,
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "top_stop": {
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "finger_left": {
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "finger_right": {
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "pad_left": {
+     "pad_right": 0.0
+    },
+    "pad_right": {}
+   },
+   "violations": [],
+   "intended_thread_or_press_overlaps_excluded": [
+    [
+     "smc_body",
+     "m5x12_csk_0",
+     35.97
+    ],
+    [
+     "smc_body",
+     "m5x12_csk_1",
+     35.97
+    ],
+    [
+     "smc_body",
+     "m5x12_csk_2",
+     35.97
+    ],
+    [
+     "smc_body",
+     "m5x12_csk_3",
+     35.97
+    ],
+    [
+     "smc_jaw_left",
+     "m3x8_left_0",
+     7.35
+    ],
+    [
+     "smc_jaw_left",
+     "m3x8_left_1",
+     7.35
+    ],
+    [
+     "smc_jaw_left",
+     "m3x8_left_2",
+     7.35
+    ],
+    [
+     "smc_jaw_left",
+     "m3x8_left_3",
+     7.35
+    ],
+    [
+     "smc_jaw_right",
+     "m3x8_right_0",
+     7.35
+    ],
+    [
+     "smc_jaw_right",
+     "m3x8_right_1",
+     7.35
+    ],
+    [
+     "smc_jaw_right",
+     "m3x8_right_2",
+     7.35
+    ],
+    [
+     "smc_jaw_right",
+     "m3x8_right_3",
+     7.35
+    ]
+   ],
+   "n_thread_overlaps": 12
+  },
+  "closed_on_16": {
+   "top_stop_min_distance_mm": {
+    "finger_left": 2.5,
+    "finger_right": 2.5,
+    "pad_left": 7.606,
+    "pad_right": 7.606,
+    "smc_jaw_left": 7.5,
+    "smc_jaw_right": 7.5,
+    "smc_body": 0.0
+   },
+   "jaw_opening_each_mm": 4.0,
+   "n_solids": 44,
+   "n_main_pairs": 45,
+   "main_pair_volume_mm3": {
+    "flange_disc": {
+     "gripper_plate": 0.0,
+     "smc_body": 0.0,
+     "smc_jaw_left": 0.0,
+     "smc_jaw_right": 0.0,
+     "top_stop": 0.0,
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "gripper_plate": {
+     "smc_body": 0.0,
+     "smc_jaw_left": 0.0,
+     "smc_jaw_right": 0.0,
+     "top_stop": 0.0,
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "smc_body": {
+     "smc_jaw_left": 0.0,
+     "smc_jaw_right": 0.0,
+     "top_stop": 0.0,
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "smc_jaw_left": {
+     "smc_jaw_right": 0.0,
+     "top_stop": 0.0,
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "smc_jaw_right": {
+     "top_stop": 0.0,
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "top_stop": {
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "finger_left": {
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "finger_right": {
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "pad_left": {
+     "pad_right": 0.0
+    },
+    "pad_right": {}
+   },
+   "violations": [],
+   "intended_thread_or_press_overlaps_excluded": [
+    [
+     "smc_body",
+     "m5x12_csk_0",
+     35.97
+    ],
+    [
+     "smc_body",
+     "m5x12_csk_1",
+     35.97
+    ],
+    [
+     "smc_body",
+     "m5x12_csk_2",
+     35.97
+    ],
+    [
+     "smc_body",
+     "m5x12_csk_3",
+     35.97
+    ],
+    [
+     "smc_jaw_left",
+     "m3x8_left_0",
+     7.35
+    ],
+    [
+     "smc_jaw_left",
+     "m3x8_left_1",
+     7.35
+    ],
+    [
+     "smc_jaw_left",
+     "m3x8_left_2",
+     7.35
+    ],
+    [
+     "smc_jaw_left",
+     "m3x8_left_3",
+     7.35
+    ],
+    [
+     "smc_jaw_right",
+     "m3x8_right_0",
+     7.35
+    ],
+    [
+     "smc_jaw_right",
+     "m3x8_right_1",
+     7.35
+    ],
+    [
+     "smc_jaw_right",
+     "m3x8_right_2",
+     7.35
+    ],
+    [
+     "smc_jaw_right",
+     "m3x8_right_3",
+     7.35
+    ]
+   ],
+   "n_thread_overlaps": 12
+  },
+  "closed_on_12": {
+   "top_stop_min_distance_mm": {
+    "finger_left": 2.5,
+    "finger_right": 2.5,
+    "pad_left": 5.852,
+    "pad_right": 5.852,
+    "smc_jaw_left": 7.5,
+    "smc_jaw_right": 7.5,
+    "smc_body": 0.0
+   },
+   "jaw_opening_each_mm": 2.0,
+   "n_solids": 44,
+   "n_main_pairs": 45,
+   "main_pair_volume_mm3": {
+    "flange_disc": {
+     "gripper_plate": 0.0,
+     "smc_body": 0.0,
+     "smc_jaw_left": 0.0,
+     "smc_jaw_right": 0.0,
+     "top_stop": 0.0,
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "gripper_plate": {
+     "smc_body": 0.0,
+     "smc_jaw_left": 0.0,
+     "smc_jaw_right": 0.0,
+     "top_stop": 0.0,
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "smc_body": {
+     "smc_jaw_left": 0.0,
+     "smc_jaw_right": 0.0,
+     "top_stop": 0.0,
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "smc_jaw_left": {
+     "smc_jaw_right": 0.0,
+     "top_stop": 0.0,
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "smc_jaw_right": {
+     "top_stop": 0.0,
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "top_stop": {
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "finger_left": {
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "finger_right": {
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "pad_left": {
+     "pad_right": 0.0
+    },
+    "pad_right": {}
+   },
+   "violations": [],
+   "intended_thread_or_press_overlaps_excluded": [
+    [
+     "smc_body",
+     "m5x12_csk_0",
+     35.97
+    ],
+    [
+     "smc_body",
+     "m5x12_csk_1",
+     35.97
+    ],
+    [
+     "smc_body",
+     "m5x12_csk_2",
+     35.97
+    ],
+    [
+     "smc_body",
+     "m5x12_csk_3",
+     35.97
+    ],
+    [
+     "smc_jaw_left",
+     "m3x8_left_0",
+     7.35
+    ],
+    [
+     "smc_jaw_left",
+     "m3x8_left_1",
+     7.35
+    ],
+    [
+     "smc_jaw_left",
+     "m3x8_left_2",
+     7.35
+    ],
+    [
+     "smc_jaw_left",
+     "m3x8_left_3",
+     7.35
+    ],
+    [
+     "smc_jaw_right",
+     "m3x8_right_0",
+     7.35
+    ],
+    [
+     "smc_jaw_right",
+     "m3x8_right_1",
+     7.35
+    ],
+    [
+     "smc_jaw_right",
+     "m3x8_right_2",
+     7.35
+    ],
+    [
+     "smc_jaw_right",
+     "m3x8_right_3",
+     7.35
+    ]
+   ],
+   "n_thread_overlaps": 12
+  },
+  "mid_12": {
+   "top_stop_min_distance_mm": {
+    "finger_left": 2.5,
+    "finger_right": 2.5,
+    "pad_left": 15.096,
+    "pad_right": 15.096,
+    "smc_jaw_left": 7.5,
+    "smc_jaw_right": 7.5,
+    "smc_body": 0.0
+   },
+   "jaw_opening_each_mm": 12.0,
+   "n_solids": 44,
+   "n_main_pairs": 45,
+   "main_pair_volume_mm3": {
+    "flange_disc": {
+     "gripper_plate": 0.0,
+     "smc_body": 0.0,
+     "smc_jaw_left": 0.0,
+     "smc_jaw_right": 0.0,
+     "top_stop": 0.0,
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "gripper_plate": {
+     "smc_body": 0.0,
+     "smc_jaw_left": 0.0,
+     "smc_jaw_right": 0.0,
+     "top_stop": 0.0,
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "smc_body": {
+     "smc_jaw_left": 0.0,
+     "smc_jaw_right": 0.0,
+     "top_stop": 0.0,
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "smc_jaw_left": {
+     "smc_jaw_right": 0.0,
+     "top_stop": 0.0,
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "smc_jaw_right": {
+     "top_stop": 0.0,
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "top_stop": {
+     "finger_left": 0.0,
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "finger_left": {
+     "finger_right": 0.0,
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "finger_right": {
+     "pad_left": 0.0,
+     "pad_right": 0.0
+    },
+    "pad_left": {
+     "pad_right": 0.0
+    },
+    "pad_right": {}
+   },
+   "violations": [],
+   "intended_thread_or_press_overlaps_excluded": [
+    [
+     "smc_body",
+     "m5x12_csk_0",
+     35.97
+    ],
+    [
+     "smc_body",
+     "m5x12_csk_1",
+     35.97
+    ],
+    [
+     "smc_body",
+     "m5x12_csk_2",
+     35.97
+    ],
+    [
+     "smc_body",
+     "m5x12_csk_3",
+     35.97
+    ],
+    [
+     "smc_jaw_left",
+     "m3x8_left_0",
+     7.35
+    ],
+    [
+     "smc_jaw_left",
+     "m3x8_left_1",
+     7.35
+    ],
+    [
+     "smc_jaw_left",
+     "m3x8_left_2",
+     7.35
+    ],
+    [
+     "smc_jaw_left",
+     "m3x8_left_3",
+     7.35
+    ],
+    [
+     "smc_jaw_right",
+     "m3x8_right_0",
+     7.35
+    ],
+    [
+     "smc_jaw_right",
+     "m3x8_right_1",
+     7.35
+    ],
+    [
+     "smc_jaw_right",
+     "m3x8_right_2",
+     7.35
+    ],
+    [
+     "smc_jaw_right",
+     "m3x8_right_3",
+     7.35
+    ]
+   ],
+   "n_thread_overlaps": 12
+  },
+  "max_boolean_volume_mm3_excluding_thread_hosts": 0.0,
+  "top_stop_min_clearance_to_fingers_pads_jaws_mm": {
+   "open_56": 6.5,
+   "closed_8": 2.5,
+   "closed_on_16": 2.5,
+   "closed_on_12": 2.5,
+   "mid_12": 2.5
+  },
+  "top_stop_clearance_ge_2p5_all_states": true,
+  "note": "hardware (screws/pins) checked against every other part except the part holding its thread / press fit (SMC body or jaw); heat-set inserts are the empty holes"
+ },
+ "reimport": {
+  "flange_disc": {
+   "step_valid": true,
+   "n_solids": 1,
+   "step_volume_mm3": 32219.635472078007,
+   "cad_volume_mm3": 32219.635472076818,
+   "volume_error_rel": 3.6922176569935894e-14,
+   "stl_watertight": true,
+   "stl_winding_consistent": true,
+   "stl_volume_mm3": 32206.565458668072,
+   "stl_volume_error_rel": 0.00040565367103773483,
+   "stl_triangles": 17180,
+   "stl_units": "mm"
+  },
+  "gripper_plate": {
+   "step_valid": true,
+   "n_solids": 1,
+   "step_volume_mm3": 20052.943201403712,
+   "cad_volume_mm3": 20052.943201404854,
+   "volume_error_rel": 5.696547055231122e-14,
+   "stl_watertight": true,
+   "stl_winding_consistent": true,
+   "stl_volume_mm3": 20053.193630798447,
+   "stl_volume_error_rel": 1.2488410857070369e-05,
+   "stl_triangles": 7660,
+   "stl_units": "mm"
+  },
+  "top_stop": {
+   "step_valid": true,
+   "n_solids": 1,
+   "step_volume_mm3": 24312.04252843878,
+   "cad_volume_mm3": 24312.042528438586,
+   "volume_error_rel": 7.930755984418887e-15,
+   "stl_watertight": true,
+   "stl_winding_consistent": true,
+   "stl_volume_mm3": 24312.28916968181,
+   "stl_volume_error_rel": 1.0144817858778858e-05,
+   "stl_triangles": 2124,
+   "stl_units": "mm"
+  },
+  "finger_left": {
+   "step_valid": true,
+   "n_solids": 1,
+   "step_volume_mm3": 44469.0068938663,
+   "cad_volume_mm3": 44469.006893866346,
+   "volume_error_rel": 9.81711729908725e-16,
+   "stl_watertight": true,
+   "stl_winding_consistent": true,
+   "stl_volume_mm3": 44469.25052954862,
+   "stl_volume_error_rel": 5.4787749781371825e-06,
+   "stl_triangles": 5628,
+   "stl_units": "mm"
+  },
+  "finger_right": {
+   "step_valid": true,
+   "n_solids": 1,
+   "step_volume_mm3": 44469.00689386637,
+   "cad_volume_mm3": 44469.006893866346,
+   "volume_error_rel": 4.908558649543625e-16,
+   "stl_watertight": true,
+   "stl_winding_consistent": true,
+   "stl_volume_mm3": 44469.25052954862,
+   "stl_volume_error_rel": 5.4787749781371825e-06,
+   "stl_triangles": 5628,
+   "stl_units": "mm"
+  },
+  "pad_left": {
+   "step_valid": true,
+   "n_solids": 1,
+   "step_volume_mm3": 6044.353972912955,
+   "cad_volume_mm3": 6044.3539729129525,
+   "volume_error_rel": 4.514103769478358e-16,
+   "stl_watertight": true,
+   "stl_winding_consistent": true,
+   "stl_volume_mm3": 6044.407071258959,
+   "stl_volume_error_rel": 8.78478432014695e-06,
+   "stl_triangles": 2612,
+   "stl_units": "mm"
+  },
+  "pad_right": {
+   "step_valid": true,
+   "n_solids": 1,
+   "step_volume_mm3": 6044.353972912968,
+   "cad_volume_mm3": 6044.3539729129525,
+   "volume_error_rel": 2.5579921360377363e-15,
+   "stl_watertight": true,
+   "stl_winding_consistent": true,
+   "stl_volume_mm3": 6044.407071258959,
+   "stl_volume_error_rel": 8.78478432014695e-06,
+   "stl_triangles": 2612,
+   "stl_units": "mm"
+  },
+  "assembly_open": {
+   "step_valid": true,
+   "n_solids": 44,
+   "size_MB": 3.0
+  },
+  "assembly_closed16": {
+   "step_valid": true,
+   "n_solids": 44,
+   "size_MB": 3.0
+  },
+  "smc_gripper_mounted": {
+   "step_valid": true,
+   "n_solids": 3
+  },
+  "sim_meshes": {
+   "meshes/collision/base_flange_disc.stl": {
+    "watertight": true,
+    "triangles": 500,
+    "extent_m": [
+     0.072,
+     0.072,
+     0.0083
+    ],
+    "convex": true
+   },
+   "meshes/collision/base_gripper_plate.stl": {
+    "watertight": true,
+    "triangles": 60,
+    "extent_m": [
+     0.058,
+     0.062,
+     0.006
+    ],
+    "convex": true
+   },
+   "meshes/collision/base_smc_body_0.stl": {
+    "watertight": true,
+    "triangles": 396,
+    "extent_m": [
+     0.0399,
+     0.0325,
+     0.0683
+    ],
+    "convex": true
+   },
+   "meshes/collision/base_smc_body_1.stl": {
+    "watertight": true,
+    "triangles": 788,
+    "extent_m": [
+     0.1162,
+     0.035,
+     0.0787
+    ],
+    "convex": true
+   },
+   "meshes/collision/base_smc_body_2.stl": {
+    "watertight": true,
+    "triangles": 664,
+    "extent_m": [
+     0.0019,
+     0.0325,
+     0.0683
+    ],
+    "convex": true
+   },
+   "meshes/collision/base_top_stop_bar.stl": {
+    "watertight": true,
+    "triangles": 12,
+    "extent_m": [
+     0.003,
+     0.055,
+     0.0085
+    ],
+    "convex": true
+   },
+   "meshes/collision/base_top_stop_neg.stl": {
+    "watertight": true,
+    "triangles": 32,
+    "extent_m": [
+     0.038,
+     0.0105,
+     0.0565
+    ],
+    "convex": true
+   },
+   "meshes/collision/base_top_stop_pos.stl": {
+    "watertight": true,
+    "triangles": 32,
+    "extent_m": [
+     0.038,
+     0.0105,
+     0.0565
+    ],
+    "convex": true
+   },
+   "meshes/collision/finger_jaw_left_low.stl": {
+    "watertight": true,
+    "triangles": 20,
+    "extent_m": [
+     0.0658,
+     0.0055,
+     0.0051
+    ],
+    "convex": true
+   },
+   "meshes/collision/finger_jaw_left_top.stl": {
+    "watertight": true,
+    "triangles": 28,
+    "extent_m": [
+     0.029,
+     0.02,
+     0.0071
+    ],
+    "convex": true
+   },
+   "meshes/collision/finger_jaw_right_low.stl": {
+    "watertight": true,
+    "triangles": 20,
+    "extent_m": [
+     0.0658,
+     0.0055,
+     0.0051
+    ],
+    "convex": true
+   },
+   "meshes/collision/finger_jaw_right_top.stl": {
+    "watertight": true,
+    "triangles": 28,
+    "extent_m": [
+     0.029,
+     0.02,
+     0.0071
+    ],
+    "convex": true
+   },
+   "meshes/collision/finger_left_block.stl": {
+    "watertight": true,
+    "triangles": 16,
+    "extent_m": [
+     0.0126,
+     0.0564,
+     0.0564
+    ],
+    "convex": true
+   },
+   "meshes/collision/finger_left_column.stl": {
+    "watertight": true,
+    "triangles": 12,
+    "extent_m": [
+     0.006,
+     0.0564,
+     0.0105
+    ],
+    "convex": true
+   },
+   "meshes/collision/finger_left_foot.stl": {
+    "watertight": true,
+    "triangles": 20,
+    "extent_m": [
+     0.027,
+     0.04,
+     0.007
+    ],
+    "convex": true
+   },
+   "meshes/collision/finger_left_ledge.stl": {
+    "watertight": true,
+    "triangles": 28,
+    "extent_m": [
+     0.019,
+     0.0564,
+     0.003
+    ],
+    "convex": true
+   },
+   "meshes/collision/finger_pad_left.stl": {
+    "watertight": true,
+    "triangles": 20,
+    "extent_m": [
+     0.003,
+     0.05,
+     0.045
+    ],
+    "convex": true
+   },
+   "meshes/collision/finger_pad_right.stl": {
+    "watertight": true,
+    "triangles": 20,
+    "extent_m": [
+     0.003,
+     0.05,
+     0.045
+    ],
+    "convex": true
+   },
+   "meshes/collision/finger_right_block.stl": {
+    "watertight": true,
+    "triangles": 16,
+    "extent_m": [
+     0.0126,
+     0.0564,
+     0.0564
+    ],
+    "convex": true
+   },
+   "meshes/collision/finger_right_column.stl": {
+    "watertight": true,
+    "triangles": 12,
+    "extent_m": [
+     0.006,
+     0.0564,
+     0.0105
+    ],
+    "convex": true
+   },
+   "meshes/collision/finger_right_foot.stl": {
+    "watertight": true,
+    "triangles": 20,
+    "extent_m": [
+     0.027,
+     0.04,
+     0.007
+    ],
+    "convex": true
+   },
+   "meshes/visual/base_flange_disc.stl": {
+    "watertight": true,
+    "triangles": 17180,
+    "extent_m": [
+     0.072,
+     0.072,
+     0.0083
+    ],
+    "convex": null
+   },
+   "meshes/visual/base_gripper_plate.stl": {
+    "watertight": true,
+    "triangles": 7660,
+    "extent_m": [
+     0.058,
+     0.062,
+     0.006
+    ],
+    "convex": null
+   },
+   "meshes/visual/base_smc_body.stl": {
+    "watertight": false,
+    "triangles": 7035,
+    "extent_m": [
+     0.158,
+     0.035,
+     0.0787
+    ],
+    "convex": null
+   },
+   "meshes/visual/base_top_stop.stl": {
+    "watertight": true,
+    "triangles": 2124,
+    "extent_m": [
+     0.038,
+     0.055,
+     0.0635
+    ],
+    "convex": null
+   },
+   "meshes/visual/finger_jaw_left.stl": {
+    "watertight": true,
+    "triangles": 1778,
+    "extent_m": [
+     0.0658,
+     0.02,
+     0.0122
+    ],
+    "convex": null
+   },
+   "meshes/visual/finger_jaw_right.stl": {
+    "watertight": true,
+    "triangles": 1778,
+    "extent_m": [
+     0.0658,
+     0.02,
+     0.0122
+    ],
+    "convex": null
+   },
+   "meshes/visual/finger_left.stl": {
+    "watertight": true,
+    "triangles": 1932,
+    "extent_m": [
+     0.027,
+     0.0564,
+     0.0769
+    ],
+    "convex": null
+   },
+   "meshes/visual/finger_pad_left.stl": {
+    "watertight": true,
+    "triangles": 1308,
+    "extent_m": [
+     0.003,
+     0.05,
+     0.045
+    ],
+    "convex": null
+   },
+   "meshes/visual/finger_pad_right.stl": {
+    "watertight": true,
+    "triangles": 1308,
+    "extent_m": [
+     0.003,
+     0.05,
+     0.045
+    ],
+    "convex": null
+   },
+   "meshes/visual/finger_right.stl": {
+    "watertight": true,
+    "triangles": 1932,
+    "extent_m": [
+     0.027,
+     0.0564,
+     0.0769
+    ],
+    "convex": null
+   }
+  }
+ },
+ "hold_check_a": {
+  "box": {
+   "name": "Terumo Ultimaster Nagomi",
+   "t": 16.0,
+   "h": 250.0,
+   "l": 295.0
+  },
+  "mass_kg": 0.15,
+  "grip_centre_s_mm": 42.5,
+  "mu": 0.5,
+  "dynamic_factor": 2.0,
+  "cog_offset_from_grip_mm": 105.0,
+  "required_friction_torque_Nm": 0.309015,
+  "effective_radius_mm": 18.1886406627323,
+  "model": "two pads, uniform pressure on the 50 x 45 mm patch, torque about the clamp axis X: T_cap = 2*mu*N*r_mean; combined with the shear (2W) by the friction ellipse",
+  "cases": {
+   "11 N (catalog minimum of the LEHF20 range / brief)": {
+    "N_per_finger": 11.0,
+    "T_cap_Nm": 0.2001,
+    "margin_torque_only": 0.647,
+    "margin_ellipse": 0.638
+   },
+   "20 N (brief nominal)": {
+    "N_per_finger": 20.0,
+    "T_cap_Nm": 0.3638,
+    "margin_torque_only": 1.177,
+    "margin_ellipse": 1.16
+   },
+   "40 % pushing, nominal at L=43.2": {
+    "N_per_finger": 8.87,
+    "T_cap_Nm": 0.1612,
+    "margin_torque_only": 0.522,
+    "margin_ellipse": 0.514
+   },
+   "70 % pushing, nominal": {
+    "N_per_finger": 15.49,
+    "T_cap_Nm": 0.2818,
+    "margin_torque_only": 0.912,
+    "margin_ellipse": 0.899
+   },
+   "70 % pushing, -25 %": {
+    "N_per_finger": 11.62,
+    "T_cap_Nm": 0.2114,
+    "margin_torque_only": 0.684,
+    "margin_ellipse": 0.674
+   },
+   "100 % pushing, nominal": {
+    "N_per_finger": 24.31,
+    "T_cap_Nm": 0.4422,
+    "margin_torque_only": 1.431,
+    "margin_ellipse": 1.41
+   },
+   "100 % pushing, -25 % (worst)": {
+    "N_per_finger": 18.23,
+    "T_cap_Nm": 0.3316,
+    "margin_torque_only": 1.073,
+    "margin_ellipse": 1.057
+   }
+  },
+  "all_boxes_at_100pct_worst": {
+   "1": {
+    "l": 250.0,
+    "cog_offset_mm": 82.5,
+    "T_req_Nm": 0.2428,
+    "margin": 1.366
+   },
+   "2": {
+    "l": 250.0,
+    "cog_offset_mm": 82.5,
+    "T_req_Nm": 0.2428,
+    "margin": 1.366
+   },
+   "3": {
+    "l": 250.0,
+    "cog_offset_mm": 82.5,
+    "T_req_Nm": 0.2428,
+    "margin": 1.366
+   },
+   "4": {
+    "l": 295.0,
+    "cog_offset_mm": 105.0,
+    "T_req_Nm": 0.309,
+    "margin": 1.073
+   },
+   "5": {
+    "l": 250.0,
+    "cog_offset_mm": 82.5,
+    "T_req_Nm": 0.2428,
+    "margin": 1.366
+   }
+  },
+  "recommendation": "Pushing force 100 % (LEC step data), pushing speed <= 20 mm/s: nominal 24.3 N per finger at L = 43.2 mm (18.2 N worst case with the +-25 % accuracy); 11 N and 20 N do NOT give margin >= 1.5 for box 4 with dynamic factor 2",
+  "mitigation_if_margin_too_thin": "grip with the pad centre as deep as possible (s_pad = 42.5 is the zone centre); slow the lift/transport acceleration; mu of ribbed TPU on cardboard is typically > 0.5",
+  "note": "NO-STOP reference (previous revision); see hold_check_a_with_stop"
+ },
+ "hold_check_a_with_stop": {
+  "model": "static lower bound: two pads (uniform pressure, friction ellipse F/(2 mu N), T/(2 mu N r_mean)) + frictionless stop reaction F_s >= 0 along z at s = 15 (lever 27.5 mm from the pad centre, 25.7 mm above it) + gravity x 2; margin = 1 / min over F_s of the ellipse utilisation. Mechanism upper bound: box pivots about the stop contact, pads slide with mu N over the patch (mean radius 40.1 mm from the pivot).",
+  "mu": 0.5,
+  "dynamic_factor": 2.0,
+  "lever_stop_mm": 27.5,
+  "pad_centre_below_stop_mm": 25.69999999999999,
+  "r_mean_pad_mm": 18.1886406627323,
+  "r_mean_pivot_mm": 40.12206726437699,
+  "boxes": {
+   "1": {
+    "name": "Boston Scientific Agent MONORAIL",
+    "l": 250.0,
+    "h": 230.0,
+    "11.0 N": {
+     "no_stop": 0.805,
+     "with_stop": 1.12,
+     "stop_force_N": 5.25,
+     "pivot_mechanism_bound": 1.363
+    },
+    "18.2 N": {
+     "no_stop": 1.334,
+     "with_stop": 1.857,
+     "stop_force_N": 5.25,
+     "pivot_mechanism_bound": 2.26
+    },
+    "24.3 N": {
+     "no_stop": 1.779,
+     "with_stop": 2.476,
+     "stop_force_N": 5.25,
+     "pivot_mechanism_bound": 3.013
+    },
+    "hang_angle_deg": 42.7,
+    "margin_at_hang_angle_with_stop": {
+     "11.0 N": 3.738,
+     "18.2 N": 6.195,
+     "24.3 N": 8.261
+    },
+    "margin_vs_tool_tilt_with_stop": {
+     "0 deg": {
+      "11.0 N": 1.12,
+      "18.2 N": 1.857,
+      "24.3 N": 2.476
+     },
+     "15 deg": {
+      "11.0 N": 1.475,
+      "18.2 N": 2.444,
+      "24.3 N": 3.259
+     },
+     "30 deg": {
+      "11.0 N": 2.315,
+      "18.2 N": 3.837,
+      "24.3 N": 5.117
+     },
+     "45 deg": {
+      "11.0 N": 3.614,
+      "18.2 N": 5.99,
+      "24.3 N": 7.986
+     }
+    },
+    "stop_engaged_after_slip": {
+     "gap 4.0 mm": {
+      "11.0 N": 1.283,
+      "18.2 N": 2.127,
+      "24.3 N": 2.837
+     },
+     "gap 8.9 mm": {
+      "11.0 N": 1.609,
+      "18.2 N": 2.666,
+      "24.3 N": 3.555
+     }
+    },
+    "cog_offset_along_s_mm": 82.5,
+    "cog_depth_below_pad_centre_mm": 89.30000000000001
+   },
+   "2": {
+    "name": "iVascular angiolite",
+    "l": 250.0,
+    "h": 240.0,
+    "11.0 N": {
+     "no_stop": 0.805,
+     "with_stop": 1.12,
+     "stop_force_N": 5.25,
+     "pivot_mechanism_bound": 1.363
+    },
+    "18.2 N": {
+     "no_stop": 1.334,
+     "with_stop": 1.857,
+     "stop_force_N": 5.25,
+     "pivot_mechanism_bound": 2.26
+    },
+    "24.3 N": {
+     "no_stop": 1.779,
+     "with_stop": 2.476,
+     "stop_force_N": 5.25,
+     "pivot_mechanism_bound": 3.013
+    },
+    "hang_angle_deg": 41.2,
+    "margin_at_hang_angle_with_stop": {
+     "11.0 N": 3.738,
+     "18.2 N": 6.195,
+     "24.3 N": 8.261
+    },
+    "margin_vs_tool_tilt_with_stop": {
+     "0 deg": {
+      "11.0 N": 1.12,
+      "18.2 N": 1.857,
+      "24.3 N": 2.476
+     },
+     "15 deg": {
+      "11.0 N": 1.498,
+      "18.2 N": 2.482,
+      "24.3 N": 3.31
+     },
+     "30 deg": {
+      "11.0 N": 2.423,
+      "18.2 N": 4.016,
+      "24.3 N": 5.355
+     },
+     "45 deg": {
+      "11.0 N": 3.397,
+      "18.2 N": 5.631,
+      "24.3 N": 7.508
+     }
+    },
+    "stop_engaged_after_slip": {
+     "gap 4.0 mm": {
+      "11.0 N": 1.293,
+      "18.2 N": 2.144,
+      "24.3 N": 2.858
+     },
+     "gap 8.9 mm": {
+      "11.0 N": 1.642,
+      "18.2 N": 2.722,
+      "24.3 N": 3.63
+     }
+    },
+    "cog_offset_along_s_mm": 82.5,
+    "cog_depth_below_pad_centre_mm": 94.30000000000001
+   },
+   "3": {
+    "name": "Terumo Accuforce",
+    "l": 250.0,
+    "h": 220.0,
+    "11.0 N": {
+     "no_stop": 0.805,
+     "with_stop": 1.12,
+     "stop_force_N": 5.25,
+     "pivot_mechanism_bound": 1.363
+    },
+    "18.2 N": {
+     "no_stop": 1.334,
+     "with_stop": 1.857,
+     "stop_force_N": 5.25,
+     "pivot_mechanism_bound": 2.26
+    },
+    "24.3 N": {
+     "no_stop": 1.779,
+     "with_stop": 2.476,
+     "stop_force_N": 5.25,
+     "pivot_mechanism_bound": 3.013
+    },
+    "hang_angle_deg": 44.4,
+    "margin_at_hang_angle_with_stop": {
+     "11.0 N": 3.738,
+     "18.2 N": 6.195,
+     "24.3 N": 8.261
+    },
+    "margin_vs_tool_tilt_with_stop": {
+     "0 deg": {
+      "11.0 N": 1.12,
+      "18.2 N": 1.857,
+      "24.3 N": 2.476
+     },
+     "15 deg": {
+      "11.0 N": 1.452,
+      "18.2 N": 2.407,
+      "24.3 N": 3.209
+     },
+     "30 deg": {
+      "11.0 N": 2.216,
+      "18.2 N": 3.673,
+      "24.3 N": 4.897
+     },
+     "45 deg": {
+      "11.0 N": 3.729,
+      "18.2 N": 6.18,
+      "24.3 N": 8.241
+     }
+    },
+    "stop_engaged_after_slip": {
+     "gap 4.0 mm": {
+      "11.0 N": 1.274,
+      "18.2 N": 2.112,
+      "24.3 N": 2.815
+     },
+     "gap 8.9 mm": {
+      "11.0 N": 1.576,
+      "18.2 N": 2.613,
+      "24.3 N": 3.483
+     }
+    },
+    "cog_offset_along_s_mm": 82.5,
+    "cog_depth_below_pad_centre_mm": 84.30000000000001
+   },
+   "4": {
+    "name": "Terumo Ultimaster Nagomi",
+    "l": 295.0,
+    "h": 250.0,
+    "11.0 N": {
+     "no_stop": 0.638,
+     "with_stop": 0.93,
+     "stop_force_N": 6.9,
+     "pivot_mechanism_bound": 1.132
+    },
+    "18.2 N": {
+     "no_stop": 1.057,
+     "with_stop": 1.542,
+     "stop_force_N": 6.9,
+     "pivot_mechanism_bound": 1.876
+    },
+    "24.3 N": {
+     "no_stop": 1.41,
+     "with_stop": 2.056,
+     "stop_force_N": 6.9,
+     "pivot_mechanism_bound": 2.501
+    },
+    "hang_angle_deg": 46.6,
+    "margin_at_hang_angle_with_stop": {
+     "11.0 N": 3.738,
+     "18.2 N": 6.195,
+     "24.3 N": 8.261
+    },
+    "margin_vs_tool_tilt_with_stop": {
+     "0 deg": {
+      "11.0 N": 0.93,
+      "18.2 N": 1.542,
+      "24.3 N": 2.056
+     },
+     "15 deg": {
+      "11.0 N": 1.201,
+      "18.2 N": 1.99,
+      "24.3 N": 2.654
+     },
+     "30 deg": {
+      "11.0 N": 1.835,
+      "18.2 N": 3.042,
+      "24.3 N": 4.056
+     },
+     "45 deg": {
+      "11.0 N": 3.649,
+      "18.2 N": 6.049,
+      "24.3 N": 8.065
+     }
+    },
+    "stop_engaged_after_slip": {
+     "gap 4.0 mm": {
+      "11.0 N": 1.055,
+      "18.2 N": 1.749,
+      "24.3 N": 2.332
+     },
+     "gap 8.9 mm": {
+      "11.0 N": 1.302,
+      "18.2 N": 2.159,
+      "24.3 N": 2.878
+     }
+    },
+    "cog_offset_along_s_mm": 105.0,
+    "cog_depth_below_pad_centre_mm": 99.30000000000001
+   },
+   "5": {
+    "name": "unknown (photo missing)",
+    "l": 250.0,
+    "h": 230.0,
+    "11.0 N": {
+     "no_stop": 0.805,
+     "with_stop": 1.12,
+     "stop_force_N": 5.25,
+     "pivot_mechanism_bound": 1.363
+    },
+    "18.2 N": {
+     "no_stop": 1.334,
+     "with_stop": 1.857,
+     "stop_force_N": 5.25,
+     "pivot_mechanism_bound": 2.26
+    },
+    "24.3 N": {
+     "no_stop": 1.779,
+     "with_stop": 2.476,
+     "stop_force_N": 5.25,
+     "pivot_mechanism_bound": 3.013
+    },
+    "hang_angle_deg": 42.7,
+    "margin_at_hang_angle_with_stop": {
+     "11.0 N": 3.738,
+     "18.2 N": 6.195,
+     "24.3 N": 8.261
+    },
+    "margin_vs_tool_tilt_with_stop": {
+     "0 deg": {
+      "11.0 N": 1.12,
+      "18.2 N": 1.857,
+      "24.3 N": 2.476
+     },
+     "15 deg": {
+      "11.0 N": 1.475,
+      "18.2 N": 2.444,
+      "24.3 N": 3.259
+     },
+     "30 deg": {
+      "11.0 N": 2.315,
+      "18.2 N": 3.837,
+      "24.3 N": 5.117
+     },
+     "45 deg": {
+      "11.0 N": 3.614,
+      "18.2 N": 5.99,
+      "24.3 N": 7.986
+     }
+    },
+    "stop_engaged_after_slip": {
+     "gap 4.0 mm": {
+      "11.0 N": 1.283,
+      "18.2 N": 2.127,
+      "24.3 N": 2.837
+     },
+     "gap 8.9 mm": {
+      "11.0 N": 1.609,
+      "18.2 N": 2.666,
+      "24.3 N": 3.555
+     }
+    },
+    "cog_offset_along_s_mm": 82.5,
+    "cog_depth_below_pad_centre_mm": 89.30000000000001
+   }
+  },
+  "rotate_to_hang_note": "Rotate the tool about the pad axis X so that the line pad centre -> box CoG is vertical: tool axis tilted by theta = atan(d / (h/2 - 25.7)) from the downward vertical with the box far end (s > 0 side) DOWN, i.e. the spine end up toward the stop (46-48 deg boxes 1-3/5 ~ 43 deg; box 4 47 deg). In that attitude gravity produces no torque about X: the pads only carry W (margin = 2 mu N / (2 W) = 3.7 at 11 N); stop and friction torque are not needed. Whatever the transport attitude, keep the tilt within ~15 deg of that angle for accelerations; at 0 deg the stop is loaded by ~7 N."
+ },
+ "stop_stiffness": {
+  "method": "voxel FE 1 mm hex8, E = 3200 MPa (PA12-CF, printed XY, conservative), nu 0.35, 29694 nodes; bolt clamp zones (r 6 mm on the side-plate inner faces) fixed; load 15 N toward the body spread over the spine-side 2 mm strip of the stop face",
+  "load_N": 15.0,
+  "deflection_mm": 0.010341505863522064,
+  "stiffness_N_per_mm": 1450.4657443467684,
+  "cg_converged": true,
+  "note": "bolt/hole clearance (about 0.2 mm on the diameter, M5 in d5.4) and the clamp friction are not in the FE; with friction >= 15 N x lever / preload no slip is expected (M5 preload ~ 3 kN)."
+ },
+ "jaw_moments_b": {
+  "box_cog_arm_y_mm": 105.0,
+  "box_cog_arm_z_from_jaw_plane_mm": 142.5,
+  "finger_pair_mass_kg": 0.10502472013733163,
+  "finger_cog_z_mm": 28.7559109751912,
+  "allowable": {
+   "Mp": 0.68,
+   "My": 0.68,
+   "Mr": 1.4,
+   "Fv_N": 98.0
+  },
+  "axes": "Mp about Y, My about Z (finger axis), Mr about X (stroke axis), Fv along Z (catalog p.45 figure); arms measured from the jaw mounting plane (conservative)",
+  "case_A_gravity_along_tool_axis_plus_2g_one_axis_Nm": {
+   "Mr": 0.573885,
+   "Mp": 0.4786314990783334,
+   "My": 0.309015
+  },
+  "case_B_3g_any_single_axis_Nm": {
+   "Mr": 0.6290662499999999,
+   "Mp": 0.7179472486175001,
+   "My": 0.4635225
+  },
+  "margins_A": {
+   "Mr": 2.439513142877057,
+   "Mp": 1.4207171933093155,
+   "My": 2.200540426840121
+  },
+  "margins_B": {
+   "Mr": 2.2255207619229296,
+   "Mp": 0.9471447955395436,
+   "My": 1.4670269512267475
+  },
+  "Fv_load_N_3g": 4.4145,
+  "Fv_margin": 22.19956960018122,
+  "pass": false
+ },
+ "crush_c": {
+  "nominal 100 %": {
+   "F_N": 24.31,
+   "pressure_macro_kPa": 10.8,
+   "pressure_on_rib_crests_kPa": 27.01
+  },
+  "max 100 % +25 %": {
+   "F_N": 30.39,
+   "pressure_macro_kPa": 13.51,
+   "pressure_on_rib_crests_kPa": 33.77
+  },
+  "28 N catalog max": {
+   "F_N": 28.0,
+   "pressure_macro_kPa": 12.44,
+   "pressure_on_rib_crests_kPa": 31.11
+  },
+  "pad_area_macro_mm2": 2250.0,
+  "rib_contact_area_mm2": 900.0,
+  "reference": "flat-crush strength of corrugated / folding carton board is typically >= 100 kPa (UNCONFIRMED for these cartons; not measured). Pressure at max force is ~34% of that on the rib crests.",
+  "ok_with_100kPa_reference": true
+ },
+ "fit_d": {
+  "t=12": {
+   "min": {
+    "t_mm": 11.5,
+    "approach_clearance_per_side_open_mm": 22.25,
+    "grip_stroke_used_per_jaw_mm": 1.75,
+    "remaining_closing_stroke_per_jaw_mm": 1.75,
+    "registration_approach_gap_mm": 16.0,
+    "registration_clearance_per_side_mm": 2.25
+   },
+   "nom": {
+    "t_mm": 12.0,
+    "approach_clearance_per_side_open_mm": 22.0,
+    "grip_stroke_used_per_jaw_mm": 2.0,
+    "remaining_closing_stroke_per_jaw_mm": 2.0,
+    "registration_approach_gap_mm": 16.0,
+    "registration_clearance_per_side_mm": 2.0
+   },
+   "max": {
+    "t_mm": 12.5,
+    "approach_clearance_per_side_open_mm": 21.75,
+    "grip_stroke_used_per_jaw_mm": 2.25,
+    "remaining_closing_stroke_per_jaw_mm": 2.25,
+    "registration_approach_gap_mm": 16.0,
+    "registration_clearance_per_side_mm": 1.75
+   }
+  },
+  "t=15": {
+   "min": {
+    "t_mm": 14.5,
+    "approach_clearance_per_side_open_mm": 20.75,
+    "grip_stroke_used_per_jaw_mm": 3.25,
+    "remaining_closing_stroke_per_jaw_mm": 3.25,
+    "registration_approach_gap_mm": 19.0,
+    "registration_clearance_per_side_mm": 2.25
+   },
+   "nom": {
+    "t_mm": 15.0,
+    "approach_clearance_per_side_open_mm": 20.5,
+    "grip_stroke_used_per_jaw_mm": 3.5,
+    "remaining_closing_stroke_per_jaw_mm": 3.5,
+    "registration_approach_gap_mm": 19.0,
+    "registration_clearance_per_side_mm": 2.0
+   },
+   "max": {
+    "t_mm": 15.5,
+    "approach_clearance_per_side_open_mm": 20.25,
+    "grip_stroke_used_per_jaw_mm": 3.75,
+    "remaining_closing_stroke_per_jaw_mm": 3.75,
+    "registration_approach_gap_mm": 19.0,
+    "registration_clearance_per_side_mm": 1.75
+   }
+  },
+  "t=16": {
+   "min": {
+    "t_mm": 15.5,
+    "approach_clearance_per_side_open_mm": 20.25,
+    "grip_stroke_used_per_jaw_mm": 3.75,
+    "remaining_closing_stroke_per_jaw_mm": 3.75,
+    "registration_approach_gap_mm": 20.0,
+    "registration_clearance_per_side_mm": 2.25
+   },
+   "nom": {
+    "t_mm": 16.0,
+    "approach_clearance_per_side_open_mm": 20.0,
+    "grip_stroke_used_per_jaw_mm": 4.0,
+    "remaining_closing_stroke_per_jaw_mm": 4.0,
+    "registration_approach_gap_mm": 20.0,
+    "registration_clearance_per_side_mm": 2.0
+   },
+   "max": {
+    "t_mm": 16.5,
+    "approach_clearance_per_side_open_mm": 19.75,
+    "grip_stroke_used_per_jaw_mm": 4.25,
+    "remaining_closing_stroke_per_jaw_mm": 4.25,
+    "registration_approach_gap_mm": 20.0,
+    "registration_clearance_per_side_mm": 1.75
+   }
+  },
+  "capture_open_56_per_side_mm": 19.75,
+  "capture_open_with_tip_chamfer_mm": 27.75,
+  "note": "Open approach (56 mm): the box is captured within +-(20 - t/2 ...) mm laterally (+5 mm tip chamfer), and the fixed centre top-stop (x +-2, always between the pads) is hit by the box top edge at any jaw opening, so the descent can be stopped on contact (force/z) with no pre-closing. Spine-side end of the stop at s = 15; the stop only registers the 16/12 mm spine if it is within +-2 mm per side of the centre at closed; open approach centre error up to +-(gap-t)/2."
+ },
+ "clearance_e": {
+  "fingers+pads (incl. chamfers)": {
+   "s_min": 14.3,
+   "s_max": 70.7,
+   "margin_to_s0_mm": 4.3,
+   "margin_to_s90_mm": 19.3
+  },
+  "smc_body+jaws": {
+   "s_min": 25.0,
+   "s_max": 60.0,
+   "margin_to_s0_mm": 15.0,
+   "margin_to_s90_mm": 30.0
+  },
+  "gripper_plate": {
+   "s_min": 11.5,
+   "s_max": 73.5,
+   "margin_to_s0_mm": 1.5,
+   "margin_to_s90_mm": 16.5
+  },
+  "top_stop": {
+   "s_min": 15.0,
+   "s_max": 70.0,
+   "margin_to_s0_mm": 5.0,
+   "margin_to_s90_mm": 20.0
+  },
+  "flange_disc": {
+   "s_min": 6.5,
+   "s_max": 78.5,
+   "margin_to_s0_mm": -3.5,
+   "margin_to_s90_mm": 11.5
+  },
+  "hardware": {
+   "s_min": 11.5,
+   "s_max": 71.5,
+   "margin_to_s0_mm": 1.5,
+   "margin_to_s90_mm": 18.5
+  },
+  "assumption": "grip centre at s = 42.5 (middle of the 15..70 zone), link6 Y parallel to s (mirrored mounting gives identical margins: the tool is symmetric about y = 0)",
+  "required": "fingers incl. chamfers s >= 10; nothing of this tool at s >= 90; (the other tool is assumed to exist only at s < 0)",
+  "whole_tool_s_range": [
+   6.5,
+   78.5
+  ],
+  "pass_fingers_s_ge_10": true,
+  "pass_tool_s_lt_90": true,
+  "pass_tool_s_ge_0": true,
+  "flange_disc_note": "the flange disc (R36) is the part closest to the spine plane of everything except the fingers (s = 6.5); it is 89 mm above the jaw plane",
+  "pad_zone_s_range": [
+   17.5,
+   67.5
+  ],
+  "neighbour_proud_case": {
+   "neighbour_spine_s_mm": 85.0,
+   "margin_fingers_mm": 14.3,
+   "margin_whole_tool_mm": 6.5,
+   "note": "shared NEIGHBOUR_PROTRUSION = 15 mm (ASSUMED): a neighbour spine may stand 15 mm proud, i.e. at s = 85"
+  }
+ },
+ "registration_v3": {
+  "chamfer_mm": 8.0,
+  "chamfer_angle_deg": 45,
+  "preclose_offset_mm": 4.0,
+  "jaw_backlash_per_side_mm": 0.5,
+  "print_tol_per_side_mm": 0.3,
+  "bar_thickness_mm": 3.0,
+  "rows": {
+   "t=12": {
+    "thin": {
+     "t_actual": 11.5,
+     "pad_gap_preclosed": 16.0,
+     "tip_gap": 32.0,
+     "capture_nominal": 10.25,
+     "capture_effective": 9.45,
+     "clearance_per_side_straight": 2.25,
+     "residual_error_after_centring": 2.75,
+     "bar_fully_on_edge_if_error_le": 4.25,
+     "bar_margin": 1.5,
+     "closing_stroke_per_jaw_to_clamp": 2.25
+    },
+    "nom": {
+     "t_actual": 12.0,
+     "pad_gap_preclosed": 16.0,
+     "tip_gap": 32.0,
+     "capture_nominal": 10.0,
+     "capture_effective": 9.2,
+     "clearance_per_side_straight": 2.0,
+     "residual_error_after_centring": 2.5,
+     "bar_fully_on_edge_if_error_le": 4.5,
+     "bar_margin": 2.0,
+     "closing_stroke_per_jaw_to_clamp": 2.0
+    },
+    "thick": {
+     "t_actual": 12.5,
+     "pad_gap_preclosed": 16.0,
+     "tip_gap": 32.0,
+     "capture_nominal": 9.75,
+     "capture_effective": 8.95,
+     "clearance_per_side_straight": 1.75,
+     "residual_error_after_centring": 2.25,
+     "bar_fully_on_edge_if_error_le": 4.75,
+     "bar_margin": 2.5,
+     "closing_stroke_per_jaw_to_clamp": 1.75
+    }
+   },
+   "t=14": {
+    "thin": {
+     "t_actual": 13.5,
+     "pad_gap_preclosed": 18.0,
+     "tip_gap": 34.0,
+     "capture_nominal": 10.25,
+     "capture_effective": 9.45,
+     "clearance_per_side_straight": 2.25,
+     "residual_error_after_centring": 2.75,
+     "bar_fully_on_edge_if_error_le": 5.25,
+     "bar_margin": 2.5,
+     "closing_stroke_per_jaw_to_clamp": 2.25
+    },
+    "nom": {
+     "t_actual": 14.0,
+     "pad_gap_preclosed": 18.0,
+     "tip_gap": 34.0,
+     "capture_nominal": 10.0,
+     "capture_effective": 9.2,
+     "clearance_per_side_straight": 2.0,
+     "residual_error_after_centring": 2.5,
+     "bar_fully_on_edge_if_error_le": 5.5,
+     "bar_margin": 3.0,
+     "closing_stroke_per_jaw_to_clamp": 2.0
+    },
+    "thick": {
+     "t_actual": 14.5,
+     "pad_gap_preclosed": 18.0,
+     "tip_gap": 34.0,
+     "capture_nominal": 9.75,
+     "capture_effective": 8.95,
+     "clearance_per_side_straight": 1.75,
+     "residual_error_after_centring": 2.25,
+     "bar_fully_on_edge_if_error_le": 5.75,
+     "bar_margin": 3.5,
+     "closing_stroke_per_jaw_to_clamp": 1.75
+    }
+   },
+   "t=15": {
+    "thin": {
+     "t_actual": 14.5,
+     "pad_gap_preclosed": 19.0,
+     "tip_gap": 35.0,
+     "capture_nominal": 10.25,
+     "capture_effective": 9.45,
+     "clearance_per_side_straight": 2.25,
+     "residual_error_after_centring": 2.75,
+     "bar_fully_on_edge_if_error_le": 5.75,
+     "bar_margin": 3.0,
+     "closing_stroke_per_jaw_to_clamp": 2.25
+    },
+    "nom": {
+     "t_actual": 15.0,
+     "pad_gap_preclosed": 19.0,
+     "tip_gap": 35.0,
+     "capture_nominal": 10.0,
+     "capture_effective": 9.2,
+     "clearance_per_side_straight": 2.0,
+     "residual_error_after_centring": 2.5,
+     "bar_fully_on_edge_if_error_le": 6.0,
+     "bar_margin": 3.5,
+     "closing_stroke_per_jaw_to_clamp": 2.0
+    },
+    "thick": {
+     "t_actual": 15.5,
+     "pad_gap_preclosed": 19.0,
+     "tip_gap": 35.0,
+     "capture_nominal": 9.75,
+     "capture_effective": 8.95,
+     "clearance_per_side_straight": 1.75,
+     "residual_error_after_centring": 2.25,
+     "bar_fully_on_edge_if_error_le": 6.25,
+     "bar_margin": 4.0,
+     "closing_stroke_per_jaw_to_clamp": 1.75
+    }
+   },
+   "t=16": {
+    "thin": {
+     "t_actual": 15.5,
+     "pad_gap_preclosed": 20.0,
+     "tip_gap": 36.0,
+     "capture_nominal": 10.25,
+     "capture_effective": 9.45,
+     "clearance_per_side_straight": 2.25,
+     "residual_error_after_centring": 2.75,
+     "bar_fully_on_edge_if_error_le": 6.25,
+     "bar_margin": 3.5,
+     "closing_stroke_per_jaw_to_clamp": 2.25
+    },
+    "nom": {
+     "t_actual": 16.0,
+     "pad_gap_preclosed": 20.0,
+     "tip_gap": 36.0,
+     "capture_nominal": 10.0,
+     "capture_effective": 9.2,
+     "clearance_per_side_straight": 2.0,
+     "residual_error_after_centring": 2.5,
+     "bar_fully_on_edge_if_error_le": 6.5,
+     "bar_margin": 4.0,
+     "closing_stroke_per_jaw_to_clamp": 2.0
+    },
+    "thick": {
+     "t_actual": 16.5,
+     "pad_gap_preclosed": 20.0,
+     "tip_gap": 36.0,
+     "capture_nominal": 9.75,
+     "capture_effective": 8.95,
+     "clearance_per_side_straight": 1.75,
+     "residual_error_after_centring": 2.25,
+     "bar_fully_on_edge_if_error_le": 6.75,
+     "bar_margin": 4.5,
+     "closing_stroke_per_jaw_to_clamp": 1.75
+    }
+   }
+  },
+  "worst_capture_effective_mm": 8.95,
+  "required_capture_mm": 8.0,
+  "capture_ok": true,
+  "worst_bar_on_edge_margin_mm": 1.5,
+  "bar_on_edge_ok": true,
+  "insertion_depth_mm": 55.400000000000006,
+  "lean_drift_uncompensated_mm": 1.9346106298428245,
+  "lean_drift_after_tilt_compensation_mm": 0.9670105970232543,
+  "lean_clearance_ok_with_compensation": true,
+  "lean_uncompensated_exceeds_min_clearance": true,
+  "height_stack_components_pm_mm": {
+   "carton_height_lookup": 1.0,
+   "shelf_floor_height": 1.5,
+   "tcp_z_calibration": 1.0,
+   "spine_pitch_3deg_over_stop_half_length": 1.4412139302836333
+  },
+  "height_stack_worst_case_pm_mm": 4.9412139302836335,
+  "height_stack_rss_pm_mm": 2.51537225730976,
+  "g_nom_mm": 4.0,
+  "gap_after_clamp_nominal_mm": 4.0,
+  "gap_after_clamp_range_worst_case_mm": [
+   -0.9412139302836335,
+   8.941213930283634
+  ],
+  "gap_after_clamp_range_rss_mm": [
+   1.4846277426902401,
+   6.51537225730976
+  ],
+  "stop_would_land_on_edge_if_gap_error_gt_mm": 4.0,
+  "approx_probability_of_landing_if_rss_is_1sigma_gaussian": 0.05589240011723762,
+  "g_nom_needed_for_no_landing_worst_case_mm": 4.9412139302836335,
+  "g_nom_needed_for_no_landing_at_2sigma_mm": 5.03074451461952,
+  "stop_engagement_rotation_deg": {
+   "g=4.0": 8.333931565539247,
+   "g=8.9": 18.6288662519575
+  },
+  "pad_top_below_box_top_edge_nominal_mm": -0.8000000000000007,
+  "tip_to_stop_face_mm": 59.400000000000006,
+  "sequence_geometry": {
+   "pre_close_pad_gap": "t_nom + 4.0",
+   "tips_above_edge_when_preclosed_mm": 10.0,
+   "descent_from_funnel_contact_to_final_mm": 55.400000000000006,
+   "chamfer_zone_mm": 8.0,
+   "final_tool_z_rule": "z_stop_face = z_box_top_edge - 4.0 (toward the flange)"
+  }
+ },
+ "mass_flange_5": {
+  "tool_total_kg": 0.9486878515266481,
+  "tool_cog_link6_mm": [
+   2.902639586898232,
+   -0.03918473414661749,
+   110.29020537030819
+  ],
+  "parts_kg": {
+   "flange_disc": 0.0246,
+   "gripper_plate": 0.0182,
+   "smc_body": 0.7293,
+   "smc_jaw_left": 0.0104,
+   "smc_jaw_right": 0.0104,
+   "top_stop": 0.0222,
+   "finger_left": 0.032,
+   "finger_right": 0.032,
+   "pad_left": 0.0073,
+   "pad_right": 0.0073,
+   "nut_m5_stop_0": 0.0018,
+   "nut_m5_stop_1": 0.0018
+  },
+  "printed_total_kg": 0.14368785152664856,
+  "hardware_total_kg": 0.05499999999999958,
+  "smc_gripper_kg": 0.75,
+  "cog_above_flange_face_mm": 57.59020537030818,
+  "cog_lateral_offset_mm": [
+   2.902639586898232,
+   -0.03918473414661749
+  ],
+  "static_moment_tool_only_Nm_worst_orientation": 0.5366510690539222,
+  "static_moment_tool_plus_box4_Nm_worst_orientation": 0.90250747150403,
+  "mass_tool_plus_box_kg": 1.098687851526648,
+  "payload_limit_kg": 2.0,
+  "payload_margin_kg": 0.9013121484733518,
+  "note": "moment about the flange-face centre with gravity perpendicular to the CoG vector (worst orientation); ReBeL permits 2 kg (flange-moment limit not given in the shared inputs)"
+ },
+ "finger_deflection": {
+  "PA12-CF": {
+   "E_MPa": 3200.0,
+   "deflection_at_pad_centre_mm": 0.001684763410654624,
+   "meets_0p3mm": true
+  },
+  "PETG": {
+   "E_MPa": 1800.0,
+   "deflection_at_pad_centre_mm": 0.0029951349522782064,
+   "meets_0p3mm": true
+  },
+  "aluminium 6082": {
+   "E_MPa": 70000.0,
+   "deflection_at_pad_centre_mm": 7.701775591568587e-05,
+   "meets_0p3mm": true
+  },
+  "column_peak_bending_stress_MPa_at_28N": 3.886467723504931,
+  "column_min_I_mm4": 755.390294957193,
+  "method": "2-D frame FE of the centroid line, section area / second moment sliced from the CAD every 0.5 mm, fixed at the jaw plane, 28 N (catalog max gripping force) at the pad centre z = 43.2 mm; first-order (no shear, rigid jaw interface, TPU pad ignored); isotropic printed-XY modulus"
+ },
+ "printability_6": {
+  "flange_disc": {
+   "print_orientation": "flange-side face (z = 52.7) on the bed, countersinks / insert holes open upward",
+   "bed_contact_mm2": 3959.0,
+   "overhang_gt45deg_area_mm2": 0.0,
+   "of_which_horizontal_bridge_mm2": 0.0,
+   "wall_thickness_p01_mm": 3.78,
+   "wall_thickness_p05_mm": 7.32,
+   "frac_samples_below_3mm": 0.0,
+   "height_mm": 8.3
+  },
+  "gripper_plate": {
+   "print_orientation": "turned over: the gripper-side (top) face on the bed so the M5 countersinks open upward (no support)",
+   "bed_contact_mm2": 3387.0,
+   "overhang_gt45deg_area_mm2": 0.0,
+   "of_which_horizontal_bridge_mm2": 0.0,
+   "wall_thickness_p01_mm": 3.55,
+   "wall_thickness_p05_mm": 5.51,
+   "frac_samples_below_3mm": 0.0,
+   "height_mm": 6.0
+  },
+  "top_stop": {
+   "print_orientation": "upside down: the stop face on the bed (4 x 55 mm), risers up, side plates last: bridges/overhang of the 16 mm wide side plates (support or print on the side with support)",
+   "bed_contact_mm2": 165.0,
+   "overhang_gt45deg_area_mm2": 658.0,
+   "of_which_horizontal_bridge_mm2": 558.0,
+   "wall_thickness_p01_mm": 1.66,
+   "wall_thickness_p05_mm": 2.98,
+   "frac_samples_below_3mm": 0.0207,
+   "height_mm": 63.5
+  },
+  "finger_left": {
+   "print_orientation": "foot (jaw face) on the bed; column flanks 35 deg from vertical, the window ceiling is a short bridge",
+   "bed_contact_mm2": 1038.0,
+   "overhang_gt45deg_area_mm2": 542.0,
+   "of_which_horizontal_bridge_mm2": 511.0,
+   "wall_thickness_p01_mm": 2.98,
+   "wall_thickness_p05_mm": 2.98,
+   "frac_samples_below_3mm": 0.008,
+   "height_mm": 76.9,
+   "support_estimate": "window ceiling 56 x 6.6 mm bridge only (1 line of bridging); everything else self-supporting"
+  },
+  "finger_right": {
+   "print_orientation": "foot (jaw face) on the bed",
+   "bed_contact_mm2": 1038.0,
+   "overhang_gt45deg_area_mm2": 542.0,
+   "of_which_horizontal_bridge_mm2": 512.0,
+   "wall_thickness_p01_mm": 2.98,
+   "wall_thickness_p05_mm": 2.98,
+   "frac_samples_below_3mm": 0.0077,
+   "height_mm": 76.9
+  },
+  "pad_left": {
+   "print_orientation": "back (floor) face on the bed, ribs up; TPU, 0.2 mm layers, slow",
+   "bed_contact_mm2": 2232.0,
+   "overhang_gt45deg_area_mm2": 0.0,
+   "of_which_horizontal_bridge_mm2": 0.0,
+   "wall_thickness_p01_mm": 0.58,
+   "wall_thickness_p05_mm": 0.58,
+   "frac_samples_below_3mm": 0.6367,
+   "height_mm": 3.0
+  },
+  "pad_right": {
+   "print_orientation": "back (floor) face on the bed, ribs up",
+   "bed_contact_mm2": 2232.0,
+   "overhang_gt45deg_area_mm2": 0.0,
+   "of_which_horizontal_bridge_mm2": 0.0,
+   "wall_thickness_p01_mm": 0.58,
+   "wall_thickness_p05_mm": 0.58,
+   "frac_samples_below_3mm": 0.64,
+   "height_mm": 3.0
+  },
+  "inserts": "M4 x 4 heat-set inserts (hole d5.6 x 4.5) x4 in the disc; M3 x 4 inserts (hole d4.2 x 5) x4 in the fingers (x2 each); floors under the blind holes are 3.0 / >= 5 mm",
+  "min_wall_rules": "min wall 3.0 mm kept everywhere except: TPU pad (2.6 base, by design), pocket side walls 3.0, stop plate 4.0 / risers 4.0 x 6.5, pad-retention cb floor in the TPU 0.7 mm (under the screw head, compressible), tip lip behind the chamfer 7.6 mm"
+ },
+ "assembly_access": {
+  "inner_screw_ball_key_swing_toward_gap_deg_vs_collisions": {
+   "0": {
+    "finger_left": 26.756,
+    "pad_left": 403.59,
+    "finger_right": 26.756,
+    "pad_right": 403.59
+   },
+   "10": {
+    "finger_left": 0.3,
+    "finger_right": 0.3
+   },
+   "15": {},
+   "20": {},
+   "25": {},
+   "30": {}
+  },
+  "inner_screw_min_clear_swing_deg": 15,
+  "inner_screw_note": "screws seated with the fingers on the OPEN jaws; the window under the pad block is 10.5 mm high (screw M3x8 drops in vertically, driver ball-end key swung >= 15 deg toward the gap)",
+  "window_height_mm": 10.5,
+  "outer_finger_screws_vertical_d8_driver_collisions": {},
+  "m4_plate_screws_vertical_d8_driver_collisions": {},
+  "m4_note": "the M4 plate screws are driven BEFORE the stop yoke is fitted (the yoke side plates / M5 heads sit in the driver column); to remove them take the yoke off first",
+  "stop_yoke_install_slide_down_max_collision_mm3": {
+   "jaws_open_0": 0.0,
+   "jaws_open_24": 0.0
+  },
+  "stop_m5_bolt_wrench_access_collisions": {},
+  "pass": true
+ },
+ "fasteners": {
+  "finger_inner_screw_tension_each_N": 33.6,
+  "finger_screw_shear_each_N": 8.75,
+  "m3_thread_pullout_ref_N": "M3 12.9 steel proof load ~ 4.5 kN; 3.8 mm engagement in aluminium jaw ~ 1.5 kN",
+  "disc_to_flange_M3_tension_each_N_est": 18.79906015722631,
+  "plate_to_disc_M4_tension_each_N_est": 20.208989669018283
+ },
+ "urdf": {
+  "xacro_check_urdf_ok": true,
+  "check_urdf_output": [
+   "robot name is: right_gripper_tool_test",
+   "---------- Successfully Parsed XML ---------------",
+   "root Link: link6 has 1 child(ren)",
+   "    child(1):  right_gripper_base",
+   "        child(1):  right_finger_left",
+   "        child(2):  right_finger_right",
+   "        child(3):  right_gripper_tcp",
+   "        child(4):  right_top_stop_frame"
+  ],
+  "n_mesh_references": 30,
+  "all_meshes_exist": true,
+  "n_joints": 5,
+  "mimic_present": true,
+  "inertials": {
+   "base": {
+    "mass_kg": 0.8436631313893166,
+    "principal_kgmm2": [
+     595.299539834202,
+     986.980334055802,
+     1356.60435497399
+    ],
+    "positive_definite": true,
+    "triangle_ok": true
+   },
+   "finger_left": {
+    "mass_kg": 0.05251236006866582,
+    "principal_kgmm2": [
+     13.433419364067849,
+     38.35612166575563,
+     45.015936937286746
+    ],
+    "positive_definite": true,
+    "triangle_ok": true
+   },
+   "finger_right": {
+    "mass_kg": 0.05251236006866582,
+    "principal_kgmm2": [
+     13.433419364067849,
+     38.3561216657556,
+     45.015936937286746
+    ],
+    "positive_definite": true,
+    "triangle_ok": true
+   }
+  }
+ }
+}

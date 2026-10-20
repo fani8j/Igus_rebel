@@ -1,0 +1,523 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    kilogramsPerUnit = 1
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "World" (
+    customData = {
+        int nested_bodies_flattened = 29
+        string reach_check = "wrist centre 0.241 m horizontally from the shoulder axis at shoulder height (ReBeL reach ~0.5 m): ROUGH only, no IK was run"
+        string rig_usd = "/media/farhan/My Passport/igus_nvidia/scratch_usd/dual_arm_stand_20261006/dual_arm_stand_isaac_usd/dual_arm_rig_v2.usda"
+        double[] shelf_spine_world = [0.228209, -0.5792970000000001, 1.1583]
+    }
+    doc = "Dual-arm stand rig (operator zip dual_arm_stand_isaac_usd_20261006, referenced) with the medical-pick tools: suction tool v5 on arm_left/link6, LEHF20K2-48 gripper on arm_right/link6, XEG-32 tooling removed. Home: lift -0.2, sliders -+0.005973, arms upright. Shelf with cartons in front of the left arm."
+    prepend references = @/media/farhan/My Passport/igus_nvidia/scratch_usd/dual_arm_stand_20261006/dual_arm_stand_isaac_usd/dual_arm_rig_v2.usda@</World>
+)
+{
+    over "CardboardBox" (
+        active = false
+    )
+    {
+    }
+
+    over "table" (
+        active = false
+    )
+    {
+    }
+
+    over "dual_arm_rig"
+    {
+        over "arm_left"
+        {
+            over "base_link"
+            {
+                over "motor1"
+                {
+                    matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (0.228209, -0.179297, 1.2555, 1) )
+                    uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+
+                    over "link1"
+                    {
+                        matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (0.228209, -0.179297, 1.2555, 1) )
+                        uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+
+                        over "motor2"
+                        {
+                            matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (0.2507089999993986, -0.17929683547591144, 1.3615000000000002, 1) )
+                            uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+
+                            over "link2"
+                            {
+                                matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (0.20170900000070854, -0.17929719377281547, 1.3615000000000002, 1) )
+                                uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+
+                                over "motor3"
+                                {
+                                    matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (0.2507089999993986, -0.17929683547591144, 1.6030200000000001, 1) )
+                                    uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+
+                                    over "link3"
+                                    {
+                                        matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (0.2282090000000001, -0.179297, 1.6030200000000001, 1) )
+                                        uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+
+                                        over "motor4"
+                                        {
+                                            matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (0.2282089901652515, -0.17795201857125556, 1.7084994074013562, 1) )
+                                            uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+
+                                            over "link4"
+                                            {
+                                                matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (0.2282089901652515, -0.17795201857125556, 1.7604994074013562, 1) )
+                                                uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+
+                                                over "motor5"
+                                                {
+                                                    matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (0.24640899016476497, -0.17795188548954835, 1.9024994074013561, 1) )
+                                                    uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+
+                                                    over "link5"
+                                                    {
+                                                        matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (0.22820899016525154, -0.17795201857125556, 1.9024994074013561, 1) )
+                                                        uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+
+                                                        over "link6"
+                                                        {
+                                                            matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (0.22820899016525154, -0.17795201857125556, 1.9792994074013561, 1) )
+                                                            uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+
+                                                            over "xeg32_base_link" (
+                                                                active = false
+                                                            )
+                                                            {
+                                                            }
+
+                                                            def Xform "left_suction_tool" (
+                                                                delete apiSchemas = ["PhysicsArticulationRootAPI"]
+                                                                prepend references = @./left_suction_tool.usda@
+                                                            )
+                                                            {
+                                                                over "joints"
+                                                                {
+                                                                    over "world_anchor" (
+                                                                        active = false
+                                                                    )
+                                                                    {
+                                                                    }
+                                                                }
+
+                                                                over "base"
+                                                                {
+                                                                    matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (0.22820899016525154, -0.17795201857125556, 1.9792994074013561, 1) )
+                                                                    uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+                                                                }
+
+                                                                over "pad_1"
+                                                                {
+                                                                    matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (0.22820899016525154, -0.17795201857125556, 1.9792994074013561, 1) )
+                                                                    uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+                                                                }
+
+                                                                over "pad_2"
+                                                                {
+                                                                    matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (0.22820899016525154, -0.17795201857125556, 1.9792994074013561, 1) )
+                                                                    uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+                                                                }
+
+                                                                over "pad_3"
+                                                                {
+                                                                    matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (0.22820899016525154, -0.17795201857125556, 1.9792994074013561, 1) )
+                                                                    uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        over "Joints"
+        {
+            over "arm_left_xeg32_mount_joint" (
+                active = false
+            )
+            {
+            }
+
+            over "arm_left_xeg32_left_carriage_joint" (
+                active = false
+            )
+            {
+            }
+
+            over "arm_left_xeg32_right_carriage_joint" (
+                active = false
+            )
+            {
+            }
+
+            over "arm_left_xeg32_camera_tilt_joint" (
+                active = false
+            )
+            {
+            }
+
+            def PhysicsFixedJoint "arm_left_medical_tool_mount"
+            {
+                rel physics:body0 = </World/dual_arm_rig/arm_left/base_link/motor1/link1/motor2/link2/motor3/link3/motor4/link4/motor5/link5/link6>
+                rel physics:body1 = </World/dual_arm_rig/arm_left/base_link/motor1/link1/motor2/link2/motor3/link3/motor4/link4/motor5/link5/link6/left_suction_tool/base>
+                point3f physics:localPos0 = (0, 0, 0)
+                point3f physics:localPos1 = (0, 0, 0)
+                quatf physics:localRot0 = (1, 0, 0, 0)
+                quatf physics:localRot1 = (1, 0, 0, 0)
+            }
+
+            over "arm_right_xeg32_mount_joint" (
+                active = false
+            )
+            {
+            }
+
+            over "arm_right_xeg32_left_carriage_joint" (
+                active = false
+            )
+            {
+            }
+
+            over "arm_right_xeg32_right_carriage_joint" (
+                active = false
+            )
+            {
+            }
+
+            over "arm_right_xeg32_camera_tilt_joint" (
+                active = false
+            )
+            {
+            }
+
+            def PhysicsFixedJoint "arm_right_medical_tool_mount"
+            {
+                rel physics:body0 = </World/dual_arm_rig/arm_right/base_link/motor1/link1/motor2/link2/motor3/link3/motor4/link4/motor5/link5/link6>
+                rel physics:body1 = </World/dual_arm_rig/arm_right/base_link/motor1/link1/motor2/link2/motor3/link3/motor4/link4/motor5/link5/link6/right_gripper_tool/base>
+                point3f physics:localPos0 = (0, 0, 0)
+                point3f physics:localPos1 = (0, 0, 0)
+                quatf physics:localRot0 = (1, 0, 0, 0)
+                quatf physics:localRot1 = (1, 0, 0, 0)
+            }
+
+            over "lift_joint" (
+                prepend apiSchemas = ["PhysicsDriveAPI:linear", "PhysicsJointStateAPI:linear"]
+            )
+            {
+                float drive:linear:physics:targetPosition = -0.2
+                float state:linear:physics:position = -0.2
+                float state:linear:physics:velocity = 0
+            }
+
+            over "slider_left_joint" (
+                prepend apiSchemas = ["PhysicsDriveAPI:linear", "PhysicsJointStateAPI:linear"]
+            )
+            {
+                float drive:linear:physics:targetPosition = -0.005973
+                float state:linear:physics:position = -0.005973
+                float state:linear:physics:velocity = 0
+            }
+
+            over "slider_right_joint" (
+                prepend apiSchemas = ["PhysicsDriveAPI:linear", "PhysicsJointStateAPI:linear"]
+            )
+            {
+                float drive:linear:physics:targetPosition = 0.005973
+                float state:linear:physics:position = 0.005973
+                float state:linear:physics:velocity = 0
+            }
+
+            over "arm_left_joint1" (
+                prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+            )
+            {
+                float drive:angular:physics:targetPosition = 0
+                float state:angular:physics:position = 0
+                float state:angular:physics:velocity = 0
+            }
+
+            over "arm_left_joint2" (
+                prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+            )
+            {
+                float drive:angular:physics:targetPosition = 0
+                float state:angular:physics:position = 0
+                float state:angular:physics:velocity = 0
+            }
+
+            over "arm_left_joint3" (
+                prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+            )
+            {
+                float drive:angular:physics:targetPosition = 0
+                float state:angular:physics:position = 0
+                float state:angular:physics:velocity = 0
+            }
+
+            over "arm_left_joint4" (
+                prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+            )
+            {
+                float drive:angular:physics:targetPosition = 0
+                float state:angular:physics:position = 0
+                float state:angular:physics:velocity = 0
+            }
+
+            over "arm_left_joint5" (
+                prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+            )
+            {
+                float drive:angular:physics:targetPosition = 0
+                float state:angular:physics:position = 0
+                float state:angular:physics:velocity = 0
+            }
+
+            over "arm_left_joint6" (
+                prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+            )
+            {
+                float drive:angular:physics:targetPosition = 0
+                float state:angular:physics:position = 0
+                float state:angular:physics:velocity = 0
+            }
+
+            over "arm_right_joint1" (
+                prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+            )
+            {
+                float drive:angular:physics:targetPosition = 0
+                float state:angular:physics:position = 0
+                float state:angular:physics:velocity = 0
+            }
+
+            over "arm_right_joint2" (
+                prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+            )
+            {
+                float drive:angular:physics:targetPosition = 0
+                float state:angular:physics:position = 0
+                float state:angular:physics:velocity = 0
+            }
+
+            over "arm_right_joint3" (
+                prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+            )
+            {
+                float drive:angular:physics:targetPosition = 0
+                float state:angular:physics:position = 0
+                float state:angular:physics:velocity = 0
+            }
+
+            over "arm_right_joint4" (
+                prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+            )
+            {
+                float drive:angular:physics:targetPosition = 0
+                float state:angular:physics:position = 0
+                float state:angular:physics:velocity = 0
+            }
+
+            over "arm_right_joint5" (
+                prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+            )
+            {
+                float drive:angular:physics:targetPosition = 0
+                float state:angular:physics:position = 0
+                float state:angular:physics:velocity = 0
+            }
+
+            over "arm_right_joint6" (
+                prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+            )
+            {
+                float drive:angular:physics:targetPosition = 0
+                float state:angular:physics:position = 0
+                float state:angular:physics:velocity = 0
+            }
+        }
+
+        over "arm_right"
+        {
+            over "base_link"
+            {
+                over "motor1"
+                {
+                    matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (-0.231737, -0.179297, 1.2555, 1) )
+                    uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+
+                    over "link1"
+                    {
+                        matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (-0.231737, -0.179297, 1.2555, 1) )
+                        uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+
+                        over "motor2"
+                        {
+                            matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (-0.20923700000060141, -0.17929683547591144, 1.3615000000000002, 1) )
+                            uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+
+                            over "link2"
+                            {
+                                matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (-0.2582369999992915, -0.17929719377281547, 1.3615000000000002, 1) )
+                                uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+
+                                over "motor3"
+                                {
+                                    matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (-0.20923700000060144, -0.17929683547591144, 1.6030200000000001, 1) )
+                                    uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+
+                                    over "link3"
+                                    {
+                                        matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (-0.23173699999999994, -0.179297, 1.6030200000000001, 1) )
+                                        uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+
+                                        over "motor4"
+                                        {
+                                            matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (-0.23173700983474854, -0.17795201857125556, 1.7084994074013562, 1) )
+                                            uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+
+                                            over "link4"
+                                            {
+                                                matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (-0.23173700983474854, -0.17795201857125556, 1.7604994074013562, 1) )
+                                                uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+
+                                                over "motor5"
+                                                {
+                                                    matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (-0.2135370098352351, -0.17795188548954835, 1.9024994074013561, 1) )
+                                                    uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+
+                                                    over "link5"
+                                                    {
+                                                        matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (-0.23173700983474854, -0.17795201857125556, 1.9024994074013561, 1) )
+                                                        uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+
+                                                        over "link6"
+                                                        {
+                                                            matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (-0.23173700983474854, -0.17795201857125556, 1.9792994074013561, 1) )
+                                                            uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+
+                                                            over "xeg32_base_link" (
+                                                                active = false
+                                                            )
+                                                            {
+                                                            }
+
+                                                            def Xform "right_gripper_tool" (
+                                                                delete apiSchemas = ["PhysicsArticulationRootAPI"]
+                                                                prepend references = @./right_gripper_tool.usda@
+                                                            )
+                                                            {
+                                                                over "joints"
+                                                                {
+                                                                    over "world_anchor" (
+                                                                        active = false
+                                                                    )
+                                                                    {
+                                                                    }
+                                                                }
+
+                                                                over "base"
+                                                                {
+                                                                    matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (-0.23173700983474854, -0.17795201857125556, 1.9792994074013561, 1) )
+                                                                    uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+                                                                }
+
+                                                                over "finger_left"
+                                                                {
+                                                                    matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (-0.23173683434238737, -0.20195201857061396, 2.1292994074013563, 1) )
+                                                                    uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+                                                                }
+
+                                                                over "finger_right"
+                                                                {
+                                                                    matrix4d xformOp:transform = ( (-0.000007312181715047886, 0.9999999999732666, 0, 0), (-0.9999999999732666, -0.000007312181715047886, 0, 0), (0, 0, 1, 0), (-0.2317371853271097, -0.15395201857189716, 2.1292994074013563, 1) )
+                                                                    uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    def Xform "medical_shelf" (
+        prepend references = @./shelf_cartons.usda@
+    )
+    {
+        matrix4d xformOp:transform = ( (-1, 0, 0, 0), (0, -1, 0, 0), (0, 0, 1, 0), (0.228209, -0.5792970000000001, 1.0483, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+    }
+
+    def Cube "shelf_plinth" (
+        prepend apiSchemas = ["PhysicsCollisionAPI"]
+    )
+    {
+        color3f[] primvars:displayColor = [(0.55, 0.55, 0.58)]
+        double size = 1
+        float3 xformOp:scale = (0.3, 0.4, 1.0283)
+        double3 xformOp:translate = (0.228209, -0.7392970000000001, 0.51415)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+    }
+
+    def Cube "GroundPlane" (
+        prepend apiSchemas = ["PhysicsCollisionAPI"]
+    )
+    {
+        color3f[] primvars:displayColor = [(0.35, 0.37, 0.4)]
+        double size = 1
+        float3 xformOp:scale = (6, 6, 0.1)
+        double3 xformOp:translate = (0, -0.5, -0.05)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+    }
+
+    over "ch_v4_L1"
+    {
+        matrix4d xformOp:transform = ( (-4.440892098500626e-16, 2.220446049250313e-16, -1.0000000000000002, 0), (1.0000000000000002, -4.440892098500626e-16, -2.220446049250313e-16, 0), (-2.220446049250313e-16, -1.0000000000000002, -4.440892098500626e-16, 0), (-0.268497, 0.228663, 1.1067960000000001, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+    }
+
+    over "ch_v4_L2"
+    {
+        matrix4d xformOp:transform = ( (-4.440892098500626e-16, 2.220446049250313e-16, -1.0000000000000002, 0), (1.0000000000000002, -4.440892098500626e-16, -2.220446049250313e-16, 0), (-2.220446049250313e-16, -1.0000000000000002, -4.440892098500626e-16, 0), (-0.188497, 0.228663, 1.1067960000000001, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+    }
+
+    over "ch_v4_R1"
+    {
+        matrix4d xformOp:transform = ( (-4.440892098500626e-16, 2.220446049250313e-16, -1.0000000000000002, 0), (1.0000000000000002, -4.440892098500626e-16, -2.220446049250313e-16, 0), (-2.220446049250313e-16, -1.0000000000000002, -4.440892098500626e-16, 0), (0.185603, 0.228663, 1.1067960000000001, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+    }
+
+    over "ch_v4_R2"
+    {
+        matrix4d xformOp:transform = ( (-4.440892098500626e-16, 2.220446049250313e-16, -1.0000000000000002, 0), (1.0000000000000002, -4.440892098500626e-16, -2.220446049250313e-16, 0), (-2.220446049250313e-16, -1.0000000000000002, -4.440892098500626e-16, 0), (0.265603, 0.228663, 1.1067960000000001, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+    }
+}
+

@@ -1,0 +1,608 @@
+[Info] [carb] Logging to file: /home/farhan/isaac-sim/kit/logs/Kit/Isaac-Sim Python/5.1/kit_20261015_015928.log
+[0.038s] [ext: omni.kit.async_engine-0.0.3] startup
+[0.247s] [ext: omni.metrics.core-0.0.3] startup
+[0.248s] [ext: omni.client.lib-1.1.0] startup
+[0.257s] [ext: omni.blobkey-1.1.2] startup
+[0.257s] [ext: omni.stats-1.0.1] startup
+[0.258s] [ext: omni.datastore-0.0.0] startup
+[0.262s] [ext: omni.client-1.3.0] startup
+[0.316s] [ext: omni.ujitso.default-1.0.0] startup
+[0.318s] [ext: omni.hsscclient-1.1.2] startup
+[0.321s] [ext: omni.gpu_foundation.shadercache.vulkan-1.0.0] startup
+[0.322s] [ext: omni.assets.plugins-0.0.0] startup
+[0.323s] [ext: omni.gpu_foundation-0.0.0] startup
+[0.328s] [ext: carb.windowing.plugins-1.0.0] startup
+[0.359s] [ext: omni.kit.renderer.init-0.0.0] startup
+
+|---------------------------------------------------------------------------------------------|
+| Driver Version: 580.178.04    | Graphics API: Vulkan
+|=============================================================================================|
+| GPU | Name                             | Active | LDA | GPU Memory | Vendor-ID | LUID       |
+|     |                                  |        |     |            | Device-ID | UUID       |
+|     |                                  |        |     |            | Bus-ID    |            |
+|---------------------------------------------------------------------------------------------|
+| 0   | NVIDIA GeForce RTX 5070 Ti       | Yes: 0 |     | 16303   MB | 10de      | 0          |
+|     |                                  |        |     |            | 2c05      | 47ec859f.. |
+|     |                                  |        |     |            | 1         |            |
+|=============================================================================================|
+| OS: 22.04.5 LTS (Jammy Jellyfish) ubuntu, Version: 22.04.5, Kernel: 6.8.0-138-generic
+| XServer Vendor: The X.Org Foundation, XServer Version: 12201001 (1.22.1.1)
+| Processor: Intel(R) Core(TM) i7-14700F
+| Bare Metal Cores: 20 | Bare Metal Logical Cores: 40
+| Available Cores:  28 
+|---------------------------------------------------------------------------------------------|
+| Total Memory (MB): 31837 | Free Memory: 20101
+| Total Page/Swap (MB): 16383 | Free Page/Swap: 14297
+|---------------------------------------------------------------------------------------------|
+2026-10-14T17:59:29Z [870ms] [Warning] [gpu.foundation.plugin] CPU performance profile is set to powersave. This profile sets the CPU to the lowest frequency reducing performance.
+2026-10-14T17:59:29Z [880ms] [Warning] [gpu.foundation.plugin] IOMMU is enabled.
+[1.060s] [ext: omni.kit.pipapi-0.0.0] startup
+[1.061s] [ext: omni.kit.pip_archive-0.0.0] startup
+[1.062s] [ext: omni.pip.compute-1.6.3] startup
+[1.062s] [ext: omni.materialx.libs-1.0.7] startup
+[1.067s] [ext: omni.pip.cloud-1.4.3] startup
+[1.069s] [ext: omni.isaac.core_archive-3.0.0] startup
+[1.070s] [ext: omni.usd.config-1.0.6] startup
+[1.072s] [ext: omni.gpucompute.plugins-0.0.0] startup
+[1.072s] [ext: omni.usd.libs-1.0.1] startup
+[1.130s] [ext: omni.kit.telemetry-0.5.2] startup
+[1.150s] [ext: omni.mdl-56.0.3] startup
+[1.167s] [ext: omni.iray.libs-0.0.0] startup
+[1.171s] [ext: omni.mdl.neuraylib-0.2.12] startup
+[1.172s] [ext: omni.kit.usd.mdl-1.1.5] startup
+[1.250s] [ext: omni.isaac.ml_archive-3.0.4] startup
+[1.250s] [ext: omni.kit.loop-isaac-1.3.7] startup
+[1.251s] [ext: omni.kit.test-2.0.1] startup
+[1.290s] [ext: omni.appwindow-1.1.10] startup
+[1.291s] [ext: omni.kit.renderer.core-1.1.0] startup
+[1.310s] [ext: omni.kit.renderer.capture-0.0.0] startup
+[1.312s] [ext: omni.kit.renderer.imgui-2.0.5] startup
+[1.356s] [ext: omni.ui-2.27.1] startup
+[1.363s] [ext: omni.kit.mainwindow-1.0.3] startup
+[1.364s] [ext: carb.audio-0.1.0] startup
+[1.366s] [ext: omni.uiaudio-1.0.0] startup
+[1.367s] [ext: omni.kit.uiapp-0.0.0] startup
+[1.367s] [ext: omni.usd.schema.metrics.assembler-107.3.1] startup
+[1.369s] [ext: omni.usd.schema.audio-0.0.0] startup
+[1.371s] [ext: omni.anim.graph.schema-107.3.3] startup
+[1.379s] [ext: omni.usd_resolver-1.0.0] startup
+[1.381s] [ext: omni.usd.core-1.5.3] startup
+[1.383s] [ext: omni.usd.schema.render_settings.rtx-0.0.0] startup
+[1.401s] [ext: omni.usd.schema.semantics-0.0.0] startup
+[1.403s] [ext: isaacsim.robot.schema-3.6.0] startup
+[1.409s] [ext: omni.usd.schema.geospatial-0.0.0] startup
+[1.411s] [ext: omni.usd.schema.anim-0.0.0] startup
+[1.421s] [ext: omni.kit.window.popup_dialog-2.0.24] startup
+[1.424s] [ext: usdrt.scenegraph-7.6.1] startup
+[1.449s] [ext: omni.timeline-1.0.14] startup
+[1.450s] [ext: omni.resourcemonitor-107.0.1] startup
+[1.451s] [ext: omni.activity.core-1.0.3] startup
+[1.452s] [ext: omni.kit.widget.nucleus_connector-2.0.1] startup
+[1.453s] [ext: omni.hydra.usdrt_delegate-7.5.1] startup
+[1.457s] [ext: omni.kit.actions.core-1.0.0] startup
+[1.459s] [ext: omni.graph.exec-0.9.6] startup
+[1.459s] [ext: omni.kit.commands-1.4.10] startup
+[1.461s] [ext: omni.kit.usd_undo-0.1.8] startup
+[1.461s] [ext: omni.kit.exec.core-0.13.4] startup
+[1.463s] [ext: omni.kit.audiodeviceenum-1.0.2] startup
+[1.463s] [ext: omni.hydra.scene_delegate-0.3.4] startup
+[1.466s] [ext: omni.usd-1.13.10] startup
+[1.483s] [ext: omni.kit.asset_converter-5.0.17] startup
+[1.491s] [ext: omni.usd.schema.flow-107.1.1] startup
+[1.491s] [ext: omni.usd.schema.omnigraph-1.0.0] startup
+[1.495s] [ext: omni.usd.schema.omni_sensors-0.0.0] startup
+[1.496s] [ext: omni.anim.navigation.schema-107.3.3] startup
+[1.498s] [ext: omni.inspect-1.0.2] startup
+[1.499s] [ext: omni.kit.notification_manager-1.0.10] startup
+[1.501s] [ext: omni.graph.core-2.184.5] startup
+[1.503s] [ext: isaacsim.core.deprecation_manager-0.2.7] startup
+[1.503s] [ext: omni.usd.schema.physx-107.3.26] startup
+[1.527s] [ext: omni.usd.schema.isaac-3.0.5] startup
+[1.527s] [ext: omni.usd.schema.omniscripting-1.0.0] startup
+[1.530s] [ext: omni.usd.schema.omni_lens_distortion-0.0.0] startup
+[1.530s] [ext: omni.kvdb-107.3.26] startup
+[1.532s] [ext: omni.usdphysics-107.3.26] startup
+[1.534s] [ext: omni.physx.foundation-107.3.26] startup
+[1.535s] [ext: omni.localcache-107.3.26] startup
+[1.536s] [ext: omni.convexdecomposition-107.3.26] startup
+[1.538s] [ext: omni.physx.cooking-107.3.26] startup
+[1.541s] [ext: omni.physx-107.3.26] startup
+[1.548s] [ext: omni.physics-107.3.26] startup
+[1.550s] [ext: omni.kit.usd.layers-2.2.11] startup
+[1.555s] [ext: omni.physics.physx-107.3.26] startup
+2026-10-14T17:59:30Z [1,542ms] [Warning] [carb] Acquiring non optional plugin interface which is not listed as dependency: [omni::physx::IPhysxBenchmarks v1.0] (plugin: <default plugin>), by client: omni.physics.physx.plugin. Add it to CARB_PLUGIN_IMPL_DEPS() macro of a client.
+[1.556s] [ext: omni.physics.stageupdate-107.3.26] startup
+[1.558s] [ext: omni.kit.numpy.common-0.1.3] startup
+[1.559s] [ext: isaacsim.core.version-2.0.6] startup
+[1.559s] [ext: omni.isaac.dynamic_control-2.0.7] startup
+2026-10-14T17:59:30Z [1,548ms] [Warning] [omni.isaac.dynamic_control] omni.isaac.dynamic_control is deprecated as of Isaac Sim 4.5. No action is needed from end-users.
+[1.563s] [ext: isaacsim.storage.native-1.5.1] startup
+[1.564s] [ext: omni.kit.menu.core-1.1.2] startup
+[1.564s] [ext: omni.kit.helper.file_utils-0.1.9] startup
+[1.565s] [ext: omni.usd.metrics.assembler-107.3.1] startup
+[1.569s] [ext: omni.kit.widget.context_menu-1.2.5] startup
+[1.570s] [ext: omni.warp.core-1.8.2] startup
+[1.719s] [ext: omni.usd.metrics.assembler.physics-107.3.26] startup
+[1.721s] [ext: omni.physics.tensors-107.3.26] startup
+[1.725s] [ext: omni.kit.context_menu-1.8.6] startup
+[1.726s] [ext: omni.kit.clipboard-1.0.5] startup
+[1.727s] [ext: isaacsim.core.utils-3.5.1] startup
+[1.729s] [ext: omni.kit.widget.filebrowser-2.12.3] startup
+[1.732s] [ext: omni.kit.widget.options_menu-1.1.6] startup
+[1.733s] [ext: omni.kit.widget.path_field-2.0.11] startup
+[1.734s] [ext: omni.index.libs-380600.8087.0] startup
+[1.734s] [ext: omni.ui.scene-1.11.5] startup
+[1.737s] [ext: omni.kit.widget.options_button-1.0.3] startup
+[1.738s] [ext: omni.kit.widget.browser_bar-2.0.10] startup
+[1.738s] [ext: omni.index-1.0.1] startup
+[1.739s] [ext: omni.hydra.rtx.shadercache.vulkan-1.0.0] startup
+[1.740s] [ext: omni.kit.window.filepicker-2.13.4] startup
+[1.750s] [ext: omni.volume-0.5.2] startup
+[1.753s] [ext: omni.ujitso.client-0.0.0] startup
+[1.753s] [ext: omni.graph.tools-1.79.2] startup
+[1.768s] [ext: omni.graph.image.core-0.6.1] startup
+[1.769s] [ext: omni.hydra.rtx-1.0.0] startup
+2026-10-14T17:59:30Z [1,766ms] [Warning] [omni.log] Source: omni.hydra was already registered.
+[1.790s] [ext: omni.kit.window.file_importer-1.1.18] startup
+[1.791s] [ext: omni.kit.menu.utils-2.0.5] startup
+[1.797s] [ext: omni.graph.image.nodes-1.3.1] startup
+[1.798s] [ext: omni.kit.widget.searchable_combobox-1.0.6] startup
+[1.798s] [ext: omni.kit.hydra_texture-1.4.6] startup
+[1.800s] [ext: omni.kit.material.library-2.0.7] startup
+[1.803s] [ext: omni.hydra.engine.stats-1.0.3] startup
+[1.805s] [ext: omni.kit.viewport.scene_camera_model-1.0.6] startup
+[1.808s] [ext: omni.kit.widget.settings-1.2.6] startup
+[1.810s] [ext: omni.kit.viewport.legacy_gizmos-1.0.19] startup
+[1.811s] [ext: omni.kit.widget.viewport-107.1.3] startup
+[1.814s] [ext: omni.kit.viewport.registry-104.0.6] startup
+[1.814s] [ext: omni.kit.raycast.query-1.1.0] startup
+[1.818s] [ext: omni.physx.tensors-107.3.26] startup
+[1.822s] [ext: omni.kit.window.drop_support-1.0.5] startup
+[1.823s] [ext: omni.kit.primitive.mesh-1.0.17] startup
+[1.825s] [ext: omni.kit.viewport.window-107.2.0] startup
+[1.839s] [ext: omni.kit.window.preferences-1.8.0] startup
+[1.843s] [ext: isaacsim.core.simulation_manager-1.4.4] startup
+[2.985s] [ext: omni.graph.action_core-1.1.7] startup
+[2.986s] [ext: omni.graph-1.141.2] startup
+[3.020s] [ext: omni.kit.viewport.utility-1.1.2] startup
+[3.021s] [ext: omni.kit.viewport.menubar.core-107.2.1] startup
+[3.032s] [ext: isaacsim.core.prims-0.6.1] startup
+[3.055s] [ext: omni.graph.action_nodes-1.50.4] startup
+[3.058s] [ext: omni.kit.stage_template.core-1.1.22] startup
+[3.060s] [ext: omni.syntheticdata-0.6.13] startup
+[3.089s] [ext: omni.graph.nodes-1.170.10] startup
+[3.102s] [ext: omni.graph.action-1.130.0] startup
+[3.105s] [ext: omni.kit.stage_templates-2.0.0] startup
+[3.117s] [ext: omni.kit.widget.filter-1.1.4] startup
+[3.123s] [ext: omni.kit.widget.graph-2.0.0] startup
+[3.141s] [ext: omni.kit.property.adapter.core-1.0.2] startup
+[3.144s] [ext: omni.kit.window.file_exporter-1.0.33] startup
+[3.145s] [ext: omni.kit.widget.searchfield-1.1.8] startup
+[3.147s] [ext: omni.kit.hotkeys.core-1.3.10] startup
+[3.148s] [ext: omni.kit.graph.delegate.default-1.2.3] startup
+[3.149s] [ext: omni.kit.property.adapter.fabric-1.0.3] startup
+[3.151s] [ext: omni.kit.widget.stage-3.1.4] startup
+[3.159s] [ext: omni.kit.property.adapter.usd-1.0.2] startup
+[3.161s] [ext: omni.kit.graph.editor.core-1.5.3] startup
+[3.164s] [ext: omni.kit.widget.material_preview-1.0.16] startup
+[3.165s] [ext: omni.kit.widget.highlight_label-1.0.3] startup
+[3.166s] [ext: omni.kit.window.file-2.0.5] startup
+[3.169s] [ext: omni.kit.window.content_browser_registry-0.0.6] startup
+[3.170s] [ext: omni.kit.window.property-1.12.1] startup
+[3.173s] [ext: omni.kit.window.content_browser-3.1.3] startup
+[3.181s] [ext: omni.kit.graph.usd.commands-1.3.1] startup
+[3.182s] [ext: omni.kit.property.usd-4.5.12] startup
+[3.191s] [ext: omni.graph.ui_nodes-1.50.5] startup
+[3.196s] [ext: omni.videoencoding-0.1.2] startup
+[3.199s] [ext: omni.kit.window.material_graph-1.9.1] startup
+[3.217s] [ext: omni.warp-1.8.2] startup
+[3.225s] [ext: isaacsim.core.api-4.8.0] startup
+[3.240s] [ext: omni.graph.scriptnode-1.50.0] startup
+[3.244s] [ext: isaacsim.test.docstring-1.1.0] startup
+[3.249s] [ext: isaacsim.core.experimental.utils-0.3.0] startup
+[3.256s] [ext: omni.replicator.core-1.12.27] startup
+2026-10-14T17:59:31Z [3,265ms] [Warning] [pxr.Semantics] pxr.Semantics is deprecated - please use Semantics instead
+2026-10-14T17:59:32Z [3,392ms] [Warning] [omni.graph.core.plugin] Found duplicate of category 'Replicator' - was 'Annotators', adding 'Fabric Reader'
+2026-10-14T17:59:32Z [3,392ms] [Warning] [omni.graph.core.plugin] Category 'Replicator' not accepted on node type 'omni.replicator.core.FabricReader' in extension 'omni.replicator.core'
+2026-10-14T17:59:32Z [3,393ms] [Warning] [omni.replicator.core.scripts.extension] No material configuration file, adding configuration to material settings directly.
+[3.409s] [ext: isaacsim.core.experimental.prims-0.8.1] startup
+[3.454s] [ext: omni.kit.window.extensions-1.4.27] startup
+[3.463s] [ext: isaacsim.core.experimental.objects-0.4.0] startup
+[3.467s] [ext: omni.ui_query-1.1.8] startup
+[3.469s] [ext: omni.kit.manipulator.viewport-107.0.1] startup
+[3.472s] [ext: isaacsim.robot.surface_gripper-3.3.1] startup
+[3.479s] [ext: omni.kit.ui_test-1.3.7] startup
+[3.484s] [ext: omni.graph.visualization.nodes-2.1.3] startup
+[3.522s] [ext: isaacsim.robot_motion.lula-4.0.8] startup
+[3.531s] [ext: isaacsim.core.nodes-3.4.3] startup
+[3.548s] [ext: isaacsim.gui.components-1.2.1] startup
+[3.562s] [ext: isaacsim.robot_motion.motion_generation-8.0.26] startup
+[3.581s] [ext: isaacsim.robot.manipulators-3.3.6] startup
+[3.599s] [ext: isaacsim.core.experimental.materials-0.4.0] startup
+[3.678s] [ext: isaacsim.robot.manipulators.examples-1.1.2] startup
+[3.726s] [ext: isaacsim.cortex.framework-1.0.12] startup
+[3.739s] [ext: isaacsim.cortex.behaviors-2.0.14] startup
+[3.756s] [ext: omni.isaac.cortex.sample_behaviors-2.0.5] startup
+2026-10-14T17:59:32Z [3,752ms] [Warning] [omni.isaac.cortex] omni.isaac.cortex has been deprecated in favor of isaacsim.cortex.framework. Please update your code accordingly.
+2026-10-14T17:59:32Z [3,755ms] [Warning] [omni.isaac.cortex.sample_behaviors] omni.isaac.cortex.sample_behaviors has been deprecated in favor of isaacsim.cortex.behaviors. Please update your code accordingly.
+[3.770s] [ext: omni.kit.widget.zoombar-1.0.6] startup
+[3.776s] [ext: isaacsim.gui.content_browser-0.1.11] startup
+[3.791s] [ext: omni.kit.browser.core-2.3.13] startup
+[3.987s] [ext: omni.kit.widget.stage_icons-1.0.8] startup
+[4.026s] [ext: omni.kit.widget.prompt-1.0.7] startup
+[4.035s] [ext: omni.kit.usd.collect-2.4.5] startup
+[4.042s] [ext: omni.kit.browser.folder.core-1.10.9] startup
+[4.066s] [ext: omni.kit.window.stage-2.6.1] startup
+[4.082s] [ext: omni.kit.usdz_export-1.0.9] startup
+[4.085s] [ext: omni.kit.tool.collect-2.2.18] startup
+[4.088s] [ext: omni.kit.menu.stage-1.2.7] startup
+[4.090s] [ext: omni.kit.tool.asset_importer-4.3.2] startup
+[4.097s] [ext: isaacsim.robot.wheeled_robots-4.0.24] startup
+[4.108s] [ext: isaacsim.examples.browser-0.2.1] startup
+[4.111s] [ext: isaacsim.asset.importer.urdf-2.4.30] startup
+[4.173s] [ext: omni.isaac.wheeled_robots-3.0.7] startup
+2026-10-14T17:59:32Z [4,161ms] [Warning] [omni.isaac.wheeled_robots] omni.isaac.wheeled_robots has been deprecated in favor of isaacsim.robot.wheeled_robots. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,161ms] [Warning] [omni.isaac.wheeled_robots.controllers] omni.isaac.wheeled_robots has been deprecated in favor of isaacsim.robot.wheeled_robots. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,161ms] [Warning] [omni.isaac.wheeled_robots.controllers.ackermann_controller] omni.isaac.wheeled_robots has been deprecated in favor of isaacsim.robot.wheeled_robots. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,161ms] [Warning] [omni.isaac.wheeled_robots.controllers.differential_controller] omni.isaac.wheeled_robots has been deprecated in favor of isaacsim.robot.wheeled_robots. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,161ms] [Warning] [omni.isaac.wheeled_robots.controllers.holonomic_controller] omni.isaac.wheeled_robots has been deprecated in favor of isaacsim.robot.wheeled_robots. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,161ms] [Warning] [omni.isaac.wheeled_robots.controllers.quintic_path_planner] omni.isaac.wheeled_robots has been deprecated in favor of isaacsim.robot.wheeled_robots. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,161ms] [Warning] [omni.isaac.wheeled_robots.controllers.stanley_control] omni.isaac.wheeled_robots has been deprecated in favor of isaacsim.robot.wheeled_robots. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,161ms] [Warning] [omni.isaac.wheeled_robots.controllers.wheel_base_pose_controller] omni.isaac.wheeled_robots has been deprecated in favor of isaacsim.robot.wheeled_robots. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,163ms] [Warning] [omni.isaac.wheeled_robots.impl] omni.isaac.wheeled_robots has been deprecated in favor of isaacsim.robot.wheeled_robots. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,163ms] [Warning] [omni.isaac.wheeled_robots.robots] omni.isaac.wheeled_robots has been deprecated in favor of isaacsim.robot.wheeled_robots. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,163ms] [Warning] [omni.isaac.wheeled_robots.robots.holonomic_robot_usd_setup] omni.isaac.wheeled_robots has been deprecated in favor of isaacsim.robot.wheeled_robots. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,163ms] [Warning] [omni.isaac.wheeled_robots.robots.wheeled_robot] omni.isaac.wheeled_robots has been deprecated in favor of isaacsim.robot.wheeled_robots. Please update your code accordingly.
+[4.179s] [ext: isaacsim.simulation_app-2.12.2] startup
+[4.183s] [ext: omni.isaac.franka-1.0.7] startup
+2026-10-14T17:59:32Z [4,170ms] [Warning] [omni.isaac.franka] omni.isaac.franka has been deprecated in favor of isaacsim.robot.manipulators.examples.franka. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,170ms] [Warning] [omni.isaac.franka.franka] omni.isaac.franka has been deprecated in favor of isaacsim.robot.manipulators.examples.franka. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,187ms] [Warning] [omni.isaac.franka.kinematics_solver] omni.isaac.franka has been deprecated in favor of isaacsim.robot.manipulators.examples.franka. Please update your code accordingly.
+[4.201s] [ext: omni.isaac.kit-2.0.6] startup
+2026-10-14T17:59:32Z [4,189ms] [Warning] [omni.isaac.kit] omni.isaac.kit has been deprecated in favor of isaacsim.simulation_app. Please update your code accordingly.
+[4.203s] [ext: omni.kit.selection-0.1.6] startup
+[4.205s] [ext: omni.isaac.lula-4.0.6] startup
+2026-10-14T17:59:32Z [4,192ms] [Warning] [omni.isaac.lula] omni.isaac.lula has been deprecated in favor of isaacsim.robot_motion.lula. Please update your code accordingly.
+[4.206s] [ext: isaacsim.robot_motion.lula_test_widget-1.0.12] startup
+[4.208s] [ext: isaacsim.asset.browser-1.3.23] startup
+[4.269s] [ext: omni.kit.viewport.actions-107.0.2] startup
+[4.276s] [ext: isaacsim.gui.menu-2.4.4] startup
+[4.281s] [ext: omni.isaac.manipulators-3.0.7] startup
+2026-10-14T17:59:32Z [4,269ms] [Warning] [omni.isaac.manipulators] omni.isaac.manipulators has been deprecated in favor of isaacsim.robot.manipulators. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,269ms] [Warning] [omni.isaac.manipulators.controllers] omni.isaac.manipulators has been deprecated in favor of isaacsim.robot.manipulators. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,269ms] [Warning] [omni.isaac.manipulators.controllers.pick_place_controller] omni.isaac.manipulators has been deprecated in favor of isaacsim.robot.manipulators. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,271ms] [Warning] [omni.isaac.manipulators.controllers.stacking_controller] omni.isaac.manipulators has been deprecated in favor of isaacsim.robot.manipulators. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,271ms] [Warning] [omni.isaac.manipulators.grippers] omni.isaac.manipulators has been deprecated in favor of isaacsim.robot.manipulators. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,271ms] [Warning] [omni.isaac.manipulators.grippers.gripper] omni.isaac.manipulators has been deprecated in favor of isaacsim.robot.manipulators. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,271ms] [Warning] [omni.isaac.manipulators.grippers.parallel_gripper] omni.isaac.manipulators has been deprecated in favor of isaacsim.robot.manipulators. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,271ms] [Warning] [omni.isaac.manipulators.grippers.surface_gripper] omni.isaac.manipulators has been deprecated in favor of isaacsim.robot.manipulators. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,271ms] [Warning] [omni.isaac.manipulators.manipulators] omni.isaac.manipulators has been deprecated in favor of isaacsim.robot.manipulators. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,271ms] [Warning] [omni.isaac.manipulators.manipulators.single_manipulator] omni.isaac.manipulators has been deprecated in favor of isaacsim.robot.manipulators. Please update your code accordingly.
+[4.285s] [ext: omni.isaac.lula_test_widget-1.0.6] startup
+2026-10-14T17:59:32Z [4,273ms] [Warning] [omni.isaac.lula_test_widget] omni.isaac.lula_test_widget has been deprecated in favor of isaacsim.robot_motion.lula_test_widget. Please update your code accordingly.
+[4.287s] [ext: omni.isaac.asset_browser-1.0.6] startup
+2026-10-14T17:59:32Z [4,275ms] [Warning] [omni.isaac.asset_browser] omni.isaac.asset_browser has been deprecated in favor of isaacsim.asset.browser. Please update your code accordingly.
+[4.290s] [ext: omni.kit.viewport.menubar.display-107.0.3] startup
+[4.292s] [ext: omni.isaac.menu-1.0.6] startup
+2026-10-14T17:59:32Z [4,280ms] [Warning] [omni.isaac.menu] omni.isaac.menu has been deprecated in favor of isaacsim.gui.menu. Please update your code accordingly.
+[4.295s] [ext: omni.isaac.motion_generation-8.0.7] startup
+2026-10-14T17:59:32Z [4,283ms] [Warning] [omni.isaac.motion_generation] omni.isaac.motion_generation has been deprecated in favor of isaacsim.robot_motion.motion_generation. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,283ms] [Warning] [omni.isaac.motion_generation.articulation_kinematics_solver] omni.isaac.motion_generation has been deprecated in favor of isaacsim.robot_motion.motion_generation. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,284ms] [Warning] [omni.isaac.motion_generation.articulation_motion_policy] omni.isaac.motion_generation has been deprecated in favor of isaacsim.robot_motion.motion_generation. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,284ms] [Warning] [omni.isaac.motion_generation.articulation_trajectory] omni.isaac.motion_generation has been deprecated in favor of isaacsim.robot_motion.motion_generation. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,284ms] [Warning] [omni.isaac.motion_generation.kinematics_interface] omni.isaac.motion_generation has been deprecated in favor of isaacsim.robot_motion.motion_generation. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,284ms] [Warning] [omni.isaac.motion_generation.lula] omni.isaac.motion_generation has been deprecated in favor of isaacsim.robot_motion.motion_generation. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,284ms] [Warning] [omni.isaac.motion_generation.lula.kinematics] omni.isaac.motion_generation has been deprecated in favor of isaacsim.robot_motion.motion_generation. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,284ms] [Warning] [omni.isaac.motion_generation.lula.motion_policies] omni.isaac.motion_generation has been deprecated in favor of isaacsim.robot_motion.motion_generation. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,284ms] [Warning] [omni.isaac.motion_generation.lula.path_planners] omni.isaac.motion_generation has been deprecated in favor of isaacsim.robot_motion.motion_generation. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,284ms] [Warning] [omni.isaac.motion_generation.lula.trajectory_generator] omni.isaac.motion_generation has been deprecated in favor of isaacsim.robot_motion.motion_generation. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,284ms] [Warning] [omni.isaac.motion_generation.motion_policy_controller] omni.isaac.motion_generation has been deprecated in favor of isaacsim.robot_motion.motion_generation. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,284ms] [Warning] [omni.isaac.motion_generation.motion_policy_interface] omni.isaac.motion_generation has been deprecated in favor of isaacsim.robot_motion.motion_generation. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,284ms] [Warning] [omni.isaac.motion_generation.path_planner_visualizer] omni.isaac.motion_generation has been deprecated in favor of isaacsim.robot_motion.motion_generation. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,285ms] [Warning] [omni.isaac.motion_generation.path_planning_interface] omni.isaac.motion_generation has been deprecated in favor of isaacsim.robot_motion.motion_generation. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,285ms] [Warning] [omni.isaac.motion_generation.trajectory] omni.isaac.motion_generation has been deprecated in favor of isaacsim.robot_motion.motion_generation. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,285ms] [Warning] [omni.isaac.motion_generation.world_interface] omni.isaac.motion_generation has been deprecated in favor of isaacsim.robot_motion.motion_generation. Please update your code accordingly.
+[4.299s] [ext: omni.isaac.assets_check-0.3.13] startup
+2026-10-14T17:59:32Z [4,287ms] [Warning] [omni.isaac.assets_check] omni.isaac.assets_check has been deprecated in favor of isaacsim.asset.browser. Please update your code accordingly.
+[4.301s] [ext: isaacsim.gui.sensors.icon-2.0.3] startup
+[4.312s] [ext: isaacsim.asset.importer.mjcf-2.5.13] startup
+[4.316s] [ext: omni.sensors.nv.common-3.0.0] startup
+[4.323s] [ext: isaacsim.sensors.physics-0.4.3] startup
+[4.327s] [ext: omni.sensors.net-1.0.0] startup
+[4.329s] [ext: omni.isaac.nucleus-1.0.6] startup
+2026-10-14T17:59:32Z [4,316ms] [Warning] [omni.isaac.nucleus] omni.isaac.nucleus has been deprecated in favor of isaacsim.storage.native. Please update your code accordingly.
+2026-10-14T17:59:32Z [4,316ms] [Warning] [omni.isaac.nucleus.nucleus] omni.isaac.nucleus.nucleus has been deprecated in favor of isaacsim.storage.native. Please update your code accordingly.
+[4.331s] [ext: omni.sensors.nv.materials-2.0.0] startup
+[4.334s] [ext: isaacsim.robot.policy.examples-4.1.11] startup
+[4.339s] [ext: omni.sensors.nv.wpm-3.0.0] startup
+[4.344s] [ext: omni.sensors.nv.lidar-3.0.0] startup
+[4.350s] [ext: isaacsim.util.debug_draw-3.1.0] startup
+[4.353s] [ext: omni.sensors.nv.radar-3.0.0] startup
+[4.355s] [ext: omni.sensors.nv.ids-2.0.0] startup
+[4.356s] [ext: isaacsim.core.cloner-1.4.10] startup
+[4.358s] [ext: isaacsim.sensors.physx-2.3.2] startup
+[4.361s] [ext: isaacsim.sensors.rtx-15.8.4] startup
+[4.368s] [ext: isaacsim.sensors.camera-1.3.6] startup
+[4.376s] [ext: omni.isaac.quadruped-3.0.7] startup
+2026-10-14T17:59:33Z [4,364ms] [Warning] [omni.isaac.quadruped] omni.isaac.quadruped has been deprecated in favor of isaacsim.robot.policy.examples. Please update your code accordingly.
+[4.379s] [ext: omni.isaac.cloner-1.0.7] startup
+2026-10-14T17:59:33Z [4,367ms] [Warning] [omni.isaac.cloner] omni.isaac.cloner has been deprecated in favor of isaacsim.core.cloner. Please update your code accordingly.
+[4.382s] [ext: omni.isaac.range_sensor-4.0.6] startup
+2026-10-14T17:59:33Z [4,370ms] [Warning] [omni.isaac.range_sensor] omni.isaac.range_sensor has been deprecated in favor of isaacsim.sensors.physx. Please update your code accordingly.
+2026-10-14T17:59:33Z [4,371ms] [Warning] [omni.isaac.range_sensor.commands] omni.isaac.range_sensor.commands has been deprecated in favor of isaacsim.sensors.physx.commands. Please update your code accordingly.
+[4.387s] [ext: omni.isaac.sensor-13.0.7] startup
+2026-10-14T17:59:33Z [4,375ms] [Warning] [omni.isaac.sensor] omni.isaac.sensor has been deprecated in favor of isaacsim.sensors.camera, isaacsim.sensors.physics, isaacsim.sensors.physx, and isaacsim.sensors.rtx. Please update your code accordingly.
+2026-10-14T17:59:33Z [4,375ms] [Warning] [omni.isaac.sensor.camera] omni.isaac.sensor.camera has been deprecated in favor of isaacsim.sensors.camera.camera. Please update your code accordingly.
+2026-10-14T17:59:33Z [4,376ms] [Warning] [omni.isaac.sensor.camera_view] omni.isaac.sensor.camera_view has been deprecated in favor of isaacsim.sensors.camera.camera_view. Please update your code accordingly.
+2026-10-14T17:59:33Z [4,376ms] [Warning] [omni.isaac.sensor.commands] omni.isaac.sensor.commands has been deprecated in favor of isaacsim.sensors.physics.commands, isaacsim.sensors.physx.commands, and isaacsim.sensors.rtx.commands. Please update your code accordingly.
+2026-10-14T17:59:33Z [4,376ms] [Warning] [omni.isaac.sensor.contact_sensor] omni.isaac.sensor.contact_sensor has been deprecated in favor of isaacsim.sensors.physics.contact_sensor. Please update your code accordingly.
+2026-10-14T17:59:33Z [4,376ms] [Warning] [omni.isaac.sensor.imu_sensor] omni.isaac.sensor.imu_sensor has been deprecated in favor of isaacsim.sensors.physics.imu_sensor. Please update your code accordingly.
+2026-10-14T17:59:33Z [4,376ms] [Warning] [omni.isaac.sensor.lidar_rtx] omni.isaac.sensor.lidar_rtx has been deprecated in favor of isaacsim.sensors.rtx.lidar_rtx. Please update your code accordingly.
+2026-10-14T17:59:33Z [4,376ms] [Warning] [omni.isaac.sensor.rotating_lidar_physX] omni.isaac.sensor.imu_sensor has been deprecated in favor of isaacsim.sensors.physix.rotating_lidar_physX. Please update your code accordingly.
+2026-10-14T17:59:33Z [4,376ms] [Warning] [omni.isaac.sensor.scripts.samples.contact_sensor] omni.isaac.sensor.scripts.samples.contact_sensor has been deprecated in favor of isaacsim.sensors.physics.scripts.samples.contact_sensor. Please update your code accordingly.
+2026-10-14T17:59:33Z [4,376ms] [Warning] [omni.isaac.sensor.scripts.samples.imu_sensor] omni.isaac.sensor.scripts.samples.imu_sensor has been deprecated in favor of isaacsim.sensors.physics.scripts.samples.imu_sensor. Please update your code accordingly.
+2026-10-14T17:59:33Z [4,376ms] [Warning] [omni.isaac.sensor.scripts.samples.lightbeam_sensor] omni.isaac.sensor.scripts.samples.lightbeam_sensor has been deprecated in favor of isaacsim.sensors.physx.scripts.samples.lightbeam_sensor. Please update your code accordingly.
+[4.390s] [ext: omni.kit.menu.create-2.0.1] startup
+[4.398s] [ext: omni.kit.widget.toolbar-2.0.1] startup
+[4.403s] [ext: omni.kit.manipulator.transform-107.0.0] startup
+[4.406s] [ext: omni.isaac.core-4.0.7] startup
+2026-10-14T17:59:33Z [4,393ms] [Warning] [omni.isaac.core.physics_context.physics_context] omni.isaac.core.physics_context.physics_context has been deprecated in favor of isaacsim.core.api.physics_context.physics_context. Please update your code accordingly.
+2026-10-14T17:59:33Z [4,393ms] [Warning] [omni.isaac.core.simulation_context.simulation_context] omni.isaac.core.simulation_context.simulation_context has been deprecated in favor of isaacsim.core.api.simulation_context.simulation_context. Please update your code accordingly.
+2026-10-14T17:59:33Z [4,394ms] [Warning] [omni.isaac.core.world.world] omni.isaac.core.world.world has been deprecated in favor of isaacsim.core.api.world.world. Please update your code accordingly.
+2026-10-14T17:59:33Z [4,394ms] [Warning] [omni.isaac.core] omni.isaac.core has been deprecated in favor of isaacsim.core.api. Please update your code accordingly.
+[4.408s] [ext: omni.kit.scripting-107.3.2] startup
+[4.413s] [ext: omni.kit.manipulator.tool.snap-1.5.13] startup
+[4.417s] [ext: omni.kit.manipulator.selector-1.1.3] startup
+[4.419s] [ext: isaacsim.app.about-2.0.11] startup
+[4.424s] [ext: isaacsim.replicator.behavior-1.1.16] startup
+[4.425s] [ext: omni.kit.viewport.manipulator.transform-107.0.4] startup
+[4.427s] [ext: omni.isaac.window.about-2.0.7] startup
+2026-10-14T17:59:33Z [4,414ms] [Warning] [omni.isaac.window.about] omni.isaac.window.about has been deprecated in favor of isaacsim.app.about. Please update your code accordingly.
+2026-10-14T17:59:33Z [4,414ms] [Warning] [omni.isaac.window.about.about] omni.isaac.window.about.about has been deprecated in favor of isaacsim.app.about.about. Please update your code accordingly.
+[4.428s] [ext: omni.fabric.commands-1.1.6] startup
+[4.431s] [ext: omni.kit.manipulator.prim.core-107.0.8] startup
+[4.436s] [ext: omni.kit.property.audio-1.0.16] startup
+[4.438s] [ext: omni.kit.property.camera-1.0.10] startup
+[4.439s] [ext: omni.kit.property.geometry-2.0.4] startup
+[4.442s] [ext: omni.hydra.scene_api-0.1.2] startup
+[4.447s] [ext: omni.kit.property.light-1.0.12] startup
+[4.470s] [ext: omni.kit.manipulator.prim.fabric-107.0.4] startup
+[4.473s] [ext: omni.kit.manipulator.prim.usd-107.0.3] startup
+[4.475s] [ext: omni.kit.property.material-1.11.9] startup
+[4.480s] [ext: omni.kit.property.render-1.2.1] startup
+[4.482s] [ext: omni.kit.property.transform-1.5.13] startup
+[4.486s] [ext: isaacsim.gui.property-1.1.3] startup
+[4.488s] [ext: omni.kit.manipulator.camera-106.0.4] startup
+[4.492s] [ext: omni.kit.manipulator.prim-107.0.0] startup
+[4.492s] [ext: omni.isaac.surface_gripper-2.0.6] startup
+2026-10-14T17:59:33Z [4,479ms] [Warning] [omni.isaac.surface_gripper] omni.isaac.surface_gripper has been deprecated in favor of isaacsim.robot.surface_gripper. Please update your code accordingly.
+[4.493s] [ext: omni.kit.manipulator.selection-106.0.1] startup
+[4.496s] [ext: omni.kit.property.bundle-1.4.1] startup
+[4.499s] [ext: omni.kit.property.isaac-1.0.6] startup
+2026-10-14T17:59:33Z [4,486ms] [Warning] [omni.kit.property.isaac] omni.kit.property.isaac has been deprecated in favor of isaacsim.gui.property. Please update your code accordingly.
+2026-10-14T17:59:33Z [4,486ms] [Warning] [omni.kit.property.isaac.widgets] omni.kit.property.isaac.widgets has been deprecated in favor of isaacsim.gui.property.widgets. Please update your code accordingly.
+[4.500s] [ext: omni.isaac.universal_robots-1.0.6] startup
+2026-10-14T17:59:33Z [4,486ms] [Warning] [omni.isaac.universal_robots] omni.isaac.universal_robots has been deprecated in favor of isaacsim.robot.manipulators.examples.universal_robots. Please update your code accordingly.
+2026-10-14T17:59:33Z [4,486ms] [Warning] [omni.isaac.universal_robots.kinematics_solver] omni.isaac.franka has been deprecated in favor of isaacsim.robot.manipulators.examples.universal_robots. Please update your code accordingly.
+2026-10-14T17:59:33Z [4,487ms] [Warning] [omni.isaac.universal_robots.ur10] omni.isaac.franka has been deprecated in favor of isaacsim.robot.manipulators.examples.universal_robots. Please update your code accordingly.
+[4.501s] [ext: omni.isaac.core_nodes-2.0.6] startup
+2026-10-14T17:59:33Z [4,490ms] [Warning] [omni.isaac.core_nodes] omni.isaac.core_nodes has been deprecated in favor of isaacsim.core.nodes. Please update your code accordingly.
+[4.504s] [ext: omni.kit.viewport.menubar.camera-107.0.6] startup
+[4.512s] [ext: omni.kit.viewport.menubar.lighting-107.3.1] startup
+[4.514s] [ext: isaacsim.replicator.writers-1.0.17] startup
+[4.525s] [ext: omni.kit.viewport.menubar.render-107.0.10] startup
+[4.531s] [ext: omni.kit.viewport.menubar.settings-107.0.3] startup
+[4.537s] [ext: omni.kit.window.console-1.1.4] startup
+[4.544s] [ext: isaacsim.replicator.domain_randomization-1.0.16] startup
+[4.548s] [ext: isaacsim.replicator.examples-1.3.6] startup
+[4.551s] [ext: omni.ocio-0.1.1] startup
+[4.558s] [ext: omni.rtx.window.settings-0.6.19] startup
+[4.576s] [ext: omni.kit.window.status_bar-0.1.9] startup
+[4.580s] [ext: omni.kit.window.toolbar-2.0.0] startup
+[4.586s] [ext: omni.replicator.isaac-2.0.8] startup
+2026-10-14T17:59:33Z [4,574ms] [Warning] [omni.replicator.isaac] omni.replicator.isaac has been deprecated in favor of isaacsim.replicator.domain_randomization, isaacsim.replicator.examples, isaacsim.replicator.writers. Please update your code accordingly.
+[4.588s] [ext: omni.replicator.replicator_yaml-2.0.11] startup
+[4.604s] [ext: omni.rtx.settings.core-0.6.5] startup
+[4.609s] [ext: omni.usd.metrics.assembler.ui-107.3.1] startup
+[4.618s] [ext: omni.isaac.utils-2.0.6] startup
+[4.620s] [ext: semantics.schema.editor-2.0.2] startup
+[4.624s] [ext: omni.kit.ui.actions-1.0.5] startup
+[4.625s] [ext: semantics.schema.property-2.0.1] startup
+[4.627s] [ext: omni.isaac.version-2.0.7] startup
+2026-10-14T17:59:33Z [4,614ms] [Warning] [omni.isaac.version] omni.isaac.version has been deprecated in favor of isaacsim.core.version. Please update your code accordingly.
+[4.628s] [ext: omni.isaac.cortex-1.0.5] startup
+[4.629s] [ext: omni.anim.curve.core-1.3.1] startup
+[4.638s] [ext: isaacsim.core.throttling-2.2.2] startup
+[4.640s] [ext: omni.kit.menu.common-2.0.1] startup
+[4.642s] [ext: isaacsim.exp.base-5.1.0] startup
+[4.643s] [ext: isaacsim.exp.base.python-5.1.0] startup
+[4.644s] Simulation App Starting
+2026-10-14T17:59:33Z [4,716ms] [Warning] [omni.fabric.plugin] Warning: attribute viewportHandle not found for bucket id 9
+
+2026-10-14T17:59:33Z [4,739ms] [Warning] [usdrt.population.plugin] [UsdNoticeHandler] Unhandled attribute type VtArray<std::string> (prim attribute: omni:rtx:material:db:flattener:ior_constant)
+2026-10-14T17:59:33Z [4,739ms] [Warning] [usdrt.population.plugin] [UsdNoticeHandler] Unhandled attribute type VtArray<std::string> (prim attribute: omni:rtx:material:db:flattener:reflection_roughness_constant)
+2026-10-14T17:59:33Z [4,739ms] [Warning] [usdrt.population.plugin] [UsdNoticeHandler] Unhandled attribute type VtArray<std::string> (prim attribute: omni:rtx:material:db:flattener:transmittance_color)
+[4.763s] app ready
+Starting kit application with the following args:  ['/home/farhan/isaac-sim/exts/isaacsim.simulation_app/isaacsim/simulation_app/simulation_app.py', '/home/farhan/isaac-sim/apps/isaacsim.exp.base.python.kit', '--/app/tokens/exe-path=/home/farhan/isaac-sim/kit', '--/persistent/app/viewport/displayOptions=3094', '--/rtx/materialDb/syncLoads=True', '--/rtx/hydra/materialSyncLoads=True', '--/omni.kit.plugin/syncUsdLoads=True', '--/app/renderer/resolution/width=1280', '--/app/renderer/resolution/height=720', '--/app/window/width=1440', '--/app/window/height=900', '--/renderer/multiGpu/enabled=True', '--/app/fastShutdown=True', '--/app/installSignalHandlers=0', '--ext-folder', '/home/farhan/isaac-sim/exts', '--ext-folder', '/home/farhan/isaac-sim/apps', '--/physics/cudaDevice=0', '--/plugins/carb.tasking.plugin/threadCount=28', '--/plugins/omni.tbb.globalcontrol/maxThreadCount=28', '--portable', '--no-window', '--/app/window/hideUi=1']
+Passing the following args to the base kit application:  ['--mode', 'topdown', '--targets', 'all', '--variants', 'vac35,squeeze,lat2,tilt3', '--record']
+Warp 1.8.2 initialized:
+   CUDA Toolkit 12.8, Driver 13.0
+   Devices:
+     "cpu"      : "x86_64"
+     "cuda:0"   : "NVIDIA GeForce RTX 5070 Ti" (15 GiB, sm_120, mempool enabled)
+   Kernel cache:
+     /home/farhan/.cache/warp/1.8.2
+Warp DeprecationWarning: The `warp.sim` module is deprecated and will be removed in v1.10. Please transition to using the forthcoming Newton library instead.
+### STAGE_OPEN
+shelf tops {1: 0.17, 2: 0.49, 3: 0.74, 4: 1.02, 5: 1.35, 6: 1.66, 7: 1.96} clear mm {1: 300, 2: 230, 3: 260, 4: 310, 5: 290, 6: 280}
+RESULT {"pull_out_mm": 100.0, "target": "T1", "shelf": 1, "box": "ultimaster_nagomi", "which": "mid", "variant": "base", "mode": "topdown", "thickness_mm": 16.0, "clear_height_mm": 300.0, "carton_path": "/World/Cartons/Shelf_01/ultimaster_nagomi_029", "vacuum_kpa": 50.0, "squeezed_cartons": null, "videos": ["/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T1_3q.mp4", "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T1_side.mp4"], "unexpected_contacts": {}, "contact_pairs_debug": {"/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_01/ultimaster_nagomi_029": 535, "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_01/ultimaster_nagomi_029": 525, "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_01/ultimaster_nagomi_029": 535, " | ": 1, "/World/Tools/SX/tool/pad_3 | ": 2, "/World/Tools/SX/tool/pad_2 | ": 2, "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_01/ultimaster_nagomi_029": 7398, "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_01/ultimaster_nagomi_029": 7397, "/World/Tools/GR/tool/finger_right | ": 2, "/World/Tools/GR/tool/finger_left | ": 2}, "min_clearance_by_phase_mm": {"start": {"SX.shelf_above": 98.7267304529363, "SX.shelf_below": 50.84638702056083, "SX.walls_trim_back": 355.0000060601721, "SX.neighbours": 25.85615235688544, "GR.shelf_above": 9.494573167256153, "GR.shelf_below": 265.6750167139216, "GR.walls_trim_back": 351.5111775811346, "GR.neighbours": 33.15273588604119, "GR.to_other_tool": 65.31936054239083}, "1_press_2_vacuum_3_pull": {"SX.shelf_above": 98.59995460511095, "SX.shelf_below": 50.599911481168604, "SX.walls_trim_back": 325.19137511174665, "SX.neighbours": 6.591548752487266, "GR.shelf_above": 9.494573167256153, "GR.shelf_below": 265.6750167139216, "GR.walls_trim_back": 351.51117758614976, "GR.neighbours": 33.15272683932563, "GR.to_other_tool": 65.26416003091266}, "4_gripper_approach_clamp": {"SX.shelf_above": 126.97140121252451, "SX.shelf_below": 94.6578435785116, "SX.walls_trim_back": 425.153080516704, "SX.neighbours": 100.21452552359203, "GR.shelf_above": 9.300022266339504, "GR.shelf_below": 195.73314504712891, "GR.walls_trim_back": 351.5111747992988, "GR.neighbours": 29.299716566192263, "GR.to_other_tool": 19.675016542312736}, "5_release_aside": {"SX.shelf_above": 126.9719392143476, "SX.shelf_below": 94.65857949025381, "SX.walls_trim_back": 319.4242487686137, "SX.neighbours": 100.2164342504302, "GR.shelf_above": 10.62072132051983, "GR.shelf_below": 195.73988250973827, "GR.walls_trim_back": 351.5111440997528, "GR.neighbours": 29.29973825287069, "GR.to_other_tool": 19.692046649599902}, "6_extract_7_lift": {"SX.shelf_above": 147.7225881167885, "SX.shelf_below": 121.07978847774655, "SX.walls_trim_back": 319.4241077366234, "SX.neighbours": 130.22141548475932, "GR.shelf_above": 11.743515720364277, "GR.shelf_below": 195.80436100156055, "GR.walls_trim_back": 352.69677140362427, "GR.neighbours": 30.48591208425097, "GR.to_other_tool": 71.1407744094084}}, "neighbour_max_disp_mm": 0.008, "neighbour_max_tilt_deg": 0.003, "shelf_max_disp_mm": 0.01, "carton_max_rotation_deg": 0.072, "success": true, "video_frames": 798}
+    1_press OK {"compression_mm": [0.49008859787136316, 0.4901571082882583, 0.4899803316220641], "carton_pushed_back_mm": 4.499, "travel_past_contact_mm": 4.989}
+    2_vacuum OK {"status": "Closed", "gripped": ["/World/Cartons/Shelf_01/ultimaster_nagomi_029"]}
+    3_pull OK {"carton_disp_mm": 104.786, "carton_net_disp_from_rest_mm": 99.98, "follow_error_mm": 0.16, "status": "Closed", "monitor_tripped": null, "neighbour_disp_mm": 0.008, "neighbour_tilt_deg": 0.003, "carton_yaw_tilt_deg": 0.001}
+    4a_approach OK {"carton_shift_mm": 0.0, "neighbour_disp_mm": 0.008, "carton_shift_xyz_mm": [3.166496753692627e-05, 7.450580596923828e-06, 2.9802322387695312e-05]}
+    4b_clamp OK {"gap_mm": 16.001, "gap_error_mm": 0.001, "carton_shift_during_close_mm": 0.004, "carton_shift_xyz_mm": [0.002993270754814148, -0.0016093254089355469, 0.002086162567138672], "finger_effort_N": 24.835}
+    5_release_aside OK {"status": "Open", "carton_shift_mm": 0.042, "retract_mm": 30, "aside_lateral_mm": 120.0}
+    6_extract OK {"distance_mm": 285.0, "carton_travel_mm": 285.014, "gripper_travel_mm": 285.016, "slip_mm": 0.08, "carton_lift_max_mm": 0.013, "neighbour_disp_mm": 0.008, "neighbour_tilt_deg": 0.003, "carton_rotation_deg": 0.072, "carton_fully_clear": true}
+    7_lift50 OK {"carton_rise_mm": 49.992, "slip_mm_total": 0.077, "carton_rotation_deg": 0.072, "carton_rotation_final_deg": 0.016}
+    clearance mm {"SX.shelf_above": 98.6, "SX.shelf_below": 50.6, "SX.walls_trim_back": 319.4, "SX.neighbours": 6.6, "GR.shelf_above": 9.3, "GR.shelf_below": 195.7, "GR.walls_trim_back": 351.5, "GR.neighbours": 29.3, "GR.to_other_tool": 19.7} unexpected contacts {}
+RESULT {"pull_out_mm": 100.0, "target": "T2", "shelf": 2, "box": "accuforce", "which": "mid", "variant": "base", "mode": "topdown", "thickness_mm": 16.0, "clear_height_mm": 230.0, "carton_path": "/World/Cartons/Shelf_02/accuforce_029", "vacuum_kpa": 50.0, "squeezed_cartons": null, "videos": ["/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T2_3q.mp4", "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T2_side.mp4"], "unexpected_contacts": {}, "contact_pairs_debug": {"/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_02/accuforce_029": 535, "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_02/accuforce_029": 525, "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_02/accuforce_029": 535, " | ": 1, "/World/Tools/SX/tool/pad_3 | ": 2, "/World/Tools/SX/tool/pad_2 | ": 2, "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_02/accuforce_029": 6966, "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_02/accuforce_029": 6961, "/World/Tools/GR/tool/finger_right | ": 2, "/World/Tools/GR/tool/finger_left | ": 2}, "min_clearance_by_phase_mm": {"start": {"SX.shelf_above": 43.885908820977, "SX.shelf_below": 35.9492814376711, "SX.walls_trim_back": 355.00001941186474, "SX.neighbours": 25.856353509471283, "GR.shelf_above": 9.300024852246874, "GR.shelf_below": 235.6957638651821, "GR.walls_trim_back": 351.5111775811346, "GR.neighbours": 33.152885679493124, "GR.to_other_tool": 50.6664374815969}, "1_press_2_vacuum_3_pull": {"SX.shelf_above": 43.599981993439954, "SX.shelf_below": 35.59987324476388, "SX.walls_trim_back": 325.12530147370177, "SX.neighbours": 6.5939888417260155, "GR.shelf_above": 9.300026723379402, "GR.shelf_below": 235.6957653792638, "GR.walls_trim_back": 351.51117758614976, "GR.neighbours": 33.152885679493124, "GR.to_other_tool": 50.59525693788517}, "4_gripper_approach_clamp": {"SX.shelf_above": 91.10945951322358, "SX.shelf_below": 87.56310475204099, "SX.walls_trim_back": 425.14614653856603, "SX.neighbours": 100.21662132406027, "GR.shelf_above": 9.300023195799422, "GR.shelf_below": 165.77311739760808, "GR.walls_trim_back": 351.5110334483957, "GR.neighbours": 29.299888321880463, "GR.to_other_tool": 19.245139963434703}, "5_release_aside": {"SX.shelf_above": 91.10955463564771, "SX.shelf_below": 87.56342862051015, "SX.walls_trim_back": 319.424273951745, "SX.neighbours": 100.21723634220847, "GR.shelf_above": 9.999763462356183, "GR.shelf_below": 165.78200702419102, "GR.walls_trim_back": 351.51097553443344, "GR.neighbours": 29.299808922755354, "GR.to_other_tool": 19.877898990562514}, "6_extract_7_lift": {"SX.shelf_above": 118.3256401455237, "SX.shelf_below": 115.6170850287852, "SX.walls_trim_back": 319.4240432272193, "SX.neighbours": 130.22171713709224, "GR.shelf_above": 11.186599718669012, "GR.shelf_below": 165.85352206082268, "GR.walls_trim_back": 352.69762434804767, "GR.neighbours": 30.486800609002966, "GR.to_other_tool": 60.54990661305635}}, "neighbour_max_disp_mm": 0.007, "neighbour_max_tilt_deg": 0.003, "shelf_max_disp_mm": 0.012, "carton_max_rotation_deg": 0.061, "success": true, "video_frames": 771}
+    1_press OK {"compression_mm": [0.3088759258389473, 0.3088974626734853, 0.3086535434704274], "carton_pushed_back_mm": 4.684, "travel_past_contact_mm": 4.993}
+    2_vacuum OK {"status": "Closed", "gripped": ["/World/Cartons/Shelf_02/accuforce_029"]}
+    3_pull OK {"carton_disp_mm": 104.871, "carton_net_disp_from_rest_mm": 99.998, "follow_error_mm": 0.096, "status": "Closed", "monitor_tripped": null, "neighbour_disp_mm": 0.007, "neighbour_tilt_deg": 0.003, "carton_yaw_tilt_deg": 0.0}
+    4a_approach OK {"carton_shift_mm": 0.001, "neighbour_disp_mm": 0.007, "carton_shift_xyz_mm": [2.0489096641540527e-05, -0.0005587935447692871, 0.0]}
+    4b_clamp OK {"gap_mm": 16.002, "gap_error_mm": 0.002, "carton_shift_during_close_mm": 0.005, "carton_shift_xyz_mm": [0.0029425136744976044, -0.00035762786865234375, 0.0035762786865234375], "finger_effort_N": 24.243}
+    5_release_aside OK {"status": "Open", "carton_shift_mm": 0.0, "retract_mm": 30, "aside_lateral_mm": 120.0}
+    6_extract OK {"distance_mm": 240.0, "carton_travel_mm": 240.012, "gripper_travel_mm": 240.017, "slip_mm": 0.078, "carton_lift_max_mm": 0.008, "neighbour_disp_mm": 0.007, "neighbour_tilt_deg": 0.003, "carton_rotation_deg": 0.061, "carton_fully_clear": true}
+    7_lift50 OK {"carton_rise_mm": 50.01, "slip_mm_total": 0.081, "carton_rotation_deg": 0.061, "carton_rotation_final_deg": 0.059}
+    clearance mm {"SX.shelf_above": 43.6, "SX.shelf_below": 35.6, "SX.walls_trim_back": 319.4, "SX.neighbours": 6.6, "GR.shelf_above": 9.3, "GR.shelf_below": 165.8, "GR.walls_trim_back": 351.5, "GR.neighbours": 29.3, "GR.to_other_tool": 19.2} unexpected contacts {}
+RESULT {"pull_out_mm": 100.0, "target": "T3", "shelf": 3, "box": "agent_monorail", "which": "mid", "variant": "base", "mode": "topdown", "thickness_mm": 15.0, "clear_height_mm": 260.0, "carton_path": "/World/Cartons/Shelf_03/agent_monorail_016", "vacuum_kpa": 50.0, "squeezed_cartons": null, "videos": ["/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T3_3q.mp4", "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T3_side.mp4"], "unexpected_contacts": {}, "contact_pairs_debug": {"/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_03/agent_monorail_016": 535, "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_03/agent_monorail_016": 525, "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_03/agent_monorail_016": 535, " | ": 1, "/World/Tools/SX/tool/pad_3 | ": 2, "/World/Tools/SX/tool/pad_2 | ": 2, "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_03/agent_monorail_016": 6942, "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_03/agent_monorail_016": 6936, "/World/Tools/GR/tool/finger_right | ": 2, "/World/Tools/GR/tool/finger_left | ": 2}, "min_clearance_by_phase_mm": {"start": {"SX.shelf_above": 68.7819248413648, "SX.shelf_below": 40.90672397460294, "SX.walls_trim_back": 179.51464581322605, "SX.neighbours": 25.733373559654744, "GR.shelf_above": 11.338128219118968, "GR.shelf_below": 245.688343138327, "GR.walls_trim_back": 137.69996339323677, "GR.neighbours": 33.153060069790634, "GR.to_other_tool": 55.53006337446253}, "1_press_2_vacuum_3_pull": {"SX.shelf_above": 68.59985807539415, "SX.shelf_below": 40.599954515715964, "SX.walls_trim_back": 178.7999763942588, "SX.neighbours": 6.099608969878706, "GR.shelf_above": 11.345093496572032, "GR.shelf_below": 245.688343138327, "GR.walls_trim_back": 137.70001610113175, "GR.neighbours": 33.15302514843979, "GR.to_other_tool": 55.46515185959863}, "4_gripper_approach_clamp": {"SX.shelf_above": 105.38399369086233, "SX.shelf_below": 89.71160489523535, "SX.walls_trim_back": 200.62538503728967, "SX.neighbours": 100.18345020834794, "GR.shelf_above": 9.300022264476848, "GR.shelf_below": 175.75843281758537, "GR.walls_trim_back": 137.69506612259426, "GR.neighbours": 29.299895726115967, "GR.to_other_tool": 18.4707333330185}, "5_release_aside": {"SX.shelf_above": 105.38437156177989, "SX.shelf_below": 89.7120556749069, "SX.walls_trim_back": 200.62559050053093, "SX.neighbours": 100.18502492891558, "GR.shelf_above": 9.999265776649876, "GR.shelf_below": 175.76564478173447, "GR.walls_trim_back": 137.69964181985193, "GR.neighbours": 29.299194453949045, "GR.to_other_tool": 18.478075474755055}, "6_extract_7_lift": {"SX.shelf_above": 129.637762477114, "SX.shelf_below": 117.25325482291785, "SX.walls_trim_back": 322.370200039027, "SX.neighbours": 130.762218488174, "GR.shelf_above": 10.717874014796326, "GR.shelf_below": 175.80461188265923, "GR.walls_trim_back": 137.69964170169024, "GR.neighbours": 30.017992958212865, "GR.to_other_tool": 64.25989545345612}}, "neighbour_max_disp_mm": 0.0, "neighbour_max_tilt_deg": 0.0, "shelf_max_disp_mm": 0.0, "carton_max_rotation_deg": 0.092, "success": true, "video_frames": 770}
+    1_press OK {"compression_mm": [0.46844640746712685, 0.46841660514473915, 0.4681833670474589], "carton_pushed_back_mm": 4.522, "travel_past_contact_mm": 4.99}
+    2_vacuum OK {"status": "Closed", "gripped": ["/World/Cartons/Shelf_03/agent_monorail_016"]}
+    3_pull OK {"carton_disp_mm": 104.818, "carton_net_disp_from_rest_mm": 99.984, "follow_error_mm": 0.133, "status": "Closed", "monitor_tripped": null, "neighbour_disp_mm": 0.0, "neighbour_tilt_deg": 0.0, "carton_yaw_tilt_deg": 0.001}
+    4a_approach OK {"carton_shift_mm": 0.001, "neighbour_disp_mm": 0.0, "carton_shift_xyz_mm": [-2.9802322387695312e-05, -0.0007003545761108398, 5.9604644775390625e-05]}
+    4b_clamp OK {"gap_mm": 15.003, "gap_error_mm": 0.003, "carton_shift_during_close_mm": 0.007, "carton_shift_xyz_mm": [0.006735324859619141, -0.001385807991027832, 0.0016689300537109375], "finger_effort_N": 24.707}
+    5_release_aside OK {"status": "Open", "carton_shift_mm": 0.006, "retract_mm": 30, "aside_lateral_mm": 120.0}
+    6_extract OK {"distance_mm": 240.0, "carton_travel_mm": 240.005, "gripper_travel_mm": 240.018, "slip_mm": 0.071, "carton_lift_max_mm": 0.004, "neighbour_disp_mm": 0.0, "neighbour_tilt_deg": 0.0, "carton_rotation_deg": 0.091, "carton_fully_clear": true}
+    7_lift50 OK {"carton_rise_mm": 49.998, "slip_mm_total": 0.072, "carton_rotation_deg": 0.092, "carton_rotation_final_deg": 0.092}
+    clearance mm {"SX.shelf_above": 68.6, "SX.shelf_below": 40.6, "SX.walls_trim_back": 178.8, "SX.neighbours": 6.1, "GR.shelf_above": 9.3, "GR.shelf_below": 175.8, "GR.walls_trim_back": 137.7, "GR.neighbours": 29.3, "GR.to_other_tool": 18.5} unexpected contacts {}
+RESULT {"pull_out_mm": 100.0, "target": "T4", "shelf": 3, "box": "conqueror_nc_pro", "which": "mid", "variant": "base", "mode": "topdown", "thickness_mm": 12.0, "clear_height_mm": 260.0, "carton_path": "/World/Cartons/Shelf_03/conqueror_nc_pro_019", "vacuum_kpa": 50.0, "squeezed_cartons": null, "videos": ["/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T4_3q.mp4", "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T4_side.mp4"], "unexpected_contacts": {}, "contact_pairs_debug": {"/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_03/conqueror_nc_pro_019": 535, "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_03/conqueror_nc_pro_019": 525, "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_03/conqueror_nc_pro_019": 535, " | ": 1, "/World/Tools/SX/tool/pad_3 | ": 2, "/World/Tools/SX/tool/pad_2 | ": 2, "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_03/conqueror_nc_pro_019": 6870, "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_03/conqueror_nc_pro_019": 6869, "/World/Tools/GR/tool/finger_right | ": 2, "/World/Tools/GR/tool/finger_left | ": 2}, "min_clearance_by_phase_mm": {"start": {"SX.shelf_above": 68.7819242997389, "SX.shelf_below": 40.906723063919, "SX.walls_trim_back": 178.31842967852657, "SX.neighbours": 25.41799776890319, "GR.shelf_above": 11.338128733541852, "GR.shelf_below": 245.688343138327, "GR.walls_trim_back": 167.80289691789147, "GR.neighbours": 33.152584046333814, "GR.to_other_tool": 55.530060402081226}, "1_press_2_vacuum_3_pull": {"SX.shelf_above": 68.59988637269565, "SX.shelf_below": 40.599982947115976, "SX.walls_trim_back": 178.31840659968339, "SX.neighbours": 4.599424268022164, "GR.shelf_above": 11.345093239405621, "GR.shelf_below": 245.68834323420808, "GR.walls_trim_back": 167.802962513888, "GR.neighbours": 33.152777611663716, "GR.to_other_tool": 55.46518468522011}, "4_gripper_approach_clamp": {"SX.shelf_above": 105.38454796786681, "SX.shelf_below": 89.71226858550399, "SX.walls_trim_back": 192.71238989324638, "SX.neighbours": 100.10445279013217, "GR.shelf_above": 9.300022264476848, "GR.shelf_below": 175.75843281758537, "GR.walls_trim_back": 167.80293202086642, "GR.neighbours": 29.299861645874003, "GR.to_other_tool": 18.084144402415834}, "5_release_aside": {"SX.shelf_above": 105.38474550155117, "SX.shelf_below": 89.71330431553632, "SX.walls_trim_back": 192.7268318415637, "SX.neighbours": 100.10561598628826, "GR.shelf_above": 9.999197443483043, "GR.shelf_below": 175.77121431893295, "GR.walls_trim_back": 167.8033514196593, "GR.neighbours": 29.299153330236166, "GR.to_other_tool": 18.094462665037614}, "6_extract_7_lift": {"SX.shelf_above": 129.63768625797167, "SX.shelf_below": 117.25310248843016, "SX.walls_trim_back": 315.64018502073486, "SX.neighbours": 134.2714989885908, "GR.shelf_above": 11.186496078893237, "GR.shelf_below": 175.835060687843, "GR.walls_trim_back": 167.80042706882648, "GR.neighbours": 30.48652130423274, "GR.to_other_tool": 64.12266965541666}}, "neighbour_max_disp_mm": 0.01, "neighbour_max_tilt_deg": 0.005, "shelf_max_disp_mm": 0.012, "carton_max_rotation_deg": 0.148, "success": true, "video_frames": 766}
+    1_press OK {"compression_mm": [0.3185660170856863, 0.31855833367444575, 0.3184306260664016], "carton_pushed_back_mm": 4.675, "travel_past_contact_mm": 4.993}
+    2_vacuum OK {"status": "Closed", "gripped": ["/World/Cartons/Shelf_03/conqueror_nc_pro_019"]}
+    3_pull OK {"carton_disp_mm": 104.854, "carton_net_disp_from_rest_mm": 99.995, "follow_error_mm": 0.109, "status": "Closed", "monitor_tripped": null, "neighbour_disp_mm": 0.01, "neighbour_tilt_deg": 0.005, "carton_yaw_tilt_deg": 0.002}
+    4a_approach OK {"carton_shift_mm": 0.0, "neighbour_disp_mm": 0.01, "carton_shift_xyz_mm": [-2.9802322387695312e-05, -0.00033527612686157227, -5.9604644775390625e-05]}
+    4b_clamp OK {"gap_mm": 11.996, "gap_error_mm": -0.004, "carton_shift_during_close_mm": 0.013, "carton_shift_xyz_mm": [0.012099742889404297, -0.0009313225746154785, 0.0032186508178710938], "finger_effort_N": 25.278}
+    5_release_aside OK {"status": "Open", "carton_shift_mm": 0.001, "retract_mm": 30, "aside_lateral_mm": -120.0}
+    6_extract OK {"distance_mm": 240.0, "carton_travel_mm": 240.018, "gripper_travel_mm": 240.016, "slip_mm": 0.041, "carton_lift_max_mm": 0.011, "neighbour_disp_mm": 0.01, "neighbour_tilt_deg": 0.005, "carton_rotation_deg": 0.148, "carton_fully_clear": true}
+    7_lift50 OK {"carton_rise_mm": 50.006, "slip_mm_total": 0.077, "carton_rotation_deg": 0.148, "carton_rotation_final_deg": 0.081}
+    clearance mm {"SX.shelf_above": 68.6, "SX.shelf_below": 40.6, "SX.walls_trim_back": 178.3, "SX.neighbours": 4.6, "GR.shelf_above": 9.3, "GR.shelf_below": 175.8, "GR.walls_trim_back": 167.8, "GR.neighbours": 29.3, "GR.to_other_tool": 18.1} unexpected contacts {}
+RESULT {"pull_out_mm": 100.0, "target": "T5", "shelf": 4, "box": "angiolite", "which": "mid", "variant": "base", "mode": "topdown", "thickness_mm": 16.0, "clear_height_mm": 310.0, "carton_path": "/World/Cartons/Shelf_04/angiolite_029", "vacuum_kpa": 50.0, "squeezed_cartons": null, "videos": ["/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T5_3q.mp4", "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T5_side.mp4"], "unexpected_contacts": {}, "contact_pairs_debug": {"/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_04/angiolite_029": 535, "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_04/angiolite_029": 525, "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_04/angiolite_029": 535, " | ": 1, "/World/Tools/SX/tool/pad_3 | ": 2, "/World/Tools/SX/tool/pad_2 | ": 2, "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_04/angiolite_029": 6966, "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_04/angiolite_029": 6966, "/World/Tools/GR/tool/finger_right | ": 2, "/World/Tools/GR/tool/finger_left | ": 2}, "min_clearance_by_phase_mm": {"start": {"SX.shelf_above": 113.7100067059825, "SX.shelf_below": 45.87324138371627, "SX.walls_trim_back": 354.9999911590109, "SX.neighbours": 25.856406746230043, "GR.shelf_above": 9.300023116171285, "GR.shelf_below": 255.68153755355993, "GR.walls_trim_back": 351.5111775811346, "GR.neighbours": 33.153031548078154, "GR.to_other_tool": 60.41622770400456}, "1_press_2_vacuum_3_pull": {"SX.shelf_above": 113.59998404982963, "SX.shelf_below": 45.59992587569495, "SX.walls_trim_back": 325.2593736114875, "SX.neighbours": 6.59937595849982, "GR.shelf_above": 9.300024128984653, "GR.shelf_below": 255.68153755355993, "GR.walls_trim_back": 351.51117758614976, "GR.neighbours": 33.153032918930634, "GR.to_other_tool": 60.35651544961016}, "4_gripper_approach_clamp": {"SX.shelf_above": 138.9409434691305, "SX.shelf_below": 92.0813537963857, "SX.walls_trim_back": 425.1506895889362, "SX.neighbours": 100.21389124791664, "GR.shelf_above": 9.300021865404823, "GR.shelf_below": 185.7451392983232, "GR.walls_trim_back": 351.5111747992988, "GR.neighbours": 29.29991781745217, "GR.to_other_tool": 18.63154798866713}, "5_release_aside": {"SX.shelf_above": 138.94198547112296, "SX.shelf_below": 92.08276275698331, "SX.walls_trim_back": 319.42426848979, "SX.neighbours": 100.216617188938, "GR.shelf_above": 13.591108365618945, "GR.shelf_below": 185.75084775911543, "GR.walls_trim_back": 351.51006444004173, "GR.neighbours": 29.298843930265384, "GR.to_other_tool": 18.644324360030208}, "6_extract_7_lift": {"SX.shelf_above": 158.12956224966624, "SX.shelf_below": 119.07698254025493, "SX.walls_trim_back": 319.4241218398221, "SX.neighbours": 130.22172916309617, "GR.shelf_above": 14.7710234199542, "GR.shelf_below": 185.81425605797514, "GR.walls_trim_back": 352.69718594261656, "GR.neighbours": 30.48635473201888, "GR.to_other_tool": 67.44166093004294}}, "neighbour_max_disp_mm": 0.0, "neighbour_max_tilt_deg": 0.0, "shelf_max_disp_mm": 0.0, "carton_max_rotation_deg": 0.103, "success": true, "video_frames": 771}
+    1_press OK {"compression_mm": [0.5271872505545616, 0.5271972040645778, 0.5270824767649174], "carton_pushed_back_mm": 4.462, "travel_past_contact_mm": 4.989}
+    2_vacuum OK {"status": "Closed", "gripped": ["/World/Cartons/Shelf_04/angiolite_029"]}
+    3_pull OK {"carton_disp_mm": 104.701, "carton_net_disp_from_rest_mm": 99.964, "follow_error_mm": 0.226, "status": "Closed", "monitor_tripped": null, "neighbour_disp_mm": 0.0, "neighbour_tilt_deg": 0.0, "carton_yaw_tilt_deg": 0.001}
+    4a_approach OK {"carton_shift_mm": 0.001, "neighbour_disp_mm": 0.0, "carton_shift_xyz_mm": [-1.3969838619232178e-06, -0.0007897615432739258, 0.0]}
+    4b_clamp OK {"gap_mm": 16.008, "gap_error_mm": 0.008, "carton_shift_during_close_mm": 0.012, "carton_shift_xyz_mm": [0.012081116437911987, -0.002332031726837158, 0.0017881393432617188], "finger_effort_N": 24.909}
+    5_release_aside OK {"status": "Open", "carton_shift_mm": 0.002, "retract_mm": 30, "aside_lateral_mm": 120.0}
+    6_extract OK {"distance_mm": 240.0, "carton_travel_mm": 240.007, "gripper_travel_mm": 240.019, "slip_mm": 0.185, "carton_lift_max_mm": 0.005, "neighbour_disp_mm": 0.0, "neighbour_tilt_deg": 0.0, "carton_rotation_deg": 0.102, "carton_fully_clear": true}
+    7_lift50 OK {"carton_rise_mm": 49.987, "slip_mm_total": 0.189, "carton_rotation_deg": 0.103, "carton_rotation_final_deg": 0.103}
+    clearance mm {"SX.shelf_above": 113.6, "SX.shelf_below": 45.6, "SX.walls_trim_back": 319.4, "SX.neighbours": 6.6, "GR.shelf_above": 9.3, "GR.shelf_below": 185.7, "GR.walls_trim_back": 351.5, "GR.neighbours": 29.3, "GR.to_other_tool": 18.6} unexpected contacts {}
+RESULT {"pull_out_mm": 100.0, "target": "T6", "shelf": 5, "box": "agent_monorail", "which": "mid", "variant": "base", "mode": "topdown", "thickness_mm": 15.0, "clear_height_mm": 290.0, "carton_path": "/World/Cartons/Shelf_05/agent_monorail_031", "vacuum_kpa": 50.0, "squeezed_cartons": null, "videos": ["/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T6_3q.mp4", "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T6_side.mp4"], "unexpected_contacts": {}, "contact_pairs_debug": {"/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_05/agent_monorail_031": 535, "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_05/agent_monorail_031": 525, "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_05/agent_monorail_031": 535, " | ": 1, "/World/Tools/SX/tool/pad_3 | ": 2, "/World/Tools/SX/tool/pad_2 | ": 2, "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_05/agent_monorail_031": 6942, "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_05/agent_monorail_031": 6936, "/World/Tools/GR/tool/finger_right | ": 2, "/World/Tools/GR/tool/finger_left | ": 2}, "min_clearance_by_phase_mm": {"start": {"SX.shelf_above": 98.72679148531456, "SX.shelf_below": 40.90659067979925, "SX.walls_trim_back": 355.0000045958072, "SX.neighbours": 25.7332856792566, "GR.shelf_above": 9.300023116171285, "GR.shelf_below": 245.68811918548013, "GR.walls_trim_back": 351.51117758127253, "GR.neighbours": 33.15289607132982, "GR.to_other_tool": 55.52999071788879}, "1_press_2_vacuum_3_pull": {"SX.shelf_above": 98.60005557539009, "SX.shelf_below": 40.59985435010716, "SX.walls_trim_back": 325.19650973156746, "SX.neighbours": 6.099504626198442, "GR.shelf_above": 9.300024128984653, "GR.shelf_below": 245.68811918548013, "GR.walls_trim_back": 351.51117758614976, "GR.neighbours": 33.15282061520651, "GR.to_other_tool": 55.4650422413958}, "4_gripper_approach_clamp": {"SX.shelf_above": 126.97180856021792, "SX.shelf_below": 89.711714858496, "SX.walls_trim_back": 425.13111829500633, "SX.neighbours": 100.18338362662624, "GR.shelf_above": 9.300020935944856, "GR.shelf_below": 175.75832806037204, "GR.walls_trim_back": 351.51104537449055, "GR.neighbours": 29.29981611097582, "GR.to_other_tool": 18.468383865091166}, "5_release_aside": {"SX.shelf_above": 126.97198889143455, "SX.shelf_below": 89.7119542272387, "SX.walls_trim_back": 316.11376853315085, "SX.neighbours": 100.1847845818391, "GR.shelf_above": 13.498948922617243, "GR.shelf_below": 175.7669183020682, "GR.walls_trim_back": 351.510148530328, "GR.neighbours": 29.298890533858756, "GR.to_other_tool": 18.480703087550356}, "6_extract_7_lift": {"SX.shelf_above": 147.72261634437015, "SX.shelf_below": 117.25319552379617, "SX.walls_trim_back": 316.1135560590245, "SX.neighbours": 130.76216058429884, "GR.shelf_above": 14.216745246570683, "GR.shelf_below": 175.81233282834307, "GR.walls_trim_back": 352.22786259672176, "GR.neighbours": 30.016866283776757, "GR.to_other_tool": 64.26017746465524}}, "neighbour_max_disp_mm": 0.0, "neighbour_max_tilt_deg": 0.0, "shelf_max_disp_mm": 0.001, "carton_max_rotation_deg": 0.093, "success": true, "video_frames": 770}
+    1_press OK {"compression_mm": [0.46663498505949974, 0.46664499677717686, 0.46651746379211545], "carton_pushed_back_mm": 4.523, "travel_past_contact_mm": 4.99}
+    2_vacuum OK {"status": "Closed", "gripped": ["/World/Cartons/Shelf_05/agent_monorail_031"]}
+    3_pull OK {"carton_disp_mm": 104.784, "carton_net_disp_from_rest_mm": 99.983, "follow_error_mm": 0.165, "status": "Closed", "monitor_tripped": null, "neighbour_disp_mm": 0.0, "neighbour_tilt_deg": 0.0, "carton_yaw_tilt_deg": 0.0}
+    4a_approach OK {"carton_shift_mm": 0.0, "neighbour_disp_mm": 0.0, "carton_shift_xyz_mm": [-6.397021934390068e-05, -0.0004544854164123535, 0.0]}
+    4b_clamp OK {"gap_mm": 15.008, "gap_error_mm": 0.008, "carton_shift_during_close_mm": 0.015, "carton_shift_xyz_mm": [0.014641904272139072, -0.0014826655387878418, 0.0026226043701171875], "finger_effort_N": 24.984}
+    5_release_aside OK {"status": "Open", "carton_shift_mm": 0.009, "retract_mm": 30, "aside_lateral_mm": 120.0}
+    6_extract OK {"distance_mm": 240.0, "carton_travel_mm": 239.995, "gripper_travel_mm": 240.018, "slip_mm": 0.12, "carton_lift_max_mm": 0.007, "neighbour_disp_mm": 0.0, "neighbour_tilt_deg": 0.0, "carton_rotation_deg": 0.093, "carton_fully_clear": true}
+    7_lift50 OK {"carton_rise_mm": 49.991, "slip_mm_total": 0.123, "carton_rotation_deg": 0.093, "carton_rotation_final_deg": 0.089}
+    clearance mm {"SX.shelf_above": 98.6, "SX.shelf_below": 40.6, "SX.walls_trim_back": 316.1, "SX.neighbours": 6.1, "GR.shelf_above": 9.3, "GR.shelf_below": 175.8, "GR.walls_trim_back": 351.5, "GR.neighbours": 29.3, "GR.to_other_tool": 18.5} unexpected contacts {}
+RESULT {"pull_out_mm": 150.0, "target": "T7", "shelf": 6, "box": "accuforce", "which": "mid", "variant": "base", "mode": "topdown", "thickness_mm": 16.0, "clear_height_mm": 280.0, "carton_path": "/World/Cartons/Shelf_06/accuforce_010", "vacuum_kpa": 50.0, "squeezed_cartons": null, "videos": ["/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T7_3q.mp4", "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T7_side.mp4"], "unexpected_contacts": {}, "contact_pairs_debug": {"/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_06/accuforce_010": 535, "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_06/accuforce_010": 525, "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_06/accuforce_010": 535, " | ": 1, "/World/Tools/SX/tool/pad_3 | ": 2, "/World/Tools/SX/tool/pad_2 | ": 2, "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_06/accuforce_010": 6483, "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_06/accuforce_010": 6483, "/World/Tools/GR/tool/finger_right | ": 2, "/World/Tools/GR/tool/finger_left | ": 2}, "min_clearance_by_phase_mm": {"start": {"SX.shelf_above": 93.73337533939272, "SX.shelf_below": 35.949487144317416, "SX.walls_trim_back": 354.9999911590109, "SX.neighbours": 25.856567633864046, "GR.shelf_above": 59.30002678697846, "GR.shelf_below": 242.86313858921355, "GR.walls_trim_back": 384.4078504098239, "GR.neighbours": 80.80307675187503, "GR.to_other_tool": 56.94616103743719}, "1_press_2_vacuum_3_pull": {"SX.shelf_above": 93.59986022121558, "SX.shelf_below": 35.60005453231718, "SX.walls_trim_back": 325.1727017186041, "SX.neighbours": 6.599780778604708, "GR.shelf_above": 59.300027668010436, "GR.shelf_below": 242.86313858921355, "GR.walls_trim_back": 384.4078504098239, "GR.neighbours": 80.80302521697168, "GR.to_other_tool": 50.59694225897}, "4_gripper_approach_clamp": {"SX.shelf_above": 160.19179101419329, "SX.shelf_below": 134.78628805864568, "SX.walls_trim_back": 431.42143218568344, "SX.neighbours": 150.14425828906914, "GR.shelf_above": 59.30002448102489, "GR.shelf_below": 175.81460273184777, "GR.walls_trim_back": 384.4034024278592, "GR.neighbours": 79.2998928501939, "GR.to_other_tool": 19.245588571538985}, "5_release_aside": {"SX.shelf_above": 160.19045910519685, "SX.shelf_below": 134.78638042641023, "SX.walls_trim_back": 348.9168419261173, "SX.neighbours": 150.14516294776013, "GR.shelf_above": 60.336690423203464, "GR.shelf_below": 175.82084449097997, "GR.walls_trim_back": 384.40753427509185, "GR.neighbours": 79.29896746575551, "GR.to_other_tool": 19.876951405679588}, "6_extract_7_lift": {"SX.shelf_above": 185.36717566610577, "SX.shelf_below": 163.91257586497568, "SX.walls_trim_back": 348.9166714534386, "SX.neighbours": 180.16025227545694, "GR.shelf_above": 61.50169841618626, "GR.shelf_below": 176.2894123981979, "GR.walls_trim_back": 384.52431029297327, "GR.neighbours": 80.65557470207422, "GR.to_other_tool": 59.524041879564386}}, "neighbour_max_disp_mm": 0.0, "neighbour_max_tilt_deg": 0.0, "shelf_max_disp_mm": 0.0, "carton_max_rotation_deg": 0.139, "success": true, "video_frames": 771}
+    1_press OK {"compression_mm": [0.322053354466334, 0.32198792905546725, 0.3218125784769654], "carton_pushed_back_mm": 4.671, "travel_past_contact_mm": 4.993}
+    2_vacuum OK {"status": "Closed", "gripped": ["/World/Cartons/Shelf_06/accuforce_010"]}
+    3_pull OK {"carton_disp_mm": 154.827, "carton_net_disp_from_rest_mm": 150.002, "follow_error_mm": 0.142, "status": "Closed", "monitor_tripped": null, "neighbour_disp_mm": 0.0, "neighbour_tilt_deg": 0.0, "carton_yaw_tilt_deg": 0.001}
+    4a_approach OK {"carton_shift_mm": 0.0, "neighbour_disp_mm": 0.0, "carton_shift_xyz_mm": [6.51925802230835e-06, 5.21540641784668e-05, 0.0]}
+    4b_clamp OK {"gap_mm": 16.004, "gap_error_mm": 0.004, "carton_shift_during_close_mm": 0.006, "carton_shift_xyz_mm": [0.0012568198144435883, 0.0009126961231231689, 0.0054836273193359375], "finger_effort_N": 23.583}
+    5_release_aside OK {"status": "Open", "carton_shift_mm": 0.002, "retract_mm": 30, "aside_lateral_mm": -120.0}
+    6_extract OK {"distance_mm": 190.0, "carton_travel_mm": 190.014, "gripper_travel_mm": 190.018, "slip_mm": 0.026, "carton_lift_max_mm": 0.011, "neighbour_disp_mm": 0.0, "neighbour_tilt_deg": 0.0, "carton_rotation_deg": 0.101, "carton_fully_clear": true}
+    7_lift50 OK {"carton_rise_mm": 49.99, "slip_mm_total": 0.115, "carton_rotation_deg": 0.139, "carton_rotation_final_deg": 0.139}
+    clearance mm {"SX.shelf_above": 93.6, "SX.shelf_below": 35.6, "SX.walls_trim_back": 325.2, "SX.neighbours": 6.6, "GR.shelf_above": 59.3, "GR.shelf_below": 175.8, "GR.walls_trim_back": 384.4, "GR.neighbours": 79.3, "GR.to_other_tool": 19.2} unexpected contacts {}
+RESULT {"pull_out_mm": 150.0, "target": "T8", "shelf": 6, "box": "conqueror_nc_pro", "which": "mid", "variant": "base", "mode": "topdown", "thickness_mm": 12.0, "clear_height_mm": 280.0, "carton_path": "/World/Cartons/Shelf_06/conqueror_nc_pro_013", "vacuum_kpa": 50.0, "squeezed_cartons": null, "videos": ["/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T8_3q.mp4", "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T8_side.mp4"], "unexpected_contacts": {}, "contact_pairs_debug": {"/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_06/conqueror_nc_pro_013": 535, "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_06/conqueror_nc_pro_013": 526, "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_06/conqueror_nc_pro_013": 535, " | ": 1, "/World/Tools/SX/tool/pad_3 | ": 2, "/World/Tools/SX/tool/pad_2 | ": 2, "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_06/conqueror_nc_pro_013": 6390, "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_06/conqueror_nc_pro_013": 6387, "/World/Tools/GR/tool/finger_right | ": 2, "/World/Tools/GR/tool/finger_left | ": 2}, "min_clearance_by_phase_mm": {"start": {"SX.shelf_above": 88.74089996014541, "SX.shelf_below": 40.90679617878484, "SX.walls_trim_back": 90.39845264534874, "SX.neighbours": 25.41961735965476, "GR.shelf_above": 59.33085096239474, "GR.shelf_below": 252.57225501213503, "GR.walls_trim_back": 83.21272237548895, "GR.neighbours": 80.80297748085361, "GR.to_other_tool": 61.36752246212958}, "1_press_2_vacuum_3_pull": {"SX.shelf_above": 88.59989784660249, "SX.shelf_below": 40.60003554823011, "SX.walls_trim_back": 90.39839650980913, "SX.neighbours": 4.599703166907566, "GR.shelf_above": 59.33085096239474, "GR.shelf_below": 252.57225501213503, "GR.walls_trim_back": 83.21279930470097, "GR.neighbours": 80.80290158973496, "GR.to_other_tool": 55.4668280428842}, "4_gripper_approach_clamp": {"SX.shelf_above": 157.32047932609993, "SX.shelf_below": 136.19142523312044, "SX.walls_trim_back": 152.00305763875912, "SX.neighbours": 150.06948455136867, "GR.shelf_above": 59.300027668010436, "GR.shelf_below": 185.25931754833067, "GR.walls_trim_back": 83.21276110805421, "GR.neighbours": 79.29990434371166, "GR.to_other_tool": 18.085640694885445}, "5_release_aside": {"SX.shelf_above": 157.32634133185175, "SX.shelf_below": 136.19978875100304, "SX.walls_trim_back": 152.01236272729452, "SX.neighbours": 150.07634634470878, "GR.shelf_above": 60.10513476064756, "GR.shelf_below": 185.2658820935075, "GR.walls_trim_back": 83.21290080357419, "GR.neighbours": 79.29752242853974, "GR.to_other_tool": 18.093579139366447}, "6_extract_7_lift": {"SX.shelf_above": 182.89341144431026, "SX.shelf_below": 165.07071637512468, "SX.walls_trim_back": 260.22137335649177, "SX.neighbours": 183.10888734106163, "GR.shelf_above": 61.46030745726697, "GR.shelf_below": 185.7082732144159, "GR.walls_trim_back": 83.59554745684062, "GR.neighbours": 80.65640162351195, "GR.to_other_tool": 64.13195491274504}}, "neighbour_max_disp_mm": 0.095, "neighbour_max_tilt_deg": 0.03, "shelf_max_disp_mm": 0.095, "carton_max_rotation_deg": 0.185, "success": true, "video_frames": 766}
+    1_press OK {"compression_mm": [0.30981312738731503, 0.309894559904933, 0.30972459353506565], "carton_pushed_back_mm": 4.684, "travel_past_contact_mm": 4.993}
+    2_vacuum OK {"status": "Closed", "gripped": ["/World/Cartons/Shelf_06/conqueror_nc_pro_013"]}
+    3_pull OK {"carton_disp_mm": 154.841, "carton_net_disp_from_rest_mm": 149.995, "follow_error_mm": 0.123, "status": "Closed", "monitor_tripped": null, "neighbour_disp_mm": 0.0, "neighbour_tilt_deg": 0.0, "carton_yaw_tilt_deg": 0.001}
+    4a_approach OK {"carton_shift_mm": 0.001, "neighbour_disp_mm": 0.0, "carton_shift_xyz_mm": [5.9604644775390625e-05, -0.0011473894119262695, 0.00011920928955078125]}
+    4b_clamp OK {"gap_mm": 11.999, "gap_error_mm": -0.001, "carton_shift_during_close_mm": 0.015, "carton_shift_xyz_mm": [0.013560056686401367, 0.0030659139156341553, 0.005364418029785156], "finger_effort_N": 25.242}
+    5_release_aside OK {"status": "Open", "carton_shift_mm": 0.258, "retract_mm": 30, "aside_lateral_mm": -120.0}
+    6_extract OK {"distance_mm": 190.0, "carton_travel_mm": 189.989, "gripper_travel_mm": 190.019, "slip_mm": 0.103, "carton_lift_max_mm": 0.013, "neighbour_disp_mm": 0.095, "neighbour_tilt_deg": 0.03, "carton_rotation_deg": 0.185, "carton_fully_clear": true}
+    7_lift50 OK {"carton_rise_mm": 49.975, "slip_mm_total": 0.1, "carton_rotation_deg": 0.185, "carton_rotation_final_deg": 0.135}
+    clearance mm {"SX.shelf_above": 88.6, "SX.shelf_below": 40.6, "SX.walls_trim_back": 90.4, "SX.neighbours": 4.6, "GR.shelf_above": 59.3, "GR.shelf_below": 185.3, "GR.walls_trim_back": 83.2, "GR.neighbours": 79.3, "GR.to_other_tool": 18.1} unexpected contacts {}
+RESULT {"pull_out_mm": 100.0, "target": "E1", "shelf": 3, "box": "agent_monorail", "which": "last", "variant": "base", "mode": "topdown", "thickness_mm": 15.0, "clear_height_mm": 260.0, "carton_path": "/World/Cartons/Shelf_03/agent_monorail_030", "vacuum_kpa": 50.0, "squeezed_cartons": null, "videos": ["/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_E1_3q.mp4", "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_E1_side.mp4"], "unexpected_contacts": {}, "contact_pairs_debug": {"/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_03/agent_monorail_030": 535, "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_03/agent_monorail_030": 525, "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_03/agent_monorail_030": 535, " | ": 1, "/World/Tools/SX/tool/pad_3 | ": 2, "/World/Tools/SX/tool/pad_2 | ": 2, "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_03/agent_monorail_030": 6942, "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_03/agent_monorail_030": 6942, "/World/Tools/GR/tool/finger_right | ": 2, "/World/Tools/GR/tool/finger_left | ": 2}, "min_clearance_by_phase_mm": {"start": {"SX.shelf_above": 68.7819248413648, "SX.shelf_below": 40.90672397460294, "SX.walls_trim_back": 355.0000060601721, "SX.neighbours": 25.733475208708104, "GR.shelf_above": 11.338128733541852, "GR.shelf_below": 245.688343138327, "GR.walls_trim_back": 351.5111775811346, "GR.neighbours": 33.152869816538335, "GR.to_other_tool": 55.530064527488065}, "1_press_2_vacuum_3_pull": {"SX.shelf_above": 68.59987698495729, "SX.shelf_below": 40.59998020529565, "SX.walls_trim_back": 325.1887330465234, "SX.neighbours": 6.100081792160849, "GR.shelf_above": 11.345093496572032, "GR.shelf_below": 245.688343138327, "GR.walls_trim_back": 351.51117758614976, "GR.neighbours": 33.152869816538335, "GR.to_other_tool": 55.46515718839266}, "4_gripper_approach_clamp": {"SX.shelf_above": 105.38378805021296, "SX.shelf_below": 89.71136515110412, "SX.walls_trim_back": 412.94725820429477, "SX.neighbours": 100.1841820472581, "GR.shelf_above": 9.300022264476848, "GR.shelf_below": 175.75843281758537, "GR.walls_trim_back": 351.511029542145, "GR.neighbours": 29.299799305287006, "GR.to_other_tool": 18.4709202202235}, "5_release_aside": {"SX.shelf_above": 105.38437156177989, "SX.shelf_below": 89.71202909915746, "SX.walls_trim_back": 331.2795089208399, "SX.neighbours": 100.18516255329266, "GR.shelf_above": 9.998755229583274, "GR.shelf_below": 175.76317663054115, "GR.walls_trim_back": 351.5099708963126, "GR.neighbours": 29.298655493873728, "GR.to_other_tool": 18.47939397701205}, "6_extract_7_lift": {"SX.shelf_above": 129.6378469967014, "SX.shelf_below": 117.25325715951244, "SX.walls_trim_back": 331.2793276994122, "SX.neighbours": 132.2150018626213, "GR.shelf_above": 10.717308347800921, "GR.shelf_below": 175.80851297121458, "GR.walls_trim_back": 352.2283527940012, "GR.neighbours": 30.017443432759666, "GR.to_other_tool": 64.24968068358834}}, "neighbour_max_disp_mm": 0.0, "neighbour_max_tilt_deg": 0.0, "shelf_max_disp_mm": 0.0, "carton_max_rotation_deg": 0.145, "success": true, "video_frames": 770}
+    1_press OK {"compression_mm": [0.4655900120269507, 0.46562199713662267, 0.4654390795622021], "carton_pushed_back_mm": 4.525, "travel_past_contact_mm": 4.99}
+    2_vacuum OK {"status": "Closed", "gripped": ["/World/Cartons/Shelf_03/agent_monorail_030"]}
+    3_pull OK {"carton_disp_mm": 104.788, "carton_net_disp_from_rest_mm": 99.98, "follow_error_mm": 0.158, "status": "Closed", "monitor_tripped": null, "neighbour_disp_mm": 0.0, "neighbour_tilt_deg": 0.0, "carton_yaw_tilt_deg": 0.0}
+    4a_approach OK {"carton_shift_mm": 0.0, "neighbour_disp_mm": 0.0, "carton_shift_xyz_mm": [-1.30385160446167e-05, -0.00022351741790771484, 0.0]}
+    4b_clamp OK {"gap_mm": 15.004, "gap_error_mm": 0.004, "carton_shift_during_close_mm": 0.005, "carton_shift_xyz_mm": [0.0048782676458358765, -0.00155717134475708, 0.0018477439880371094], "finger_effort_N": 24.439}
+    5_release_aside OK {"status": "Open", "carton_shift_mm": 0.025, "retract_mm": 30, "aside_lateral_mm": 120.0}
+    6_extract OK {"distance_mm": 240.0, "carton_travel_mm": 240.0, "gripper_travel_mm": 240.018, "slip_mm": 0.183, "carton_lift_max_mm": 0.009, "neighbour_disp_mm": 0.0, "neighbour_tilt_deg": 0.0, "carton_rotation_deg": 0.145, "carton_fully_clear": true}
+    7_lift50 OK {"carton_rise_mm": 49.999, "slip_mm_total": 0.186, "carton_rotation_deg": 0.145, "carton_rotation_final_deg": 0.138}
+    clearance mm {"SX.shelf_above": 68.6, "SX.shelf_below": 40.6, "SX.walls_trim_back": 325.2, "SX.neighbours": 6.1, "GR.shelf_above": 9.3, "GR.shelf_below": 175.8, "GR.walls_trim_back": 351.5, "GR.neighbours": 29.3, "GR.to_other_tool": 18.5} unexpected contacts {}
+RESULT {"pull_out_mm": 150.0, "target": "E2", "shelf": 6, "box": "angiolite", "which": "first", "variant": "base", "mode": "topdown", "thickness_mm": 16.0, "clear_height_mm": 280.0, "carton_path": "/World/Cartons/Shelf_06/angiolite_001", "vacuum_kpa": 50.0, "squeezed_cartons": null, "videos": ["/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_E2_3q.mp4", "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_E2_side.mp4"], "unexpected_contacts": {"SX->cabinet": 81029, "SX->GR": 1656, "GR->SX": 1656}, "contact_pairs_debug": {"/World/Tools/SX/tool/base | /World/Cabinet/Cabinet/Body_Left": 3312, "/World/Tools/SX/tool/base | /World/Cabinet/Cabinet/FrontTrim_Left": 3364, "/World/Tools/SX/tool/pad_3 | /World/Cabinet/Cabinet/FrontTrim_Left": 11851, "/World/Tools/SX/tool/pad_2 | /World/Cabinet/Cabinet/FrontTrim_Left": 12661, "/World/Tools/SX/tool/pad_1 | /World/Cabinet/Cabinet/FrontTrim_Left": 12656, "/World/Tools/SX/tool/pad_3 | /World/Cabinet/Cabinet/Body_Left": 11858, "/World/Tools/SX/tool/pad_2 | /World/Cabinet/Cabinet/Body_Left": 12668, "/World/Tools/SX/tool/pad_1 | /World/Cabinet/Cabinet/Body_Left": 12659, " | ": 1, " | /World/Cabinet/Cabinet/Body_Left": 2, "/World/Tools/SX/tool/base | ": 6, "/World/Tools/SX/tool/pad_3 | ": 2, "/World/Tools/SX/tool/pad_2 | ": 3, "/World/Tools/SX/tool/base | /World/Tools/GR/tool/finger_left": 1656}, "min_clearance_by_phase_mm": {"start": {"SX.shelf_above": 91.8848670675002, "SX.shelf_below": 58.078196652450785, "SX.walls_trim_back": 0.0, "SX.neighbours": 57.93831605053921, "GR.shelf_above": 60.48465928047382, "GR.shelf_below": 262.30322822442884, "GR.walls_trim_back": 1.5111820361450103, "GR.neighbours": 80.80296656504791, "GR.to_other_tool": 59.640349322184775}, "1_press_2_vacuum_3_pull": {"SX.shelf_above": 91.84875197365665, "SX.shelf_below": 58.06346611361562, "SX.walls_trim_back": 0.0, "SX.neighbours": 57.93195148316882, "GR.shelf_above": 60.48465928047382, "GR.shelf_below": 262.30322822442884, "GR.walls_trim_back": 1.5111820564981602, "GR.neighbours": 80.80296656504791, "GR.to_other_tool": 59.497921719692314}, "4_gripper_approach_clamp": {"SX.shelf_above": 93.35033961233192, "SX.shelf_below": 62.20224355574458, "SX.walls_trim_back": 0.0, "SX.neighbours": 64.40106901914444, "GR.shelf_above": 59.300027666147784, "GR.shelf_below": 195.18701108903173, "GR.walls_trim_back": 1.462668774642427, "GR.neighbours": 79.25205524871282, "GR.to_other_tool": 4.453735753948506}, "5_release_aside": {"SX.shelf_above": 93.53193372762192, "SX.shelf_below": 62.21589984709378, "SX.walls_trim_back": 0.0, "SX.neighbours": 64.60319817500667, "GR.shelf_above": 59.95139370360107, "GR.shelf_below": 195.19195060661582, "GR.walls_trim_back": 1.465381060244575, "GR.neighbours": 79.24700833623147, "GR.to_other_tool": 4.153313573831389}, "6_extract_7_lift": {"SX.shelf_above": 92.41832681514371, "SX.shelf_below": 61.74052384044808, "SX.walls_trim_back": 0.0, "SX.neighbours": 61.38471069204727, "GR.shelf_above": 61.319940909220264, "GR.shelf_below": 195.61567981745574, "GR.walls_trim_back": 2.8313364602899003, "GR.neighbours": 80.6195728828062, "GR.to_other_tool": 0.23187782823308295}}, "neighbour_max_disp_mm": 0.0, "neighbour_max_tilt_deg": 0.0, "shelf_max_disp_mm": 0.0, "carton_max_rotation_deg": 0.0, "success": false, "video_frames": 771}
+    1_press OK {"compression_mm": [0.7042487850412726, 4.808382596820593, 5.236722528934479], "carton_pushed_back_mm": 0.0, "travel_past_contact_mm": 3.583}
+    2_vacuum FAIL {"status": "Open", "gripped": []}
+    3_pull FAIL {"carton_disp_mm": 0.0, "carton_net_disp_from_rest_mm": 0.0, "follow_error_mm": 65.136, "status": "Open", "monitor_tripped": null, "neighbour_disp_mm": 0.0, "neighbour_tilt_deg": 0.0, "carton_yaw_tilt_deg": 0.0}
+    4a_approach OK {"carton_shift_mm": 0.0, "neighbour_disp_mm": 0.0, "carton_shift_xyz_mm": [0.0, 0.0, 0.0]}
+    4b_clamp FAIL {"gap_mm": 37.393, "gap_error_mm": 21.393, "carton_shift_during_close_mm": 0.0, "carton_shift_xyz_mm": [0.0, 0.0, 0.0], "finger_effort_N": 48.577}
+    5_release_aside OK {"status": "Open", "carton_shift_mm": 0.0, "retract_mm": 30, "aside_lateral_mm": 120.0}
+    6_extract FAIL {"distance_mm": 190.0, "carton_travel_mm": 0.0, "gripper_travel_mm": 190.021, "slip_mm": 190.035, "carton_lift_max_mm": 0.0, "neighbour_disp_mm": 0.0, "neighbour_tilt_deg": 0.0, "carton_rotation_deg": 0.0, "carton_fully_clear": false}
+    7_lift50 FAIL {"carton_rise_mm": 0.0, "slip_mm_total": 196.374, "carton_rotation_deg": 0.0, "carton_rotation_final_deg": 0.0}
+    clearance mm {"SX.shelf_above": 91.8, "SX.shelf_below": 58.1, "SX.walls_trim_back": 0.0, "SX.neighbours": 57.9, "GR.shelf_above": 59.3, "GR.shelf_below": 195.2, "GR.walls_trim_back": 1.5, "GR.neighbours": 79.2, "GR.to_other_tool": 0.2} unexpected contacts {'SX->cabinet': 81029, 'SX->GR': 1656, 'GR->SX': 1656}
+RESULT {"pull_out_mm": 100.0, "target": "T5", "shelf": 4, "box": "angiolite", "which": "mid", "variant": "vac35", "mode": "topdown", "thickness_mm": 16.0, "clear_height_mm": 310.0, "carton_path": "/World/Cartons/Shelf_04/angiolite_029", "vacuum_kpa": 35.0, "squeezed_cartons": null, "videos": ["/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T5_vac35_3q.mp4", "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T5_vac35_side.mp4"], "unexpected_contacts": {}, "contact_pairs_debug": {"/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_04/angiolite_029": 535, "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_04/angiolite_029": 525, "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_04/angiolite_029": 535, " | ": 1, "/World/Tools/SX/tool/pad_3 | ": 2, "/World/Tools/SX/tool/pad_2 | ": 2, "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_04/angiolite_029": 6966, "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_04/angiolite_029": 6966, "/World/Tools/GR/tool/finger_right | ": 2, "/World/Tools/GR/tool/finger_left | ": 2}, "min_clearance_by_phase_mm": {"start": {"SX.shelf_above": 113.7100067059825, "SX.shelf_below": 45.87324138371627, "SX.walls_trim_back": 354.9999911590109, "SX.neighbours": 25.856406746230043, "GR.shelf_above": 9.300023116171285, "GR.shelf_below": 255.68153755355993, "GR.walls_trim_back": 351.5111775811346, "GR.neighbours": 33.153031548078154, "GR.to_other_tool": 60.41622770400456}, "1_press_2_vacuum_3_pull": {"SX.shelf_above": 113.59998404982963, "SX.shelf_below": 45.59992587569495, "SX.walls_trim_back": 325.2593736114875, "SX.neighbours": 6.59937595849982, "GR.shelf_above": 9.300024128984653, "GR.shelf_below": 255.68153755355993, "GR.walls_trim_back": 351.51117758614976, "GR.neighbours": 33.153032918930634, "GR.to_other_tool": 60.35651544961016}, "4_gripper_approach_clamp": {"SX.shelf_above": 138.9409434691305, "SX.shelf_below": 92.0813537963857, "SX.walls_trim_back": 425.1506895889362, "SX.neighbours": 100.21389124791664, "GR.shelf_above": 9.300021865404823, "GR.shelf_below": 185.7451392983232, "GR.walls_trim_back": 351.5111747992988, "GR.neighbours": 29.29991781745217, "GR.to_other_tool": 18.63154798866713}, "5_release_aside": {"SX.shelf_above": 138.94198547112296, "SX.shelf_below": 92.08276275698331, "SX.walls_trim_back": 319.42426848979, "SX.neighbours": 100.216617188938, "GR.shelf_above": 13.591108365618945, "GR.shelf_below": 185.75084775911543, "GR.walls_trim_back": 351.51006444004173, "GR.neighbours": 29.298843930265384, "GR.to_other_tool": 18.644324360030208}, "6_extract_7_lift": {"SX.shelf_above": 158.12956224966624, "SX.shelf_below": 119.07698254025493, "SX.walls_trim_back": 319.4241218398221, "SX.neighbours": 130.22172916309617, "GR.shelf_above": 14.7710234199542, "GR.shelf_below": 185.81425605797514, "GR.walls_trim_back": 352.69718594261656, "GR.neighbours": 30.48635473201888, "GR.to_other_tool": 67.44166093004294}}, "neighbour_max_disp_mm": 0.0, "neighbour_max_tilt_deg": 0.0, "shelf_max_disp_mm": 0.0, "carton_max_rotation_deg": 0.103, "success": true, "video_frames": 771}
+    1_press OK {"compression_mm": [0.5271872505545616, 0.5271972040645778, 0.5270824767649174], "carton_pushed_back_mm": 4.462, "travel_past_contact_mm": 4.989}
+    2_vacuum OK {"status": "Closed", "gripped": ["/World/Cartons/Shelf_04/angiolite_029"]}
+    3_pull OK {"carton_disp_mm": 104.701, "carton_net_disp_from_rest_mm": 99.964, "follow_error_mm": 0.226, "status": "Closed", "monitor_tripped": null, "neighbour_disp_mm": 0.0, "neighbour_tilt_deg": 0.0, "carton_yaw_tilt_deg": 0.001}
+    4a_approach OK {"carton_shift_mm": 0.001, "neighbour_disp_mm": 0.0, "carton_shift_xyz_mm": [-1.3969838619232178e-06, -0.0007897615432739258, 0.0]}
+    4b_clamp OK {"gap_mm": 16.008, "gap_error_mm": 0.008, "carton_shift_during_close_mm": 0.012, "carton_shift_xyz_mm": [0.012081116437911987, -0.002332031726837158, 0.0017881393432617188], "finger_effort_N": 24.909}
+    5_release_aside OK {"status": "Open", "carton_shift_mm": 0.002, "retract_mm": 30, "aside_lateral_mm": 120.0}
+    6_extract OK {"distance_mm": 240.0, "carton_travel_mm": 240.007, "gripper_travel_mm": 240.019, "slip_mm": 0.185, "carton_lift_max_mm": 0.005, "neighbour_disp_mm": 0.0, "neighbour_tilt_deg": 0.0, "carton_rotation_deg": 0.102, "carton_fully_clear": true}
+    7_lift50 OK {"carton_rise_mm": 49.987, "slip_mm_total": 0.189, "carton_rotation_deg": 0.103, "carton_rotation_final_deg": 0.103}
+    clearance mm {"SX.shelf_above": 113.6, "SX.shelf_below": 45.6, "SX.walls_trim_back": 319.4, "SX.neighbours": 6.6, "GR.shelf_above": 9.3, "GR.shelf_below": 185.7, "GR.walls_trim_back": 351.5, "GR.neighbours": 29.3, "GR.to_other_tool": 18.6} unexpected contacts {}
+[7.167s] Simulation App Startup Complete
+2026-10-14T17:59:36Z [7,673ms] [Warning] [omni.syntheticdata.plugin] OgnSdPostRenderVarToHost : rendervar copy from texture directly to host buffer is counter-performant. Please use copy from texture to device buffer first.
+2026-10-14T17:59:36Z [7,805ms] [Warning] [carb] Plugin interface for a client: omni.hydratexture.plugin was already released.
+2026-10-14T17:59:36Z [7,806ms] [Warning] [carb] Plugin interface for a client: omni.hydratexture.plugin was already released.
+2026-10-14T17:59:36Z [8,276ms] [Warning] [carb] Client gpu.foundation.plugin has acquired [gpu::unstable::IMemoryBudgetManagerFactory v0.1] 100 times. Consider accessing this interface with carb::getCachedInterface() (Performance warning)
+2026-10-14T17:59:46Z [17,394ms] [Warning] [omni.fabric.plugin] Warning: attribute isaac:grippedObjects not found for path /World/Tools/SX/tool/surface_gripper
+
+2026-10-14T18:00:53Z [84,916ms] [Warning] [carb] Plugin interface for a client: omni.hydratexture.plugin was already released.
+2026-10-14T18:00:53Z [84,917ms] [Warning] [carb] Plugin interface for a client: omni.hydratexture.plugin was already released.
+2026-10-14T18:02:10Z [162,114ms] [Warning] [carb] Plugin interface for a client: omni.hydratexture.plugin was already released.
+2026-10-14T18:02:10Z [162,115ms] [Warning] [carb] Plugin interface for a client: omni.hydratexture.plugin was already released.
+2026-10-14T18:03:23Z [234,705ms] [Warning] [carb] Plugin interface for a client: omni.hydratexture.plugin was already released.
+2026-10-14T18:03:23Z [234,706ms] [Warning] [carb] Plugin interface for a client: omni.hydratexture.plugin was already released.
+2026-10-14T18:04:40Z [312,029ms] [Warning] [carb] Plugin interface for a client: omni.hydratexture.plugin was already released.
+2026-10-14T18:04:40Z [312,032ms] [Warning] [carb] Plugin interface for a client: omni.hydratexture.plugin was already released.
+2026-10-14T18:06:04Z [395,529ms] [Warning] [carb] Client omni.kit.viewport.legacy_gizmos has acquired [carb::settings::ISettings v1.0] 100 times. Consider accessing this interface with carb::getCachedInterface() (Performance warning)
+2026-10-14T18:06:04Z [395,529ms] [Warning] [carb] Client omni.kit.viewport.legacy_gizmos has acquired [carb::dictionary::IDictionary v1.1] 100 times. Consider accessing this interface with carb::getCachedInterface() (Performance warning)
+2026-10-14T18:06:04Z [395,799ms] [Warning] [carb] Plugin interface for a client: omni.hydratexture.plugin was already released.
+2026-10-14T18:06:04Z [395,802ms] [Warning] [carb] Plugin interface for a client: omni.hydratexture.plugin was already released.
+2026-10-14T18:07:32Z [483,990ms] [Warning] [carb] Plugin interface for a client: omni.hydratexture.plugin was already released.
+2026-10-14T18:07:32Z [483,992ms] [Warning] [carb] Plugin interface for a client: omni.hydratexture.plugin was already released.
+2026-10-14T18:08:50Z [561,599ms] [Warning] [carb] Plugin interface for a client: omni.hydratexture.plugin was already released.
+2026-10-14T18:08:50Z [561,601ms] [Warning] [carb] Plugin interface for a client: omni.hydratexture.plugin was already released.
+2026-10-14T18:10:05Z [636,947ms] [Warning] [carb] Plugin interface for a client: omni.hydratexture.plugin was already released.
+2026-10-14T18:10:05Z [636,948ms] [Warning] [carb] Plugin interface for a client: omni.hydratexture.plugin was already released.
+2026-10-14T18:11:22Z [713,734ms] [Warning] [carb] Plugin interface for a client: omni.hydratexture.plugin was already released.
+2026-10-14T18:11:22Z [713,735ms] [Warning] [carb] Plugin interface for a client: omni.hydratexture.plugin was already released.
+2026-10-14T18:12:30Z [781,955ms] [Warning] [carb] Plugin interface for a client: omni.hydratexture.plugin was already released.
+2026-10-14T18:12:30Z [781,957ms] [Warning] [carb] Plugin interface for a client: omni.hydratexture.plugin was already released.
+2026-10-14T18:13:55Z [867,059ms] [Warning] [carb] Plugin interface for a client: omni.hydratexture.plugin was already released.
+2026-10-14T18:13:55Z [867,060ms] [Warning] [carb] Plugin interface for a client: omni.hydratexture.plugin was already released.
+RESULT {"pull_out_mm": 100.0, "target": "T5", "shelf": 4, "box": "angiolite", "which": "mid", "variant": "squeeze", "mode": "topdown", "thickness_mm": 16.0, "clear_height_mm": 310.0, "carton_path": "/World/Cartons/Shelf_04/angiolite_029", "vacuum_kpa": 50.0, "squeezed_cartons": 56, "videos": ["/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T5_squeeze_3q.mp4", "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T5_squeeze_side.mp4"], "unexpected_contacts": {}, "contact_pairs_debug": {"/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_04/angiolite_029": 535, "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_04/angiolite_029": 525, "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_04/angiolite_029": 535, " | ": 1, "/World/Tools/SX/tool/pad_3 | ": 2, "/World/Tools/SX/tool/pad_2 | ": 2, "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_04/angiolite_029": 6966, "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_04/angiolite_029": 6966, "/World/Tools/GR/tool/finger_right | ": 2, "/World/Tools/GR/tool/finger_left | ": 2}, "min_clearance_by_phase_mm": {"start": {"SX.shelf_above": 113.7100067059825, "SX.shelf_below": 45.87324138371627, "SX.walls_trim_back": 354.9999911590109, "SX.neighbours": 25.619477293278045, "GR.shelf_above": 9.300023116171285, "GR.shelf_below": 255.68153755355993, "GR.walls_trim_back": 351.5111775811346, "GR.neighbours": 33.1530777272453, "GR.to_other_tool": 60.41622770400456}, "1_press_2_vacuum_3_pull": {"SX.shelf_above": 113.60000282530902, "SX.shelf_below": 45.59992113712741, "SX.walls_trim_back": 325.2802788410211, "SX.neighbours": 5.599523435101188, "GR.shelf_above": 9.300024128984653, "GR.shelf_below": 255.68153755355993, "GR.walls_trim_back": 351.51117758614976, "GR.neighbours": 33.152964619029405, "GR.to_other_tool": 60.35652196039876}, "4_gripper_approach_clamp": {"SX.shelf_above": 138.9408452818414, "SX.shelf_below": 92.0810839089223, "SX.walls_trim_back": 425.13798747033036, "SX.neighbours": 100.15386341971553, "GR.shelf_above": 9.300021865404823, "GR.shelf_below": 185.7451392983232, "GR.walls_trim_back": 351.5109131746471, "GR.neighbours": 29.299728299242044, "GR.to_other_tool": 18.621503407274897}, "5_release_aside": {"SX.shelf_above": 138.94196831167176, "SX.shelf_below": 92.08278943719326, "SX.walls_trim_back": 319.4242636789288, "SX.neighbours": 100.15507333752167, "GR.shelf_above": 13.591764743274734, "GR.shelf_below": 185.75043959436456, "GR.walls_trim_back": 351.51061163883315, "GR.neighbours": 29.298652219414993, "GR.to_other_tool": 18.643575775615467}, "6_extract_7_lift": {"SX.shelf_above": 158.12954151821927, "SX.shelf_below": 119.07695500973546, "SX.walls_trim_back": 319.4241218398221, "SX.neighbours": 130.7090158619098, "GR.shelf_above": 14.762937822461664, "GR.shelf_below": 185.80984254209437, "GR.walls_trim_back": 352.6885884225179, "GR.neighbours": 30.47781982870315, "GR.to_other_tool": 67.42627212184561}}, "neighbour_max_disp_mm": 0.02, "neighbour_max_tilt_deg": 0.008, "shelf_max_disp_mm": 0.03, "carton_max_rotation_deg": 0.101, "success": true, "video_frames": 771}
+    1_press OK {"compression_mm": [0.5348912673071027, 0.5349328857846558, 0.5347144324332476], "carton_pushed_back_mm": 4.454, "travel_past_contact_mm": 4.989}
+    2_vacuum OK {"status": "Closed", "gripped": ["/World/Cartons/Shelf_04/angiolite_029"]}
+    3_pull OK {"carton_disp_mm": 104.679, "carton_net_disp_from_rest_mm": 99.963, "follow_error_mm": 0.247, "status": "Closed", "monitor_tripped": null, "neighbour_disp_mm": 0.0, "neighbour_tilt_deg": 0.0, "carton_yaw_tilt_deg": 0.0}
+    4a_approach OK {"carton_shift_mm": 0.003, "neighbour_disp_mm": 0.0, "carton_shift_xyz_mm": [-2.561137080192566e-05, -0.0030100345611572266, 0.0]}
+    4b_clamp OK {"gap_mm": 16.0, "gap_error_mm": 0.0, "carton_shift_during_close_mm": 0.003, "carton_shift_xyz_mm": [-0.0017960555851459503, -0.0017136335372924805, 0.002384185791015625], "finger_effort_N": 24.1}
+    5_release_aside OK {"status": "Open", "carton_shift_mm": 0.001, "retract_mm": 30, "aside_lateral_mm": 120.0}
+    6_extract OK {"distance_mm": 240.0, "carton_travel_mm": 239.997, "gripper_travel_mm": 240.018, "slip_mm": 0.132, "carton_lift_max_mm": 0.003, "neighbour_disp_mm": 0.02, "neighbour_tilt_deg": 0.008, "carton_rotation_deg": 0.101, "carton_fully_clear": true}
+    7_lift50 OK {"carton_rise_mm": 49.994, "slip_mm_total": 0.133, "carton_rotation_deg": 0.101, "carton_rotation_final_deg": 0.061}
+    clearance mm {"SX.shelf_above": 113.6, "SX.shelf_below": 45.6, "SX.walls_trim_back": 319.4, "SX.neighbours": 5.6, "GR.shelf_above": 9.3, "GR.shelf_below": 185.7, "GR.walls_trim_back": 351.5, "GR.neighbours": 29.3, "GR.to_other_tool": 18.6} unexpected contacts {}
+RESULT {"pull_out_mm": 100.0, "target": "T5", "shelf": 4, "box": "angiolite", "which": "mid", "variant": "lat2", "mode": "topdown", "thickness_mm": 16.0, "clear_height_mm": 310.0, "carton_path": "/World/Cartons/Shelf_04/angiolite_029", "vacuum_kpa": 50.0, "squeezed_cartons": null, "videos": ["/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T5_lat2_3q.mp4", "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T5_lat2_side.mp4"], "unexpected_contacts": {}, "contact_pairs_debug": {"/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_04/angiolite_029": 535, "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_04/angiolite_029": 525, "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_04/angiolite_029": 535, " | ": 1, "/World/Tools/SX/tool/pad_3 | ": 2, "/World/Tools/SX/tool/pad_2 | ": 2, "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_04/angiolite_029": 6949, "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_04/angiolite_029": 6964, "/World/Tools/GR/tool/finger_right | ": 2, "/World/Tools/GR/tool/finger_left | ": 2}, "min_clearance_by_phase_mm": {"start": {"SX.shelf_above": 113.7100060507351, "SX.shelf_below": 45.87324138371627, "SX.walls_trim_back": 355.0000060601721, "SX.neighbours": 25.419592646312253, "GR.shelf_above": 9.300023116171285, "GR.shelf_below": 255.68153755355993, "GR.walls_trim_back": 351.5111775811346, "GR.neighbours": 33.153031548078154, "GR.to_other_tool": 60.08379141960454}, "1_press_2_vacuum_3_pull": {"SX.shelf_above": 113.59999343756466, "SX.shelf_below": 45.59992113711475, "SX.walls_trim_back": 325.2627125922345, "SX.neighbours": 4.599510408121214, "GR.shelf_above": 9.300024128984653, "GR.shelf_below": 255.68153755355993, "GR.walls_trim_back": 351.51117758614976, "GR.neighbours": 33.15299207550465, "GR.to_other_tool": 60.022665783859495}, "4_gripper_approach_clamp": {"SX.shelf_above": 138.94098326057957, "SX.shelf_below": 92.08139381663918, "SX.walls_trim_back": 426.5913389534757, "SX.neighbours": 100.10165052871888, "GR.shelf_above": 9.300021865404823, "GR.shelf_below": 185.7451392983232, "GR.walls_trim_back": 351.5111747992988, "GR.neighbours": 29.299907705118283, "GR.to_other_tool": 18.071834221057735}, "5_release_aside": {"SX.shelf_above": 138.94195973195568, "SX.shelf_below": 92.08277609708227, "SX.walls_trim_back": 317.53203596963385, "SX.neighbours": 100.10466096795268, "GR.shelf_above": 13.591397258100576, "GR.shelf_below": 185.75125439256595, "GR.walls_trim_back": 351.51036710881425, "GR.neighbours": 29.299180999988295, "GR.to_other_tool": 18.08594323740123}, "6_extract_7_lift": {"SX.shelf_above": 158.12956224966624, "SX.shelf_below": 119.07698254025493, "SX.walls_trim_back": 317.53181886042387, "SX.neighbours": 130.35374058270634, "GR.shelf_above": 14.770900345567247, "GR.shelf_below": 185.81437817722232, "GR.walls_trim_back": 352.6971002605552, "GR.neighbours": 30.486180909442634, "GR.to_other_tool": 68.81454931431094}}, "neighbour_max_disp_mm": 0.0, "neighbour_max_tilt_deg": 0.0, "shelf_max_disp_mm": 0.0, "carton_max_rotation_deg": 0.122, "success": true, "video_frames": 771}
+    1_press OK {"compression_mm": [0.5317737231962383, 0.5317697650752962, 0.5318025359883904], "carton_pushed_back_mm": 4.457, "travel_past_contact_mm": 4.989}
+    2_vacuum OK {"status": "Closed", "gripped": ["/World/Cartons/Shelf_04/angiolite_029"]}
+    3_pull OK {"carton_disp_mm": 104.7, "carton_net_disp_from_rest_mm": 99.967, "follow_error_mm": 0.229, "status": "Closed", "monitor_tripped": null, "neighbour_disp_mm": 0.0, "neighbour_tilt_deg": 0.0, "carton_yaw_tilt_deg": 0.014}
+    4a_approach OK {"carton_shift_mm": 0.001, "neighbour_disp_mm": 0.0, "carton_shift_xyz_mm": [-4.190951585769653e-06, -0.0008791685104370117, -0.0002384185791015625]}
+    4b_clamp OK {"gap_mm": 16.003, "gap_error_mm": 0.003, "carton_shift_during_close_mm": 0.019, "carton_shift_xyz_mm": [0.018333550542593002, -0.0018402934074401855, 0.0017881393432617188], "finger_effort_N": 25.698}
+    5_release_aside OK {"status": "Open", "carton_shift_mm": 0.006, "retract_mm": 30, "aside_lateral_mm": 120.0}
+    6_extract OK {"distance_mm": 240.0, "carton_travel_mm": 239.996, "gripper_travel_mm": 240.019, "slip_mm": 0.074, "carton_lift_max_mm": 0.003, "neighbour_disp_mm": 0.0, "neighbour_tilt_deg": 0.0, "carton_rotation_deg": 0.122, "carton_fully_clear": true}
+    7_lift50 OK {"carton_rise_mm": 49.99, "slip_mm_total": 0.076, "carton_rotation_deg": 0.122, "carton_rotation_final_deg": 0.069}
+    clearance mm {"SX.shelf_above": 113.6, "SX.shelf_below": 45.6, "SX.walls_trim_back": 317.5, "SX.neighbours": 4.6, "GR.shelf_above": 9.3, "GR.shelf_below": 185.7, "GR.walls_trim_back": 351.5, "GR.neighbours": 29.3, "GR.to_other_tool": 18.1} unexpected contacts {}
+RESULT {"pull_out_mm": 100.0, "target": "T5", "shelf": 4, "box": "angiolite", "which": "mid", "variant": "tilt3", "mode": "topdown", "thickness_mm": 16.0, "clear_height_mm": 310.0, "carton_path": "/World/Cartons/Shelf_04/angiolite_029", "vacuum_kpa": 50.0, "squeezed_cartons": null, "videos": ["/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T5_tilt3_3q.mp4", "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T5_tilt3_side.mp4"], "unexpected_contacts": {}, "contact_pairs_debug": {"/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_04/angiolite_029": 1164, "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_04/angiolite_029": 482, "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_04/angiolite_029": 1643, " | ": 7, "/World/Tools/SX/tool/pad_3 | ": 20, "/World/Tools/SX/tool/pad_2 | ": 20, "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_04/angiolite_029": 7687, "/World/Tools/GR/tool/finger_right | ": 22, "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_04/angiolite_029": 6319, "/World/Tools/GR/tool/finger_left | ": 11}, "min_clearance_by_phase_mm": {"start": {"SX.shelf_above": 113.70856716245446, "SX.shelf_below": 45.8696290431575, "SX.walls_trim_back": 354.8401867853451, "SX.neighbours": 25.398150705238102, "GR.shelf_above": 9.300023116171285, "GR.shelf_below": 255.68153755355993, "GR.walls_trim_back": 351.5111775811346, "GR.neighbours": 33.153031548078154, "GR.to_other_tool": 60.194607727744696}, "1_press_2_vacuum_3_pull": {"SX.shelf_above": 113.59998762980261, "SX.shelf_below": 45.59992154659432, "SX.walls_trim_back": 325.09434340338106, "SX.neighbours": 6.352757645467368, "GR.shelf_above": 9.300024128984653, "GR.shelf_below": 255.68153755355993, "GR.walls_trim_back": 351.51117758614976, "GR.neighbours": 32.732642532866784, "GR.to_other_tool": 60.09875637591909}, "4_gripper_approach_clamp": {"SX.shelf_above": 138.85663998378084, "SX.shelf_below": 91.94633244300316, "SX.walls_trim_back": 420.781390159007, "SX.neighbours": 99.4047749578495, "GR.shelf_above": 9.300021865404823, "GR.shelf_below": 185.75324370380733, "GR.walls_trim_back": 351.5101704595872, "GR.neighbours": 28.81701078026308, "GR.to_other_tool": 17.51356380255851}, "5_release_aside": {"SX.shelf_above": 138.8607149132918, "SX.shelf_below": 91.9600876589032, "SX.walls_trim_back": 308.1207808247189, "SX.neighbours": 99.42079506857523, "GR.shelf_above": 13.593980477691863, "GR.shelf_below": 185.75087882484442, "GR.walls_trim_back": 351.5128204669459, "GR.neighbours": 28.82216625994846, "GR.to_other_tool": 17.34888247510514}, "6_extract_7_lift": {"SX.shelf_above": 153.70684426176217, "SX.shelf_below": 113.13372714823021, "SX.walls_trim_back": 308.1207524369206, "SX.neighbours": 124.48436934587008, "GR.shelf_above": 14.772612028216702, "GR.shelf_below": 185.81208289511113, "GR.walls_trim_back": 352.6985372785479, "GR.neighbours": 30.00825343799346, "GR.to_other_tool": 75.29298121677618}}, "neighbour_max_disp_mm": 4.426, "neighbour_max_tilt_deg": 0.083, "shelf_max_disp_mm": 4.426, "carton_max_rotation_deg": 1.158, "success": false, "video_frames": 771}
+    1_press OK {"compression_mm": [0.5274806753732264, 0.5275079165585339, 0.5273385322652757], "carton_pushed_back_mm": 4.583, "travel_past_contact_mm": 5.11}
+    2_vacuum OK {"status": "Closed", "gripped": ["/World/Cartons/Shelf_04/angiolite_029"]}
+    3_pull FAIL {"carton_disp_mm": 104.478, "carton_net_disp_from_rest_mm": 99.447, "follow_error_mm": 0.249, "status": "Closed", "monitor_tripped": null, "neighbour_disp_mm": 4.426, "neighbour_tilt_deg": 0.052, "carton_yaw_tilt_deg": 0.051}
+    4a_approach OK {"carton_shift_mm": 1.836, "neighbour_disp_mm": 4.426, "carton_shift_xyz_mm": [-1.8293985049240291, 0.13335049152374268, 0.08547306060791016]}
+    4b_clamp OK {"gap_mm": 16.604, "gap_error_mm": 0.604, "carton_shift_during_close_mm": 2.069, "carton_shift_xyz_mm": [-2.068332687485963, -0.030763447284698486, 0.018477439880371094], "finger_effort_N": 23.851}
+    5_release_aside OK {"status": "Open", "carton_shift_mm": 0.0, "retract_mm": 30, "aside_lateral_mm": 120.0}
+    6_extract FAIL {"distance_mm": 240.0, "carton_travel_mm": 240.013, "gripper_travel_mm": 240.016, "slip_mm": 0.01, "carton_lift_max_mm": 0.137, "neighbour_disp_mm": 4.426, "neighbour_tilt_deg": 0.083, "carton_rotation_deg": 1.158, "carton_fully_clear": true}
+    7_lift50 OK {"carton_rise_mm": 49.997, "slip_mm_total": 0.008, "carton_rotation_deg": 1.158, "carton_rotation_final_deg": 0.342}
+    clearance mm {"SX.shelf_above": 113.6, "SX.shelf_below": 45.6, "SX.walls_trim_back": 308.1, "SX.neighbours": 6.4, "GR.shelf_above": 9.3, "GR.shelf_below": 185.8, "GR.walls_trim_back": 351.5, "GR.neighbours": 28.8, "GR.to_other_tool": 17.3} unexpected contacts {}

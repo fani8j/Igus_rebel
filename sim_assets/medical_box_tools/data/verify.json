@@ -1,0 +1,772 @@
+{
+ "all_passed": true,
+ "n_checks": 146,
+ "n_failed": 0,
+ "tolerances": {
+  "position_m": 0.0001,
+  "angle_deg": 0.01
+ },
+ "file_sizes_bytes": {
+  "right_gripper_tool.usda": 1787070,
+  "shelf_handoff_scene.usda": 14464,
+  "shelf_cartons.usda": 7598,
+  "d200_rig_test_scene.usda": 1337,
+  "right_gripper_tool_arm_right.usda": 1787100,
+  "d200_dual_arm_medical.usda": 16032,
+  "left_suction_tool_arm_left.usda": 1260693,
+  "rebel_left_suction.usda": 2040,
+  "pick_test_scene.usda": 15179,
+  "dual_arm_rig_medical.usda": 30075,
+  "right_gripper_tool_independent.usda": 1787138,
+  "rebel_right_gripper.usda": 2045,
+  "left_suction_tool.usda": 1260666,
+  "cabinet_grasp_test_scene.usda": 11230,
+  "cabinet_robot_test_scene.usda": 2945
+ },
+ "scene_measurements": {
+  "carton_zmin_mm": [
+   -2.0861625621426683e-06,
+   2.682209010451686e-06,
+   5.960464483090178e-07,
+   0.0,
+   -2.0861625621426683e-06,
+   -2.0861625621426683e-06,
+   2.682209010451686e-06,
+   5.960464483090178e-07
+  ],
+  "max_overlap_mm": 7.599592344309514e-07,
+  "gripper_pad_gap_closed_mm": 16.00000037997961
+ },
+ "checks": [
+  {
+   "name": "suction: defaultPrim /left_suction_tool, Z-up, m, kg",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "suction: all prims valid",
+   "ok": true,
+   "detail": "[]"
+  },
+  {
+   "name": "suction: kind component + ArticulationRootAPI on the root (no body on the root)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "suction: expanded URDF via xacro",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "suction: visual meshes = URDF visuals = visual STLs (+3: each pad STL is cut into buffer body and sliding head)",
+   "ok": true,
+   "detail": "usd 25 urdf 22 stl 22"
+  },
+  {
+   "name": "suction: collision meshes = URDF collisions = manifest pieces",
+   "ok": true,
+   "detail": "usd 55 urdf 55 manifest 55"
+  },
+  {
+   "name": "suction: all collision meshes convexHull + guide",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "suction: every visual mesh has a material binding",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "suction: URDF has the required frames, no scanner frame",
+   "ok": true,
+   "detail": "['suction_tcp', 'suction_tcp_compressed', 'wrist_camera_mount', 'wrist_camera_color_optical_frame', 'pad_1_suction_frame', 'pad_2_suction_frame', 'pad_3_suction_frame']"
+  },
+  {
+   "name": "suction: USD frame prims = URDF frames",
+   "ok": true,
+   "detail": "['suction_tcp', 'suction_tcp_compressed', 'wrist_camera_mount', 'wrist_camera_color_optical_frame', 'pad_1_suction_frame', 'pad_2_suction_frame', 'pad_3_suction_frame']"
+  },
+  {
+   "name": "suction: no scanner / decoder material or mesh in the USD",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "suction: frame suction_tcp vs URDF",
+   "ok": true,
+   "detail": "0.00000 mm, 0.00000 deg"
+  },
+  {
+   "name": "suction: frame suction_tcp_compressed vs URDF",
+   "ok": true,
+   "detail": "0.00000 mm, 0.00000 deg"
+  },
+  {
+   "name": "suction: frame wrist_camera_mount vs URDF",
+   "ok": true,
+   "detail": "0.00000 mm, 0.00000 deg"
+  },
+  {
+   "name": "suction: frame wrist_camera_color_optical_frame vs URDF",
+   "ok": true,
+   "detail": "0.00000 mm, 0.00000 deg"
+  },
+  {
+   "name": "suction: frame pad_1_suction_frame vs URDF",
+   "ok": true,
+   "detail": "0.00000 mm, 0.00000 deg"
+  },
+  {
+   "name": "suction: frame pad_2_suction_frame vs URDF",
+   "ok": true,
+   "detail": "0.00000 mm, 0.00000 deg"
+  },
+  {
+   "name": "suction: frame pad_3_suction_frame vs URDF",
+   "ok": true,
+   "detail": "0.00000 mm, 0.00000 deg"
+  },
+  {
+   "name": "suction: pad_1_suction_frame at the pad_L lip centre, +Z out of the lip",
+   "ok": true,
+   "detail": "frame [-60.0, 0.0, 159.0] mm, lip centre (-60.000, 0, 159.000) mm"
+  },
+  {
+   "name": "suction: pad_2_suction_frame at the pad_M lip centre, +Z out of the lip",
+   "ok": true,
+   "detail": "frame [0.0, 0.0, 159.0] mm, lip centre (0.000, 0, 159.000) mm"
+  },
+  {
+   "name": "suction: pad_3_suction_frame at the pad_R lip centre, +Z out of the lip",
+   "ok": true,
+   "detail": "frame [60.0, 0.0, 159.0] mm, lip centre (60.000, 0, 159.000) mm"
+  },
+  {
+   "name": "suction: base + 3 pad heads are rigid bodies",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "suction: total mass = URDF (base + 3 heads, CAD total preserved)",
+   "ok": true,
+   "detail": "0.20380999869666994 vs 0.20381"
+  },
+  {
+   "name": "suction: combined CoG = URDF",
+   "ok": true,
+   "detail": "9.62e-10 m"
+  },
+  {
+   "name": "suction: combined inertia tensor = URDF",
+   "ok": true,
+   "detail": "rel err 2.77e-08"
+  },
+  {
+   "name": "suction: pad head masses 3.3 g each (share of the 12 g ZP2 part)",
+   "ok": true,
+   "detail": "[3.3191, 3.3191, 3.3191]"
+  },
+  {
+   "name": "suction: pad_1 buffer joint: prismatic Z, 0..-10 mm, anchor at the lip centre, base -> pad_1",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "suction: pad_1 spring 200 N/m, preload K*target = 1.0 N extended / 3.0 N compressed",
+   "ok": true,
+   "detail": "k=200.0 target=0.004999999888241291 damping=1.600000023841858 maxForce=6.0"
+  },
+  {
+   "name": "suction: pad_1 collision lip pieces on the sliding head, friction 0.5/0.5",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "suction: pad_2 buffer joint: prismatic Z, 0..-10 mm, anchor at the lip centre, base -> pad_2",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "suction: pad_2 spring 200 N/m, preload K*target = 1.0 N extended / 3.0 N compressed",
+   "ok": true,
+   "detail": "k=200.0 target=0.004999999888241291 damping=1.600000023841858 maxForce=6.0"
+  },
+  {
+   "name": "suction: pad_2 collision lip pieces on the sliding head, friction 0.5/0.5",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "suction: pad_3 buffer joint: prismatic Z, 0..-10 mm, anchor at the lip centre, base -> pad_3",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "suction: pad_3 spring 200 N/m, preload K*target = 1.0 N extended / 3.0 N compressed",
+   "ok": true,
+   "detail": "k=200.0 target=0.004999999888241291 damping=1.600000023841858 maxForce=6.0"
+  },
+  {
+   "name": "suction: pad_3 collision lip pieces on the sliding head, friction 0.5/0.5",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "suction: pad physics material 0.5 / 0.5",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "suction: IsaacSurfaceGripper prim, 3 attachment points, status Open",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "suction: physical force limits from one vacuum parameter (50 kPa x 1.16 cm2 = 5.80 N coaxial, mu 0.5 -> 2.90 N shear); authored = physical x calibration factors (1.0, 2.2)",
+   "ok": true,
+   "detail": "5.800000190734863 6.380000114440918"
+  },
+  {
+   "name": "suction: maxGripDistance 3..5 mm, retry interval > 0",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "suction: attachment 1: D6 on pad_1 at the lip centre, forward axis Z, excluded from the articulation, enabled, no break force",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "suction: attachment 2: D6 on pad_2 at the lip centre, forward axis Z, excluded from the articulation, enabled, no break force",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "suction: attachment 3: D6 on pad_3 at the lip centre, forward axis Z, excluded from the articulation, enabled, no break force",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "suction: handoff.py SUCTION_TCP_Z / COMPRESSED_Z",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper: defaultPrim /right_gripper_tool, Z-up, m, kg",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper: all prims valid",
+   "ok": true,
+   "detail": "[]"
+  },
+  {
+   "name": "gripper: ArticulationRootAPI on root, kind component",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper: expanded URDF via xacro",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper: visual meshes = URDF = manifest",
+   "ok": true,
+   "detail": "usd 10 urdf 10 manifest 10"
+  },
+  {
+   "name": "gripper: collision meshes = URDF = manifest",
+   "ok": true,
+   "detail": "usd 20 urdf 20 manifest 20"
+  },
+  {
+   "name": "gripper: collision meshes convexHull + guide",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper: base rigid body + mass",
+   "ok": true,
+   "detail": "0.8436631560325623 vs 0.843663131"
+  },
+  {
+   "name": "gripper: base CoG",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper: base inertia",
+   "ok": true,
+   "detail": "rel err 4.15e-08"
+  },
+  {
+   "name": "gripper: finger_left rigid body + mass",
+   "ok": true,
+   "detail": "0.052512358874082565 vs 0.0525123601"
+  },
+  {
+   "name": "gripper: finger_left CoG",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper: finger_left inertia",
+   "ok": true,
+   "detail": "rel err 3.87e-08"
+  },
+  {
+   "name": "gripper: finger_right rigid body + mass",
+   "ok": true,
+   "detail": "0.052512358874082565 vs 0.0525123601"
+  },
+  {
+   "name": "gripper: finger_right CoG",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper: finger_right inertia",
+   "ok": true,
+   "detail": "rel err 3.93e-08"
+  },
+  {
+   "name": "gripper: frame gripper_tcp vs URDF",
+   "ok": true,
+   "detail": "0.00000 mm, 0.00000 deg"
+  },
+  {
+   "name": "gripper: frame top_stop_frame vs URDF",
+   "ok": true,
+   "detail": "0.00000 mm, 0.00000 deg"
+  },
+  {
+   "name": "gripper: handoff.py GRIPPER_TCP_Z / STOP_Z",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper: left joint axis (X) in base frame = URDF axis",
+   "ok": true,
+   "detail": "(-1.0, 0.0, 0.0)"
+  },
+  {
+   "name": "gripper: left joint frames coincide at q=0 (rot0 == rot1)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper: left joint limits 0..0.024 m",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper: left joint anchor = URDF origin",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper: left drive maxForce 48.6 N (24.3 N per finger, SMC 11..28 N), k/c > 0",
+   "ok": true,
+   "detail": "k=10000.0 c=200.0 target=0.024000000208616257"
+  },
+  {
+   "name": "gripper: left no physxJoint:maxJointVelocity (it halves the drive force in Isaac Sim 5.1; speed is a target ramp)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper: left finger authored at open, consistent with state/target 0.024",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper: right joint axis (X) in base frame = URDF axis",
+   "ok": true,
+   "detail": "(1.0, 0.0, 0.0)"
+  },
+  {
+   "name": "gripper: right joint frames coincide at q=0 (rot0 == rot1)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper: right joint limits 0..0.024 m",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper: right joint anchor = URDF origin",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper: right finger = mimic of the left (gearing -1, offset 0), no own drive",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper: right no physxJoint:maxJointVelocity (it halves the drive force in Isaac Sim 5.1; speed is a target ramp)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper: right finger authored at open, consistent with state/target 0.024",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper: pad gap at open = 56 mm (collision pads)",
+   "ok": true,
+   "detail": "56.000 mm"
+  },
+  {
+   "name": "gripper: fingers filtered against each other (CAD jaw hulls touch)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper(independent): defaultPrim /right_gripper_tool, Z-up, m, kg",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper(independent): all prims valid",
+   "ok": true,
+   "detail": "[]"
+  },
+  {
+   "name": "gripper(independent): ArticulationRootAPI on root, kind component",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper(independent): expanded URDF via xacro",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper(independent): visual meshes = URDF = manifest",
+   "ok": true,
+   "detail": "usd 10 urdf 10 manifest 10"
+  },
+  {
+   "name": "gripper(independent): collision meshes = URDF = manifest",
+   "ok": true,
+   "detail": "usd 20 urdf 20 manifest 20"
+  },
+  {
+   "name": "gripper(independent): collision meshes convexHull + guide",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper(independent): base rigid body + mass",
+   "ok": true,
+   "detail": "0.8436631560325623 vs 0.843663131"
+  },
+  {
+   "name": "gripper(independent): base CoG",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper(independent): base inertia",
+   "ok": true,
+   "detail": "rel err 4.15e-08"
+  },
+  {
+   "name": "gripper(independent): finger_left rigid body + mass",
+   "ok": true,
+   "detail": "0.052512358874082565 vs 0.0525123601"
+  },
+  {
+   "name": "gripper(independent): finger_left CoG",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper(independent): finger_left inertia",
+   "ok": true,
+   "detail": "rel err 3.87e-08"
+  },
+  {
+   "name": "gripper(independent): finger_right rigid body + mass",
+   "ok": true,
+   "detail": "0.052512358874082565 vs 0.0525123601"
+  },
+  {
+   "name": "gripper(independent): finger_right CoG",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper(independent): finger_right inertia",
+   "ok": true,
+   "detail": "rel err 3.93e-08"
+  },
+  {
+   "name": "gripper(independent): frame gripper_tcp vs URDF",
+   "ok": true,
+   "detail": "0.00000 mm, 0.00000 deg"
+  },
+  {
+   "name": "gripper(independent): frame top_stop_frame vs URDF",
+   "ok": true,
+   "detail": "0.00000 mm, 0.00000 deg"
+  },
+  {
+   "name": "gripper(independent): handoff.py GRIPPER_TCP_Z / STOP_Z",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper(independent): left joint axis (X) in base frame = URDF axis",
+   "ok": true,
+   "detail": "(-1.0, 0.0, 0.0)"
+  },
+  {
+   "name": "gripper(independent): left joint frames coincide at q=0 (rot0 == rot1)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper(independent): left joint limits 0..0.024 m",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper(independent): left joint anchor = URDF origin",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper(independent): left drive maxForce 24.3 N (24.3 N per finger, SMC 11..28 N), k/c > 0",
+   "ok": true,
+   "detail": "k=10000.0 c=200.0 target=0.024000000208616257"
+  },
+  {
+   "name": "gripper(independent): left no physxJoint:maxJointVelocity (it halves the drive force in Isaac Sim 5.1; speed is a target ramp)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper(independent): left finger authored at open, consistent with state/target 0.024",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper(independent): right joint axis (X) in base frame = URDF axis",
+   "ok": true,
+   "detail": "(1.0, 0.0, 0.0)"
+  },
+  {
+   "name": "gripper(independent): right joint frames coincide at q=0 (rot0 == rot1)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper(independent): right joint limits 0..0.024 m",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper(independent): right joint anchor = URDF origin",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper(independent): right drive maxForce 24.3 N (24.3 N per finger, SMC 11..28 N), k/c > 0",
+   "ok": true,
+   "detail": "k=10000.0 c=200.0 target=0.024000000208616257"
+  },
+  {
+   "name": "gripper(independent): right no physxJoint:maxJointVelocity (it halves the drive force in Isaac Sim 5.1; speed is a target ramp)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper(independent): right finger authored at open, consistent with state/target 0.024",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "gripper(independent): pad gap at open = 56 mm (collision pads)",
+   "ok": true,
+   "detail": "56.000 mm"
+  },
+  {
+   "name": "gripper(independent): fingers filtered against each other (CAD jaw hulls touch)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "scene: defaultPrim /World, Z-up, m, kg",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "scene: all prims valid",
+   "ok": true,
+   "detail": "[]"
+  },
+  {
+   "name": "scene: PhysicsScene gravity -Z 9.81",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "scene: all 8 carton + 2 tool references resolve (meshes, rigid bodies present)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "scene: cartons sit on the shelf floor (bbox z min = 0 +-0.5 mm)",
+   "ok": true,
+   "detail": "max |zmin| 0.0000 mm"
+  },
+  {
+   "name": "scene: shelf floor top at z = 0",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "scene: upper board underside 300 mm above the floor",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "scene: no carton-carton overlap > 0.1 mm",
+   "ok": true,
+   "detail": "max penetration 0.00000 mm"
+  },
+  {
+   "name": "scene: packed with 0 mm gap",
+   "ok": true,
+   "detail": "gaps [-0.0, -0.0, -0.0, -0.0, 0.0, -0.0, -0.0] mm"
+  },
+  {
+   "name": "scene: target spine at y = -0.100 m",
+   "ok": true,
+   "detail": "-0.100000"
+  },
+  {
+   "name": "scene: other spines at y = 0",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "scene: target is box 3 and centred at x = 0",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "scene: target centre = handoff.box_pose(3)",
+   "ok": true,
+   "detail": "[0.0, 0.025, 0.11]"
+  },
+  {
+   "name": "scene: carton +Y(spine) -> -Y_w, X(height) -> +Z_w, Z(thickness) -> +X_w",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "scene: left_suction_tool link6 pose = handoff.py",
+   "ok": true,
+   "detail": "0.00000 mm, rot err 0.0e+00"
+  },
+  {
+   "name": "scene: left_suction_tool bodies kinematic",
+   "ok": true,
+   "detail": "4 bodies"
+  },
+  {
+   "name": "scene: right_gripper_tool link6 pose = handoff.py",
+   "ok": true,
+   "detail": "0.00000 mm, rot err 0.0e+00"
+  },
+  {
+   "name": "scene: right_gripper_tool bodies kinematic",
+   "ok": true,
+   "detail": "3 bodies"
+  },
+  {
+   "name": "scene: gripper articulation root removed in scene (kinematic bodies)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "scene: suction_tcp_compressed lands on the target spine centre (0, -0.1, h/2)",
+   "ok": true,
+   "detail": "[0.0, -0.1, 0.11]"
+  },
+  {
+   "name": "scene: gripper top_stop_frame 4.0 mm above the carton top edge, x = 0",
+   "ok": true,
+   "detail": "[0.0, -0.0575, 0.224]"
+  },
+  {
+   "name": "scene: gripper pads closed on the 16 mm carton",
+   "ok": true,
+   "detail": "16.000 mm"
+  },
+  {
+   "name": "scene: camera prim present",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "new files: pick_test_scene: 5 cartons, 2 tools on carrier + slide joint, PhysicsScene TGS/CPU",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "new files: shelf_cartons has no PhysicsScene (reference it into a scene), 5 cartons",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "new files: rebel_left_suction.usda: tool fixed to link_8, tool articulation root removed",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "new files: rebel_right_gripper.usda: tool fixed to link_8, tool articulation root removed",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "new files: dual_arm_rig_medical: XEG-32 tooling + joints removed, both tools fixed to link6",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "new files: dual_arm_rig_medical: nested rigid bodies flattened (29)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "new files: d200_dual_arm_medical: XEG-32 removed, both tools fixed to link6 (sibling bodies, no nesting)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "new files: d200_dual_arm_medical: AMR static placeholder (enabled fixed joint to the world, wheel/swivel/caster joints locked)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "new files: d200_dual_arm_medical: D200 tool variants use the URDF joint names",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "new files: cabinet_grasp_test_scene: stocked cabinet referenced, shelf lips replaced by one plate, 2 carriers (SX, GR) with root/jy/jz joints",
+   "ok": true,
+   "detail": ""
+  }
+ ]
+}

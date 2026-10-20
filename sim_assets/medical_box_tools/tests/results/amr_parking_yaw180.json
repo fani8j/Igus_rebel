@@ -1,0 +1,22 @@
+[
+ {
+  "target": "E2",
+  "mode": "front",
+  "shelf": 6,
+  "box": "angiolite",
+  "which": "first",
+  "pull_m": 0.1,
+  "yaw180": true,
+  "carton": "angiolite_001",
+  "lift_split_between_phases": false,
+  "candidates_inside_both_reach_maps": 3870,
+  "candidates_fully_evaluated": 150,
+  "full_eval_failures": {
+   "left: L0 home->stage": 95,
+   "left: L0b stage->pre": 55
+  },
+  "feasible": false,
+  "reason": "every map-feasible candidate fails the full path / collision evaluation (see full_eval_failures)",
+  "elapsed": 532.8806183338165
+ }
+]

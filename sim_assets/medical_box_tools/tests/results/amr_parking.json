@@ -1,0 +1,1121 @@
+{
+ "front": {
+  "T1": {
+   "target": "T1",
+   "mode": "front",
+   "shelf": 1,
+   "box": "ultimaster_nagomi",
+   "which": "mid",
+   "pull_m": 0.1,
+   "yaw180": false,
+   "carton": "ultimaster_nagomi_029",
+   "lift_split_between_phases": false,
+   "candidates_inside_both_reach_maps": 0,
+   "feasible": false,
+   "reason": "no (d, lat, lift, slider) puts all key poses of both arms inside the IK reach map (same lift for both arms)",
+   "elapsed": 0.3444788455963135
+  },
+  "T2": {
+   "target": "T2",
+   "mode": "front",
+   "shelf": 2,
+   "box": "accuforce",
+   "which": "mid",
+   "pull_m": 0.1,
+   "yaw180": false,
+   "carton": "accuforce_029",
+   "lift_split_between_phases": false,
+   "candidates_inside_both_reach_maps": 121,
+   "candidates_fully_evaluated": 23,
+   "full_eval_failures": {
+    "left: L0 home->stage": 23
+   },
+   "feasible": false,
+   "reason": "every map-feasible candidate fails the full path / collision evaluation (see full_eval_failures)",
+   "elapsed": 63.50181698799133
+  },
+  "T3": {
+   "target": "T3",
+   "mode": "front",
+   "shelf": 3,
+   "box": "agent_monorail",
+   "which": "mid",
+   "pull_m": 0.1,
+   "yaw180": false,
+   "carton": "agent_monorail_016",
+   "lift_split_between_phases": false,
+   "candidates_inside_both_reach_maps": 1426,
+   "candidates_fully_evaluated": 12,
+   "full_eval_failures": {
+    "left: L0 home->stage": 3,
+    "right: R0 home->stage": 3
+   },
+   "feasible": true,
+   "best_d": 0.41,
+   "lateral_offset_m": 0.005,
+   "lift": -0.6,
+   "slider_left": -0.005973,
+   "slider_right": 0.005973,
+   "feasible_d_window_m": [
+    0.35,
+    0.48
+   ],
+   "feasible_lift_window_m": [
+    -0.62,
+    -0.58
+   ],
+   "feasible_lateral_window_m": [
+    -0.065,
+    0.075
+   ],
+   "corners_box_ok": true,
+   "corner_failures": [],
+   "min_clearance_m": {
+    "left.arm_cabinet": 0.117,
+    "left.arm_blocks": 0.109,
+    "left.arm_carton": 0.109,
+    "left.tool_cabinet": 0.0317,
+    "left.tool_neighbours": 0.0056,
+    "left.robot_amr": 0.5584,
+    "left.robot_stand": 0.0448,
+    "left.arm_arm": 0.0847,
+    "left.tool_tool": 0.3626,
+    "right.arm_cabinet": 0.1884,
+    "right.arm_blocks": 0.2265,
+    "right.arm_carton": 0.1271,
+    "right.tool_cabinet": 0.0397,
+    "right.tool_neighbours": 0.0446,
+    "right.robot_amr": 0.5433,
+    "right.robot_stand": 0.0423,
+    "right.arm_arm": 0.0893,
+    "right.tool_tool": 0.2349
+   },
+   "joint_margin_rad": 0.0811,
+   "min_manipulability": {
+    "left": 0.1004,
+    "right": 0.1443
+   },
+   "stage_variant": [
+    0,
+    1
+   ],
+   "max_ik_jump_rad": 0.0312,
+   "elapsed": 198.1312313079834
+  },
+  "T4": {
+   "target": "T4",
+   "mode": "front",
+   "shelf": 3,
+   "box": "conqueror_nc_pro",
+   "which": "mid",
+   "pull_m": 0.1,
+   "yaw180": false,
+   "carton": "conqueror_nc_pro_019",
+   "lift_split_between_phases": false,
+   "candidates_inside_both_reach_maps": 1426,
+   "candidates_fully_evaluated": 12,
+   "full_eval_failures": {
+    "left: L0 home->stage": 4,
+    "right: R0 home->stage": 2
+   },
+   "feasible": true,
+   "best_d": 0.41,
+   "lateral_offset_m": 0.005,
+   "lift": -0.6,
+   "slider_left": -0.005973,
+   "slider_right": 0.005973,
+   "feasible_d_window_m": [
+    0.35,
+    0.48
+   ],
+   "feasible_lift_window_m": [
+    -0.62,
+    -0.58
+   ],
+   "feasible_lateral_window_m": [
+    -0.065,
+    0.075
+   ],
+   "corners_box_ok": true,
+   "corner_failures": [],
+   "min_clearance_m": {
+    "left.arm_cabinet": 0.117,
+    "left.arm_blocks": 0.109,
+    "left.arm_carton": 0.109,
+    "left.tool_cabinet": 0.0317,
+    "left.tool_neighbours": 0.0041,
+    "left.robot_amr": 0.5584,
+    "left.robot_stand": 0.0448,
+    "left.arm_arm": 0.0847,
+    "left.tool_tool": 0.3626,
+    "right.arm_cabinet": 0.2219,
+    "right.arm_blocks": 0.2265,
+    "right.arm_carton": 0.1273,
+    "right.tool_cabinet": 0.0698,
+    "right.tool_neighbours": 0.0446,
+    "right.robot_amr": 0.5433,
+    "right.robot_stand": 0.0423,
+    "right.arm_arm": 0.0893,
+    "right.tool_tool": 0.2354
+   },
+   "joint_margin_rad": 0.0811,
+   "min_manipulability": {
+    "left": 0.1004,
+    "right": 0.1443
+   },
+   "stage_variant": [
+    0,
+    1
+   ],
+   "max_ik_jump_rad": 0.0312,
+   "elapsed": 188.70579886436462
+  },
+  "T5": {
+   "target": "T5",
+   "mode": "front",
+   "shelf": 4,
+   "box": "angiolite",
+   "which": "mid",
+   "pull_m": 0.1,
+   "yaw180": false,
+   "carton": "angiolite_029",
+   "lift_split_between_phases": false,
+   "candidates_inside_both_reach_maps": 3072,
+   "candidates_fully_evaluated": 8,
+   "full_eval_failures": {
+    "left: L0 home->stage": 2
+   },
+   "feasible": true,
+   "best_d": 0.44,
+   "lateral_offset_m": 0.055,
+   "lift": -0.46,
+   "slider_left": -0.005973,
+   "slider_right": 0.005973,
+   "feasible_d_window_m": [
+    0.36,
+    0.53
+   ],
+   "feasible_lift_window_m": [
+    -0.62,
+    -0.3
+   ],
+   "feasible_lateral_window_m": [
+    -0.035,
+    0.145
+   ],
+   "corners_box_ok": true,
+   "corner_failures": [],
+   "min_clearance_m": {
+    "left.arm_cabinet": 0.1203,
+    "left.arm_blocks": 0.109,
+    "left.arm_carton": 0.109,
+    "left.tool_cabinet": 0.0462,
+    "left.tool_neighbours": 0.0061,
+    "left.robot_amr": 0.8429,
+    "left.robot_stand": 0.0508,
+    "left.arm_arm": 0.1547,
+    "left.tool_tool": 0.3626,
+    "right.arm_cabinet": 0.2238,
+    "right.arm_blocks": 0.2265,
+    "right.arm_carton": 0.1271,
+    "right.tool_cabinet": 0.096,
+    "right.tool_neighbours": 0.0446,
+    "right.robot_amr": 0.8138,
+    "right.robot_stand": 0.0569,
+    "right.arm_arm": 0.0909,
+    "right.tool_tool": 0.3649
+   },
+   "joint_margin_rad": 0.1082,
+   "min_manipulability": {
+    "left": 0.1095,
+    "right": 0.1313
+   },
+   "stage_variant": [
+    0,
+    0
+   ],
+   "max_ik_jump_rad": 0.0294,
+   "elapsed": 187.8308024406433
+  },
+  "T6": {
+   "target": "T6",
+   "mode": "front",
+   "shelf": 5,
+   "box": "agent_monorail",
+   "which": "mid",
+   "pull_m": 0.1,
+   "yaw180": false,
+   "carton": "agent_monorail_031",
+   "lift_split_between_phases": false,
+   "candidates_inside_both_reach_maps": 4479,
+   "candidates_fully_evaluated": 8,
+   "full_eval_failures": {
+    "left: L0 home->stage": 2
+   },
+   "feasible": true,
+   "best_d": 0.44,
+   "lateral_offset_m": 0.055,
+   "lift": -0.21,
+   "slider_left": -0.005973,
+   "slider_right": 0.005973,
+   "feasible_d_window_m": [
+    0.36,
+    0.52
+   ],
+   "feasible_lift_window_m": [
+    -0.45,
+    0.03
+   ],
+   "feasible_lateral_window_m": [
+    -0.035,
+    0.145
+   ],
+   "corners_box_ok": true,
+   "corner_failures": [],
+   "min_clearance_m": {
+    "left.arm_cabinet": 0.117,
+    "left.arm_blocks": 0.109,
+    "left.arm_carton": 0.109,
+    "left.tool_cabinet": 0.0412,
+    "left.tool_neighbours": 0.0056,
+    "left.robot_amr": 1.1212,
+    "left.robot_stand": 0.0644,
+    "left.arm_arm": 0.1564,
+    "left.tool_tool": 0.3626,
+    "right.arm_cabinet": 0.2219,
+    "right.arm_blocks": 0.2265,
+    "right.arm_carton": 0.1271,
+    "right.tool_cabinet": 0.0912,
+    "right.tool_neighbours": 0.0446,
+    "right.robot_amr": 1.1212,
+    "right.robot_stand": 0.0701,
+    "right.arm_arm": 0.0932,
+    "right.tool_tool": 0.3644
+   },
+   "joint_margin_rad": 0.1257,
+   "min_manipulability": {
+    "left": 0.0944,
+    "right": 0.1253
+   },
+   "stage_variant": [
+    0,
+    0
+   ],
+   "max_ik_jump_rad": 0.0295,
+   "elapsed": 218.7003231048584
+  },
+  "T7": {
+   "target": "T7",
+   "mode": "front",
+   "shelf": 6,
+   "box": "accuforce",
+   "which": "mid",
+   "pull_m": 0.1,
+   "yaw180": false,
+   "carton": "accuforce_010",
+   "lift_split_between_phases": false,
+   "candidates_inside_both_reach_maps": 4479,
+   "candidates_fully_evaluated": 11,
+   "full_eval_failures": {
+    "left: L0 home->stage": 5
+   },
+   "feasible": true,
+   "best_d": 0.44,
+   "lateral_offset_m": 0.055,
+   "lift": 0.09,
+   "slider_left": -0.005973,
+   "slider_right": 0.005973,
+   "feasible_d_window_m": [
+    0.36,
+    0.52
+   ],
+   "feasible_lift_window_m": [
+    -0.15,
+    0.33
+   ],
+   "feasible_lateral_window_m": [
+    -0.035,
+    0.145
+   ],
+   "corners_box_ok": true,
+   "corner_failures": [],
+   "min_clearance_m": {
+    "left.arm_cabinet": 0.1139,
+    "left.arm_blocks": 0.109,
+    "left.arm_carton": 0.109,
+    "left.tool_cabinet": 0.0362,
+    "left.tool_neighbours": 0.0061,
+    "left.robot_amr": 1.4212,
+    "left.robot_stand": 0.0796,
+    "left.arm_arm": 0.1578,
+    "left.tool_tool": 0.3626,
+    "right.arm_cabinet": 0.2196,
+    "right.arm_blocks": 0.2265,
+    "right.arm_carton": 0.1271,
+    "right.tool_cabinet": 0.0691,
+    "right.tool_neighbours": 0.0446,
+    "right.robot_amr": 1.4212,
+    "right.robot_stand": 0.0745,
+    "right.arm_arm": 0.0925,
+    "right.tool_tool": 0.3644
+   },
+   "joint_margin_rad": 0.1305,
+   "min_manipulability": {
+    "left": 0.0929,
+    "right": 0.1247
+   },
+   "stage_variant": [
+    0,
+    0
+   ],
+   "max_ik_jump_rad": 0.0296,
+   "elapsed": 238.6850848197937
+  },
+  "T8": {
+   "target": "T8",
+   "mode": "front",
+   "shelf": 6,
+   "box": "conqueror_nc_pro",
+   "which": "mid",
+   "pull_m": 0.1,
+   "yaw180": false,
+   "carton": "conqueror_nc_pro_013",
+   "lift_split_between_phases": false,
+   "candidates_inside_both_reach_maps": 4239,
+   "candidates_fully_evaluated": 10,
+   "full_eval_failures": {
+    "left: L0 home->stage": 4
+   },
+   "feasible": true,
+   "best_d": 0.44,
+   "lateral_offset_m": 0.055,
+   "lift": 0.1,
+   "slider_left": -0.005973,
+   "slider_right": 0.005973,
+   "feasible_d_window_m": [
+    0.36,
+    0.52
+   ],
+   "feasible_lift_window_m": [
+    -0.14,
+    0.34
+   ],
+   "feasible_lateral_window_m": [
+    -0.035,
+    0.145
+   ],
+   "corners_box_ok": true,
+   "corner_failures": [],
+   "min_clearance_m": {
+    "left.arm_cabinet": 0.1162,
+    "left.arm_blocks": 0.109,
+    "left.arm_carton": 0.109,
+    "left.tool_cabinet": 0.0412,
+    "left.tool_neighbours": 0.0041,
+    "left.robot_amr": 1.4312,
+    "left.robot_stand": 0.0861,
+    "left.arm_arm": 0.1564,
+    "left.tool_tool": 0.3611,
+    "right.arm_cabinet": 0.1879,
+    "right.arm_blocks": 0.2265,
+    "right.arm_carton": 0.1273,
+    "right.tool_cabinet": 0.0667,
+    "right.tool_neighbours": 0.0446,
+    "right.robot_amr": 1.4312,
+    "right.robot_stand": 0.0732,
+    "right.arm_arm": 0.0932,
+    "right.tool_tool": 0.3628
+   },
+   "joint_margin_rad": 0.1257,
+   "min_manipulability": {
+    "left": 0.0944,
+    "right": 0.1253
+   },
+   "stage_variant": [
+    0,
+    0
+   ],
+   "max_ik_jump_rad": 0.0309,
+   "elapsed": 221.98866653442383
+  },
+  "E1": {
+   "target": "E1",
+   "mode": "front",
+   "shelf": 3,
+   "box": "agent_monorail",
+   "which": "last",
+   "pull_m": 0.1,
+   "yaw180": false,
+   "carton": "agent_monorail_030",
+   "lift_split_between_phases": false,
+   "candidates_inside_both_reach_maps": 1426,
+   "candidates_fully_evaluated": 12,
+   "full_eval_failures": {
+    "left: L0 home->stage": 3,
+    "right: R0 home->stage": 3
+   },
+   "feasible": true,
+   "best_d": 0.41,
+   "lateral_offset_m": 0.005,
+   "lift": -0.6,
+   "slider_left": -0.005973,
+   "slider_right": 0.005973,
+   "feasible_d_window_m": [
+    0.35,
+    0.48
+   ],
+   "feasible_lift_window_m": [
+    -0.62,
+    -0.58
+   ],
+   "feasible_lateral_window_m": [
+    -0.065,
+    0.075
+   ],
+   "corners_box_ok": true,
+   "corner_failures": [],
+   "min_clearance_m": {
+    "left.arm_cabinet": 0.117,
+    "left.arm_blocks": 0.109,
+    "left.arm_carton": 0.109,
+    "left.tool_cabinet": 0.0317,
+    "left.tool_neighbours": 0.0056,
+    "left.robot_amr": 0.5584,
+    "left.robot_stand": 0.047,
+    "left.arm_arm": 0.0847,
+    "left.tool_tool": 0.3611,
+    "right.arm_cabinet": 0.2219,
+    "right.arm_blocks": 0.2265,
+    "right.arm_carton": 0.1271,
+    "right.tool_cabinet": 0.0697,
+    "right.tool_neighbours": 0.0446,
+    "right.robot_amr": 0.5433,
+    "right.robot_stand": 0.0426,
+    "right.arm_arm": 0.0893,
+    "right.tool_tool": 0.2351
+   },
+   "joint_margin_rad": 0.0811,
+   "min_manipulability": {
+    "left": 0.1004,
+    "right": 0.1443
+   },
+   "stage_variant": [
+    0,
+    1
+   ],
+   "max_ik_jump_rad": 0.0298,
+   "elapsed": 181.25393843650818
+  },
+  "E2": {
+   "target": "E2",
+   "mode": "front",
+   "shelf": 6,
+   "box": "angiolite",
+   "which": "first",
+   "pull_m": 0.1,
+   "yaw180": false,
+   "carton": "angiolite_001",
+   "lift_split_between_phases": false,
+   "candidates_inside_both_reach_maps": 4239,
+   "candidates_fully_evaluated": 150,
+   "full_eval_failures": {
+    "left: L0 home->stage": 91,
+    "left: L0b stage->pre": 59
+   },
+   "feasible": false,
+   "reason": "every map-feasible candidate fails the full path / collision evaluation (see full_eval_failures)",
+   "elapsed": 396.13901686668396
+  }
+ },
+ "topdown_pose_level_diagnostic": {
+  "T1": {
+   "map_cells_with_ik": 72,
+   "tested": 72,
+   "pre_pose_clear": 0,
+   "reasons": {
+    "arm_blocks": 72,
+    "arm_cabinet": 72,
+    "tool_cabinet": 72
+   },
+   "example": null
+  },
+  "T2": {
+   "map_cells_with_ik": 10516,
+   "tested": 1500,
+   "pre_pose_clear": 0,
+   "reasons": {
+    "arm_blocks": 1499,
+    "arm_cabinet": 1500,
+    "tool_cabinet": 1500
+   },
+   "example": null
+  },
+  "T3": {
+   "map_cells_with_ik": 11256,
+   "tested": 1500,
+   "pre_pose_clear": 0,
+   "reasons": {
+    "arm_blocks": 1500,
+    "arm_cabinet": 1500,
+    "tool_cabinet": 1500
+   },
+   "example": null
+  },
+  "T4": {
+   "map_cells_with_ik": 11256,
+   "tested": 1500,
+   "pre_pose_clear": 0,
+   "reasons": {
+    "arm_blocks": 1500,
+    "arm_cabinet": 1500,
+    "tool_cabinet": 1500
+   },
+   "example": null
+  },
+  "T5": {
+   "map_cells_with_ik": 10271,
+   "tested": 1500,
+   "pre_pose_clear": 0,
+   "reasons": {
+    "arm_blocks": 1500,
+    "tool_cabinet": 1500,
+    "arm_cabinet": 154
+   },
+   "example": null
+  },
+  "T6": {
+   "map_cells_with_ik": 10271,
+   "tested": 1500,
+   "pre_pose_clear": 0,
+   "reasons": {
+    "arm_blocks": 1500,
+    "arm_cabinet": 1500,
+    "tool_cabinet": 1500,
+    "robot_stand": 104
+   },
+   "example": null
+  },
+  "T7": {
+   "map_cells_with_ik": 5856,
+   "tested": 1500,
+   "pre_pose_clear": 0,
+   "reasons": {
+    "arm_cabinet": 1500,
+    "tool_cabinet": 1500,
+    "robot_stand": 1
+   },
+   "example": null
+  },
+  "T8": {
+   "map_cells_with_ik": 5844,
+   "tested": 1500,
+   "pre_pose_clear": 0,
+   "reasons": {
+    "arm_cabinet": 1500,
+    "tool_cabinet": 1500,
+    "robot_stand": 1
+   },
+   "example": null
+  },
+  "E1": {
+   "map_cells_with_ik": 11256,
+   "tested": 1500,
+   "pre_pose_clear": 0,
+   "reasons": {
+    "arm_blocks": 1500,
+    "arm_cabinet": 1500,
+    "tool_cabinet": 1500
+   },
+   "example": null
+  },
+  "E2": {
+   "map_cells_with_ik": 4786,
+   "tested": 1500,
+   "pre_pose_clear": 0,
+   "reasons": {
+    "arm_cabinet": 1500,
+    "tool_cabinet": 1500
+   },
+   "example": null
+  }
+ },
+ "yaw180_extra": {
+  "E2": {
+   "target": "E2",
+   "mode": "front",
+   "shelf": 6,
+   "box": "angiolite",
+   "which": "first",
+   "pull_m": 0.1,
+   "yaw180": true,
+   "carton": "angiolite_001",
+   "lift_split_between_phases": false,
+   "candidates_inside_both_reach_maps": 3870,
+   "candidates_fully_evaluated": 150,
+   "full_eval_failures": {
+    "left: L0 home->stage": 95,
+    "left: L0b stage->pre": 55
+   },
+   "feasible": false,
+   "reason": "every map-feasible candidate fails the full path / collision evaluation (see full_eval_failures)",
+   "elapsed": 532.8806183338165
+  }
+ },
+ "moveit_confirmation": {
+  "T3": {
+   "parking": {
+    "best_d": 0.41,
+    "lateral_offset_m": 0.005,
+    "lift": -0.6,
+    "slider_left": -0.005973,
+    "slider_right": 0.005973
+   },
+   "segments": [
+    {
+     "arm": "left",
+     "segment": "L0 home->stage",
+     "kind": "OMPL joint goal",
+     "ok": true,
+     "error": 1,
+     "points": 54,
+     "plan_time_s": 2.79
+    },
+    {
+     "arm": "left",
+     "segment": "L0b stage->pre",
+     "kind": "Cartesian",
+     "fraction": 1.0,
+     "ok": true,
+     "error": 1,
+     "points": 13,
+     "plan_time_s": 0.04
+    },
+    {
+     "arm": "left",
+     "segment": "L1 approach",
+     "kind": "Cartesian",
+     "fraction": 1.0,
+     "ok": true,
+     "error": 1,
+     "points": 7,
+     "plan_time_s": 0.01
+    },
+    {
+     "arm": "left",
+     "segment": "L2 press",
+     "kind": "hold",
+     "ok": true,
+     "plan_time_s": 0.0
+    },
+    {
+     "arm": "left",
+     "segment": "L3 pull",
+     "kind": "Cartesian",
+     "fraction": 1.0,
+     "ok": true,
+     "error": 1,
+     "points": 10,
+     "plan_time_s": 0.02
+    },
+    {
+     "arm": "left",
+     "segment": "L4 retract 100 mm",
+     "kind": "Cartesian",
+     "fraction": 1.0,
+     "ok": true,
+     "error": 1,
+     "points": 7,
+     "plan_time_s": 0.02
+    },
+    {
+     "arm": "left",
+     "segment": "L4b retract to stage",
+     "kind": "Cartesian",
+     "fraction": 1.0,
+     "ok": true,
+     "error": 1,
+     "points": 6,
+     "plan_time_s": 0.01
+    },
+    {
+     "arm": "left",
+     "segment": "L5 ->home",
+     "kind": "OMPL joint goal",
+     "ok": true,
+     "error": 1,
+     "points": 54,
+     "plan_time_s": 3.34
+    },
+    {
+     "arm": "right",
+     "segment": "R0 home->stage",
+     "kind": "OMPL joint goal",
+     "ok": true,
+     "error": 1,
+     "points": 79,
+     "plan_time_s": 2.83
+    },
+    {
+     "arm": "right",
+     "segment": "R1 stage->pre",
+     "kind": "Cartesian",
+     "fraction": 1.0,
+     "ok": true,
+     "error": 1,
+     "points": 7,
+     "plan_time_s": 0.01
+    },
+    {
+     "arm": "right",
+     "segment": "R2 approach 100 mm",
+     "kind": "Cartesian",
+     "fraction": 1.0,
+     "ok": true,
+     "error": 1,
+     "points": 7,
+     "plan_time_s": 0.01
+    },
+    {
+     "arm": "right",
+     "segment": "R3 clamp",
+     "kind": "hold",
+     "ok": true,
+     "plan_time_s": 0.0
+    },
+    {
+     "arm": "right",
+     "segment": "R4 extract",
+     "kind": "Cartesian",
+     "fraction": 1.0,
+     "ok": true,
+     "error": 1,
+     "points": 13,
+     "plan_time_s": 0.04
+    },
+    {
+     "arm": "right",
+     "segment": "R5 lift 50 mm",
+     "kind": "Cartesian",
+     "fraction": 1.0,
+     "ok": true,
+     "error": 1,
+     "points": 6,
+     "plan_time_s": 0.01
+    }
+   ],
+   "all_ok": true
+  },
+  "T8": {
+   "parking": {
+    "best_d": 0.44,
+    "lateral_offset_m": 0.055,
+    "lift": 0.1,
+    "slider_left": -0.005973,
+    "slider_right": 0.005973
+   },
+   "segments": [
+    {
+     "arm": "left",
+     "segment": "L0 home->stage",
+     "kind": "OMPL joint goal",
+     "ok": true,
+     "error": 1,
+     "points": 62,
+     "plan_time_s": 1.66
+    },
+    {
+     "arm": "left",
+     "segment": "L0b stage->pre",
+     "kind": "Cartesian",
+     "fraction": 1.0,
+     "ok": true,
+     "error": 1,
+     "points": 14,
+     "plan_time_s": 0.04
+    },
+    {
+     "arm": "left",
+     "segment": "L1 approach",
+     "kind": "Cartesian",
+     "fraction": 1.0,
+     "ok": true,
+     "error": 1,
+     "points": 7,
+     "plan_time_s": 0.01
+    },
+    {
+     "arm": "left",
+     "segment": "L2 press",
+     "kind": "hold",
+     "ok": true,
+     "plan_time_s": 0.0
+    },
+    {
+     "arm": "left",
+     "segment": "L3 pull",
+     "kind": "Cartesian",
+     "fraction": 1.0,
+     "ok": true,
+     "error": 1,
+     "points": 10,
+     "plan_time_s": 0.02
+    },
+    {
+     "arm": "left",
+     "segment": "L4 retract 100 mm",
+     "kind": "Cartesian",
+     "fraction": 1.0,
+     "ok": true,
+     "error": 1,
+     "points": 8,
+     "plan_time_s": 0.02
+    },
+    {
+     "arm": "left",
+     "segment": "L4b retract to stage",
+     "kind": "Cartesian",
+     "fraction": 1.0,
+     "ok": true,
+     "error": 1,
+     "points": 6,
+     "plan_time_s": 0.01
+    },
+    {
+     "arm": "left",
+     "segment": "L5 ->home",
+     "kind": "OMPL joint goal",
+     "ok": true,
+     "error": 1,
+     "points": 62,
+     "plan_time_s": 0.94
+    },
+    {
+     "arm": "right",
+     "segment": "R0 home->stage",
+     "kind": "OMPL joint goal",
+     "ok": true,
+     "error": 1,
+     "points": 53,
+     "plan_time_s": 1.07
+    },
+    {
+     "arm": "right",
+     "segment": "R1 stage->pre",
+     "kind": "Cartesian",
+     "fraction": 1.0,
+     "ok": true,
+     "error": 1,
+     "points": 6,
+     "plan_time_s": 0.01
+    },
+    {
+     "arm": "right",
+     "segment": "R2 approach 100 mm",
+     "kind": "Cartesian",
+     "fraction": 1.0,
+     "ok": true,
+     "error": 1,
+     "points": 7,
+     "plan_time_s": 0.01
+    },
+    {
+     "arm": "right",
+     "segment": "R3 clamp",
+     "kind": "hold",
+     "ok": true,
+     "plan_time_s": 0.0
+    },
+    {
+     "arm": "right",
+     "segment": "R4 extract",
+     "kind": "Cartesian",
+     "fraction": 1.0,
+     "ok": true,
+     "error": 1,
+     "points": 13,
+     "plan_time_s": 0.03
+    },
+    {
+     "arm": "right",
+     "segment": "R5 lift 50 mm",
+     "kind": "Cartesian",
+     "fraction": 1.0,
+     "ok": true,
+     "error": 1,
+     "points": 5,
+     "plan_time_s": 0.01
+    }
+   ],
+   "all_ok": true
+  }
+ },
+ "common_standoff_scan": {
+  "0.3": [],
+  "0.31": [],
+  "0.32": [],
+  "0.33": [],
+  "0.34": [],
+  "0.35": [
+   "T3",
+   "T4",
+   "E1"
+  ],
+  "0.36": [
+   "T3",
+   "T4",
+   "T5",
+   "T6",
+   "T7",
+   "T8",
+   "E1"
+  ],
+  "0.37": [
+   "T3",
+   "T4",
+   "T5",
+   "T6",
+   "T7",
+   "T8",
+   "E1"
+  ],
+  "0.38": [
+   "T3",
+   "T4",
+   "T5",
+   "T6",
+   "T7",
+   "T8",
+   "E1"
+  ],
+  "0.39": [
+   "T3",
+   "T4",
+   "T5",
+   "T6",
+   "T7",
+   "T8",
+   "E1"
+  ],
+  "0.4": [
+   "T3",
+   "T4",
+   "T5",
+   "T6",
+   "T7",
+   "T8",
+   "E1"
+  ],
+  "0.41": [
+   "T3",
+   "T4",
+   "T5",
+   "T6",
+   "T7",
+   "T8",
+   "E1"
+  ],
+  "0.42": [
+   "T3",
+   "T4",
+   "T5",
+   "T6",
+   "T7",
+   "T8",
+   "E1"
+  ],
+  "0.43": [
+   "T3",
+   "T4",
+   "T5",
+   "T6",
+   "T7",
+   "T8",
+   "E1"
+  ],
+  "0.44": [
+   "T3",
+   "T4",
+   "T5",
+   "T6",
+   "T7",
+   "T8",
+   "E1"
+  ],
+  "0.45": [
+   "T3",
+   "T4",
+   "T5",
+   "T6",
+   "T7",
+   "T8",
+   "E1"
+  ],
+  "0.46": [
+   "T3",
+   "T4",
+   "T5",
+   "T6",
+   "T7",
+   "T8",
+   "E1"
+  ],
+  "0.47": [
+   "T3",
+   "T4",
+   "T5",
+   "T6",
+   "T7",
+   "T8",
+   "E1"
+  ],
+  "0.48": [
+   "T3",
+   "T4",
+   "T5",
+   "T6",
+   "T7",
+   "T8",
+   "E1"
+  ],
+  "0.49": [
+   "T5",
+   "T6",
+   "T7",
+   "T8"
+  ],
+  "0.5": [
+   "T5",
+   "T6",
+   "T7",
+   "T8"
+  ],
+  "0.51": [
+   "T5",
+   "T6",
+   "T7",
+   "T8"
+  ],
+  "0.52": [
+   "T5",
+   "T6",
+   "T7",
+   "T8"
+  ],
+  "0.53": [
+   "T5"
+  ],
+  "0.54": [],
+  "0.55": [],
+  "0.56": []
+ },
+ "common_standoff_m": 0.42,
+ "common_standoff_corner_box_ok": {
+  "T3": true,
+  "T4": true,
+  "T5": true,
+  "T6": true,
+  "T7": false,
+  "T8": true,
+  "E1": true
+ }
+}

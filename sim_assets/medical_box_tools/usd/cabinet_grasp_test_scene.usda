@@ -1,0 +1,304 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    kilogramsPerUnit = 1
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "World" (
+    assetInfo = {
+        string name = "World"
+        string version = "2.0.0"
+    }
+    doc = "Stocked medicine cabinet (referenced, other session) + kinematic carriers for the suction tool (SX) and the right gripper (GR) for tests/test_cabinet_grasp.py. Carrier poses are set by the test per target carton. Cabinet frame: X across, Y into the cabinet (front at y = 0.05 shelf edge), Z up."
+    kind = "component"
+    prepend references = @../../medical_boxes/usd/medicine_cabinet_filled.usda@
+)
+{
+    over "Cabinet"
+    {
+        over "Cabinet"
+        {
+            over "ShelfLip_01" (
+                active = false
+            )
+            {
+            }
+
+            over "Shelf_01"
+            {
+                double3 xformOp:scale = (0.98, 0.35000000000000003, 0.02)
+                double3 xformOp:translate = (0, 0.225, 0.16)
+            }
+
+            over "ShelfLip_02" (
+                active = false
+            )
+            {
+            }
+
+            over "Shelf_02"
+            {
+                double3 xformOp:scale = (0.98, 0.35000000000000003, 0.02)
+                double3 xformOp:translate = (0, 0.225, 0.48)
+            }
+
+            over "ShelfLip_03" (
+                active = false
+            )
+            {
+            }
+
+            over "Shelf_03"
+            {
+                double3 xformOp:scale = (0.98, 0.35000000000000003, 0.02)
+                double3 xformOp:translate = (0, 0.225, 0.73)
+            }
+
+            over "ShelfLip_04" (
+                active = false
+            )
+            {
+            }
+
+            over "Shelf_04"
+            {
+                double3 xformOp:scale = (0.98, 0.35000000000000003, 0.02)
+                double3 xformOp:translate = (0, 0.225, 1.01)
+            }
+
+            over "ShelfLip_05" (
+                active = false
+            )
+            {
+            }
+
+            over "Shelf_05"
+            {
+                double3 xformOp:scale = (0.98, 0.35000000000000003, 0.02)
+                double3 xformOp:translate = (0, 0.225, 1.34)
+            }
+
+            over "ShelfLip_06" (
+                active = false
+            )
+            {
+            }
+
+            over "Shelf_06"
+            {
+                double3 xformOp:scale = (0.98, 0.35000000000000003, 0.02)
+                double3 xformOp:translate = (0, 0.225, 1.65)
+            }
+
+            over "ShelfLip_07" (
+                active = false
+            )
+            {
+            }
+
+            over "Shelf_07"
+            {
+                double3 xformOp:scale = (0.98, 0.35000000000000003, 0.02)
+                double3 xformOp:translate = (0, 0.225, 1.95)
+            }
+        }
+    }
+
+    def Xform "Tools"
+    {
+        def Xform "SX"
+        {
+            def Xform "root" (
+                prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI", "PhysicsArticulationRootAPI"]
+            )
+            {
+                point3f physics:centerOfMass = (0, 0, 0)
+                float3 physics:diagonalInertia = (0.001, 0.001, 0.001)
+                float physics:mass = 1
+                quatf physics:principalAxes = (1, 0, 0, 0)
+            }
+
+            def Xform "stage_body" (
+                prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+            )
+            {
+                point3f physics:centerOfMass = (0, 0, 0)
+                float3 physics:diagonalInertia = (0.001, 0.001, 0.001)
+                float physics:mass = 0.5
+                quatf physics:principalAxes = (1, 0, 0, 0)
+            }
+
+            def Xform "tool" (
+                delete apiSchemas = ["PhysicsArticulationRootAPI"]
+                prepend references = @./left_suction_tool.usda@
+            )
+            {
+                over "joints"
+                {
+                    over "world_anchor" (
+                        active = false
+                    )
+                    {
+                    }
+                }
+            }
+
+            def "joints"
+            {
+                def PhysicsFixedJoint "root_joint"
+                {
+                    rel physics:body1 = </World/Tools/SX/root>
+                    point3f physics:localPos0 = (0, 0, 0)
+                    point3f physics:localPos1 = (0, 0, 0)
+                    quatf physics:localRot0 = (1, 0, 0, 0)
+                    quatf physics:localRot1 = (1, 0, 0, 0)
+                }
+
+                def PhysicsPrismaticJoint "SX_jy" (
+                    prepend apiSchemas = ["PhysicsDriveAPI:linear", "PhysicsJointStateAPI:linear"]
+                )
+                {
+                    float drive:linear:physics:damping = 3000
+                    float drive:linear:physics:maxForce = 300
+                    float drive:linear:physics:stiffness = 100000
+                    float drive:linear:physics:targetPosition = 0
+                    float drive:linear:physics:targetVelocity = 0
+                    uniform token drive:linear:physics:type = "force"
+                    uniform token physics:axis = "Y"
+                    rel physics:body0 = </World/Tools/SX/root>
+                    rel physics:body1 = </World/Tools/SX/stage_body>
+                    point3f physics:localPos0 = (0, 0, 0)
+                    point3f physics:localPos1 = (0, 0, 0)
+                    quatf physics:localRot0 = (1, 0, 0, 0)
+                    quatf physics:localRot1 = (1, 0, 0, 0)
+                    float physics:lowerLimit = -1
+                    float physics:upperLimit = 1
+                    custom float state:linear:physics:position = 0
+                    custom float state:linear:physics:velocity = 0
+                }
+
+                def PhysicsPrismaticJoint "SX_jz" (
+                    prepend apiSchemas = ["PhysicsDriveAPI:linear", "PhysicsJointStateAPI:linear"]
+                )
+                {
+                    float drive:linear:physics:damping = 3000
+                    float drive:linear:physics:maxForce = 300
+                    float drive:linear:physics:stiffness = 100000
+                    float drive:linear:physics:targetPosition = 0
+                    float drive:linear:physics:targetVelocity = 0
+                    uniform token drive:linear:physics:type = "force"
+                    uniform token physics:axis = "Z"
+                    rel physics:body0 = </World/Tools/SX/stage_body>
+                    rel physics:body1 = </World/Tools/SX/tool/base>
+                    point3f physics:localPos0 = (0, 0, 0)
+                    point3f physics:localPos1 = (0, 0, 0)
+                    quatf physics:localRot0 = (1, 0, 0, 0)
+                    quatf physics:localRot1 = (1, 0, 0, 0)
+                    float physics:lowerLimit = -1
+                    float physics:upperLimit = 1
+                    custom float state:linear:physics:position = 0
+                    custom float state:linear:physics:velocity = 0
+                }
+            }
+        }
+
+        def Xform "GR"
+        {
+            def Xform "root" (
+                prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI", "PhysicsArticulationRootAPI"]
+            )
+            {
+                point3f physics:centerOfMass = (0, 0, 0)
+                float3 physics:diagonalInertia = (0.001, 0.001, 0.001)
+                float physics:mass = 1
+                quatf physics:principalAxes = (1, 0, 0, 0)
+            }
+
+            def Xform "stage_body" (
+                prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+            )
+            {
+                point3f physics:centerOfMass = (0, 0, 0)
+                float3 physics:diagonalInertia = (0.001, 0.001, 0.001)
+                float physics:mass = 0.5
+                quatf physics:principalAxes = (1, 0, 0, 0)
+            }
+
+            def Xform "tool" (
+                delete apiSchemas = ["PhysicsArticulationRootAPI"]
+                prepend references = @./right_gripper_tool.usda@
+            )
+            {
+                over "joints"
+                {
+                    over "world_anchor" (
+                        active = false
+                    )
+                    {
+                    }
+                }
+            }
+
+            def "joints"
+            {
+                def PhysicsFixedJoint "root_joint"
+                {
+                    rel physics:body1 = </World/Tools/GR/root>
+                    point3f physics:localPos0 = (0, 0, 0)
+                    point3f physics:localPos1 = (0, 0, 0)
+                    quatf physics:localRot0 = (1, 0, 0, 0)
+                    quatf physics:localRot1 = (1, 0, 0, 0)
+                }
+
+                def PhysicsPrismaticJoint "GR_jy" (
+                    prepend apiSchemas = ["PhysicsDriveAPI:linear", "PhysicsJointStateAPI:linear"]
+                )
+                {
+                    float drive:linear:physics:damping = 3000
+                    float drive:linear:physics:maxForce = 300
+                    float drive:linear:physics:stiffness = 100000
+                    float drive:linear:physics:targetPosition = 0
+                    float drive:linear:physics:targetVelocity = 0
+                    uniform token drive:linear:physics:type = "force"
+                    uniform token physics:axis = "Y"
+                    rel physics:body0 = </World/Tools/GR/root>
+                    rel physics:body1 = </World/Tools/GR/stage_body>
+                    point3f physics:localPos0 = (0, 0, 0)
+                    point3f physics:localPos1 = (0, 0, 0)
+                    quatf physics:localRot0 = (1, 0, 0, 0)
+                    quatf physics:localRot1 = (1, 0, 0, 0)
+                    float physics:lowerLimit = -1
+                    float physics:upperLimit = 1
+                    custom float state:linear:physics:position = 0
+                    custom float state:linear:physics:velocity = 0
+                }
+
+                def PhysicsPrismaticJoint "GR_jz" (
+                    prepend apiSchemas = ["PhysicsDriveAPI:linear", "PhysicsJointStateAPI:linear"]
+                )
+                {
+                    float drive:linear:physics:damping = 3000
+                    float drive:linear:physics:maxForce = 300
+                    float drive:linear:physics:stiffness = 100000
+                    float drive:linear:physics:targetPosition = 0
+                    float drive:linear:physics:targetVelocity = 0
+                    uniform token drive:linear:physics:type = "force"
+                    uniform token physics:axis = "Z"
+                    rel physics:body0 = </World/Tools/GR/stage_body>
+                    rel physics:body1 = </World/Tools/GR/tool/base>
+                    point3f physics:localPos0 = (0, 0, 0)
+                    point3f physics:localPos1 = (0, 0, 0)
+                    quatf physics:localRot0 = (1, 0, 0, 0)
+                    quatf physics:localRot1 = (1, 0, 0, 0)
+                    float physics:lowerLimit = -1
+                    float physics:upperLimit = 1
+                    custom float state:linear:physics:position = 0
+                    custom float state:linear:physics:velocity = 0
+                }
+            }
+        }
+    }
+}
+

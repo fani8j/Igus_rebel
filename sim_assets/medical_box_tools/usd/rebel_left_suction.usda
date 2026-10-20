@@ -1,0 +1,66 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    kilogramsPerUnit = 1
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "World" (
+    assetInfo = {
+        string name = "World"
+        string version = "2.0.0"
+    }
+    customData = {
+        string rebel_usd = "/home/farhan/robot_remote/igus_rebel_sim/rebel_6dof.usd"
+    }
+    doc = "Single ReBeL (referenced from /home/farhan/robot_remote/igus_rebel_sim/rebel_6dof.usd, other session) with the left_suction_tool fixed to link_8 (= ReBeL link6) in the robot articulation. Robot at its USD configuration (all joints 0)."
+    kind = "component"
+)
+{
+    def PhysicsScene "PhysicsScene"
+    {
+        vector3f physics:gravityDirection = (0, 0, -1)
+        float physics:gravityMagnitude = 9.81
+    }
+
+    def Xform "rebel" (
+        prepend references = @/home/farhan/robot_remote/igus_rebel_sim/rebel_6dof.usd@
+    )
+    {
+        over "root_joint"
+        {
+            over "joints"
+            {
+                def PhysicsFixedJoint "link_8_to_left_suction_tool"
+                {
+                    rel physics:body0 = </World/rebel/root_joint/link_8>
+                    rel physics:body1 = </World/left_suction_tool/base>
+                    point3f physics:localPos0 = (0, 0, 0)
+                    point3f physics:localPos1 = (0, 0, 0)
+                    quatf physics:localRot0 = (1, 0, 0, 0)
+                    quatf physics:localRot1 = (1, 0, 0, 0)
+                }
+            }
+        }
+    }
+
+    def Xform "left_suction_tool" (
+        delete apiSchemas = ["PhysicsArticulationRootAPI"]
+        prepend references = @./left_suction_tool.usda@
+    )
+    {
+        matrix4d xformOp:transform = ( (0.6087614911895116, 0, -0.7933532925782323, 0), (0, 1, 0, 0), (0.7933532925782323, 0, 0.6087614911895116, 0), (0.4653184115886688, 0, 0.673498809337616, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+
+        over "joints"
+        {
+            over "world_anchor" (
+                active = false
+            )
+            {
+            }
+        }
+    }
+}
+

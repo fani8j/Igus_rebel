@@ -1,0 +1,186 @@
+{
+ "16 mm (box 3, idx 2)": {
+  "label": "16 mm (box 3, idx 2)",
+  "thickness_mm": 16.0,
+  "mimic": true,
+  "open_q_mm": [
+   23.999977856874466,
+   23.999981582164764
+  ],
+  "open_gap_mm": 55.99995943903923,
+  "final_gap_mm": 16.004178758710623,
+  "min_gap_mm_during_close": 15.91978408396244,
+  "gap_jitter_last_0.5s_um": 37.97002136707306,
+  "max_finger_speed_mm_s": 40.000226348638535,
+  "grip_force_measured_N": [
+   -24.40943717956543,
+   -24.19055938720703
+  ],
+  "grip_force_hold_mean_N": [
+   24.38934243520101,
+   24.210661760965984
+  ],
+  "grip_force_hold_max_N": [
+   24.440753936767578,
+   24.24532699584961
+  ],
+  "max_finger_speed_ok": true,
+  "carton_lift_mm": 49.99975860118866,
+  "gripper_lift_mm": 49.9858558177948,
+  "slip_mm": -0.013902783393859863,
+  "carton_z_after_release_mm": 109.99999940395355
+ },
+ "12 mm (box 5, idx 3)": {
+  "label": "12 mm (box 5, idx 3)",
+  "thickness_mm": 12.0,
+  "mimic": true,
+  "open_q_mm": [
+   23.999977856874466,
+   23.999983444809914
+  ],
+  "open_gap_mm": 55.99996130168438,
+  "final_gap_mm": 12.000213230028749,
+  "min_gap_mm_during_close": 11.898098513484001,
+  "gap_jitter_last_0.5s_um": 7.60052353143692,
+  "max_finger_speed_mm_s": 40.000226348638535,
+  "grip_force_measured_N": [
+   -24.38250732421875,
+   -24.217483520507812
+  ],
+  "grip_force_hold_mean_N": [
+   24.19462340672811,
+   24.40537796020508
+  ],
+  "grip_force_hold_max_N": [
+   24.444242477416992,
+   24.863689422607422
+  ],
+  "max_finger_speed_ok": true,
+  "carton_lift_mm": 50.00801384449005,
+  "gripper_lift_mm": 50.00355839729309,
+  "slip_mm": -0.004455447196960449,
+  "carton_z_after_release_mm": 115.0001809000969
+ },
+ "checks": [
+  [
+   "[16 mm (box 3, idx 2)] open: pad gap 56 mm +-0.5",
+   true,
+   "56.0"
+  ],
+  [
+   "[16 mm (box 3, idx 2)] descent did not disturb the carton (< 1 mm)",
+   true,
+   ""
+  ],
+  [
+   "[16 mm (box 3, idx 2)] final pad gap = carton thickness 16 mm +-0.5",
+   true,
+   "16.004"
+  ],
+  [
+   "[16 mm (box 3, idx 2)] carton centred between the fingers (|q_left - q_right| < 0.3 mm)",
+   true,
+   "-0.0"
+  ],
+  [
+   "[16 mm (box 3, idx 2)] no overshoot below the carton (min gap within 0.5 mm of final)",
+   true,
+   "15.92"
+  ],
+  [
+   "[16 mm (box 3, idx 2)] no jitter (gap peak-to-peak over the last 0.5 s < 50 um)",
+   true,
+   "37.97"
+  ],
+  [
+   "[16 mm (box 3, idx 2)] grip force per finger: hold mean [24.39, 24.21] N = 24.3 N +-2 %, max sample [24.44, 24.25] N <= 24.3 x 1.04 (per-finger solver noise, the sum is the hard limit below), and >= 11 N",
+   true,
+   ""
+  ],
+  [
+   "[16 mm (box 3, idx 2)] never above the limit: sum of both fingers <= 2 x 24.3 N x 1.02",
+   true,
+   "48.6"
+  ],
+  [
+   "[16 mm (box 3, idx 2)] finger speed <= 45 mm/s (max 40.0)",
+   true,
+   ""
+  ],
+  [
+   "[16 mm (box 3, idx 2)] lifted 50 mm: slip <= 2 mm",
+   true,
+   "{'carton': 50.0, 'gripper': 49.99, 'slip': -0.014}"
+  ],
+  [
+   "[16 mm (box 3, idx 2)] open again: pad gap 56 mm +-0.5",
+   true,
+   "56.0"
+  ],
+  [
+   "[16 mm (box 3, idx 2)] released: carton stays on the shelf floor while the gripper rises (z = h/2 +-1 mm)",
+   true,
+   "0.11"
+  ],
+  [
+   "[12 mm (box 5, idx 3)] open: pad gap 56 mm +-0.5",
+   true,
+   "56.0"
+  ],
+  [
+   "[12 mm (box 5, idx 3)] descent did not disturb the carton (< 1 mm)",
+   true,
+   ""
+  ],
+  [
+   "[12 mm (box 5, idx 3)] final pad gap = carton thickness 12 mm +-0.5",
+   true,
+   "12.0"
+  ],
+  [
+   "[12 mm (box 5, idx 3)] carton centred between the fingers (|q_left - q_right| < 0.3 mm)",
+   true,
+   "-0.001"
+  ],
+  [
+   "[12 mm (box 5, idx 3)] no overshoot below the carton (min gap within 0.5 mm of final)",
+   true,
+   "11.898"
+  ],
+  [
+   "[12 mm (box 5, idx 3)] no jitter (gap peak-to-peak over the last 0.5 s < 50 um)",
+   true,
+   "7.6"
+  ],
+  [
+   "[12 mm (box 5, idx 3)] grip force per finger: hold mean [24.19, 24.41] N = 24.3 N +-2 %, max sample [24.44, 24.86] N <= 24.3 x 1.04 (per-finger solver noise, the sum is the hard limit below), and >= 11 N",
+   true,
+   ""
+  ],
+  [
+   "[12 mm (box 5, idx 3)] never above the limit: sum of both fingers <= 2 x 24.3 N x 1.02",
+   true,
+   "48.6"
+  ],
+  [
+   "[12 mm (box 5, idx 3)] finger speed <= 45 mm/s (max 40.0)",
+   true,
+   ""
+  ],
+  [
+   "[12 mm (box 5, idx 3)] lifted 50 mm: slip <= 2 mm",
+   true,
+   "{'carton': 50.01, 'gripper': 50.0, 'slip': -0.004}"
+  ],
+  [
+   "[12 mm (box 5, idx 3)] open again: pad gap 56 mm +-0.5",
+   true,
+   "56.0"
+  ],
+  [
+   "[12 mm (box 5, idx 3)] released: carton stays on the shelf floor while the gripper rises (z = h/2 +-1 mm)",
+   true,
+   "0.115"
+  ]
+ ]
+}

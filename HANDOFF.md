@@ -5,6 +5,56 @@
 > (`ROS_LOCALHOST_ONLY=1`, unused `ROS_DOMAIN_ID`) or against a fake CRI server, not on the
 > real arm.
 
+## 0. Medical carton shelf-pick tooling (2026-10-05, vacuum 2026-10-13, final suction tool v5 2026-10-14, Isaac Sim study + report 2026-10-15, branch `mackay`)
+
+- `cad/medical_box_tooling_v1/`: shared inputs `common/params.py` and handoff poses `common/handoff.py`.
+  - `suction_tool_v5/` (2026-10-14): the FINAL left tool; integration and the USD now use it.
+    - One printed PA12-CF body and one camera (Gemini 305). The SE4710 and PL3307 were dropped at the operator's request; barcodes are decoded in software from the colour stream.
+    - Same pads (ZP2-T4030WNK10-B5 + KQ2L04-M5 elbows), positions and lip z 159.
+    - 0.204 kg; 0 % of the camera FOV blocked; aim depth 91 mm.
+    - Handoff clearances are identical to v3. The URDF adds `pad_{1,2,3}_suction_frame` and `wrist_camera_color_optical_frame`.
+    - Pad nut torque on the printed bar is limited to about 0.3 N·m (README).
+    - `--tool suction_tool` / `SUCTION_TOOL=suction_tool` reruns v3. `suction_tool/` (v3) and `suction_tool_v4_concept/` are kept for history.
+  - Vacuum source (2026-10-14): the AMR has no room (robot stand), and no pump or pads are on hand yet.
+    - Recommended: one Schmalz ECBPi 12 24V-DC M12-8 (10.03.01.00314) on the stand's lift-carriage bracket pocket (P1, `robot_stand/`). It has a built-in sensor, part-present output and vent valve.
+    - `vacuum_sim/pump_sim.py`: in a tight shelf the ECBPi tolerates about 2.4 L/min leakage per pad (SLZ-100 0.25, 2 x Thomas 5.8).
+    - The 2-pump stand box design is paused; `vacuum_module/` (KNF on the AMR) is superseded.
+  - `robot_stand/`: analysis of the customer stand STEP (lift ZLW-20120 1250 mm, both arms on a 660 mm X rail on the lift carriage). Up axis and left/right are inferred, not confirmed.
+  - `suction_tool/`: left arm, v3. 3 x SMC ZP2-T4030WNK10-04 into an on-tool 3-to-1 collector, one ⌀6 trunk; vacuum from the electric pump module on the AMR, about 2 m of trunk (gate −40 kPa at the switch / 150 ms; model in `verify.py` 5c); Zebra SE4710 + PL3307, Gemini 305; 3 printed parts, 0.278 kg. Lip at link6 z = 159 mm.
+  - `gripper_tool/`: right arm, v3. SMC LEHF20K2-48 in-line, fingers 8/56 mm with 8 mm chamfers, fixed 3 mm centre top-stop. Registration is position-based (ReBeL has no force sensing): pre-close to t + 4 mm, descend to a computed pose with the stop 4 mm above the top edge, clamp at 100 %. README has the numbered procedure.
+  - `vacuum_module/` (2026-10-13): the robot stands on an AMR in the hallway to the operating room, so there is no compressed air.
+    - KNF N 838 KN.29DC-B 24 V brushless pump, dust filter, SMC ZSE20B switch, N.C. vent valve, HEPA exhaust filter, in a lined printed box (4 PETG parts).
+    - 240 × 186 × 220 mm, 4.5 kg; needs a 40 mm fan.
+    - Part of the pump drawing data and some small-part envelopes are ASSUMED (README).
+    - Alternatives if bench test 0 shows low leakage: Schmalz ECBPi; 2 × Thomas 1520VDP. Datasheets are in `shelf_pick_research/vacuum/` on the external drive.
+  - `integration/`: handoff clearance check, `handoff_check.py`, ~40 s. It needs python-fcl, which is in the external drive's `scratch_integration/pylib`.
+- Each tool folder has:
+  - parametric cadquery code, rebuilt with the external-drive CAD venv;
+  - STEP/STL files;
+  - a URDF xacro;
+  - collision meshes;
+  - `data/verify.json` and a README with the parts list and assembly order.
+- `sim_assets/medical_box_tools/`: USD for both tools and `shelf_handoff_scene.usda`, which references the box-3d session's carton USDs. `tools/verify_tool_usd.py` passes 82/82 (v5 left tool).
+- Isaac Sim 5.1 study (2026-10-15), simulation only:
+  - `tests/test_cabinet_grasp_robot.py`: full dual-arm + lift replay in `usd/cabinet_robot_test_scene.usda`; plans from `tools/export_plan.py` (`data/plans/`), kinematics in `tools/robot_kin.py`, reach/parking in `tools/parking.py` / `parking_study.py`. Results in `tests/results/` (`cabinet_grasp_robot_summary.md`).
+  - Front grasp (suction pulls 100 mm, gripper grasps from the front) passes for the 7 tested cartons on shelves 3-6, one run each. Top-down grasp fails (arm hits stock above / top panel). Shelf 1 unreachable (116-195 mm short); shelf 2 near miss (24 mm short, pad touches the neighbour) - see `tools/closest_attempt.py`, `tests/results/unreachable_closest.json`.
+  - E2 (first carton at the side wall): a longer/asymmetric suction tool does not help (`tools/e2_study/`, `tests/results/e2_longer_tool_study.md`); options are 25-33 mm wall gap, hand pick, or an angled tool.
+  - Suction holding force was never challenged (most loaded pad <= 0.74 N vs ~5.8 N software release limit). Cycle 45-47 s sequential, 38-41 s overlapped.
+  - Videos (3 views + tiled, closest attempts, highlight reel): external drive `scratch_usd/videos/robot_20261015/`; old carrier runs in `carrier_20261015/`. `--header` restores the top info bar.
+- Report: `cad/medical_box_tooling_v1/report/medicine_shelf_pick_report.html` (local, light mode, three.js viewers; fact-checked + reviewed by both advisors). The MP4s in `report/media/` are git-ignored; copy them per `report/media/VIDEOS.md`. AMR content was removed at the operator's request (the AMR is another team's). The old hosted page https://claude.ai/artifact/FUocA26sA5XpZEFZQAhZXa is outdated; the operator will delete it.
+- ECBPi part number corrected to 10.03.01.00314 (00364 is the TB-8 variant).
+- Open items:
+  - Right-arm camera not decided.
+  - Box masses and pad friction are not measured (0.5 is assumed).
+  - The pad fitting height (14.7 mm) is read from a catalog sketch; check it on the first parts.
+  - Bench tests before printing: `cad/medical_box_tooling_v1/BENCH_TEST_PLAN.md`. Test 0 (pad leakage on carton) decides the pump; test 11 covers noise and heat of the module.
+  - Pump noise (no dB(A) published), AMR mounting pattern and 24 V aux budget (2.3 A peak), and the IO for the switch, vent valve and pump speed are still to assign.
+  - The handoff check has not been re-run against the medicine-cabinet USD (shelf clear heights 230-310 mm).
+  - Spine tilt and shelf lean are not modelled.
+  - The ECBPi fit at P1 needs the Schmalz CAD; the report's 3D pump viewer has not been checked in a real browser.
+  - No real holding-force, leakage or combined-error test yet (bench tests).
+  - `gripper_tool/meshes/collision/finger_*_ledge.stl` are stale and unused.
+
 ## 1. Current state (2026-09-27)
 
 - Branch `hcut-path-consistency`, HEAD `2eb8bd0` (last commit). The P0/P1/P2 hardening

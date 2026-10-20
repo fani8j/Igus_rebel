@@ -1,0 +1,137 @@
+[
+ {
+  "detach_force_N": 66.79999999999923,
+  "limit_coaxial_N": 0.93873,
+  "limit_shear_N": 3.6047000000000002,
+  "n": 3,
+  "kpa": 25,
+  "direction": "coaxial",
+  "rate": 2.0,
+  "cal": [
+   0.3237,
+   2.486
+  ],
+  "ratio_to_n_x_limit": 23.719990483596362,
+  "total_vs_physical": 7.678160919540142
+ },
+ {
+  "detach_force_N": 4.343749999999914,
+  "limit_coaxial_N": 0.93873,
+  "limit_shear_N": 3.6047000000000002,
+  "n": 3,
+  "kpa": 25,
+  "direction": "shear_x",
+  "rate": 0.5,
+  "cal": [
+   0.3237,
+   2.486
+  ],
+  "ratio_to_n_x_limit": 0.40167466548301883,
+  "total_vs_physical": 0.9985632183907849
+ },
+ {
+  "detach_force_N": 5.156249999999868,
+  "limit_coaxial_N": 0.93873,
+  "limit_shear_N": 3.6047000000000002,
+  "n": 3,
+  "kpa": 25,
+  "direction": "shear_y",
+  "rate": 0.5,
+  "cal": [
+   0.3237,
+   2.486
+  ],
+  "ratio_to_n_x_limit": 0.4768080561489045,
+  "total_vs_physical": 1.1853448275861767
+ },
+ {
+  "detach_force_N": 132.69166666671032,
+  "limit_coaxial_N": 1.87746,
+  "limit_shear_N": 7.2094000000000005,
+  "n": 3,
+  "kpa": 50,
+  "direction": "coaxial",
+  "rate": 2.0,
+  "cal": [
+   0.3237,
+   2.486
+  ],
+  "ratio_to_n_x_limit": 23.55872058822564,
+  "total_vs_physical": 7.6259578544086395
+ },
+ {
+  "detach_force_N": 8.691666666666334,
+  "limit_coaxial_N": 1.87746,
+  "limit_shear_N": 7.2094000000000005,
+  "n": 3,
+  "kpa": 50,
+  "direction": "shear_x",
+  "rate": 0.5,
+  "cal": [
+   0.3237,
+   2.486
+  ],
+  "ratio_to_n_x_limit": 0.40186731520266755,
+  "total_vs_physical": 0.9990421455938316
+ },
+ {
+  "detach_force_N": 10.329166666666241,
+  "limit_coaxial_N": 1.87746,
+  "limit_shear_N": 7.2094000000000005,
+  "n": 3,
+  "kpa": 50,
+  "direction": "shear_y",
+  "rate": 0.5,
+  "cal": [
+   0.3237,
+   2.486
+  ],
+  "ratio_to_n_x_limit": 0.47757865502752156,
+  "total_vs_physical": 1.1872605363984186
+ },
+ {
+  "detach_force_N": 199.17499999998319,
+  "limit_coaxial_N": 2.8161899999999997,
+  "limit_shear_N": 10.8141,
+  "n": 3,
+  "kpa": 75,
+  "direction": "coaxial",
+  "rate": 2.0,
+  "cal": [
+   0.3237,
+   2.486
+  ],
+  "ratio_to_n_x_limit": 23.57499553178623,
+  "total_vs_physical": 7.631226053639203
+ },
+ {
+  "detach_force_N": 13.035416666666087,
+  "limit_coaxial_N": 2.8161899999999997,
+  "limit_shear_N": 10.8141,
+  "n": 3,
+  "kpa": 75,
+  "direction": "shear_x",
+  "rate": 0.5,
+  "cal": [
+   0.3237,
+   2.486
+  ],
+  "ratio_to_n_x_limit": 0.4018030986294463,
+  "total_vs_physical": 0.9988825031928037
+ },
+ {
+  "detach_force_N": 15.504166666665947,
+  "limit_coaxial_N": 2.8161899999999997,
+  "limit_shear_N": 10.8141,
+  "n": 3,
+  "kpa": 75,
+  "direction": "shear_y",
+  "rate": 0.5,
+  "cal": [
+   0.3237,
+   2.486
+  ],
+  "ratio_to_n_x_limit": 0.4778997378936125,
+  "total_vs_physical": 1.188058748403521
+ }
+]

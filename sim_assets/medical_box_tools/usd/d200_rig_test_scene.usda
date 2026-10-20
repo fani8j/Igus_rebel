@@ -1,0 +1,47 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    kilogramsPerUnit = 1
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "World" (
+    assetInfo = {
+        string name = "World"
+        string version = "2.0.0"
+    }
+    doc = "D200 dual-arm medical rig (static AMR placeholder) on a ground plane. Needs the carb settings /physics/collisionCylinderCustomGeometry=true and /physics/collisionApproximateCylinders=false (cylinder tyres) and CPU physics."
+    kind = "component"
+)
+{
+    def PhysicsScene "PhysicsScene" (
+        prepend apiSchemas = ["PhysxSceneAPI"]
+    )
+    {
+        vector3f physics:gravityDirection = (0, 0, -1)
+        float physics:gravityMagnitude = 9.81
+        bool physxScene:enableGPUDynamics = 0
+        bool physxScene:enableSceneQuerySupport = 1
+        uniform token physxScene:solverType = "TGS"
+        uint physxScene:timeStepsPerSecond = 240
+    }
+
+    def Cube "Ground" (
+        prepend apiSchemas = ["PhysicsCollisionAPI"]
+    )
+    {
+        color3f[] primvars:displayColor = [(0.35, 0.37, 0.4)]
+        double size = 1
+        float3 xformOp:scale = (40, 40, 0.1)
+        double3 xformOp:translate = (0, 0, -0.05)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+    }
+
+    def Xform "D200" (
+        prepend references = @./d200_dual_arm_medical.usda@
+    )
+    {
+    }
+}
+

@@ -1,0 +1,2118 @@
+{
+ "interference": {
+  "parts": [
+   "carrier",
+   "camera_arm",
+   "scanner_arm",
+   "pad_L",
+   "nut_front_L",
+   "washer_L",
+   "nut_rear_L",
+   "tube_L",
+   "pad_M",
+   "nut_front_M",
+   "washer_M",
+   "nut_rear_M",
+   "tube_M",
+   "pad_R",
+   "nut_front_R",
+   "washer_R",
+   "nut_rear_R",
+   "tube_R",
+   "collector",
+   "trunk_tube",
+   "scanner_se4710",
+   "decoder_pl3307",
+   "camera_gemini305"
+  ],
+  "n_pairs": 253,
+  "pairs_with_overlap": [],
+  "max_overlap_mm3": 0.0,
+  "matrix_mm3": [
+   [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  ],
+  "pairs_closer_than_3mm": [
+   [
+    "carrier",
+    "camera_arm",
+    0.0
+   ],
+   [
+    "carrier",
+    "scanner_arm",
+    0.0
+   ],
+   [
+    "carrier",
+    "washer_L",
+    0.0
+   ],
+   [
+    "carrier",
+    "washer_M",
+    0.0
+   ],
+   [
+    "carrier",
+    "washer_R",
+    0.0
+   ],
+   [
+    "scanner_arm",
+    "scanner_se4710",
+    0.0
+   ],
+   [
+    "pad_L",
+    "tube_L",
+    0.0
+   ],
+   [
+    "washer_L",
+    "nut_rear_L",
+    0.0
+   ],
+   [
+    "tube_L",
+    "collector",
+    0.0
+   ],
+   [
+    "pad_M",
+    "tube_M",
+    0.0
+   ],
+   [
+    "washer_M",
+    "nut_rear_M",
+    0.0
+   ],
+   [
+    "tube_M",
+    "collector",
+    0.0
+   ],
+   [
+    "pad_R",
+    "tube_R",
+    0.0
+   ],
+   [
+    "washer_R",
+    "nut_rear_R",
+    0.0
+   ],
+   [
+    "tube_R",
+    "collector",
+    0.0
+   ],
+   [
+    "collector",
+    "trunk_tube",
+    0.0
+   ],
+   [
+    "pad_L",
+    "nut_front_L",
+    0.05
+   ],
+   [
+    "pad_L",
+    "nut_rear_L",
+    0.05
+   ],
+   [
+    "pad_M",
+    "nut_front_M",
+    0.05
+   ],
+   [
+    "pad_M",
+    "nut_rear_M",
+    0.05
+   ],
+   [
+    "pad_R",
+    "nut_front_R",
+    0.05
+   ],
+   [
+    "pad_R",
+    "nut_rear_R",
+    0.05
+   ],
+   [
+    "carrier",
+    "nut_front_L",
+    0.125
+   ],
+   [
+    "carrier",
+    "nut_front_M",
+    0.125
+   ],
+   [
+    "carrier",
+    "nut_front_R",
+    0.125
+   ],
+   [
+    "carrier",
+    "tube_L",
+    0.15
+   ],
+   [
+    "carrier",
+    "tube_M",
+    0.15
+   ],
+   [
+    "carrier",
+    "tube_R",
+    0.15
+   ],
+   [
+    "carrier",
+    "collector",
+    0.2
+   ],
+   [
+    "scanner_arm",
+    "decoder_pl3307",
+    0.2
+   ],
+   [
+    "carrier",
+    "decoder_pl3307",
+    0.25
+   ],
+   [
+    "carrier",
+    "pad_L",
+    0.3
+   ],
+   [
+    "carrier",
+    "pad_M",
+    0.3
+   ],
+   [
+    "carrier",
+    "pad_R",
+    0.3
+   ],
+   [
+    "pad_L",
+    "washer_L",
+    0.3
+   ],
+   [
+    "pad_M",
+    "washer_M",
+    0.3
+   ],
+   [
+    "pad_R",
+    "washer_R",
+    0.3
+   ],
+   [
+    "camera_arm",
+    "camera_gemini305",
+    0.305
+   ],
+   [
+    "carrier",
+    "trunk_tube",
+    0.35
+   ],
+   [
+    "carrier",
+    "nut_rear_L",
+    1.0
+   ],
+   [
+    "carrier",
+    "nut_rear_M",
+    1.0
+   ],
+   [
+    "carrier",
+    "nut_rear_R",
+    1.0
+   ]
+  ],
+  "note": "screws, inserts and zip ties are not modelled"
+ },
+ "keepout": {
+  "slab_above_lip_minus_25_parts": [
+   "pad_L",
+   "pad_M",
+   "pad_R"
+  ],
+  "ok_only_pads": true,
+  "slab_lip_minus_40_to_minus_25_parts": [
+   {
+    "part": "carrier",
+    "vol": 42820.2,
+    "y": [
+     -12.0,
+     12.0
+    ],
+    "x": [
+     -72.0,
+     72.0
+    ],
+    "z": [
+     119.0,
+     133.5
+    ]
+   },
+   {
+    "part": "pad_L",
+    "vol": 1141.3,
+    "y": [
+     -4.95,
+     4.95
+    ],
+    "x": [
+     -64.95,
+     -55.05
+    ],
+    "z": [
+     119.0,
+     134.0
+    ]
+   },
+   {
+    "part": "nut_front_L",
+    "vol": 273.6,
+    "y": [
+     -7.0,
+     7.0
+    ],
+    "x": [
+     -68.08,
+     -51.92
+    ],
+    "z": [
+     130.5,
+     133.5
+    ]
+   },
+   {
+    "part": "pad_M",
+    "vol": 1141.3,
+    "y": [
+     -4.95,
+     4.95
+    ],
+    "x": [
+     -4.95,
+     4.95
+    ],
+    "z": [
+     119.0,
+     134.0
+    ]
+   },
+   {
+    "part": "nut_front_M",
+    "vol": 273.6,
+    "y": [
+     -7.0,
+     7.0
+    ],
+    "x": [
+     -8.08,
+     8.08
+    ],
+    "z": [
+     130.5,
+     133.5
+    ]
+   },
+   {
+    "part": "pad_R",
+    "vol": 1141.3,
+    "y": [
+     -4.95,
+     4.95
+    ],
+    "x": [
+     55.05,
+     64.95
+    ],
+    "z": [
+     119.0,
+     134.0
+    ]
+   },
+   {
+    "part": "nut_front_R",
+    "vol": 273.6,
+    "y": [
+     -7.0,
+     7.0
+    ],
+    "x": [
+     51.92,
+     68.08
+    ],
+    "z": [
+     130.5,
+     133.5
+    ]
+   }
+  ],
+  "carrier_in_slab_bbox": {
+   "x": [
+    -72.00000010000001,
+    72.00000010000001
+   ],
+   "y": [
+    -12.000000100000014,
+    12.000000100000014
+   ],
+   "width_y": 24.000000200000027,
+   "z": [
+    119.0001,
+    133.50000010000002
+   ]
+  },
+  "carrier_in_slab_volume_outside_bracket_stadium_mm3": 0.0,
+  "ok_bracket_width_le_24": true,
+  "ok_bracket_abs_y_le_12": true,
+  "non_pad_parts_above_z_lip_minus_40_mm": {},
+  "min_margin_below_z_lip_minus_40_mm": {
+   "washer_L": -0.01,
+   "washer_M": -0.01,
+   "washer_R": -0.01,
+   "nut_rear_L": 1.0,
+   "nut_rear_M": 1.0,
+   "nut_rear_R": 1.0
+  },
+  "note": "parts in the middle slab: carrier (bracket), pads and their front nuts (the nut is captured inside the bracket pocket); washer + rear nut start at z_lip-40; the two flange-screw access holes pass through the bracket (material removed only)",
+  "pass": true
+ },
+ "neighbours": {
+  "max_abs_y_of_tool_geometry_within_15mm_of_lip_plane": 4.0,
+  "clearance_to_neighbour_face_mm": {
+   "1": 3.5,
+   "2": 4.0,
+   "3": 4.0,
+   "4": 4.0,
+   "5": 2.0
+  },
+  "note": "neighbour spines may stand 15 mm proud; this is tool geometry with z > z_lip-15; lean +-10 deg about z is followed by rolling the tool"
+ },
+ "camera": {
+  "pose_front_face_centre_mm": [
+   0.0,
+   76.29439238195569,
+   104.78427178795341
+  ],
+  "optical_axis": [
+   0.0,
+   -0.6293203910498374,
+   0.7771459614569709
+  ],
+  "tilt_deg_about_x": 39.0,
+  "axis_passes_aim_point_mm": [
+   0.0,
+   0.0,
+   199.0
+  ],
+  "axis_miss_distance_mm": 7.105427357601002e-15,
+  "lips_min_margin_deg": {
+   "horizontal": 3.6134287982539846,
+   "vertical": 16.064517251195653
+  },
+  "required_margin_deg": 3.0,
+  "range_front_face_to_middle_lip_mm": 93.59583054011713,
+  "axial_range_mm": 90.14715107616286,
+  "good_min_mm": 90.0,
+  "hard_min_mm": 50.0,
+  "visibility_pct_all_samples": 85.71428571428572,
+  "visibility_pct_excluding_points_covered_by_a_pad": 100.0,
+  "blocked_samples_not_pad_footprint": [],
+  "n_ray_samples": 315,
+  "highest_point_z": 116.99977613203721,
+  "limit_z": 119.0,
+  "pass_": true
+ },
+ "scanner": {
+  "window_centre_mm": [
+   0.0,
+   -31.1867536226639,
+   111.5
+  ],
+  "axis": [
+   0.0,
+   0.20791169081775934,
+   0.9781476007338057
+  ],
+  "tilt_deg_about_x": 12.0,
+  "crossing_point_y0_mm": [
+   0.0,
+   0.0,
+   258.2221401100709
+  ],
+  "distance_window_to_y0_crossing_mm": 150.0,
+  "required_standoff_mm": 150.0,
+  "crossing_z_above_lip_plane_mm": 99.22214011007088,
+  "window_behind_lip_plane_mm": 47.5,
+  "required_window_behind_lip_mm": 40.0,
+  "highest_scanner_assembly_z": 115.00000010000002,
+  "limit_z": 119.0,
+  "fov_deg": [
+   42.0,
+   28.0
+  ],
+  "fov_assumption": "42 deg along link6 X (engine long axis), 28 deg across [ASSUMED orientation]",
+  "n_rays": 441,
+  "n_rays_clipped_within_300mm": 0,
+  "pct_clipped": 0.0,
+  "clipped_by_part": {},
+  "pass_": true
+ },
+ "decoder": {
+  "engine_rear_flex_exit_mm": [
+   0.0,
+   -34.0351437868672,
+   98.09937786994686
+  ],
+  "farthest_board_corner_distance_mm": 32.03074969465368,
+  "nearest_board_corner_distance_mm": 21.25886252320274,
+  "flex_reach_mm": 89.4,
+  "slack_over_straight_line_mm": 57.36925030534633,
+  "required_slack_mm": 10.0,
+  "pass_": true,
+  "note": "straight line from the engine rear-face centre to the farthest corner of the board (connector position on the PL3307 is not known)",
+  "pocket_mm": {
+   "x": [
+    -19.95,
+    19.95
+   ],
+   "y": [
+    -39.41,
+    -12.0
+   ],
+   "z": [
+    84.84771033986802,
+    91.64771033986801
+   ]
+  }
+ },
+ "buffer_stroke": {
+  "stroke_mm": 10.0,
+  "steps_checked": 11,
+  "collisions_moving_head_vs_all_other_parts": [],
+  "gap_adapter_top_to_bracket_face_at_full_stroke_mm": 1.5,
+  "fittings_tubes_note": "the one-touch fitting and tube are on the fixed buffer top (z <= lip-61.5) and do not move with the stroke",
+  "pass_": true
+ },
+ "tubes": {
+  "rows": [
+   {
+    "tube": "tube_L",
+    "length_mm": 82.59154335937487,
+    "n_bends": 2,
+    "min_bend_radius_mm": 12.0,
+    "straight_out_of_fitting_mm": 8.000000000000002,
+    "min_straight_between_bends_mm": 6.000000000000002,
+    "straight_into_port_mm": 31.0,
+    "z_min": 60.84863627433736,
+    "clearance_to_floor_top_mm": 0.14863627433735616
+   },
+   {
+    "tube": "tube_M",
+    "length_mm": 34.795771679687434,
+    "n_bends": 1,
+    "min_bend_radius_mm": 12.0,
+    "straight_out_of_fitting_mm": 8.000000000000002,
+    "min_straight_between_bends_mm": 8.000000000000002,
+    "straight_into_port_mm": 8.000000000000002,
+    "z_min": 60.848636274337366,
+    "clearance_to_floor_top_mm": 0.14863627433736326
+   },
+   {
+    "tube": "tube_R",
+    "length_mm": 82.59154335937487,
+    "n_bends": 2,
+    "min_bend_radius_mm": 12.0,
+    "straight_out_of_fitting_mm": 8.000000000000002,
+    "min_straight_between_bends_mm": 6.000000000000002,
+    "straight_into_port_mm": 31.0,
+    "z_min": 60.84863627433736,
+    "clearance_to_floor_top_mm": 0.14863627433735616
+   }
+  ],
+  "fitting_height_mm": 14.7,
+  "tube_run_height_z": 62.8,
+  "total_pad_tube_length_mm": 199.97885839843718,
+  "min_head_height_limit_note": "lip >= floor top + OD/2 + fitting 14.7 + 61.5 + straight 8 + bend R 12 = 158.85",
+  "pass_": true
+ },
+ "collector": {
+  "code": "SMC push-in branch/manifold block 1 x phi6 in + 3 x phi4 out - \"to confirm\" (not in the research catalogs; proxy)",
+  "body_mm": [
+   24.0,
+   10.0,
+   16.0
+  ],
+  "bbox_mm": [
+   -17.003146928452217,
+   17.003146928452217,
+   -39.00384622366382,
+   -19.996853071547783,
+   54.79999989999998,
+   70.80000010000002
+  ],
+  "port_axis_z": 62.8,
+  "mounted_in": "flap pocket + 2 zip ties; base 54.8 (2.1 mm above the flange plane)",
+  "trunk": {
+   "od_mm": 6.0,
+   "exits_along": "-y",
+   "stub_end_y": -43.00206302087423,
+   "distance_of_exit_from_joint6_axis_mm": 39.0,
+   "strain_relief": "2 zip-tie slits at the groove end of the flap (carrier y min -43.0)"
+  },
+  "twist_note": "one phi6 trunk leaves the tool: a joint-6 rotation twists/bends this single tube (it exits 39 mm off the axis; dress it with a service loop, or through the phi20 bore if the flange is hollow - unconfirmed)",
+  "pass_": true
+ },
+ "vacuum_gate": {
+  "source": "electric pump on the AMR (operator decision 2026-10-13): KNF N 838 KN.29DC-B (MI); 24 V, enclosure on the AMR; dust filter -> tee with SMC ZSE20B(F) digital vacuum switch, PNP, 0..-101 kPa, 12-24 VDC (vacuum-OK signal) + 24 V N.C. vent valve -> pump inlet; outlet -> HEPA filter",
+  "switch_location": "AMR enclosure (pump side, after the inlet filter), not at the pads",
+  "switch_accuracy_kpa": 2.0,
+  "trunk_options": [
+   "A: all phi6x4, 2000 mm",
+   "B: phi6x4 1200 mm (arm) + phi8x6 800 mm (to AMR)"
+  ],
+  "volumes_cm3": {
+   "pad_cavity_cm3_each": 0.348,
+   "buffer_and_fitting_bore_cm3_each": 0.37404587531803474,
+   "tubes_cm3_total": 0.9816439256528184,
+   "collector_cm3": 1.0,
+   "filter_switch_tee_cm3": 10.0
+  },
+  "tool_side_volume_cm3": 4.147781551606923,
+  "trunk_volume_cm3": {
+   "A: all phi6x4, 2000 mm": 25.132741228718345,
+   "B: phi6x4 1200 mm (arm) + phi8x6 800 mm (to AMR)": 37.69911184307752
+  },
+  "total_volume_cm3": {
+   "A: all phi6x4, 2000 mm": 39.28052278032527,
+   "B: phi6x4 1200 mm (arm) + phi8x6 800 mm (to AMR)": 51.84689339468444
+  },
+  "trunk_assumption_mm": 2000.0,
+  "steady_state_vacuum_kpa": {
+   "A: all phi6x4, 2000 mm": {
+    "3 pads sealed (1 L/min each)": {
+     "vacuum_at_pads_kpa": -78.6,
+     "vacuum_at_switch_kpa": -80.0,
+     "total_flow_lpm": 3.0,
+     "trunk_reynolds": 1059
+    },
+    "3 pads at 2 L/min each": {
+     "vacuum_at_pads_kpa": -66.8,
+     "vacuum_at_switch_kpa": -68.6,
+     "total_flow_lpm": 6.0,
+     "trunk_reynolds": 2118
+    },
+    "3 pads on a rough carton (4 L/min each)": {
+     "vacuum_at_pads_kpa": -46.6,
+     "vacuum_at_switch_kpa": -52.6,
+     "total_flow_lpm": 11.96,
+     "trunk_reynolds": 4222
+    },
+    "one pad lost (open line), 2 sealed": {
+     "vacuum_at_pads_kpa": -19.0,
+     "vacuum_at_switch_kpa": -30.3,
+     "total_flow_lpm": 21.63,
+     "trunk_reynolds": 7635
+    },
+    "one pad half lost (3 mm2 leak = 28.6 L/min), 2 sealed": {
+     "vacuum_at_pads_kpa": -16.4,
+     "vacuum_at_switch_kpa": -28.2,
+     "total_flow_lpm": 22.53,
+     "trunk_reynolds": 7952
+    },
+    "one pad 1 mm2 leak, 2 sealed": {
+     "vacuum_at_pads_kpa": -48.0,
+     "vacuum_at_switch_kpa": -53.7,
+     "total_flow_lpm": 11.5,
+     "trunk_reynolds": 4060
+    }
+   },
+   "B: phi6x4 1200 mm (arm) + phi8x6 800 mm (to AMR)": {
+    "3 pads sealed (1 L/min each)": {
+     "vacuum_at_pads_kpa": -79.0,
+     "vacuum_at_switch_kpa": -80.0,
+     "total_flow_lpm": 3.0,
+     "trunk_reynolds": 1059
+    },
+    "3 pads at 2 L/min each": {
+     "vacuum_at_pads_kpa": -67.3,
+     "vacuum_at_switch_kpa": -68.6,
+     "total_flow_lpm": 6.0,
+     "trunk_reynolds": 2118
+    },
+    "3 pads on a rough carton (4 L/min each)": {
+     "vacuum_at_pads_kpa": -48.5,
+     "vacuum_at_switch_kpa": -52.5,
+     "total_flow_lpm": 11.99,
+     "trunk_reynolds": 4231
+    },
+    "one pad lost (open line), 2 sealed": {
+     "vacuum_at_pads_kpa": -20.7,
+     "vacuum_at_switch_kpa": -28.6,
+     "total_flow_lpm": 22.35,
+     "trunk_reynolds": 7888
+    },
+    "one pad half lost (3 mm2 leak = 28.6 L/min), 2 sealed": {
+     "vacuum_at_pads_kpa": -18.0,
+     "vacuum_at_switch_kpa": -26.2,
+     "total_flow_lpm": 23.36,
+     "trunk_reynolds": 8245
+    },
+    "one pad 1 mm2 leak, 2 sealed": {
+     "vacuum_at_pads_kpa": -49.9,
+     "vacuum_at_switch_kpa": -53.7,
+     "total_flow_lpm": 11.52,
+     "trunk_reynolds": 4065
+    }
+   }
+  },
+  "thresholds": {
+   "A: all phi6x4, 2000 mm": {
+    "35": {
+     "threshold_kpa_at_switch": -35.0,
+     "margin_rough_carton_kpa": 17.6,
+     "margin_one_pad_lost_detected_kpa": 4.699999999999999,
+     "rough_carton_passes": true,
+     "one_pad_lost_detected": true,
+     "both_margins_at_least_2x_switch_accuracy": true,
+     "one_pad_half_lost_detected": true,
+     "one_pad_1mm2_leak_detected": false
+    },
+    "40": {
+     "threshold_kpa_at_switch": -40.0,
+     "margin_rough_carton_kpa": 12.600000000000001,
+     "margin_one_pad_lost_detected_kpa": 9.7,
+     "rough_carton_passes": true,
+     "one_pad_lost_detected": true,
+     "both_margins_at_least_2x_switch_accuracy": true,
+     "one_pad_half_lost_detected": true,
+     "one_pad_1mm2_leak_detected": false
+    },
+    "45": {
+     "threshold_kpa_at_switch": -45.0,
+     "margin_rough_carton_kpa": 7.600000000000001,
+     "margin_one_pad_lost_detected_kpa": 14.7,
+     "rough_carton_passes": true,
+     "one_pad_lost_detected": true,
+     "both_margins_at_least_2x_switch_accuracy": true,
+     "one_pad_half_lost_detected": true,
+     "one_pad_1mm2_leak_detected": false
+    },
+    "50": {
+     "threshold_kpa_at_switch": -50.0,
+     "margin_rough_carton_kpa": 2.6000000000000014,
+     "margin_one_pad_lost_detected_kpa": 19.7,
+     "rough_carton_passes": true,
+     "one_pad_lost_detected": true,
+     "both_margins_at_least_2x_switch_accuracy": false,
+     "one_pad_half_lost_detected": true,
+     "one_pad_1mm2_leak_detected": false
+    }
+   },
+   "B: phi6x4 1200 mm (arm) + phi8x6 800 mm (to AMR)": {
+    "35": {
+     "threshold_kpa_at_switch": -35.0,
+     "margin_rough_carton_kpa": 17.5,
+     "margin_one_pad_lost_detected_kpa": 6.399999999999999,
+     "rough_carton_passes": true,
+     "one_pad_lost_detected": true,
+     "both_margins_at_least_2x_switch_accuracy": true,
+     "one_pad_half_lost_detected": true,
+     "one_pad_1mm2_leak_detected": false
+    },
+    "40": {
+     "threshold_kpa_at_switch": -40.0,
+     "margin_rough_carton_kpa": 12.5,
+     "margin_one_pad_lost_detected_kpa": 11.399999999999999,
+     "rough_carton_passes": true,
+     "one_pad_lost_detected": true,
+     "both_margins_at_least_2x_switch_accuracy": true,
+     "one_pad_half_lost_detected": true,
+     "one_pad_1mm2_leak_detected": false
+    },
+    "45": {
+     "threshold_kpa_at_switch": -45.0,
+     "margin_rough_carton_kpa": 7.5,
+     "margin_one_pad_lost_detected_kpa": 16.4,
+     "rough_carton_passes": true,
+     "one_pad_lost_detected": true,
+     "both_margins_at_least_2x_switch_accuracy": true,
+     "one_pad_half_lost_detected": true,
+     "one_pad_1mm2_leak_detected": false
+    },
+    "50": {
+     "threshold_kpa_at_switch": -50.0,
+     "margin_rough_carton_kpa": 2.5,
+     "margin_one_pad_lost_detected_kpa": 21.4,
+     "rough_carton_passes": true,
+     "one_pad_lost_detected": true,
+     "both_margins_at_least_2x_switch_accuracy": false,
+     "one_pad_half_lost_detected": true,
+     "one_pad_1mm2_leak_detected": false
+    }
+   }
+  },
+  "thresholds_evaluated_at": "switch (pump end)",
+  "recommended_gate_kpa": -40.0,
+  "recommended_gate_basis": "midpoint of lost-pad (30.3 kPa, weakest-case trunk) and rough-carton (52.5 kPa) readings at the switch, rounded to 5 kPa",
+  "rough_carton_reads_stronger_than_gate": true,
+  "one_pad_lost_reads_weaker_than_gate": true,
+  "evacuation": {
+   "A: all phi6x4, 2000 mm": {
+    "3 pads sealed": {
+     "time_to_minus40_kpa_s": 0.052,
+     "time_to_minus50_kpa_s": 0.077
+    },
+    "rough carton (4 L/min each)": {
+     "time_to_minus40_kpa_s": 0.107,
+     "time_to_minus50_kpa_s": null
+    }
+   },
+   "B: phi6x4 1200 mm (arm) + phi8x6 800 mm (to AMR)": {
+    "3 pads sealed": {
+     "time_to_minus40_kpa_s": 0.064,
+     "time_to_minus50_kpa_s": 0.094
+    },
+    "rough carton (4 L/min each)": {
+     "time_to_minus40_kpa_s": 0.12,
+     "time_to_minus50_kpa_s": null
+    }
+   }
+  },
+  "energy_per_pick": {
+   "pump_on_s_ASSUMED": 8.0,
+   "at_500mbar_current_a": 2.0,
+   "at_i_max_a": 2.3,
+   "energy_at_500mbar_J": 384.0,
+   "energy_at_i_max_J": 441.59999999999997,
+   "energy_at_500mbar_Wh": 0.10666666666666667,
+   "energy_at_i_max_Wh": 0.12266666666666666,
+   "note": "pump only; valves, switch, AMR DC/DC losses not included; current at deep vacuum / low flow is probably lower than 2.0 A, so this is an upper estimate"
+  },
+  "pump_curve_mbar_lpm": [
+   [
+    100.0,
+    0.0
+   ],
+   [
+    200.0,
+    3.0
+   ],
+   [
+    300.0,
+    5.5
+   ],
+   [
+    400.0,
+    9.0
+   ],
+   [
+    500.0,
+    13.0
+   ],
+   [
+    600.0,
+    17.5
+   ],
+   [
+    800.0,
+    26.0
+   ],
+   [
+    1000.0,
+    34.0
+   ]
+  ],
+  "assumptions": [
+   "pump: KNF N 838 KN.29DC-B (MI) max-speed curve read off the datasheet chart (abs inlet mbar -> standard L/min), linearly interpolated; vacuum kPa = (1000 - p_abs mbar)/10",
+   "trunk friction: Darcy-Weisbach stepped along the tube at the actual (rarefied) density and volumetric flow, laminar f=64/Re (Re<2300) else Blasius; air 20 C, mu 1.81e-5 Pa s; fittings, bends, filter and valve losses NOT included",
+   "pad leak model (ISO 6358 style) unchanged; pad-tube friction only via the 0.55 factor of the open-line limit 25.7 L/min (choked 11.9 L/min/mm2 x 0.8 x 0.55); \"pads\" = the collector end of the trunk, pad-tube drop neglected for the sealed cases",
+   "sealed pad on coated carton leaks 1 L/min (rough carton 4 L/min) - ASSUMED, to be measured; leak flows taken as standard L/min",
+   "pad cavity 3 mm deep, collector 1 cm3, filter + switch + tee 10 cm3 (ASSUMED); trunk 2000 mm total, option A all phi6x4, option B 1200 mm phi6x4 + 800 mm phi8x6",
+   "evacuation: lumped volume at the pad pressure, trunk friction quasi-steady, pump at full speed curve; pump-on 8 s per pick ASSUMED",
+   "switch accuracy +-2 kPa (SMC ZSE20B, +-2 %% F.S.); the switch reads the pump-end pressure, which is stronger than the pad pressure by the trunk drop under flow"
+  ],
+  "pass_": true
+ },
+ "reimport": {
+  "step_parts": [
+   {
+    "part": "carrier",
+    "valid": true,
+    "rel_vol_err": 6.455966903871432e-15
+   },
+   {
+    "part": "camera_arm",
+    "valid": true,
+    "rel_vol_err": 3.8950397226039205e-14
+   },
+   {
+    "part": "scanner_arm",
+    "valid": true,
+    "rel_vol_err": 9.74574621759368e-14
+   },
+   {
+    "part": "pad_L",
+    "valid": true,
+    "rel_vol_err": 1.605854431092981e-13
+   },
+   {
+    "part": "nut_front_L",
+    "valid": true,
+    "rel_vol_err": 3.3802289227135954e-13
+   },
+   {
+    "part": "washer_L",
+    "valid": true,
+    "rel_vol_err": 2.210599846250214e-14
+   },
+   {
+    "part": "nut_rear_L",
+    "valid": true,
+    "rel_vol_err": 3.3802289227135954e-13
+   },
+   {
+    "part": "tube_L",
+    "valid": true,
+    "rel_vol_err": 8.383133703238128e-10
+   },
+   {
+    "part": "pad_M",
+    "valid": true,
+    "rel_vol_err": 2.395473460746435e-14
+   },
+   {
+    "part": "nut_front_M",
+    "valid": true,
+    "rel_vol_err": 1.0824211854540765e-13
+   },
+   {
+    "part": "washer_M",
+    "valid": true,
+    "rel_vol_err": 2.2230891109182944e-14
+   },
+   {
+    "part": "nut_rear_M",
+    "valid": true,
+    "rel_vol_err": 1.0824211854540765e-13
+   },
+   {
+    "part": "tube_M",
+    "valid": true,
+    "rel_vol_err": 3.788908931301307e-09
+   },
+   {
+    "part": "pad_R",
+    "valid": true,
+    "rel_vol_err": 2.395473460746436e-14
+   },
+   {
+    "part": "nut_front_R",
+    "valid": true,
+    "rel_vol_err": 1.0699556823586366e-13
+   },
+   {
+    "part": "washer_R",
+    "valid": true,
+    "rel_vol_err": 2.2230891109182944e-14
+   },
+   {
+    "part": "nut_rear_R",
+    "valid": true,
+    "rel_vol_err": 1.0699556823586366e-13
+   },
+   {
+    "part": "tube_R",
+    "valid": true,
+    "rel_vol_err": 4.155938033794929e-10
+   },
+   {
+    "part": "collector",
+    "valid": true,
+    "rel_vol_err": 1.1424948392128652e-14
+   },
+   {
+    "part": "trunk_tube",
+    "valid": true,
+    "rel_vol_err": 6.497350685105337e-16
+   },
+   {
+    "part": "scanner_se4710",
+    "valid": true,
+    "rel_vol_err": 6.381979808378932e-13
+   },
+   {
+    "part": "decoder_pl3307",
+    "valid": true,
+    "rel_vol_err": 2.31039457284198e-15
+   },
+   {
+    "part": "camera_gemini305",
+    "valid": true,
+    "rel_vol_err": 3.3683380955888044e-13
+   }
+  ],
+  "stl_printed": [
+   {
+    "part": "carrier",
+    "watertight": true,
+    "winding_consistent": true,
+    "rel_vol_err": 1.9913580565517133e-05,
+    "volume_positive": true
+   },
+   {
+    "part": "camera_arm",
+    "watertight": true,
+    "winding_consistent": true,
+    "rel_vol_err": 7.063134679828075e-06,
+    "volume_positive": true
+   },
+   {
+    "part": "scanner_arm",
+    "watertight": true,
+    "winding_consistent": true,
+    "rel_vol_err": 9.511661193422129e-06,
+    "volume_positive": true
+   }
+  ],
+  "assembly_step_solids": 23,
+  "expected_assembly_solids": 23,
+  "stale_files": [],
+  "pass_": true
+ },
+ "mass": {
+  "total_kg": 0.2781672935159285,
+  "cog_mm": [
+   -0.49425372225109515,
+   19.794946741811973,
+   98.23842637450555
+  ],
+  "budget_kg": 0.6,
+  "printed_kg": 0.12036729351592847,
+  "per_body_g": {
+   "carrier": 75.6,
+   "camera_arm": 29.7,
+   "scanner_arm": 15.0,
+   "pad_L": 15.0,
+   "nut_front_L": 2.5,
+   "washer_L": 1.0,
+   "nut_rear_L": 2.5,
+   "tube_L": 1.0,
+   "pad_M": 15.0,
+   "nut_front_M": 2.5,
+   "washer_M": 1.0,
+   "nut_rear_M": 2.5,
+   "tube_M": 1.0,
+   "pad_R": 15.0,
+   "nut_front_R": 2.5,
+   "washer_R": 1.0,
+   "nut_rear_R": 2.5,
+   "tube_R": 1.0,
+   "collector": 12.0,
+   "trunk_tube": 1.0,
+   "scanner_se4710": 4.8,
+   "decoder_pl3307": 6.0,
+   "camera_gemini305": 68.0
+  },
+  "assumptions": "PETG 1.27 g/cm3 x 0.55 effective fill; purchased masses: pad incl. one-touch fitting 15 g (ASSUMED), nut 2.5 g, washer 1 g, tubes 1 g each, collector 12 g (ASSUMED), camera 68 g, scanner 4.8 g, decoder 6 g (assumed); screws/inserts NOT included (~10 g est.)",
+  "payload_margin_kg": 1.7218327064840715
+ },
+ "deflection": {
+  "target_mm": 0.5,
+  "results": {
+   "E_xy_1800MPa": {
+    "pull_30N_outer_pad_mm": 0.03044059761270581,
+    "lateral_10N_y_mm": 0.07340928255270159,
+    "lateral_10N_x_mm": 0.003876340899872766,
+    "lip_deflection_combined_worst_mm": 0.10384988016540739
+   },
+   "E_z_1200MPa_interlayer_conservative": {
+    "pull_30N_outer_pad_mm": 0.04566089641905872,
+    "lateral_10N_y_mm": 0.11011392382905238,
+    "lateral_10N_x_mm": 0.005814511349809149,
+    "lip_deflection_combined_worst_mm": 0.1557748202481111
+   }
+  },
+  "joint_compliance_note": "flange/floor joint and layer adhesion not modelled: x2 safety factor suggested",
+  "with_factor_2_mm": 0.3115496404962222,
+  "pass_": true
+ },
+ "lips": {
+  "lip_z": {
+   "pad_L": 159.0,
+   "pad_M": 159.0,
+   "pad_R": 159.0
+  },
+  "coplanarity_spread_mm": 0.0,
+  "pad_span_outer_edges_mm": 150.8,
+  "pad_centres_x": [
+   -60.0,
+   0.0,
+   60.0
+  ],
+  "pad_pitch_mm": 60.0
+ },
+ "pad_span_margins": {
+  "1": {
+   "box": "Boston Scientific Agent MONORAIL",
+   "h": 230.0,
+   "margin_to_each_spine_end_mm": 39.599999999999994,
+   "ok_ge_25": true,
+   "lateral_margin_lip_vs_spine_half_thickness_mm": 5.1
+  },
+  "2": {
+   "box": "iVascular angiolite",
+   "h": 240.0,
+   "margin_to_each_spine_end_mm": 44.599999999999994,
+   "ok_ge_25": true,
+   "lateral_margin_lip_vs_spine_half_thickness_mm": 5.6
+  },
+  "3": {
+   "box": "Terumo Accuforce",
+   "h": 220.0,
+   "margin_to_each_spine_end_mm": 34.599999999999994,
+   "ok_ge_25": true,
+   "lateral_margin_lip_vs_spine_half_thickness_mm": 5.6
+  },
+  "4": {
+   "box": "Terumo Ultimaster Nagomi",
+   "h": 250.0,
+   "margin_to_each_spine_end_mm": 49.599999999999994,
+   "ok_ge_25": true,
+   "lateral_margin_lip_vs_spine_half_thickness_mm": 5.6
+  },
+  "5": {
+   "box": "unknown (photo missing)",
+   "h": 230.0,
+   "margin_to_each_spine_end_mm": 39.599999999999994,
+   "ok_ge_25": true,
+   "lateral_margin_lip_vs_spine_half_thickness_mm": 3.6
+  },
+  "min_h_220_margin_mm": 34.599999999999994
+ },
+ "screw_access": {
+  "order": "1 carrier -> flange (6 x M3x12 CSK, carrier alone; 2 of them through the bracket access holes) -> 2 pads + front nuts + washers + rear nuts (spanner from the side) -> 3 collector (pocket, 2 zip ties) + 3 pad tubes + trunk -> 4 decoder board into the scanner-arm pocket, engine into the cradle (+ 2 x M1.4) -> 5 scanner arm (4 x M3, closes the pocket against the carrier web) -> 6 camera arm (4 x M3) -> 7 camera (2 x M3 from below)",
+  "checks": [
+   {
+    "step": "1 flange screw 0 M3 CSK from +z (carrier alone, head clearance r 3.1)",
+    "blocked_by": {},
+    "ok": true
+   },
+   {
+    "step": "1 flange screw 1 M3 CSK from +z (carrier alone, head clearance r 3.1)",
+    "blocked_by": {},
+    "ok": true
+   },
+   {
+    "step": "1 flange screw 2 M3 CSK from +z (carrier alone, head clearance r 3.1)",
+    "blocked_by": {},
+    "ok": true
+   },
+   {
+    "step": "1 flange screw 3 M3 CSK from +z (carrier alone, head clearance r 3.1)",
+    "blocked_by": {},
+    "ok": true
+   },
+   {
+    "step": "1 flange screw 4 M3 CSK from +z (carrier alone, head clearance r 3.1)",
+    "blocked_by": {},
+    "ok": true
+   },
+   {
+    "step": "1 flange screw 5 M3 CSK from +z (carrier alone, head clearance r 3.1)",
+    "blocked_by": {},
+    "ok": true
+   },
+   {
+    "step": "3 rear nut L: flat spanner (4 x 24 x 38 mm) from +y or -y at z = lip-44.5..-40.5",
+    "blocked_by": {
+     "+y": [],
+     "-y": []
+    },
+    "ok": true
+   },
+   {
+    "step": "3 rear nut M: flat spanner (4 x 24 x 38 mm) from +y or -y at z = lip-44.5..-40.5",
+    "blocked_by": {
+     "+y": [],
+     "-y": [
+      "scanner_arm"
+     ]
+    },
+    "ok": true
+   },
+   {
+    "step": "3 rear nut R: flat spanner (4 x 24 x 38 mm) from +y or -y at z = lip-44.5..-40.5",
+    "blocked_by": {
+     "+y": [],
+     "-y": []
+    },
+    "ok": true
+   },
+   {
+    "step": "4 scanner arm M3 from -y x=-30 z=99.0",
+    "blocked_by": {},
+    "ok": true
+   },
+   {
+    "step": "4 scanner arm M3 from -y x=-30 z=108.5",
+    "blocked_by": {},
+    "ok": true
+   },
+   {
+    "step": "4 scanner arm M3 from -y x=+30 z=99.0",
+    "blocked_by": {},
+    "ok": true
+   },
+   {
+    "step": "4 scanner arm M3 from -y x=+30 z=108.5",
+    "blocked_by": {},
+    "ok": true
+   },
+   {
+    "step": "5 camera arm M3 from +y x=-30 z=86.3",
+    "blocked_by": {},
+    "ok": true
+   },
+   {
+    "step": "5 camera arm M3 from +y x=-30 z=98.3",
+    "blocked_by": {},
+    "ok": true
+   },
+   {
+    "step": "5 camera arm M3 from +y x=+30 z=86.3",
+    "blocked_by": {},
+    "ok": true
+   },
+   {
+    "step": "5 camera arm M3 from +y x=+30 z=98.3",
+    "blocked_by": {},
+    "ok": true
+   },
+   {
+    "step": "6 camera screw M3 x=-10 from below (-u)",
+    "blocked_by": {},
+    "ok": true
+   },
+   {
+    "step": "6 camera screw M3 x=+10 from below (-u)",
+    "blocked_by": {},
+    "ok": true
+   },
+   {
+    "step": "7 decoder board slides into the pocket along -y (arm alone, 0..30 mm)",
+    "blocked_by": {},
+    "ok": true
+   },
+   {
+    "step": "8 engine slides into the cradle from the front along the scan axis (arm alone, 0..25 mm)",
+    "blocked_by": {},
+    "ok": true
+   },
+   {
+    "step": "9 engine M1.4 u=+9.25 driven from +w through the plate window (arm alone, r 1.4 x 16 mm)",
+    "blocked_by": {},
+    "ok": true
+   },
+   {
+    "step": "9 engine M1.4 u=-4.05 driven from +w through the plate window (arm alone, r 1.4 x 16 mm)",
+    "blocked_by": {},
+    "ok": true
+   },
+   {
+    "step": "10 collector drops into the flap pocket along -z (0..40 mm above it; carrier, pads, nuts present; arms mounted afterwards)",
+    "blocked_by": {},
+    "ok": true
+   },
+   {
+    "step": "11 tube L pushed into the pad fitting from below (r 3, 12 mm)",
+    "blocked_by": {},
+    "ok": true
+   },
+   {
+    "step": "11 tube M pushed into the pad fitting from below (r 3, 12 mm)",
+    "blocked_by": {},
+    "ok": true
+   },
+   {
+    "step": "11 tube R pushed into the pad fitting from below (r 3, 12 mm)",
+    "blocked_by": {},
+    "ok": true
+   }
+  ],
+  "all_ok": true
+ },
+ "printability": {
+  "per_part": {
+   "carrier": {
+    "candidates": {
+     "flange face down (z up)": {
+      "build_dir_link6": [
+       0.0,
+       0.0,
+       1.0
+      ],
+      "bed_contact_mm2": 4783.187839319727,
+      "overhang_area_mm2": 2830.391207163454,
+      "support_volume_est_cm3": 157.9539523725954,
+      "height_mm": 80.8
+     },
+     "bracket front face down (z flipped)": {
+      "build_dir_link6": [
+       0.0,
+       0.0,
+       -1.0
+      ],
+      "bed_contact_mm2": 2744.0706345960557,
+      "overhang_area_mm2": 4778.282399171219,
+      "support_volume_est_cm3": 295.1721845562621,
+      "height_mm": 80.8
+     }
+    },
+    "best": "flange face down (z up)",
+    "support_pct_of_part_best": 145.99245082892855,
+    "walls": {
+     "min_mm": 0.8000000000000043,
+     "p01_mm": 1.8999999999999915,
+     "frac_below_2p9mm": 0.052
+    },
+    "bbox_xyz_mm": [
+     144.01678328507845,
+     71.01958046592505,
+     80.82797200846414
+    ]
+   },
+   "camera_arm": {
+    "candidates": {
+     "attach face down (+y)": {
+      "build_dir_link6": [
+       0.0,
+       1.0,
+       0.0
+      ],
+      "bed_contact_mm2": 1835.7170449619193,
+      "overhang_area_mm2": 1557.612346451991,
+      "support_volume_est_cm3": 53.60705626234043,
+      "height_mm": 74.59688495535815
+     },
+     "attach face down (rev)": {
+      "build_dir_link6": [
+       0.0,
+       -1.0,
+       0.0
+      ],
+      "bed_contact_mm2": 0.0,
+      "overhang_area_mm2": 3363.794138181735,
+      "support_volume_est_cm3": 108.57073903652172,
+      "height_mm": 74.59688495535815
+     },
+     "cradle plate down": {
+      "build_dir_link6": [
+       -0.0,
+       -0.7771459614569709,
+       -0.6293203910498374
+      ],
+      "bed_contact_mm2": 154.00000000000006,
+      "overhang_area_mm2": 3209.794138181735,
+      "support_volume_est_cm3": 77.6090167323122,
+      "height_mm": 62.64311774678741
+     }
+    },
+    "best": "attach face down (+y)",
+    "support_pct_of_part_best": 125.86611951790634,
+    "walls": {
+     "min_mm": 2.699999999999983,
+     "p01_mm": 2.9499999999999686,
+     "frac_below_2p9mm": 0.006333333333333333
+    },
+    "bbox_xyz_mm": [
+     80.00000020000004,
+     74.5980739572179,
+     36.89173224659115
+    ]
+   },
+   "scanner_arm": {
+    "candidates": {
+     "attach face down (-y)": {
+      "build_dir_link6": [
+       0.0,
+       -1.0,
+       0.0
+      ],
+      "bed_contact_mm2": 1466.7196217358323,
+      "overhang_area_mm2": 1100.658819464003,
+      "support_volume_est_cm3": 14.072861324966004,
+      "height_mm": 29.952219570122836
+     },
+     "attach face down (rev)": {
+      "build_dir_link6": [
+       0.0,
+       1.0,
+       0.0
+      ],
+      "bed_contact_mm2": 0.0,
+      "overhang_area_mm2": 2655.426916068821,
+      "support_volume_est_cm3": 28.695971038658985,
+      "height_mm": 29.952219570122836
+     }
+    },
+    "best": "attach face down (-y)",
+    "support_pct_of_part_best": 65.33735182822528,
+    "walls": {
+     "min_mm": 0.12747793470429514,
+     "p01_mm": 2.0,
+     "frac_below_2p9mm": 0.233
+    },
+    "bbox_xyz_mm": [
+     72.00000020000006,
+     29.9534085719826,
+     32.15228986013204
+    ]
+   }
+  },
+  "method": "overhang = faces > 45 deg from vertical; support volume = overhang area x free drop below each face (ray to the part or the bed; solid-support upper bound, tree/organic supports use ~30-50 %); wall = inward ray from 3000 surface samples (edge samples read thin)",
+  "bed_note": "carrier x extent 144 mm (floor flap / bracket 144 mm): fits a 220 x 220 mm bed"
+ },
+ "compactness": {
+  "default": {
+   "bbox_min": [
+    -75.4,
+    -43.0,
+    52.7
+   ],
+   "bbox_max": [
+    75.4,
+    105.62,
+    159.0
+   ],
+   "size": [
+    150.8,
+    148.62,
+    106.3
+   ],
+   "bbox_volume_cm3": 2382.3805705610484,
+   "hull_cm3": 1150.5902098795054
+  },
+  "printed_only": {
+   "bbox_min": [
+    -72.0,
+    -43.0,
+    52.7
+   ],
+   "bbox_max": [
+    72.0,
+    86.6,
+    133.5
+   ],
+   "size": [
+    144.0,
+    129.6,
+    80.8
+   ],
+   "bbox_volume_cm3": 1507.8856758325828,
+   "hull_cm3": 795.3739897076513
+  },
+  "flange_to_lip_z_mm": 106.3,
+  "n_printed": 3,
+  "n_purchased": 20,
+  "mass_kg": 0.2781672935159285,
+  "camera_range_mm": 93.59583054011713,
+  "v1": {
+   "default": {
+    "bbox_min": [
+     -95.0,
+     -54.0,
+     52.7
+    ],
+    "bbox_max": [
+     114.0,
+     108.7,
+     165.0
+    ],
+    "size": [
+     209.0,
+     162.7,
+     112.3
+    ],
+    "hull_cm3": 1694.3088224756411
+   },
+   "printed_only": {
+    "bbox_min": [
+     -95.0,
+     -54.0,
+     52.7
+    ],
+    "bbox_max": [
+     114.0,
+     90.0,
+     139.5
+    ],
+    "size": [
+     209.0,
+     144.0,
+     86.8
+    ],
+    "hull_cm3": 1247.2678424416233
+   },
+   "flange_to_lip_z_mm": 112.3,
+   "n_printed": 6,
+   "n_purchased": 27,
+   "mass_kg": 0.355547665817295
+  },
+  "v2": {
+   "default": {
+    "bbox_min": [
+     -75.4,
+     -41.95,
+     52.7
+    ],
+    "bbox_max": [
+     75.4,
+     105.62,
+     159.0
+    ],
+    "size": [
+     150.8,
+     147.57,
+     106.3
+    ],
+    "bbox_volume_cm3": 2365.584608358901,
+    "hull_cm3": 1178.1196362759401
+   },
+   "printed_only": {
+    "bbox_min": [
+     -72.0,
+     -41.95,
+     52.7
+    ],
+    "bbox_max": [
+     72.0,
+     85.77,
+     133.5
+    ],
+    "size": [
+     144.0,
+     127.72,
+     80.8
+    ],
+    "bbox_volume_cm3": 1486.0993569007087,
+    "hull_cm3": 845.1474469758257
+   },
+   "flange_to_lip_z_mm": 106.3,
+   "n_printed": 3,
+   "n_purchased": 18,
+   "mass_kg": 0.26353400557481665
+  }
+ },
+ "summary": {
+  "lip_z": 159.0,
+  "pitch": 60.0,
+  "overall": {
+   "interference_ok": true,
+   "keepout_ok": true,
+   "stroke_ok": true,
+   "reimport_ok": true,
+   "camera_ok": true,
+   "scanner_ok": true,
+   "decoder_ok": true,
+   "screw_access_ok": true,
+   "collector_ok": true,
+   "tubes_ok": true,
+   "vacuum_gate_ok": true,
+   "deflection_ok": true
+  }
+ }
+}

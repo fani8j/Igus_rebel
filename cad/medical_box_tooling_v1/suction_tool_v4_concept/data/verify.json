@@ -1,0 +1,882 @@
+{
+ "compactness": {
+  "v4": {
+   "bbox_min": [
+    -75.4,
+    -30.0,
+    52.68
+   ],
+   "bbox_max": [
+    75.4,
+    65.7,
+    159.0
+   ],
+   "size": [
+    150.8,
+    95.71,
+    106.32
+   ],
+   "hull_cm3": 723.2835346801544,
+   "bbox_volume_cm3": 1534.5574336162183,
+   "mass_kg": 0.33197373316062556,
+   "com_mm": [
+    -1.09,
+    14.62,
+    104.7
+   ],
+   "n_printed": 2,
+   "n_purchased_solids": 18,
+   "n_solids": 20
+  },
+  "v3": {
+   "bbox_min": [
+    -75.4,
+    -43.0,
+    52.7
+   ],
+   "bbox_max": [
+    75.4,
+    105.62,
+    159.0
+   ],
+   "size": [
+    150.8,
+    148.62,
+    106.3
+   ],
+   "hull_cm3": 1150.4932056955092,
+   "bbox_volume_cm3": 2382.3805705610484,
+   "mass_kg": 0.2781672935159285,
+   "com_mm": [
+    -0.49,
+    19.8,
+    98.24
+   ],
+   "n_printed": 3,
+   "n_purchased_solids": 20,
+   "n_solids": 23
+  },
+  "bar_material": {
+   "al6061_bar_g": 104.36954753889877,
+   "pa12cf_bar_g": 37.109172458275125,
+   "bar_volume_cm3": 38.65538797736991,
+   "total_with_al_kg": 0.33197373316062556,
+   "total_with_pa12cf_kg": 0.2647133580800019,
+   "lip_deflection_mm_10N_per_pad": {
+    "al": 0.0009497971014492754,
+    "pa12cf": 0.010922666666666667
+   }
+  }
+ },
+ "mass": {
+  "mass_kg": 0.33197373316062556,
+  "bodies": {
+   "hub_stem": [
+    0.0262,
+    [
+     -0.0,
+     0.1,
+     77.9
+    ]
+   ],
+   "sensor_pod": [
+    0.0466,
+    [
+     -4.0,
+     39.1,
+     81.3
+    ]
+   ],
+   "bar_al6061": [
+    0.1044,
+    [
+     0.0,
+     0.0,
+     125.9
+    ]
+   ],
+   "pad_L": [
+    0.015,
+    [
+     -60.0,
+     0.0,
+     122.4
+    ]
+   ],
+   "nut_front_L": [
+    0.0025,
+    [
+     -60.0,
+     -0.0,
+     132.0
+    ]
+   ],
+   "nut_rear_L": [
+    0.0025,
+    [
+     -60.0,
+     -0.0,
+     117.0
+    ]
+   ],
+   "tube_L": [
+    0.001,
+    [
+     -43.7,
+     -0.0,
+     66.4
+    ]
+   ],
+   "pad_M": [
+    0.015,
+    [
+     0.0,
+     0.0,
+     122.4
+    ]
+   ],
+   "nut_front_M": [
+    0.0025,
+    [
+     -0.0,
+     0.0,
+     132.0
+    ]
+   ],
+   "nut_rear_M": [
+    0.0025,
+    [
+     -0.0,
+     0.0,
+     117.0
+    ]
+   ],
+   "tube_M": [
+    0.001,
+    [
+     0.0,
+     0.0,
+     77.8
+    ]
+   ],
+   "pad_R": [
+    0.015,
+    [
+     60.0,
+     0.0,
+     122.4
+    ]
+   ],
+   "nut_front_R": [
+    0.0025,
+    [
+     60.0,
+     0.0,
+     132.0
+    ]
+   ],
+   "nut_rear_R": [
+    0.0025,
+    [
+     60.0,
+     0.0,
+     117.0
+    ]
+   ],
+   "tube_R": [
+    0.001,
+    [
+     43.7,
+     0.0,
+     66.4
+    ]
+   ],
+   "collector": [
+    0.012,
+    [
+     0.0,
+     -0.7,
+     63.3
+    ]
+   ],
+   "trunk_tube": [
+    0.001,
+    [
+     0.0,
+     -20.9,
+     62.8
+    ]
+   ],
+   "scanner_se4710": [
+    0.0048,
+    [
+     -42.1,
+     49.5,
+     104.0
+    ]
+   ],
+   "decoder_pl3307": [
+    0.006,
+    [
+     4.2,
+     40.7,
+     68.9
+    ]
+   ],
+   "camera_gemini305": [
+    0.068,
+    [
+     -0.0,
+     37.9,
+     95.2
+    ]
+   ]
+  },
+  "printed_kg": 0.07280418562172668,
+  "note": "printed = volume x PETG 1.27 g/cm3 x 0.55 (v3 model); purchased masses as v3 MASS_PURCHASED (washers dropped); screws, inserts, flex, cables not included"
+ },
+ "interference": {
+  "n_pairs": 190,
+  "pairs_with_overlap": [],
+  "max_overlap_mm3": 0.0,
+  "pairs_closer_than_3mm": [
+   [
+    "hub_stem",
+    "bar_al6061",
+    0.0
+   ],
+   [
+    "hub_stem",
+    "collector",
+    0.0
+   ],
+   [
+    "bar_al6061",
+    "nut_rear_L",
+    0.0
+   ],
+   [
+    "bar_al6061",
+    "nut_rear_M",
+    0.0
+   ],
+   [
+    "bar_al6061",
+    "nut_rear_R",
+    0.0
+   ],
+   [
+    "pad_L",
+    "tube_L",
+    0.0
+   ],
+   [
+    "tube_L",
+    "collector",
+    0.0
+   ],
+   [
+    "pad_M",
+    "tube_M",
+    0.0
+   ],
+   [
+    "tube_M",
+    "collector",
+    0.0
+   ],
+   [
+    "pad_R",
+    "tube_R",
+    0.0
+   ],
+   [
+    "tube_R",
+    "collector",
+    0.0
+   ],
+   [
+    "collector",
+    "trunk_tube",
+    0.0
+   ],
+   [
+    "pad_L",
+    "nut_front_L",
+    0.05
+   ],
+   [
+    "pad_L",
+    "nut_rear_L",
+    0.05
+   ],
+   [
+    "pad_M",
+    "nut_front_M",
+    0.05
+   ],
+   [
+    "pad_M",
+    "nut_rear_M",
+    0.05
+   ],
+   [
+    "pad_R",
+    "nut_front_R",
+    0.05
+   ],
+   [
+    "pad_R",
+    "nut_rear_R",
+    0.05
+   ],
+   [
+    "hub_stem",
+    "sensor_pod",
+    0.1
+   ],
+   [
+    "bar_al6061",
+    "nut_front_L",
+    0.125
+   ],
+   [
+    "bar_al6061",
+    "nut_front_M",
+    0.125
+   ],
+   [
+    "bar_al6061",
+    "nut_front_R",
+    0.125
+   ],
+   [
+    "hub_stem",
+    "tube_L",
+    0.15
+   ],
+   [
+    "hub_stem",
+    "tube_R",
+    0.15
+   ],
+   [
+    "sensor_pod",
+    "decoder_pl3307",
+    0.2
+   ],
+   [
+    "sensor_pod",
+    "camera_gemini305",
+    0.218
+   ],
+   [
+    "sensor_pod",
+    "scanner_se4710",
+    0.25
+   ],
+   [
+    "bar_al6061",
+    "pad_L",
+    0.3
+   ],
+   [
+    "bar_al6061",
+    "pad_M",
+    0.3
+   ],
+   [
+    "bar_al6061",
+    "pad_R",
+    0.3
+   ],
+   [
+    "hub_stem",
+    "trunk_tube",
+    0.35
+   ],
+   [
+    "hub_stem",
+    "nut_rear_M",
+    1.0
+   ]
+  ],
+  "note": "screws, inserts, zip ties not modelled"
+ },
+ "keepout": {
+  "limit_z": 119.0,
+  "max_z_of_non_pad_non_bar_parts": {
+   "hub_stem": 118.5,
+   "sensor_pod": 116.89,
+   "nut_rear_L": 118.5,
+   "tube_L": 82.8,
+   "nut_rear_M": 118.5,
+   "tube_M": 82.8,
+   "nut_rear_R": 118.5,
+   "tube_R": 82.8,
+   "collector": 72.8,
+   "trunk_tube": 65.75,
+   "scanner_se4710": 114.71,
+   "decoder_pl3307": 72.07,
+   "camera_gemini305": 112.54
+  },
+  "parts_above_limit": {},
+  "bar_z": [
+   118.5,
+   133.5
+  ],
+  "bar_y": [
+   -10.0,
+   10.0
+  ],
+  "pass_": true,
+  "note": "bar rear face 118.5 (stock 15 mm bar, front face 133.5 unchanged); hub_stem top and the rear nuts end at 118.5"
+ },
+ "pressed_pose": {
+  "per_box": {
+   "1": {
+    "spine_tool_z": 154.0,
+    "tcp_z": 154.0,
+    "min_clearance_all_parts_except_pad_heads_mm": {
+     "value": 3.5,
+     "part": "pad_L",
+     "box": "nb0"
+    },
+    "pad_heads_distance_mm": {
+     "target": 0.0,
+     "nb0": 3.5,
+     "nb1": 3.5
+    },
+    "min_clearance_to_neighbours_any_part_mm": 3.5,
+    "gap_bar_front_to_neighbour_front_plane_mm": 5.5
+   },
+   "2": {
+    "spine_tool_z": 154.0,
+    "tcp_z": 154.0,
+    "min_clearance_all_parts_except_pad_heads_mm": {
+     "value": 4.0,
+     "part": "pad_L",
+     "box": "nb0"
+    },
+    "pad_heads_distance_mm": {
+     "target": 0.0,
+     "nb0": 4.0,
+     "nb1": 4.0
+    },
+    "min_clearance_to_neighbours_any_part_mm": 4.0,
+    "gap_bar_front_to_neighbour_front_plane_mm": 5.5
+   },
+   "3": {
+    "spine_tool_z": 154.0,
+    "tcp_z": 154.0,
+    "min_clearance_all_parts_except_pad_heads_mm": {
+     "value": 4.0,
+     "part": "pad_L",
+     "box": "nb0"
+    },
+    "pad_heads_distance_mm": {
+     "target": 0.0,
+     "nb0": 4.0,
+     "nb1": 4.0
+    },
+    "min_clearance_to_neighbours_any_part_mm": 4.0,
+    "gap_bar_front_to_neighbour_front_plane_mm": 5.5
+   },
+   "4": {
+    "spine_tool_z": 154.0,
+    "tcp_z": 154.0,
+    "min_clearance_all_parts_except_pad_heads_mm": {
+     "value": 4.0,
+     "part": "pad_L",
+     "box": "nb0"
+    },
+    "pad_heads_distance_mm": {
+     "target": 0.0,
+     "nb0": 4.0,
+     "nb1": 4.0
+    },
+    "min_clearance_to_neighbours_any_part_mm": 4.0,
+    "gap_bar_front_to_neighbour_front_plane_mm": 5.5
+   },
+   "5": {
+    "spine_tool_z": 154.0,
+    "tcp_z": 154.0,
+    "min_clearance_all_parts_except_pad_heads_mm": {
+     "value": 2.0,
+     "part": "pad_L",
+     "box": "nb0"
+    },
+    "pad_heads_distance_mm": {
+     "target": 0.0,
+     "nb0": 2.0,
+     "nb1": 2.0
+    },
+    "min_clearance_to_neighbours_any_part_mm": 2.0,
+    "gap_bar_front_to_neighbour_front_plane_mm": 5.5
+   }
+  },
+  "protrusion_mm": 15.0,
+  "method": "handoff.suction_link6_pose(pulled=False) (compressed TCP z=154 on the spine), neighbours 15 mm proud, exact solid distance (OCC); pad heads retracted 5 mm",
+  "min_clearance_overall_mm": 2.0,
+  "min_clearance_to_neighbours_mm": 2.0
+ },
+ "camera": {
+  "front_face_centre_mm": [
+   0.0,
+   33.888,
+   105.895
+  ],
+  "optical_axis": [
+   0.0,
+   -0.342,
+   0.9397
+  ],
+  "tilt_deg": 20.0,
+  "aim_point": [
+   0.0,
+   0.0,
+   199.0
+  ],
+  "aim_error_mm": 0.0,
+  "range_front_face_to_aim_point_mm": 99.08055626358487,
+  "range_front_face_to_middle_lip_mm": 62.996311183759865,
+  "good_depth_min_mm": 90.0,
+  "range_to_aim_ok": true,
+  "pods_max_y": 65.70442399191424,
+  "camera_max_y": 60.705449613827895,
+  "camera_max_z": 112.53963469232339,
+  "z_limit": 119.0,
+  "lips_in_depth_fov_margin_deg": {
+   "horizontal": -7.177462786365808,
+   "vertical": 18.15467740810474
+  },
+  "lips_note": "informational: at 63 mm range the outer pad lips (x = +-75) are outside the 88 deg depth FOV; the wrist camera is for the spine, not the pad row",
+  "tool_blocks_pct_of_depth_fov_rays_within_300mm": 28.644501278772378,
+  "pass_": true
+ },
+ "scanner": {
+  "window_centre_mm": [
+   -40.0,
+   47.0,
+   110.0
+  ],
+  "axis": [
+   0.3077,
+   -0.3615,
+   0.8801
+  ],
+  "glare_tilt_to_spine_normal_deg": 28.342871741482032,
+  "glare_ok": true,
+  "aimed_at_spine_centre": true,
+  "scan_pose_nominal_standoff_mm": 130.0,
+  "scan_pose_distance_check_mm": 130.0,
+  "scan_poses": {
+   "115": {
+    "spine_tool_z": 207.03607576566563,
+    "backed_off_from_pressed_mm": 53.03607576566563,
+    "backed_off_from_lip_plane_mm": 48.03607576566563,
+    "glare_tilt_deg": 32.45726518728512,
+    "camera_range_to_spine_centre_mm": 106.66741354411944
+   },
+   "130": {
+    "spine_tool_z": 224.4159079848602,
+    "backed_off_from_pressed_mm": 70.41590798486021,
+    "backed_off_from_lip_plane_mm": 65.41590798486021,
+    "glare_tilt_deg": 28.342871741482032,
+    "camera_range_to_spine_centre_mm": 123.27057570990186
+   },
+   "150": {
+    "spine_tool_z": 246.71503209230505,
+    "backed_off_from_pressed_mm": 92.71503209230505,
+    "backed_off_from_lip_plane_mm": 87.71503209230505,
+    "glare_tilt_deg": 24.295785027764786,
+    "camera_range_to_spine_centre_mm": 144.84033477785715
+   }
+  },
+  "scan_window_range_required_mm": [
+   115,
+   150
+  ],
+  "max_z_of_engine": 114.71234260385933,
+  "z_limit": 119.0,
+  "fov_rays": 441,
+  "fov_rays_clipped_within_300mm": 2,
+  "pct_clipped": 0.45351473922902497,
+  "decoder_farthest_corner_from_engine_rear_mm": 79.16908336044187,
+  "flex_reach_mm": 89.4,
+  "flex_slack_mm": 10.230916639558131,
+  "pass_": false
+ },
+ "buffer_stroke": {
+  "stroke_mm": 10.0,
+  "collisions": [],
+  "gap_adapter_to_bar_front_at_full_stroke_mm": 1.5,
+  "note": "the sliding head is in front of the bar (z > 133.5); buffer body, fitting and tube are fixed and sit behind the bar / inside the stem (middle pad) -> nothing inside the stem moves; middle fitting clear of the stem walls: see interference",
+  "pass_": true
+ },
+ "tubes": {
+  "rows": [
+   {
+    "tube": "tube_L",
+    "min_bend_radius_mm": 12.0,
+    "n_bends": 1,
+    "straight_out_of_fitting_mm": 8.000000000000002,
+    "segments_mm": [
+     8.0,
+     31.0
+    ],
+    "length_mm": 57.795771679687434,
+    "z_min": 60.848636274337366,
+    "clearance_to_hub_top_mm": 0.14863627433736326
+   },
+   {
+    "tube": "tube_M",
+    "min_bend_radius_mm": null,
+    "n_bends": 0,
+    "straight_out_of_fitting_mm": 10.0,
+    "segments_mm": [
+     10.0
+    ],
+    "length_mm": 10.0,
+    "z_min": 72.79863627433737,
+    "clearance_to_hub_top_mm": 12.098636274337366
+   },
+   {
+    "tube": "tube_R",
+    "min_bend_radius_mm": 12.0,
+    "n_bends": 1,
+    "straight_out_of_fitting_mm": 8.000000000000002,
+    "segments_mm": [
+     8.0,
+     31.0
+    ],
+    "length_mm": 57.795771679687434,
+    "z_min": 60.848636274337366,
+    "clearance_to_hub_top_mm": 0.14863627433736326
+   }
+  ],
+  "trunk": "phi6 leaves through the -y stem wall at z = 62.8, stub to y = -30",
+  "middle_tube": "straight 10 mm from fitting to the +z collector port (no bend)",
+  "pass_": true
+ },
+ "printability": {
+  "per_part": {
+   "hub_stem": {
+    "candidates": {
+     "+z": {
+      "overhang_area_mm2": 125.6392169005508,
+      "largest_patches_mm2": [
+       28.2,
+       23.9,
+       23.1,
+       7.6,
+       7.6
+      ],
+      "n_patches_over_25mm2": 1,
+      "support_volume_upper_bound_cm3": 1.6566707110672443
+     },
+     "-z": {
+      "overhang_area_mm2": 2128.850471902356,
+      "largest_patches_mm2": [
+       1483.0,
+       440.7,
+       75.5,
+       35.8,
+       34.4
+      ],
+      "n_patches_over_25mm2": 5,
+      "support_volume_upper_bound_cm3": 111.28935601616448
+     },
+     "+x": {
+      "overhang_area_mm2": 2308.1256978615274,
+      "largest_patches_mm2": [
+       889.5,
+       734.4,
+       158.8,
+       154.0,
+       150.5
+      ],
+      "n_patches_over_25mm2": 6,
+      "support_volume_upper_bound_cm3": 34.35409988534195
+     },
+     "-x": {
+      "overhang_area_mm2": 2316.75388492621,
+      "largest_patches_mm2": [
+       889.5,
+       734.4,
+       158.9,
+       158.3,
+       154.0
+      ],
+      "n_patches_over_25mm2": 6,
+      "support_volume_upper_bound_cm3": 34.353575597259
+     },
+     "+y": {
+      "overhang_area_mm2": 3830.6778563425905,
+      "largest_patches_mm2": [
+       1844.0,
+       1486.2,
+       154.5,
+       154.4,
+       26.5
+      ],
+      "n_patches_over_25mm2": 6,
+      "support_volume_upper_bound_cm3": 61.28156290074472
+     },
+     "-y": {
+      "overhang_area_mm2": 3826.816423592092,
+      "largest_patches_mm2": [
+       1893.5,
+       1406.4,
+       158.8,
+       150.5,
+       30.6
+      ],
+      "n_patches_over_25mm2": 7,
+      "support_volume_upper_bound_cm3": 57.11729493839852
+     }
+    },
+    "best": "+z",
+    "best_support_cm3": 1.6566707110672443,
+    "bbox_mm": [
+     56.0443769850542,
+     56.0443769850542,
+     65.82365711247147
+    ],
+    "support_pct_of_part": 4.423427029160328
+   },
+   "sensor_pod": {
+    "candidates": {
+     "+z": {
+      "overhang_area_mm2": 2130.9816696667685,
+      "largest_patches_mm2": [
+       1082.0,
+       391.0,
+       265.0,
+       236.0,
+       60.0
+      ],
+      "n_patches_over_25mm2": 7,
+      "support_volume_upper_bound_cm3": 30.98025950049131
+     },
+     "-z": {
+      "overhang_area_mm2": 4572.4677577423745,
+      "largest_patches_mm2": [
+       1788.1,
+       1089.5,
+       546.0,
+       265.0,
+       236.0
+      ],
+      "n_patches_over_25mm2": 10,
+      "support_volume_upper_bound_cm3": 82.17427374888783
+     },
+     "+x": {
+      "overhang_area_mm2": 3632.55654643001,
+      "largest_patches_mm2": [
+       1779.4,
+       850.5,
+       329.1,
+       251.1,
+       162.0
+      ],
+      "n_patches_over_25mm2": 7,
+      "support_volume_upper_bound_cm3": 115.72214402484835
+     },
+     "-x": {
+      "overhang_area_mm2": 3337.575190935604,
+      "largest_patches_mm2": [
+       1749.0,
+       994.5,
+       157.8,
+       148.5,
+       122.1
+      ],
+      "n_patches_over_25mm2": 7,
+      "support_volume_upper_bound_cm3": 86.20124203510605
+     },
+     "+y": {
+      "overhang_area_mm2": 3014.8325936175174,
+      "largest_patches_mm2": [
+       994.5,
+       863.1,
+       321.2,
+       305.7,
+       271.1
+      ],
+      "n_patches_over_25mm2": 7,
+      "support_volume_upper_bound_cm3": 90.41204378016798
+     },
+     "-y": {
+      "overhang_area_mm2": 5701.344629621302,
+      "largest_patches_mm2": [
+       2640.6,
+       994.5,
+       493.1,
+       399.3,
+       318.3
+      ],
+      "n_patches_over_25mm2": 9,
+      "support_volume_upper_bound_cm3": 69.88028727921024
+     }
+    },
+    "best": "+z",
+    "best_support_cm3": 30.98025950049131,
+    "bbox_mm": [
+     96.54127934388666,
+     54.604424091914254,
+     54.38648178850301
+    ],
+    "support_pct_of_part": 46.393518467637755
+   }
+  },
+  "v3_same_method": {
+   "carrier": {
+    "best": "-y",
+    "best_support_cm3": 88.00994497342855
+   },
+   "camera_arm": {
+    "best": "+x",
+    "best_support_cm3": 15.826176330813844
+   },
+   "scanner_arm": {
+    "best": "+z",
+    "best_support_cm3": 10.886624247206798
+   }
+  },
+  "method": "faces whose normal is > 45 deg past vertical on the underside (n.up < -sin45); support volume = overhang area x drop to the part/bed (solid upper bound)",
+  "min_wall_mm": {
+   "stem_wall": 3.0,
+   "pod_wall": 3.0,
+   "hub_floor_under_collector": 4.899999999999999,
+   "pod_insert_wall_note": "insert holes 4.2 x 5.5 in >= 8 mm of pod material"
+  }
+ },
+ "reimport": {
+  "max_rel_volume_error": 2.597292221134553e-09,
+  "pass_": true
+ },
+ "summary": {
+  "bbox_mm": [
+   150.8,
+   95.7,
+   106.3
+  ],
+  "v3_bbox_mm": [
+   150.8,
+   148.6,
+   106.3
+  ],
+  "mass_kg": 0.33197373316062556,
+  "v3_mass_kg": 0.2781672935159285,
+  "n_printed": 2,
+  "n_solids": 20,
+  "interference_ok": true,
+  "keepout_ok": true,
+  "camera_ok": true,
+  "scanner_ok": false,
+  "stroke_ok": true,
+  "tubes_ok": true,
+  "min_clearance_pressed_mm": 2.0
+ }
+}

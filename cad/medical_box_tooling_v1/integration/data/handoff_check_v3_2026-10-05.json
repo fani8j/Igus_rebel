@@ -1,0 +1,9001 @@
+{
+ "frames": "shelf frame W (common/handoff.py), mm",
+ "wrist_model": "ReBeL link5.dae + link6.dae (visual meshes, exact triangles) placed as in igus_rebel2.urdf, joint6=0",
+ "tool_model": "suction + gripper: URDF collision meshes (convex pieces, coacd hulls ~1.1x volume, conservative) + ejector envelope (reserved) for suction",
+ "unexpected_threshold_mm": 3.0,
+ "assertions": {
+  "urdf_vs_handoff": [
+   {
+    "name": "suction_tcp z",
+    "urdf": 159.0,
+    "handoff_py": 159.0,
+    "delta": 0.0
+   },
+   {
+    "name": "suction_tcp_compressed z",
+    "urdf": 154.0,
+    "handoff_py": 154.0,
+    "delta": 0.0
+   },
+   {
+    "name": "gripper_tcp z",
+    "urdf": 193.2,
+    "handoff_py": 193.2,
+    "delta": 0.0
+   },
+   {
+    "name": "top_stop_frame z",
+    "urdf": 167.5,
+    "handoff_py": 167.5,
+    "delta": 0.0
+   },
+   {
+    "name": "finger joint z",
+    "urdf": 150.0,
+    "handoff_py": 150.0,
+    "delta": 0.0
+   },
+   {
+    "name": "finger_right joint z",
+    "urdf": 150.0,
+    "handoff_py": 150.0,
+    "delta": 0.0
+   },
+   {
+    "name": "suction_tcp_joint x",
+    "urdf": 0.0,
+    "handoff_py": 0.0,
+    "delta": 0.0
+   },
+   {
+    "name": "suction_tcp_joint y",
+    "urdf": 0.0,
+    "handoff_py": 0.0,
+    "delta": 0.0
+   },
+   {
+    "name": "suction_tcp_compressed_joint x",
+    "urdf": 0.0,
+    "handoff_py": 0.0,
+    "delta": 0.0
+   },
+   {
+    "name": "suction_tcp_compressed_joint y",
+    "urdf": 0.0,
+    "handoff_py": 0.0,
+    "delta": 0.0
+   },
+   {
+    "name": "gripper_tcp_joint x",
+    "urdf": 0.0,
+    "handoff_py": 0.0,
+    "delta": 0.0
+   },
+   {
+    "name": "gripper_tcp_joint y",
+    "urdf": 0.0,
+    "handoff_py": 0.0,
+    "delta": 0.0
+   },
+   {
+    "name": "top_stop_frame_joint x",
+    "urdf": 0.0,
+    "handoff_py": 0.0,
+    "delta": 0.0
+   },
+   {
+    "name": "top_stop_frame_joint y",
+    "urdf": 0.0,
+    "handoff_py": 0.0,
+    "delta": 0.0
+   }
+  ],
+  "mesh_vs_handoff": [
+   {
+    "name": "suction pad lip z (mesh max)",
+    "mesh": 159.0,
+    "expected": 159.0
+   },
+   {
+    "name": "gripper top-stop face z (mesh max)",
+    "mesh": 167.5,
+    "expected": 167.5
+   },
+   {
+    "name": "gripper pad centre z (mesh)",
+    "mesh": 193.2,
+    "expected": 193.2
+   },
+   {
+    "name": "finger pad crest |x| closed (mesh)",
+    "mesh": 4.0,
+    "expected": 4.0
+   },
+   {
+    "name": "finger pad y span (mesh)",
+    "mesh": 50.0,
+    "expected": 50.0
+   }
+  ]
+ },
+ "check1_yaw0": {
+  "1": {
+   "a_flush": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 10.805,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_R_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 10.805,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_R_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 10.805,
+      "at": [
+       "pad_R_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 159.208,
+      "at": [
+       "pad_R_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 95.137,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 95.137,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 39.6,
+      "at": [
+       "pad_L_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 120.359,
+      "at": [
+       "link6",
+       "finger_right_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 224.247,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 201.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 201.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 74.898,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 29.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 29.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 174.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.298,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 122.894,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 123.07,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 349.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   },
+   "b_proud15": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 10.805,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_R_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 10.805,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_R_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 10.805,
+      "at": [
+       "pad_R_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 159.208,
+      "at": [
+       "pad_R_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 80.162,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 80.162,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 39.6,
+      "at": [
+       "pad_L_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 120.359,
+      "at": [
+       "link6",
+       "finger_right_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 224.247,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 74.898,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 14.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 14.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 174.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.298,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 120.306,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 120.314,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 349.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   },
+   "c_proud15_t12": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 10.805,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_R_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 10.805,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_R_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 10.805,
+      "at": [
+       "pad_R_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 159.208,
+      "at": [
+       "pad_R_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 80.162,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 80.162,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 39.6,
+      "at": [
+       "pad_L_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 120.359,
+      "at": [
+       "link6",
+       "finger_right_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 224.247,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 74.898,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 14.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 14.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 174.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.298,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 120.306,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 120.314,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 349.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   }
+  },
+  "2": {
+   "a_flush": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 11.068,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_R_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 11.068,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_R_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 11.068,
+      "at": [
+       "pad_R_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 164.198,
+      "at": [
+       "pad_R_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 95.165,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 95.165,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 44.6,
+      "at": [
+       "pad_L_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 121.342,
+      "at": [
+       "link6",
+       "finger_right_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 228.656,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 201.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 201.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 79.898,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 29.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 29.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 184.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.298,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 122.904,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 123.078,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 359.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   },
+   "b_proud15": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 11.068,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_R_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 11.068,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_R_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 11.068,
+      "at": [
+       "pad_R_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 164.198,
+      "at": [
+       "pad_R_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 80.196,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 80.196,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 44.6,
+      "at": [
+       "pad_L_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 121.342,
+      "at": [
+       "link6",
+       "finger_right_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 228.656,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 79.898,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 14.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 14.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 184.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.298,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 120.313,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 120.323,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 359.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   },
+   "c_proud15_t12": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 11.068,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_R_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 11.068,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_R_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 11.068,
+      "at": [
+       "pad_R_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 164.198,
+      "at": [
+       "pad_R_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 80.196,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 80.196,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 44.6,
+      "at": [
+       "pad_L_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 121.342,
+      "at": [
+       "link6",
+       "finger_right_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 228.656,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 79.898,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 14.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 14.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 184.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.298,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 120.313,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 120.323,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 359.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   }
+  },
+  "3": {
+   "a_flush": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 11.068,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_R_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 11.068,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_R_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 11.068,
+      "at": [
+       "pad_R_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 154.218,
+      "at": [
+       "pad_R_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 95.165,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 95.165,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 34.6,
+      "at": [
+       "pad_L_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 119.635,
+      "at": [
+       "link6",
+       "finger_right_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 219.864,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 201.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 201.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 69.898,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 29.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 29.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 164.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.298,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 122.904,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 123.078,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 339.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   },
+   "b_proud15": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 11.068,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_R_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 11.068,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_R_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 11.068,
+      "at": [
+       "pad_R_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 154.218,
+      "at": [
+       "pad_R_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 80.196,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 80.196,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 34.6,
+      "at": [
+       "pad_L_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 119.635,
+      "at": [
+       "link6",
+       "finger_right_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 219.864,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 69.898,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 14.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 14.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 164.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.298,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 120.313,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 120.323,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 339.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   },
+   "c_proud15_t12": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 11.068,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_R_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 11.068,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_R_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 11.068,
+      "at": [
+       "pad_R_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 154.218,
+      "at": [
+       "pad_R_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 80.196,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 80.196,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 34.6,
+      "at": [
+       "pad_L_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 119.635,
+      "at": [
+       "link6",
+       "finger_right_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 219.864,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 69.898,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 14.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 14.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 164.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.298,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 120.313,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 120.323,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 339.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   }
+  },
+  "4": {
+   "a_flush": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 11.746,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_R_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 11.746,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_R_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 11.746,
+      "at": [
+       "pad_R_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 169.19,
+      "at": [
+       "pad_R_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 95.165,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 95.165,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 49.6,
+      "at": [
+       "pad_L_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 122.493,
+      "at": [
+       "link6",
+       "finger_right_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 233.088,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 201.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 201.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 84.898,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 29.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 29.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 194.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.298,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 122.904,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 123.078,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 369.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   },
+   "b_proud15": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 11.746,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_R_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 11.746,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_R_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 11.746,
+      "at": [
+       "pad_R_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 169.19,
+      "at": [
+       "pad_R_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 80.196,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 80.196,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 49.6,
+      "at": [
+       "pad_L_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 122.493,
+      "at": [
+       "link6",
+       "finger_right_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 233.088,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 84.898,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 14.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 14.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 194.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.298,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 120.313,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 120.323,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 369.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   },
+   "c_proud15_t12": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 11.746,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_R_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 11.746,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_R_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 11.746,
+      "at": [
+       "pad_R_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 169.19,
+      "at": [
+       "pad_R_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 80.196,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 80.196,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 49.6,
+      "at": [
+       "pad_L_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 122.493,
+      "at": [
+       "link6",
+       "finger_right_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 233.088,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 84.898,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 14.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 14.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 194.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.298,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 120.313,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 120.323,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 369.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   }
+  },
+  "5": {
+   "a_flush": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 10.124,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_R_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 10.124,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_R_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 10.124,
+      "at": [
+       "pad_R_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 159.208,
+      "at": [
+       "pad_R_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 95.068,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 95.068,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 39.6,
+      "at": [
+       "pad_L_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 120.283,
+      "at": [
+       "link6",
+       "finger_right_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 224.247,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 201.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 201.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 74.898,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 29.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 29.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 174.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.299,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 122.878,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 123.045,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 349.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   },
+   "b_proud15": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 10.124,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_R_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 10.124,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_R_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 10.124,
+      "at": [
+       "pad_R_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 159.208,
+      "at": [
+       "pad_R_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 80.081,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 80.081,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 39.6,
+      "at": [
+       "pad_L_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 120.283,
+      "at": [
+       "link6",
+       "finger_right_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 224.247,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 74.898,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 14.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 14.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 174.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.299,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 120.285,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 120.288,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 349.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   },
+   "c_proud15_t16": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 10.124,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_R_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 10.124,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_R_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 10.124,
+      "at": [
+       "pad_R_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 159.208,
+      "at": [
+       "pad_R_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 80.081,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 80.081,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 39.6,
+      "at": [
+       "pad_L_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 120.283,
+      "at": [
+       "link6",
+       "finger_right_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 224.247,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 74.898,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 14.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 14.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 174.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.299,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 120.285,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 120.288,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 349.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   }
+  }
+ },
+ "check4_yaw180": {
+  "1": {
+   "a_flush": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 10.805,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_L_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 10.805,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_L_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 10.805,
+      "at": [
+       "pad_L_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 159.208,
+      "at": [
+       "pad_L_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 95.137,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 95.137,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 39.6,
+      "at": [
+       "pad_R_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 120.474,
+      "at": [
+       "link6",
+       "finger_left_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 224.15,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 201.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 201.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 74.852,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 29.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 29.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 174.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.298,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 122.894,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 123.07,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 349.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   },
+   "b_proud15": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 10.805,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_L_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 10.805,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_L_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 10.805,
+      "at": [
+       "pad_L_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 159.208,
+      "at": [
+       "pad_L_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 80.162,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 80.162,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 39.6,
+      "at": [
+       "pad_R_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 120.474,
+      "at": [
+       "link6",
+       "finger_left_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 224.15,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 74.852,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 14.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 14.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 174.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.298,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 120.306,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 120.314,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 349.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   },
+   "c_proud15_t12": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 10.805,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_L_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 10.805,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_L_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 10.805,
+      "at": [
+       "pad_L_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 159.208,
+      "at": [
+       "pad_L_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 80.162,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 80.162,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 39.6,
+      "at": [
+       "pad_R_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 120.474,
+      "at": [
+       "link6",
+       "finger_left_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 224.15,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 74.852,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 14.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 14.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 174.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.298,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 120.306,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 120.314,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 349.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   }
+  },
+  "2": {
+   "a_flush": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 11.068,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_L_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 11.068,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_L_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 11.068,
+      "at": [
+       "pad_L_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 164.198,
+      "at": [
+       "pad_L_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 95.165,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 95.165,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 44.6,
+      "at": [
+       "pad_R_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 121.486,
+      "at": [
+       "link6",
+       "finger_left_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 228.559,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 201.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 201.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 79.852,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 29.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 29.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 184.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.298,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 122.904,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 123.078,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 359.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   },
+   "b_proud15": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 11.068,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_L_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 11.068,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_L_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 11.068,
+      "at": [
+       "pad_L_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 164.198,
+      "at": [
+       "pad_L_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 80.196,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 80.196,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 44.6,
+      "at": [
+       "pad_R_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 121.486,
+      "at": [
+       "link6",
+       "finger_left_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 228.559,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 79.852,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 14.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 14.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 184.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.298,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 120.313,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 120.323,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 359.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   },
+   "c_proud15_t12": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 11.068,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_L_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 11.068,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_L_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 11.068,
+      "at": [
+       "pad_L_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 164.198,
+      "at": [
+       "pad_L_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 80.196,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 80.196,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 44.6,
+      "at": [
+       "pad_R_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 121.486,
+      "at": [
+       "link6",
+       "finger_left_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 228.559,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 79.852,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 14.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 14.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 184.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.298,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 120.313,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 120.323,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 359.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   }
+  },
+  "3": {
+   "a_flush": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 11.068,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_L_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 11.068,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_L_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 11.068,
+      "at": [
+       "pad_L_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 154.218,
+      "at": [
+       "pad_L_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 95.165,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 95.165,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 34.6,
+      "at": [
+       "pad_R_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 119.698,
+      "at": [
+       "link6",
+       "finger_right_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 219.766,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 201.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 201.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 69.852,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 29.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 29.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 164.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.298,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 122.904,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 123.078,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 339.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   },
+   "b_proud15": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 11.068,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_L_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 11.068,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_L_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 11.068,
+      "at": [
+       "pad_L_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 154.218,
+      "at": [
+       "pad_L_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 80.196,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 80.196,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 34.6,
+      "at": [
+       "pad_R_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 119.698,
+      "at": [
+       "link6",
+       "finger_right_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 219.766,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 69.852,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 14.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 14.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 164.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.298,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 120.313,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 120.323,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 339.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   },
+   "c_proud15_t12": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 11.068,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_L_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 11.068,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_L_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 11.068,
+      "at": [
+       "pad_L_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 154.218,
+      "at": [
+       "pad_L_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 80.196,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 80.196,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 34.6,
+      "at": [
+       "pad_R_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 119.698,
+      "at": [
+       "link6",
+       "finger_right_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 219.766,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 69.852,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 14.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 14.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 164.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.298,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 120.313,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 120.323,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 339.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   }
+  },
+  "4": {
+   "a_flush": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 11.746,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_L_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 11.746,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_L_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 11.746,
+      "at": [
+       "pad_L_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 169.19,
+      "at": [
+       "pad_L_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 95.165,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 95.165,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 49.6,
+      "at": [
+       "pad_R_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 122.65,
+      "at": [
+       "link6",
+       "finger_left_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 232.991,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 201.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 201.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 84.852,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 29.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 29.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 194.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.298,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 122.904,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 123.078,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 369.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   },
+   "b_proud15": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 11.746,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_L_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 11.746,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_L_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 11.746,
+      "at": [
+       "pad_L_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 169.19,
+      "at": [
+       "pad_L_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 80.196,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 80.196,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 49.6,
+      "at": [
+       "pad_R_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 122.65,
+      "at": [
+       "link6",
+       "finger_left_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 232.991,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 84.852,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 14.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 14.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 194.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.298,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 120.313,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 120.323,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 369.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   },
+   "c_proud15_t12": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 11.746,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_L_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 11.746,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_L_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 11.746,
+      "at": [
+       "pad_L_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 169.19,
+      "at": [
+       "pad_L_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 80.196,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 80.196,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 49.6,
+      "at": [
+       "pad_R_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 122.65,
+      "at": [
+       "link6",
+       "finger_left_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 232.991,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 84.852,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 14.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 14.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 194.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.298,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 120.313,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 120.323,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 369.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   }
+  },
+  "5": {
+   "a_flush": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 10.124,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_L_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 10.124,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_L_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 10.124,
+      "at": [
+       "pad_L_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 159.208,
+      "at": [
+       "pad_L_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 95.068,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 95.068,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 39.6,
+      "at": [
+       "pad_R_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 120.392,
+      "at": [
+       "link6",
+       "finger_left_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 224.15,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 201.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 201.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 74.852,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 29.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 29.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 174.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.299,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 122.878,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 123.045,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 349.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   },
+   "b_proud15": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 10.124,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_L_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 10.124,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_L_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 10.124,
+      "at": [
+       "pad_L_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 159.208,
+      "at": [
+       "pad_L_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 80.081,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 80.081,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 39.6,
+      "at": [
+       "pad_R_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 120.392,
+      "at": [
+       "link6",
+       "finger_left_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 224.15,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 74.852,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 14.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 14.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 174.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.299,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 120.285,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 120.288,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 349.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   },
+   "c_proud15_t16": {
+    "min_unexpected": 8.062,
+    "min_pair": "G-B",
+    "at": [
+     "finger_left_column",
+     "B"
+    ],
+    "min_cross_arm": 10.124,
+    "cross_pair": "S-G",
+    "cross_at": [
+     "pad_L_00",
+     "finger_left_block"
+    ],
+    "no_ejector": {
+     "min_unexpected": 8.062,
+     "min_pair": "G-B",
+     "at": [
+      "finger_left_column",
+      "B"
+     ],
+     "min_cross_arm": 10.124,
+     "cross_pair": "S-G",
+     "cross_at": [
+      "pad_L_00",
+      "finger_left_block"
+     ]
+    },
+    "pairs": {
+     "S-G": {
+      "d": 10.124,
+      "at": [
+       "pad_L_00",
+       "finger_left_block"
+      ]
+     },
+     "S-GW": {
+      "d": 159.208,
+      "at": [
+       "pad_L_00",
+       "link6"
+      ]
+     },
+     "S-B": {
+      "d": 20.5,
+      "at": [
+       "carrier_12",
+       "B"
+      ],
+      "expected_contact": {
+       "min": -5.0,
+       "at": [
+        "pad_L_00",
+        "B"
+       ],
+       "n_parts_in_contact": 3,
+       "per_part": {
+        "pad_L_00": -5.0,
+        "pad_M_00": -5.0,
+        "pad_R_00": -5.0,
+        "pad_L_02": 5.95,
+        "pad_M_02": 5.95,
+        "pad_R_02": 5.95,
+        "pad_L_03": 9.23,
+        "pad_M_03": 9.23
+       }
+      }
+     },
+     "S-N1": {
+      "d": 80.081,
+      "at": [
+       "pad_L_00",
+       "N1"
+      ]
+     },
+     "S-N2": {
+      "d": 80.081,
+      "at": [
+       "pad_L_00",
+       "N2"
+      ]
+     },
+     "S-F": {
+      "d": 39.6,
+      "at": [
+       "pad_R_00",
+       "F"
+      ]
+     },
+     "SW-G": {
+      "d": 120.392,
+      "at": [
+       "link6",
+       "finger_left_block"
+      ]
+     },
+     "SW-GW": {
+      "d": 224.15,
+      "at": [
+       "link6",
+       "link6"
+      ]
+     },
+     "SW-B": {
+      "d": 101.798,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "SW-N1": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "SW-N2": {
+      "d": 186.798,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "SW-F": {
+      "d": 74.852,
+      "at": [
+       "link5",
+       "F"
+      ]
+     },
+     "G-B": {
+      "d": 8.062,
+      "at": [
+       "finger_left_column",
+       "B"
+      ],
+      "expected_contact": {
+       "min": 0.0,
+       "at": [
+        "finger_pad_left",
+        "B"
+       ],
+       "n_parts_in_contact": 2,
+       "per_part": {
+        "finger_pad_left": 0.0,
+        "finger_pad_right": 0.0,
+        "finger_left_block": 0.4,
+        "finger_right_block": 0.4,
+        "base_top_stop_bar": 4.0
+       }
+      }
+     },
+     "G-N1": {
+      "d": 14.3,
+      "at": [
+       "finger_left_block",
+       "N1"
+      ]
+     },
+     "G-N2": {
+      "d": 14.3,
+      "at": [
+       "finger_right_block",
+       "N2"
+      ]
+     },
+     "G-F": {
+      "d": 174.6,
+      "at": [
+       "finger_left_block",
+       "F"
+      ]
+     },
+     "GW-B": {
+      "d": 119.299,
+      "at": [
+       "link6",
+       "B"
+      ]
+     },
+     "GW-N1": {
+      "d": 120.285,
+      "at": [
+       "link6",
+       "N1"
+      ]
+     },
+     "GW-N2": {
+      "d": 120.288,
+      "at": [
+       "link6",
+       "N2"
+      ]
+     },
+     "GW-F": {
+      "d": 349.298,
+      "at": [
+       "link6",
+       "F"
+      ]
+     }
+    }
+   }
+  }
+ },
+ "check2_sweep": {
+  "1": {
+   "a_flush": {
+    "first_lift_below_3mm": null,
+    "first_lift_contact": null,
+    "min_distance": 11.0,
+    "at_lift": 0.0,
+    "pair": [
+     "G-B",
+     [
+      "base_top_stop_neg",
+      "B"
+     ]
+    ],
+    "pair_min": {
+     "S-G": 27.61,
+     "S-GW": 159.21,
+     "S-B": 20.5,
+     "S-N1": 95.14,
+     "S-N2": 95.14,
+     "S-F": 39.6,
+     "SW-G": 122.1,
+     "SW-GW": 224.25,
+     "SW-B": 101.8,
+     "SW-N1": 201.8,
+     "SW-N2": 201.8,
+     "SW-F": 74.9,
+     "G-B": 11.0,
+     "G-N1": 29.89,
+     "G-N2": 29.89,
+     "G-F": 174.6,
+     "GW-B": 119.3,
+     "GW-N1": 122.89,
+     "GW-N2": 123.07,
+     "GW-F": 349.3
+    },
+    "curve": [
+     [
+      150.0,
+      20.5
+     ],
+     [
+      140.0,
+      20.5
+     ],
+     [
+      130.0,
+      20.5
+     ],
+     [
+      120.0,
+      20.5
+     ],
+     [
+      110.0,
+      20.5
+     ],
+     [
+      100.0,
+      20.5
+     ],
+     [
+      90.0,
+      20.5
+     ],
+     [
+      80.0,
+      20.5
+     ],
+     [
+      70.0,
+      20.5
+     ],
+     [
+      60.0,
+      20.5
+     ],
+     [
+      50.0,
+      20.5
+     ],
+     [
+      40.0,
+      20.5
+     ],
+     [
+      30.0,
+      20.5
+     ],
+     [
+      20.0,
+      20.5
+     ],
+     [
+      10.0,
+      20.5
+     ],
+     [
+      0.0,
+      11.0
+     ]
+    ]
+   },
+   "b_proud15": {
+    "first_lift_below_3mm": null,
+    "first_lift_contact": null,
+    "min_distance": 11.0,
+    "at_lift": 0.0,
+    "pair": [
+     "G-B",
+     [
+      "base_top_stop_neg",
+      "B"
+     ]
+    ],
+    "pair_min": {
+     "S-G": 27.61,
+     "S-GW": 159.21,
+     "S-B": 20.5,
+     "S-N1": 80.16,
+     "S-N2": 80.16,
+     "S-F": 39.6,
+     "SW-G": 122.1,
+     "SW-GW": 224.25,
+     "SW-B": 101.8,
+     "SW-N1": 186.8,
+     "SW-N2": 186.8,
+     "SW-F": 74.9,
+     "G-B": 11.0,
+     "G-N1": 15.47,
+     "G-N2": 15.47,
+     "G-F": 174.6,
+     "GW-B": 119.3,
+     "GW-N1": 120.31,
+     "GW-N2": 120.31,
+     "GW-F": 349.3
+    },
+    "curve": [
+     [
+      150.0,
+      20.5
+     ],
+     [
+      140.0,
+      20.5
+     ],
+     [
+      130.0,
+      20.5
+     ],
+     [
+      120.0,
+      20.5
+     ],
+     [
+      110.0,
+      20.5
+     ],
+     [
+      100.0,
+      20.5
+     ],
+     [
+      90.0,
+      20.5
+     ],
+     [
+      80.0,
+      20.5
+     ],
+     [
+      70.0,
+      20.5
+     ],
+     [
+      60.0,
+      19.38
+     ],
+     [
+      50.0,
+      15.69
+     ],
+     [
+      40.0,
+      15.47
+     ],
+     [
+      30.0,
+      15.47
+     ],
+     [
+      20.0,
+      15.47
+     ],
+     [
+      10.0,
+      15.47
+     ],
+     [
+      0.0,
+      11.0
+     ]
+    ]
+   },
+   "c_proud15_t12": {
+    "first_lift_below_3mm": null,
+    "first_lift_contact": null,
+    "min_distance": 11.0,
+    "at_lift": 0.0,
+    "pair": [
+     "G-B",
+     [
+      "base_top_stop_neg",
+      "B"
+     ]
+    ],
+    "pair_min": {
+     "S-G": 27.61,
+     "S-GW": 159.21,
+     "S-B": 20.5,
+     "S-N1": 80.16,
+     "S-N2": 80.16,
+     "S-F": 39.6,
+     "SW-G": 122.1,
+     "SW-GW": 224.25,
+     "SW-B": 101.8,
+     "SW-N1": 186.8,
+     "SW-N2": 186.8,
+     "SW-F": 74.9,
+     "G-B": 11.0,
+     "G-N1": 16.64,
+     "G-N2": 16.64,
+     "G-F": 174.6,
+     "GW-B": 119.3,
+     "GW-N1": 120.31,
+     "GW-N2": 120.31,
+     "GW-F": 349.3
+    },
+    "curve": [
+     [
+      150.0,
+      20.5
+     ],
+     [
+      140.0,
+      20.5
+     ],
+     [
+      130.0,
+      20.5
+     ],
+     [
+      120.0,
+      20.5
+     ],
+     [
+      110.0,
+      20.5
+     ],
+     [
+      100.0,
+      20.5
+     ],
+     [
+      90.0,
+      20.5
+     ],
+     [
+      80.0,
+      20.5
+     ],
+     [
+      70.0,
+      20.5
+     ],
+     [
+      60.0,
+      20.5
+     ],
+     [
+      50.0,
+      17.04
+     ],
+     [
+      40.0,
+      16.84
+     ],
+     [
+      30.0,
+      16.84
+     ],
+     [
+      20.0,
+      16.84
+     ],
+     [
+      10.0,
+      16.84
+     ],
+     [
+      0.0,
+      11.0
+     ]
+    ]
+   }
+  },
+  "2": {
+   "a_flush": {
+    "first_lift_below_3mm": null,
+    "first_lift_contact": null,
+    "min_distance": 11.0,
+    "at_lift": 0.0,
+    "pair": [
+     "G-B",
+     [
+      "base_top_stop_neg",
+      "B"
+     ]
+    ],
+    "pair_min": {
+     "S-G": 27.61,
+     "S-GW": 164.2,
+     "S-B": 20.5,
+     "S-N1": 95.17,
+     "S-N2": 95.17,
+     "S-F": 44.6,
+     "SW-G": 123.2,
+     "SW-GW": 228.66,
+     "SW-B": 101.8,
+     "SW-N1": 201.8,
+     "SW-N2": 201.8,
+     "SW-F": 79.9,
+     "G-B": 11.0,
+     "G-N1": 29.63,
+     "G-N2": 29.63,
+     "G-F": 184.6,
+     "GW-B": 119.3,
+     "GW-N1": 122.9,
+     "GW-N2": 123.08,
+     "GW-F": 359.3
+    },
+    "curve": [
+     [
+      150.0,
+      20.5
+     ],
+     [
+      140.0,
+      20.5
+     ],
+     [
+      130.0,
+      20.5
+     ],
+     [
+      120.0,
+      20.5
+     ],
+     [
+      110.0,
+      20.5
+     ],
+     [
+      100.0,
+      20.5
+     ],
+     [
+      90.0,
+      20.5
+     ],
+     [
+      80.0,
+      20.5
+     ],
+     [
+      70.0,
+      20.5
+     ],
+     [
+      60.0,
+      20.5
+     ],
+     [
+      50.0,
+      20.5
+     ],
+     [
+      40.0,
+      20.0
+     ],
+     [
+      30.0,
+      20.0
+     ],
+     [
+      20.0,
+      20.0
+     ],
+     [
+      10.0,
+      20.0
+     ],
+     [
+      0.0,
+      11.0
+     ]
+    ]
+   },
+   "b_proud15": {
+    "first_lift_below_3mm": null,
+    "first_lift_contact": null,
+    "min_distance": 11.0,
+    "at_lift": 0.0,
+    "pair": [
+     "G-B",
+     [
+      "base_top_stop_neg",
+      "B"
+     ]
+    ],
+    "pair_min": {
+     "S-G": 27.61,
+     "S-GW": 164.2,
+     "S-B": 20.5,
+     "S-N1": 80.2,
+     "S-N2": 80.2,
+     "S-F": 44.6,
+     "SW-G": 123.2,
+     "SW-GW": 228.66,
+     "SW-B": 101.8,
+     "SW-N1": 186.8,
+     "SW-N2": 186.8,
+     "SW-F": 79.9,
+     "G-B": 11.0,
+     "G-N1": 14.96,
+     "G-N2": 14.96,
+     "G-F": 184.6,
+     "GW-B": 119.3,
+     "GW-N1": 120.31,
+     "GW-N2": 120.32,
+     "GW-F": 359.3
+    },
+    "curve": [
+     [
+      150.0,
+      20.5
+     ],
+     [
+      140.0,
+      20.5
+     ],
+     [
+      130.0,
+      20.5
+     ],
+     [
+      120.0,
+      20.5
+     ],
+     [
+      110.0,
+      20.5
+     ],
+     [
+      100.0,
+      20.5
+     ],
+     [
+      90.0,
+      20.5
+     ],
+     [
+      80.0,
+      20.5
+     ],
+     [
+      70.0,
+      20.5
+     ],
+     [
+      60.0,
+      18.68
+     ],
+     [
+      50.0,
+      15.18
+     ],
+     [
+      40.0,
+      14.96
+     ],
+     [
+      30.0,
+      14.96
+     ],
+     [
+      20.0,
+      14.96
+     ],
+     [
+      10.0,
+      14.96
+     ],
+     [
+      0.0,
+      11.0
+     ]
+    ]
+   },
+   "c_proud15_t12": {
+    "first_lift_below_3mm": null,
+    "first_lift_contact": null,
+    "min_distance": 11.0,
+    "at_lift": 0.0,
+    "pair": [
+     "G-B",
+     [
+      "base_top_stop_neg",
+      "B"
+     ]
+    ],
+    "pair_min": {
+     "S-G": 27.61,
+     "S-GW": 164.2,
+     "S-B": 20.5,
+     "S-N1": 80.2,
+     "S-N2": 80.2,
+     "S-F": 44.6,
+     "SW-G": 123.2,
+     "SW-GW": 228.66,
+     "SW-B": 101.8,
+     "SW-N1": 186.8,
+     "SW-N2": 186.8,
+     "SW-F": 79.9,
+     "G-B": 11.0,
+     "G-N1": 16.59,
+     "G-N2": 16.59,
+     "G-F": 184.6,
+     "GW-B": 119.3,
+     "GW-N1": 120.31,
+     "GW-N2": 120.32,
+     "GW-F": 359.3
+    },
+    "curve": [
+     [
+      150.0,
+      20.5
+     ],
+     [
+      140.0,
+      20.5
+     ],
+     [
+      130.0,
+      20.5
+     ],
+     [
+      120.0,
+      20.5
+     ],
+     [
+      110.0,
+      20.5
+     ],
+     [
+      100.0,
+      20.5
+     ],
+     [
+      90.0,
+      20.5
+     ],
+     [
+      80.0,
+      20.5
+     ],
+     [
+      70.0,
+      20.5
+     ],
+     [
+      60.0,
+      20.5
+     ],
+     [
+      50.0,
+      16.79
+     ],
+     [
+      40.0,
+      16.59
+     ],
+     [
+      30.0,
+      16.59
+     ],
+     [
+      20.0,
+      16.59
+     ],
+     [
+      10.0,
+      16.59
+     ],
+     [
+      0.0,
+      11.0
+     ]
+    ]
+   }
+  },
+  "3": {
+   "a_flush": {
+    "first_lift_below_3mm": null,
+    "first_lift_contact": null,
+    "min_distance": 11.0,
+    "at_lift": 0.0,
+    "pair": [
+     "G-B",
+     [
+      "base_top_stop_neg",
+      "B"
+     ]
+    ],
+    "pair_min": {
+     "S-G": 27.61,
+     "S-GW": 154.22,
+     "S-B": 20.5,
+     "S-N1": 95.17,
+     "S-N2": 95.17,
+     "S-F": 34.6,
+     "SW-G": 121.16,
+     "SW-GW": 219.86,
+     "SW-B": 101.8,
+     "SW-N1": 201.8,
+     "SW-N2": 201.8,
+     "SW-F": 69.9,
+     "G-B": 11.0,
+     "G-N1": 29.63,
+     "G-N2": 29.63,
+     "G-F": 164.6,
+     "GW-B": 119.3,
+     "GW-N1": 122.9,
+     "GW-N2": 123.08,
+     "GW-F": 339.3
+    },
+    "curve": [
+     [
+      150.0,
+      20.5
+     ],
+     [
+      140.0,
+      20.5
+     ],
+     [
+      130.0,
+      20.5
+     ],
+     [
+      120.0,
+      20.5
+     ],
+     [
+      110.0,
+      20.5
+     ],
+     [
+      100.0,
+      20.5
+     ],
+     [
+      90.0,
+      20.5
+     ],
+     [
+      80.0,
+      20.5
+     ],
+     [
+      70.0,
+      20.5
+     ],
+     [
+      60.0,
+      20.5
+     ],
+     [
+      50.0,
+      20.5
+     ],
+     [
+      40.0,
+      20.0
+     ],
+     [
+      30.0,
+      20.0
+     ],
+     [
+      20.0,
+      20.0
+     ],
+     [
+      10.0,
+      20.0
+     ],
+     [
+      0.0,
+      11.0
+     ]
+    ]
+   },
+   "b_proud15": {
+    "first_lift_below_3mm": null,
+    "first_lift_contact": null,
+    "min_distance": 11.0,
+    "at_lift": 0.0,
+    "pair": [
+     "G-B",
+     [
+      "base_top_stop_neg",
+      "B"
+     ]
+    ],
+    "pair_min": {
+     "S-G": 27.61,
+     "S-GW": 154.22,
+     "S-B": 20.5,
+     "S-N1": 80.2,
+     "S-N2": 80.2,
+     "S-F": 34.6,
+     "SW-G": 121.16,
+     "SW-GW": 219.86,
+     "SW-B": 101.8,
+     "SW-N1": 186.8,
+     "SW-N2": 186.8,
+     "SW-F": 69.9,
+     "G-B": 11.0,
+     "G-N1": 14.96,
+     "G-N2": 14.96,
+     "G-F": 164.6,
+     "GW-B": 119.3,
+     "GW-N1": 120.31,
+     "GW-N2": 120.32,
+     "GW-F": 339.3
+    },
+    "curve": [
+     [
+      150.0,
+      20.5
+     ],
+     [
+      140.0,
+      20.5
+     ],
+     [
+      130.0,
+      20.5
+     ],
+     [
+      120.0,
+      20.5
+     ],
+     [
+      110.0,
+      20.5
+     ],
+     [
+      100.0,
+      20.5
+     ],
+     [
+      90.0,
+      20.5
+     ],
+     [
+      80.0,
+      20.5
+     ],
+     [
+      70.0,
+      20.5
+     ],
+     [
+      60.0,
+      18.68
+     ],
+     [
+      50.0,
+      15.18
+     ],
+     [
+      40.0,
+      14.96
+     ],
+     [
+      30.0,
+      14.96
+     ],
+     [
+      20.0,
+      14.96
+     ],
+     [
+      10.0,
+      14.96
+     ],
+     [
+      0.0,
+      11.0
+     ]
+    ]
+   },
+   "c_proud15_t12": {
+    "first_lift_below_3mm": null,
+    "first_lift_contact": null,
+    "min_distance": 11.0,
+    "at_lift": 0.0,
+    "pair": [
+     "G-B",
+     [
+      "base_top_stop_neg",
+      "B"
+     ]
+    ],
+    "pair_min": {
+     "S-G": 27.61,
+     "S-GW": 154.22,
+     "S-B": 20.5,
+     "S-N1": 80.2,
+     "S-N2": 80.2,
+     "S-F": 34.6,
+     "SW-G": 121.16,
+     "SW-GW": 219.86,
+     "SW-B": 101.8,
+     "SW-N1": 186.8,
+     "SW-N2": 186.8,
+     "SW-F": 69.9,
+     "G-B": 11.0,
+     "G-N1": 16.59,
+     "G-N2": 16.59,
+     "G-F": 164.6,
+     "GW-B": 119.3,
+     "GW-N1": 120.31,
+     "GW-N2": 120.32,
+     "GW-F": 339.3
+    },
+    "curve": [
+     [
+      150.0,
+      20.5
+     ],
+     [
+      140.0,
+      20.5
+     ],
+     [
+      130.0,
+      20.5
+     ],
+     [
+      120.0,
+      20.5
+     ],
+     [
+      110.0,
+      20.5
+     ],
+     [
+      100.0,
+      20.5
+     ],
+     [
+      90.0,
+      20.5
+     ],
+     [
+      80.0,
+      20.5
+     ],
+     [
+      70.0,
+      20.5
+     ],
+     [
+      60.0,
+      20.5
+     ],
+     [
+      50.0,
+      16.79
+     ],
+     [
+      40.0,
+      16.59
+     ],
+     [
+      30.0,
+      16.59
+     ],
+     [
+      20.0,
+      16.59
+     ],
+     [
+      10.0,
+      16.59
+     ],
+     [
+      0.0,
+      11.0
+     ]
+    ]
+   }
+  },
+  "4": {
+   "a_flush": {
+    "first_lift_below_3mm": null,
+    "first_lift_contact": null,
+    "min_distance": 11.0,
+    "at_lift": 0.0,
+    "pair": [
+     "G-B",
+     [
+      "base_top_stop_neg",
+      "B"
+     ]
+    ],
+    "pair_min": {
+     "S-G": 27.96,
+     "S-GW": 169.19,
+     "S-B": 20.5,
+     "S-N1": 95.17,
+     "S-N2": 95.17,
+     "S-F": 49.6,
+     "SW-G": 124.49,
+     "SW-GW": 233.09,
+     "SW-B": 101.8,
+     "SW-N1": 201.8,
+     "SW-N2": 201.8,
+     "SW-F": 84.9,
+     "G-B": 11.0,
+     "G-N1": 29.63,
+     "G-N2": 29.63,
+     "G-F": 194.6,
+     "GW-B": 119.3,
+     "GW-N1": 122.9,
+     "GW-N2": 123.08,
+     "GW-F": 369.3
+    },
+    "curve": [
+     [
+      150.0,
+      20.5
+     ],
+     [
+      140.0,
+      20.5
+     ],
+     [
+      130.0,
+      20.5
+     ],
+     [
+      120.0,
+      20.5
+     ],
+     [
+      110.0,
+      20.5
+     ],
+     [
+      100.0,
+      20.5
+     ],
+     [
+      90.0,
+      20.5
+     ],
+     [
+      80.0,
+      20.5
+     ],
+     [
+      70.0,
+      20.5
+     ],
+     [
+      60.0,
+      20.5
+     ],
+     [
+      50.0,
+      20.5
+     ],
+     [
+      40.0,
+      20.0
+     ],
+     [
+      30.0,
+      20.0
+     ],
+     [
+      20.0,
+      20.0
+     ],
+     [
+      10.0,
+      20.0
+     ],
+     [
+      0.0,
+      11.0
+     ]
+    ]
+   },
+   "b_proud15": {
+    "first_lift_below_3mm": null,
+    "first_lift_contact": null,
+    "min_distance": 11.0,
+    "at_lift": 0.0,
+    "pair": [
+     "G-B",
+     [
+      "base_top_stop_neg",
+      "B"
+     ]
+    ],
+    "pair_min": {
+     "S-G": 27.96,
+     "S-GW": 169.19,
+     "S-B": 20.5,
+     "S-N1": 80.2,
+     "S-N2": 80.2,
+     "S-F": 49.6,
+     "SW-G": 124.49,
+     "SW-GW": 233.09,
+     "SW-B": 101.8,
+     "SW-N1": 186.8,
+     "SW-N2": 186.8,
+     "SW-F": 84.9,
+     "G-B": 11.0,
+     "G-N1": 14.96,
+     "G-N2": 14.96,
+     "G-F": 194.6,
+     "GW-B": 119.3,
+     "GW-N1": 120.31,
+     "GW-N2": 120.32,
+     "GW-F": 369.3
+    },
+    "curve": [
+     [
+      150.0,
+      20.5
+     ],
+     [
+      140.0,
+      20.5
+     ],
+     [
+      130.0,
+      20.5
+     ],
+     [
+      120.0,
+      20.5
+     ],
+     [
+      110.0,
+      20.5
+     ],
+     [
+      100.0,
+      20.5
+     ],
+     [
+      90.0,
+      20.5
+     ],
+     [
+      80.0,
+      20.5
+     ],
+     [
+      70.0,
+      20.5
+     ],
+     [
+      60.0,
+      18.68
+     ],
+     [
+      50.0,
+      15.18
+     ],
+     [
+      40.0,
+      14.96
+     ],
+     [
+      30.0,
+      14.96
+     ],
+     [
+      20.0,
+      14.96
+     ],
+     [
+      10.0,
+      14.96
+     ],
+     [
+      0.0,
+      11.0
+     ]
+    ]
+   },
+   "c_proud15_t12": {
+    "first_lift_below_3mm": null,
+    "first_lift_contact": null,
+    "min_distance": 11.0,
+    "at_lift": 0.0,
+    "pair": [
+     "G-B",
+     [
+      "base_top_stop_neg",
+      "B"
+     ]
+    ],
+    "pair_min": {
+     "S-G": 27.96,
+     "S-GW": 169.19,
+     "S-B": 20.5,
+     "S-N1": 80.2,
+     "S-N2": 80.2,
+     "S-F": 49.6,
+     "SW-G": 124.49,
+     "SW-GW": 233.09,
+     "SW-B": 101.8,
+     "SW-N1": 186.8,
+     "SW-N2": 186.8,
+     "SW-F": 84.9,
+     "G-B": 11.0,
+     "G-N1": 16.59,
+     "G-N2": 16.59,
+     "G-F": 194.6,
+     "GW-B": 119.3,
+     "GW-N1": 120.31,
+     "GW-N2": 120.32,
+     "GW-F": 369.3
+    },
+    "curve": [
+     [
+      150.0,
+      20.5
+     ],
+     [
+      140.0,
+      20.5
+     ],
+     [
+      130.0,
+      20.5
+     ],
+     [
+      120.0,
+      20.5
+     ],
+     [
+      110.0,
+      20.5
+     ],
+     [
+      100.0,
+      20.5
+     ],
+     [
+      90.0,
+      20.5
+     ],
+     [
+      80.0,
+      20.5
+     ],
+     [
+      70.0,
+      20.5
+     ],
+     [
+      60.0,
+      20.5
+     ],
+     [
+      50.0,
+      16.79
+     ],
+     [
+      40.0,
+      16.59
+     ],
+     [
+      30.0,
+      16.59
+     ],
+     [
+      20.0,
+      16.59
+     ],
+     [
+      10.0,
+      16.59
+     ],
+     [
+      0.0,
+      11.0
+     ]
+    ]
+   }
+  },
+  "5": {
+   "a_flush": {
+    "first_lift_below_3mm": null,
+    "first_lift_contact": null,
+    "min_distance": 11.0,
+    "at_lift": 0.0,
+    "pair": [
+     "G-B",
+     [
+      "base_top_stop_neg",
+      "B"
+     ]
+    ],
+    "pair_min": {
+     "S-G": 27.61,
+     "S-GW": 159.21,
+     "S-B": 20.5,
+     "S-N1": 95.07,
+     "S-N2": 95.07,
+     "S-F": 39.6,
+     "SW-G": 122.1,
+     "SW-GW": 224.25,
+     "SW-B": 101.8,
+     "SW-N1": 201.8,
+     "SW-N2": 201.8,
+     "SW-F": 74.9,
+     "G-B": 11.0,
+     "G-N1": 30.6,
+     "G-N2": 30.6,
+     "G-F": 174.6,
+     "GW-B": 119.3,
+     "GW-N1": 122.88,
+     "GW-N2": 123.05,
+     "GW-F": 349.3
+    },
+    "curve": [
+     [
+      150.0,
+      20.5
+     ],
+     [
+      140.0,
+      20.5
+     ],
+     [
+      130.0,
+      20.5
+     ],
+     [
+      120.0,
+      20.5
+     ],
+     [
+      110.0,
+      20.5
+     ],
+     [
+      100.0,
+      20.5
+     ],
+     [
+      90.0,
+      20.5
+     ],
+     [
+      80.0,
+      20.5
+     ],
+     [
+      70.0,
+      20.5
+     ],
+     [
+      60.0,
+      20.5
+     ],
+     [
+      50.0,
+      20.5
+     ],
+     [
+      40.0,
+      20.5
+     ],
+     [
+      30.0,
+      20.5
+     ],
+     [
+      20.0,
+      20.5
+     ],
+     [
+      10.0,
+      20.5
+     ],
+     [
+      0.0,
+      11.0
+     ]
+    ]
+   },
+   "b_proud15": {
+    "first_lift_below_3mm": null,
+    "first_lift_contact": null,
+    "min_distance": 11.0,
+    "at_lift": 0.0,
+    "pair": [
+     "G-B",
+     [
+      "base_top_stop_neg",
+      "B"
+     ]
+    ],
+    "pair_min": {
+     "S-G": 27.61,
+     "S-GW": 159.21,
+     "S-B": 20.5,
+     "S-N1": 80.08,
+     "S-N2": 80.08,
+     "S-F": 39.6,
+     "SW-G": 122.1,
+     "SW-GW": 224.25,
+     "SW-B": 101.8,
+     "SW-N1": 186.8,
+     "SW-N2": 186.8,
+     "SW-F": 74.9,
+     "G-B": 11.0,
+     "G-N1": 16.16,
+     "G-N2": 16.16,
+     "G-F": 174.6,
+     "GW-B": 119.3,
+     "GW-N1": 120.28,
+     "GW-N2": 120.29,
+     "GW-F": 349.3
+    },
+    "curve": [
+     [
+      150.0,
+      20.5
+     ],
+     [
+      140.0,
+      20.5
+     ],
+     [
+      130.0,
+      20.5
+     ],
+     [
+      120.0,
+      20.5
+     ],
+     [
+      110.0,
+      20.5
+     ],
+     [
+      100.0,
+      20.5
+     ],
+     [
+      90.0,
+      20.5
+     ],
+     [
+      80.0,
+      20.5
+     ],
+     [
+      70.0,
+      20.5
+     ],
+     [
+      60.0,
+      20.5
+     ],
+     [
+      50.0,
+      17.87
+     ],
+     [
+      40.0,
+      17.68
+     ],
+     [
+      30.0,
+      17.68
+     ],
+     [
+      20.0,
+      17.68
+     ],
+     [
+      10.0,
+      17.68
+     ],
+     [
+      0.0,
+      11.0
+     ]
+    ]
+   },
+   "c_proud15_t16": {
+    "first_lift_below_3mm": null,
+    "first_lift_contact": null,
+    "min_distance": 11.0,
+    "at_lift": 0.0,
+    "pair": [
+     "G-B",
+     [
+      "base_top_stop_neg",
+      "B"
+     ]
+    ],
+    "pair_min": {
+     "S-G": 27.61,
+     "S-GW": 159.21,
+     "S-B": 20.5,
+     "S-N1": 80.08,
+     "S-N2": 80.08,
+     "S-F": 39.6,
+     "SW-G": 122.1,
+     "SW-GW": 224.25,
+     "SW-B": 101.8,
+     "SW-N1": 186.8,
+     "SW-N2": 186.8,
+     "SW-F": 74.9,
+     "G-B": 11.0,
+     "G-N1": 15.67,
+     "G-N2": 15.67,
+     "G-F": 174.6,
+     "GW-B": 119.3,
+     "GW-N1": 120.28,
+     "GW-N2": 120.29,
+     "GW-F": 349.3
+    },
+    "curve": [
+     [
+      150.0,
+      20.5
+     ],
+     [
+      140.0,
+      20.5
+     ],
+     [
+      130.0,
+      20.5
+     ],
+     [
+      120.0,
+      20.5
+     ],
+     [
+      110.0,
+      20.5
+     ],
+     [
+      100.0,
+      20.5
+     ],
+     [
+      90.0,
+      20.5
+     ],
+     [
+      80.0,
+      20.5
+     ],
+     [
+      70.0,
+      20.5
+     ],
+     [
+      60.0,
+      19.62
+     ],
+     [
+      50.0,
+      15.88
+     ],
+     [
+      40.0,
+      15.67
+     ],
+     [
+      30.0,
+      15.67
+     ],
+     [
+      20.0,
+      15.67
+     ],
+     [
+      10.0,
+      15.67
+     ],
+     [
+      0.0,
+      11.0
+     ]
+    ]
+   }
+  }
+ },
+ "check3_pad_row": {
+  "1": {
+   "default_zc": 115.0,
+   "suction_top_z_excl_ejector": 190.4,
+   "suction_top_z_incl_ejector_envelope": 190.4,
+   "suction_bottom_z_excl_ejector": 39.6,
+   "suction_top_part": "pad_R_00",
+   "gripper_lowest_z": 174.6,
+   "gripper_lowest_parts": [
+    [
+     174.6,
+     "finger_left_block"
+    ],
+    [
+     174.6,
+     "finger_right_block"
+    ],
+    [
+     185.8,
+     "finger_pad_left"
+    ]
+   ],
+   "gripper_wrist_lowest_z": 349.3,
+   "z_gap_suction_top_to_gripper_lowest": -15.8,
+   "z_gap_suction_top_to_gripper_wrist_lowest": 158.9,
+   "dist_default": {
+    "S-G": {
+     "d": 10.805,
+     "at": [
+      "pad_R_00",
+      "finger_left_block"
+     ]
+    },
+    "S-GW": {
+     "d": 159.208,
+     "at": [
+      "pad_R_00",
+      "link6"
+     ]
+    },
+    "SW-G": {
+     "d": 120.359,
+     "at": [
+      "link6",
+      "finger_right_block"
+     ]
+    },
+    "SW-GW": {
+     "d": 224.247,
+     "at": [
+      "link6",
+      "link6"
+     ]
+    }
+   },
+   "min_clearance_default": 10.805,
+   "search_range_zc": [
+    100.4,
+    129.6
+   ],
+   "search": [
+    [
+     101.0,
+     13.13
+    ],
+    [
+     102.0,
+     12.64
+    ],
+    [
+     103.0,
+     12.2
+    ],
+    [
+     104.0,
+     11.82
+    ],
+    [
+     105.0,
+     11.48
+    ],
+    [
+     106.0,
+     11.23
+    ],
+    [
+     107.0,
+     11.02
+    ],
+    [
+     108.0,
+     10.89
+    ],
+    [
+     109.0,
+     10.82
+    ],
+    [
+     110.0,
+     10.8
+    ],
+    [
+     111.0,
+     10.8
+    ],
+    [
+     112.0,
+     10.8
+    ],
+    [
+     113.0,
+     10.8
+    ],
+    [
+     114.0,
+     10.8
+    ],
+    [
+     115.0,
+     10.8
+    ],
+    [
+     116.0,
+     10.8
+    ],
+    [
+     117.0,
+     10.8
+    ],
+    [
+     118.0,
+     10.8
+    ],
+    [
+     119.0,
+     10.8
+    ],
+    [
+     120.0,
+     10.8
+    ],
+    [
+     121.0,
+     10.8
+    ],
+    [
+     122.0,
+     10.8
+    ],
+    [
+     123.0,
+     10.8
+    ],
+    [
+     124.0,
+     10.8
+    ],
+    [
+     125.0,
+     10.8
+    ],
+    [
+     126.0,
+     10.8
+    ],
+    [
+     127.0,
+     10.8
+    ],
+    [
+     128.0,
+     10.8
+    ],
+    [
+     129.0,
+     10.8
+    ]
+   ],
+   "best_zc": 101.0,
+   "best_min_clearance": 13.13,
+   "clearance_ge_10_default": true
+  },
+  "2": {
+   "default_zc": 120.0,
+   "suction_top_z_excl_ejector": 195.4,
+   "suction_top_z_incl_ejector_envelope": 195.4,
+   "suction_bottom_z_excl_ejector": 44.6,
+   "suction_top_part": "pad_R_00",
+   "gripper_lowest_z": 184.6,
+   "gripper_lowest_parts": [
+    [
+     184.6,
+     "finger_left_block"
+    ],
+    [
+     184.6,
+     "finger_right_block"
+    ],
+    [
+     195.8,
+     "finger_pad_left"
+    ]
+   ],
+   "gripper_wrist_lowest_z": 359.3,
+   "z_gap_suction_top_to_gripper_lowest": -10.8,
+   "z_gap_suction_top_to_gripper_wrist_lowest": 163.9,
+   "dist_default": {
+    "S-G": {
+     "d": 11.068,
+     "at": [
+      "pad_R_00",
+      "finger_left_block"
+     ]
+    },
+    "S-GW": {
+     "d": 164.198,
+     "at": [
+      "pad_R_00",
+      "link6"
+     ]
+    },
+    "SW-G": {
+     "d": 121.342,
+     "at": [
+      "link6",
+      "finger_right_block"
+     ]
+    },
+    "SW-GW": {
+     "d": 228.656,
+     "at": [
+      "link6",
+      "link6"
+     ]
+    }
+   },
+   "min_clearance_default": 11.068,
+   "search_range_zc": [
+    100.4,
+    139.6
+   ],
+   "search": [
+    [
+     101.0,
+     19.11
+    ],
+    [
+     102.0,
+     18.5
+    ],
+    [
+     103.0,
+     17.89
+    ],
+    [
+     104.0,
+     17.29
+    ],
+    [
+     105.0,
+     16.7
+    ],
+    [
+     106.0,
+     16.11
+    ],
+    [
+     107.0,
+     15.54
+    ],
+    [
+     108.0,
+     14.98
+    ],
+    [
+     109.0,
+     14.43
+    ],
+    [
+     110.0,
+     13.9
+    ],
+    [
+     111.0,
+     13.38
+    ],
+    [
+     112.0,
+     12.89
+    ],
+    [
+     113.0,
+     12.45
+    ],
+    [
+     114.0,
+     12.07
+    ],
+    [
+     115.0,
+     11.75
+    ],
+    [
+     116.0,
+     11.49
+    ],
+    [
+     117.0,
+     11.29
+    ],
+    [
+     118.0,
+     11.15
+    ],
+    [
+     119.0,
+     11.08
+    ],
+    [
+     120.0,
+     11.07
+    ],
+    [
+     121.0,
+     11.07
+    ],
+    [
+     122.0,
+     11.07
+    ],
+    [
+     123.0,
+     11.07
+    ],
+    [
+     124.0,
+     11.07
+    ],
+    [
+     125.0,
+     11.07
+    ],
+    [
+     126.0,
+     11.07
+    ],
+    [
+     127.0,
+     11.07
+    ],
+    [
+     128.0,
+     11.07
+    ],
+    [
+     129.0,
+     11.07
+    ],
+    [
+     130.0,
+     11.07
+    ],
+    [
+     131.0,
+     11.07
+    ],
+    [
+     132.0,
+     11.07
+    ],
+    [
+     133.0,
+     11.07
+    ],
+    [
+     134.0,
+     11.07
+    ],
+    [
+     135.0,
+     11.07
+    ],
+    [
+     136.0,
+     11.07
+    ],
+    [
+     137.0,
+     11.07
+    ],
+    [
+     138.0,
+     11.07
+    ],
+    [
+     139.0,
+     11.07
+    ]
+   ],
+   "best_zc": 101.0,
+   "best_min_clearance": 19.11,
+   "clearance_ge_10_default": true
+  },
+  "3": {
+   "default_zc": 110.0,
+   "suction_top_z_excl_ejector": 185.4,
+   "suction_top_z_incl_ejector_envelope": 185.4,
+   "suction_bottom_z_excl_ejector": 34.6,
+   "suction_top_part": "pad_R_00",
+   "gripper_lowest_z": 164.6,
+   "gripper_lowest_parts": [
+    [
+     164.6,
+     "finger_left_block"
+    ],
+    [
+     164.6,
+     "finger_right_block"
+    ],
+    [
+     175.8,
+     "finger_pad_left"
+    ]
+   ],
+   "gripper_wrist_lowest_z": 339.3,
+   "z_gap_suction_top_to_gripper_lowest": -20.8,
+   "z_gap_suction_top_to_gripper_wrist_lowest": 153.9,
+   "dist_default": {
+    "S-G": {
+     "d": 11.068,
+     "at": [
+      "pad_R_00",
+      "finger_left_block"
+     ]
+    },
+    "S-GW": {
+     "d": 154.218,
+     "at": [
+      "pad_R_00",
+      "link6"
+     ]
+    },
+    "SW-G": {
+     "d": 119.635,
+     "at": [
+      "link6",
+      "finger_right_block"
+     ]
+    },
+    "SW-GW": {
+     "d": 219.864,
+     "at": [
+      "link6",
+      "link6"
+     ]
+    }
+   },
+   "min_clearance_default": 11.068,
+   "search_range_zc": [
+    100.4,
+    119.6
+   ],
+   "search": [
+    [
+     101.0,
+     11.07
+    ],
+    [
+     102.0,
+     11.07
+    ],
+    [
+     103.0,
+     11.07
+    ],
+    [
+     104.0,
+     11.07
+    ],
+    [
+     105.0,
+     11.07
+    ],
+    [
+     106.0,
+     11.07
+    ],
+    [
+     107.0,
+     11.07
+    ],
+    [
+     108.0,
+     11.07
+    ],
+    [
+     109.0,
+     11.07
+    ],
+    [
+     110.0,
+     11.07
+    ],
+    [
+     111.0,
+     11.07
+    ],
+    [
+     112.0,
+     11.07
+    ],
+    [
+     113.0,
+     11.07
+    ],
+    [
+     114.0,
+     11.07
+    ],
+    [
+     115.0,
+     11.07
+    ],
+    [
+     116.0,
+     11.07
+    ],
+    [
+     117.0,
+     11.07
+    ],
+    [
+     118.0,
+     11.07
+    ],
+    [
+     119.0,
+     11.07
+    ]
+   ],
+   "best_zc": 101.0,
+   "best_min_clearance": 11.07,
+   "clearance_ge_10_default": true
+  },
+  "4": {
+   "default_zc": 125.0,
+   "suction_top_z_excl_ejector": 200.4,
+   "suction_top_z_incl_ejector_envelope": 200.4,
+   "suction_bottom_z_excl_ejector": 49.6,
+   "suction_top_part": "pad_R_00",
+   "gripper_lowest_z": 194.6,
+   "gripper_lowest_parts": [
+    [
+     194.6,
+     "finger_left_block"
+    ],
+    [
+     194.6,
+     "finger_right_block"
+    ],
+    [
+     205.8,
+     "finger_pad_left"
+    ]
+   ],
+   "gripper_wrist_lowest_z": 369.3,
+   "z_gap_suction_top_to_gripper_lowest": -5.8,
+   "z_gap_suction_top_to_gripper_wrist_lowest": 168.9,
+   "dist_default": {
+    "S-G": {
+     "d": 11.746,
+     "at": [
+      "pad_R_00",
+      "finger_left_block"
+     ]
+    },
+    "S-GW": {
+     "d": 169.19,
+     "at": [
+      "pad_R_00",
+      "link6"
+     ]
+    },
+    "SW-G": {
+     "d": 122.493,
+     "at": [
+      "link6",
+      "finger_right_block"
+     ]
+    },
+    "SW-GW": {
+     "d": 233.088,
+     "at": [
+      "link6",
+      "link6"
+     ]
+    }
+   },
+   "min_clearance_default": 11.746,
+   "search_range_zc": [
+    100.4,
+    149.6
+   ],
+   "search": [
+    [
+     101.0,
+     25.67
+    ],
+    [
+     102.0,
+     24.95
+    ],
+    [
+     103.0,
+     24.25
+    ],
+    [
+     104.0,
+     23.57
+    ],
+    [
+     105.0,
+     22.91
+    ],
+    [
+     106.0,
+     22.27
+    ],
+    [
+     107.0,
+     21.63
+    ],
+    [
+     108.0,
+     20.99
+    ],
+    [
+     109.0,
+     20.36
+    ],
+    [
+     110.0,
+     19.73
+    ],
+    [
+     111.0,
+     19.11
+    ],
+    [
+     112.0,
+     18.5
+    ],
+    [
+     113.0,
+     17.89
+    ],
+    [
+     114.0,
+     17.29
+    ],
+    [
+     115.0,
+     16.7
+    ],
+    [
+     116.0,
+     16.11
+    ],
+    [
+     117.0,
+     15.54
+    ],
+    [
+     118.0,
+     14.98
+    ],
+    [
+     119.0,
+     14.43
+    ],
+    [
+     120.0,
+     13.9
+    ],
+    [
+     121.0,
+     13.38
+    ],
+    [
+     122.0,
+     12.89
+    ],
+    [
+     123.0,
+     12.45
+    ],
+    [
+     124.0,
+     12.07
+    ],
+    [
+     125.0,
+     11.75
+    ],
+    [
+     126.0,
+     11.49
+    ],
+    [
+     127.0,
+     11.29
+    ],
+    [
+     128.0,
+     11.15
+    ],
+    [
+     129.0,
+     11.08
+    ],
+    [
+     130.0,
+     11.07
+    ],
+    [
+     131.0,
+     11.07
+    ],
+    [
+     132.0,
+     11.07
+    ],
+    [
+     133.0,
+     11.07
+    ],
+    [
+     134.0,
+     11.07
+    ],
+    [
+     135.0,
+     11.07
+    ],
+    [
+     136.0,
+     11.07
+    ],
+    [
+     137.0,
+     11.07
+    ],
+    [
+     138.0,
+     11.07
+    ],
+    [
+     139.0,
+     11.07
+    ],
+    [
+     140.0,
+     11.07
+    ],
+    [
+     141.0,
+     11.07
+    ],
+    [
+     142.0,
+     11.07
+    ],
+    [
+     143.0,
+     11.07
+    ],
+    [
+     144.0,
+     11.07
+    ],
+    [
+     145.0,
+     11.07
+    ],
+    [
+     146.0,
+     11.07
+    ],
+    [
+     147.0,
+     11.07
+    ],
+    [
+     148.0,
+     11.07
+    ],
+    [
+     149.0,
+     11.07
+    ]
+   ],
+   "best_zc": 101.0,
+   "best_min_clearance": 25.67,
+   "clearance_ge_10_default": true
+  },
+  "5": {
+   "default_zc": 115.0,
+   "suction_top_z_excl_ejector": 190.4,
+   "suction_top_z_incl_ejector_envelope": 190.4,
+   "suction_bottom_z_excl_ejector": 39.6,
+   "suction_top_part": "pad_R_00",
+   "gripper_lowest_z": 174.6,
+   "gripper_lowest_parts": [
+    [
+     174.6,
+     "finger_left_block"
+    ],
+    [
+     174.6,
+     "finger_right_block"
+    ],
+    [
+     185.8,
+     "finger_pad_left"
+    ]
+   ],
+   "gripper_wrist_lowest_z": 349.3,
+   "z_gap_suction_top_to_gripper_lowest": -15.8,
+   "z_gap_suction_top_to_gripper_wrist_lowest": 158.9,
+   "dist_default": {
+    "S-G": {
+     "d": 10.124,
+     "at": [
+      "pad_R_00",
+      "finger_left_block"
+     ]
+    },
+    "S-GW": {
+     "d": 159.208,
+     "at": [
+      "pad_R_00",
+      "link6"
+     ]
+    },
+    "SW-G": {
+     "d": 120.283,
+     "at": [
+      "link6",
+      "finger_right_block"
+     ]
+    },
+    "SW-GW": {
+     "d": 224.247,
+     "at": [
+      "link6",
+      "link6"
+     ]
+    }
+   },
+   "min_clearance_default": 10.124,
+   "search_range_zc": [
+    100.4,
+    129.6
+   ],
+   "search": [
+    [
+     101.0,
+     12.41
+    ],
+    [
+     102.0,
+     11.95
+    ],
+    [
+     103.0,
+     11.52
+    ],
+    [
+     104.0,
+     11.12
+    ],
+    [
+     105.0,
+     10.8
+    ],
+    [
+     106.0,
+     10.53
+    ],
+    [
+     107.0,
+     10.34
+    ],
+    [
+     108.0,
+     10.21
+    ],
+    [
+     109.0,
+     10.14
+    ],
+    [
+     110.0,
+     10.12
+    ],
+    [
+     111.0,
+     10.12
+    ],
+    [
+     112.0,
+     10.12
+    ],
+    [
+     113.0,
+     10.12
+    ],
+    [
+     114.0,
+     10.12
+    ],
+    [
+     115.0,
+     10.12
+    ],
+    [
+     116.0,
+     10.12
+    ],
+    [
+     117.0,
+     10.12
+    ],
+    [
+     118.0,
+     10.12
+    ],
+    [
+     119.0,
+     10.12
+    ],
+    [
+     120.0,
+     10.12
+    ],
+    [
+     121.0,
+     10.12
+    ],
+    [
+     122.0,
+     10.12
+    ],
+    [
+     123.0,
+     10.12
+    ],
+    [
+     124.0,
+     10.12
+    ],
+    [
+     125.0,
+     10.12
+    ],
+    [
+     126.0,
+     10.12
+    ],
+    [
+     127.0,
+     10.12
+    ],
+    [
+     128.0,
+     10.12
+    ],
+    [
+     129.0,
+     10.12
+    ]
+   ],
+   "best_zc": 101.0,
+   "best_min_clearance": 12.41,
+   "clearance_ge_10_default": true
+  }
+ },
+ "check5_mass": {
+  "1": {
+   "suction": {
+    "tool_mass_kg": 0.2782,
+    "tool_cog_link6_mm": [
+     -0.5,
+     19.8,
+     98.2
+    ],
+    "carton_cog_link6_mm": [
+     0.0,
+     0.0,
+     279.0
+    ],
+    "total_mass_kg": 0.4282,
+    "total_cog_link6_mm": [
+     -0.3,
+     12.9,
+     161.6
+    ],
+    "moment_handoff_tool_Nm": 0.136,
+    "moment_handoff_tool_plus_carton_Nm": 0.46,
+    "moment_about_link6_z_Nm": 0.054,
+    "moment_worst_orientation_tool_plus_carton_Nm": 0.46,
+    "payload_margin_kg": 1.572
+   },
+   "gripper": {
+    "tool_mass_kg": 0.9487,
+    "tool_cog_link6_mm": [
+     2.9,
+     -0.0,
+     110.3
+    ],
+    "carton_cog_link6_mm": [
+     0.0,
+     -82.5,
+     286.5
+    ],
+    "total_mass_kg": 1.0987,
+    "total_cog_link6_mm": [
+     2.5,
+     -11.3,
+     134.3
+    ],
+    "moment_handoff_tool_Nm": 0.027,
+    "moment_handoff_tool_plus_carton_Nm": 0.125,
+    "moment_about_link6_z_Nm": 0.0,
+    "moment_worst_orientation_tool_plus_carton_Nm": 0.889,
+    "payload_margin_kg": 0.901
+   }
+  },
+  "2": {
+   "suction": {
+    "tool_mass_kg": 0.2782,
+    "tool_cog_link6_mm": [
+     -0.5,
+     19.8,
+     98.2
+    ],
+    "carton_cog_link6_mm": [
+     0.0,
+     0.0,
+     279.0
+    ],
+    "total_mass_kg": 0.4282,
+    "total_cog_link6_mm": [
+     -0.3,
+     12.9,
+     161.6
+    ],
+    "moment_handoff_tool_Nm": 0.136,
+    "moment_handoff_tool_plus_carton_Nm": 0.46,
+    "moment_about_link6_z_Nm": 0.054,
+    "moment_worst_orientation_tool_plus_carton_Nm": 0.46,
+    "payload_margin_kg": 1.572
+   },
+   "gripper": {
+    "tool_mass_kg": 0.9487,
+    "tool_cog_link6_mm": [
+     2.9,
+     -0.0,
+     110.3
+    ],
+    "carton_cog_link6_mm": [
+     0.0,
+     -82.5,
+     291.5
+    ],
+    "total_mass_kg": 1.0987,
+    "total_cog_link6_mm": [
+     2.5,
+     -11.3,
+     135.0
+    ],
+    "moment_handoff_tool_Nm": 0.027,
+    "moment_handoff_tool_plus_carton_Nm": 0.125,
+    "moment_about_link6_z_Nm": 0.0,
+    "moment_worst_orientation_tool_plus_carton_Nm": 0.896,
+    "payload_margin_kg": 0.901
+   }
+  },
+  "3": {
+   "suction": {
+    "tool_mass_kg": 0.2782,
+    "tool_cog_link6_mm": [
+     -0.5,
+     19.8,
+     98.2
+    ],
+    "carton_cog_link6_mm": [
+     0.0,
+     0.0,
+     279.0
+    ],
+    "total_mass_kg": 0.4282,
+    "total_cog_link6_mm": [
+     -0.3,
+     12.9,
+     161.6
+    ],
+    "moment_handoff_tool_Nm": 0.136,
+    "moment_handoff_tool_plus_carton_Nm": 0.46,
+    "moment_about_link6_z_Nm": 0.054,
+    "moment_worst_orientation_tool_plus_carton_Nm": 0.46,
+    "payload_margin_kg": 1.572
+   },
+   "gripper": {
+    "tool_mass_kg": 0.9487,
+    "tool_cog_link6_mm": [
+     2.9,
+     -0.0,
+     110.3
+    ],
+    "carton_cog_link6_mm": [
+     0.0,
+     -82.5,
+     281.5
+    ],
+    "total_mass_kg": 1.0987,
+    "total_cog_link6_mm": [
+     2.5,
+     -11.3,
+     133.7
+    ],
+    "moment_handoff_tool_Nm": 0.027,
+    "moment_handoff_tool_plus_carton_Nm": 0.125,
+    "moment_about_link6_z_Nm": 0.0,
+    "moment_worst_orientation_tool_plus_carton_Nm": 0.882,
+    "payload_margin_kg": 0.901
+   }
+  },
+  "4": {
+   "suction": {
+    "tool_mass_kg": 0.2782,
+    "tool_cog_link6_mm": [
+     -0.5,
+     19.8,
+     98.2
+    ],
+    "carton_cog_link6_mm": [
+     0.0,
+     0.0,
+     301.5
+    ],
+    "total_mass_kg": 0.4282,
+    "total_cog_link6_mm": [
+     -0.3,
+     12.9,
+     169.4
+    ],
+    "moment_handoff_tool_Nm": 0.136,
+    "moment_handoff_tool_plus_carton_Nm": 0.493,
+    "moment_about_link6_z_Nm": 0.054,
+    "moment_worst_orientation_tool_plus_carton_Nm": 0.493,
+    "payload_margin_kg": 1.572
+   },
+   "gripper": {
+    "tool_mass_kg": 0.9487,
+    "tool_cog_link6_mm": [
+     2.9,
+     -0.0,
+     110.3
+    ],
+    "carton_cog_link6_mm": [
+     0.0,
+     -105.0,
+     296.5
+    ],
+    "total_mass_kg": 1.0987,
+    "total_cog_link6_mm": [
+     2.5,
+     -14.4,
+     135.7
+    ],
+    "moment_handoff_tool_Nm": 0.027,
+    "moment_handoff_tool_plus_carton_Nm": 0.157,
+    "moment_about_link6_z_Nm": 0.0,
+    "moment_worst_orientation_tool_plus_carton_Nm": 0.908,
+    "payload_margin_kg": 0.901
+   }
+  },
+  "5": {
+   "suction": {
+    "tool_mass_kg": 0.2782,
+    "tool_cog_link6_mm": [
+     -0.5,
+     19.8,
+     98.2
+    ],
+    "carton_cog_link6_mm": [
+     0.0,
+     0.0,
+     279.0
+    ],
+    "total_mass_kg": 0.4282,
+    "total_cog_link6_mm": [
+     -0.3,
+     12.9,
+     161.6
+    ],
+    "moment_handoff_tool_Nm": 0.136,
+    "moment_handoff_tool_plus_carton_Nm": 0.46,
+    "moment_about_link6_z_Nm": 0.054,
+    "moment_worst_orientation_tool_plus_carton_Nm": 0.46,
+    "payload_margin_kg": 1.572
+   },
+   "gripper": {
+    "tool_mass_kg": 0.9487,
+    "tool_cog_link6_mm": [
+     2.9,
+     -0.0,
+     110.3
+    ],
+    "carton_cog_link6_mm": [
+     0.0,
+     -82.5,
+     286.5
+    ],
+    "total_mass_kg": 1.0987,
+    "total_cog_link6_mm": [
+     2.5,
+     -11.3,
+     134.3
+    ],
+    "moment_handoff_tool_Nm": 0.027,
+    "moment_handoff_tool_plus_carton_Nm": 0.125,
+    "moment_about_link6_z_Nm": 0.0,
+    "moment_worst_orientation_tool_plus_carton_Nm": 0.889,
+    "payload_margin_kg": 0.901
+   }
+  }
+ }
+}

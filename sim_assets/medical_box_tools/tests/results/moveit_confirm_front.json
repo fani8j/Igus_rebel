@@ -1,0 +1,288 @@
+{
+ "T3": {
+  "parking": {
+   "best_d": 0.41,
+   "lateral_offset_m": 0.005,
+   "lift": -0.6,
+   "slider_left": -0.005973,
+   "slider_right": 0.005973
+  },
+  "segments": [
+   {
+    "arm": "left",
+    "segment": "L0 home->stage",
+    "kind": "OMPL joint goal",
+    "ok": true,
+    "error": 1,
+    "points": 54,
+    "plan_time_s": 2.79
+   },
+   {
+    "arm": "left",
+    "segment": "L0b stage->pre",
+    "kind": "Cartesian",
+    "fraction": 1.0,
+    "ok": true,
+    "error": 1,
+    "points": 13,
+    "plan_time_s": 0.04
+   },
+   {
+    "arm": "left",
+    "segment": "L1 approach",
+    "kind": "Cartesian",
+    "fraction": 1.0,
+    "ok": true,
+    "error": 1,
+    "points": 7,
+    "plan_time_s": 0.01
+   },
+   {
+    "arm": "left",
+    "segment": "L2 press",
+    "kind": "hold",
+    "ok": true,
+    "plan_time_s": 0.0
+   },
+   {
+    "arm": "left",
+    "segment": "L3 pull",
+    "kind": "Cartesian",
+    "fraction": 1.0,
+    "ok": true,
+    "error": 1,
+    "points": 10,
+    "plan_time_s": 0.02
+   },
+   {
+    "arm": "left",
+    "segment": "L4 retract 100 mm",
+    "kind": "Cartesian",
+    "fraction": 1.0,
+    "ok": true,
+    "error": 1,
+    "points": 7,
+    "plan_time_s": 0.02
+   },
+   {
+    "arm": "left",
+    "segment": "L4b retract to stage",
+    "kind": "Cartesian",
+    "fraction": 1.0,
+    "ok": true,
+    "error": 1,
+    "points": 6,
+    "plan_time_s": 0.01
+   },
+   {
+    "arm": "left",
+    "segment": "L5 ->home",
+    "kind": "OMPL joint goal",
+    "ok": true,
+    "error": 1,
+    "points": 54,
+    "plan_time_s": 3.34
+   },
+   {
+    "arm": "right",
+    "segment": "R0 home->stage",
+    "kind": "OMPL joint goal",
+    "ok": true,
+    "error": 1,
+    "points": 79,
+    "plan_time_s": 2.83
+   },
+   {
+    "arm": "right",
+    "segment": "R1 stage->pre",
+    "kind": "Cartesian",
+    "fraction": 1.0,
+    "ok": true,
+    "error": 1,
+    "points": 7,
+    "plan_time_s": 0.01
+   },
+   {
+    "arm": "right",
+    "segment": "R2 approach 100 mm",
+    "kind": "Cartesian",
+    "fraction": 1.0,
+    "ok": true,
+    "error": 1,
+    "points": 7,
+    "plan_time_s": 0.01
+   },
+   {
+    "arm": "right",
+    "segment": "R3 clamp",
+    "kind": "hold",
+    "ok": true,
+    "plan_time_s": 0.0
+   },
+   {
+    "arm": "right",
+    "segment": "R4 extract",
+    "kind": "Cartesian",
+    "fraction": 1.0,
+    "ok": true,
+    "error": 1,
+    "points": 13,
+    "plan_time_s": 0.04
+   },
+   {
+    "arm": "right",
+    "segment": "R5 lift 50 mm",
+    "kind": "Cartesian",
+    "fraction": 1.0,
+    "ok": true,
+    "error": 1,
+    "points": 6,
+    "plan_time_s": 0.01
+   }
+  ],
+  "all_ok": true
+ },
+ "T8": {
+  "parking": {
+   "best_d": 0.44,
+   "lateral_offset_m": 0.055,
+   "lift": 0.1,
+   "slider_left": -0.005973,
+   "slider_right": 0.005973
+  },
+  "segments": [
+   {
+    "arm": "left",
+    "segment": "L0 home->stage",
+    "kind": "OMPL joint goal",
+    "ok": true,
+    "error": 1,
+    "points": 62,
+    "plan_time_s": 1.66
+   },
+   {
+    "arm": "left",
+    "segment": "L0b stage->pre",
+    "kind": "Cartesian",
+    "fraction": 1.0,
+    "ok": true,
+    "error": 1,
+    "points": 14,
+    "plan_time_s": 0.04
+   },
+   {
+    "arm": "left",
+    "segment": "L1 approach",
+    "kind": "Cartesian",
+    "fraction": 1.0,
+    "ok": true,
+    "error": 1,
+    "points": 7,
+    "plan_time_s": 0.01
+   },
+   {
+    "arm": "left",
+    "segment": "L2 press",
+    "kind": "hold",
+    "ok": true,
+    "plan_time_s": 0.0
+   },
+   {
+    "arm": "left",
+    "segment": "L3 pull",
+    "kind": "Cartesian",
+    "fraction": 1.0,
+    "ok": true,
+    "error": 1,
+    "points": 10,
+    "plan_time_s": 0.02
+   },
+   {
+    "arm": "left",
+    "segment": "L4 retract 100 mm",
+    "kind": "Cartesian",
+    "fraction": 1.0,
+    "ok": true,
+    "error": 1,
+    "points": 8,
+    "plan_time_s": 0.02
+   },
+   {
+    "arm": "left",
+    "segment": "L4b retract to stage",
+    "kind": "Cartesian",
+    "fraction": 1.0,
+    "ok": true,
+    "error": 1,
+    "points": 6,
+    "plan_time_s": 0.01
+   },
+   {
+    "arm": "left",
+    "segment": "L5 ->home",
+    "kind": "OMPL joint goal",
+    "ok": true,
+    "error": 1,
+    "points": 62,
+    "plan_time_s": 0.94
+   },
+   {
+    "arm": "right",
+    "segment": "R0 home->stage",
+    "kind": "OMPL joint goal",
+    "ok": true,
+    "error": 1,
+    "points": 53,
+    "plan_time_s": 1.07
+   },
+   {
+    "arm": "right",
+    "segment": "R1 stage->pre",
+    "kind": "Cartesian",
+    "fraction": 1.0,
+    "ok": true,
+    "error": 1,
+    "points": 6,
+    "plan_time_s": 0.01
+   },
+   {
+    "arm": "right",
+    "segment": "R2 approach 100 mm",
+    "kind": "Cartesian",
+    "fraction": 1.0,
+    "ok": true,
+    "error": 1,
+    "points": 7,
+    "plan_time_s": 0.01
+   },
+   {
+    "arm": "right",
+    "segment": "R3 clamp",
+    "kind": "hold",
+    "ok": true,
+    "plan_time_s": 0.0
+   },
+   {
+    "arm": "right",
+    "segment": "R4 extract",
+    "kind": "Cartesian",
+    "fraction": 1.0,
+    "ok": true,
+    "error": 1,
+    "points": 13,
+    "plan_time_s": 0.03
+   },
+   {
+    "arm": "right",
+    "segment": "R5 lift 50 mm",
+    "kind": "Cartesian",
+    "fraction": 1.0,
+    "ok": true,
+    "error": 1,
+    "points": 5,
+    "plan_time_s": 0.01
+   }
+  ],
+  "all_ok": true
+ }
+}

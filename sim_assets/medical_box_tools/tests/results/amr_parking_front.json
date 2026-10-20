@@ -1,0 +1,528 @@
+[
+ {
+  "target": "T1",
+  "mode": "front",
+  "shelf": 1,
+  "box": "ultimaster_nagomi",
+  "which": "mid",
+  "pull_m": 0.1,
+  "yaw180": false,
+  "carton": "ultimaster_nagomi_029",
+  "lift_split_between_phases": false,
+  "candidates_inside_both_reach_maps": 0,
+  "feasible": false,
+  "reason": "no (d, lat, lift, slider) puts all key poses of both arms inside the IK reach map (same lift for both arms)",
+  "elapsed": 0.3444788455963135
+ },
+ {
+  "target": "T2",
+  "mode": "front",
+  "shelf": 2,
+  "box": "accuforce",
+  "which": "mid",
+  "pull_m": 0.1,
+  "yaw180": false,
+  "carton": "accuforce_029",
+  "lift_split_between_phases": false,
+  "candidates_inside_both_reach_maps": 121,
+  "candidates_fully_evaluated": 23,
+  "full_eval_failures": {
+   "left: L0 home->stage": 23
+  },
+  "feasible": false,
+  "reason": "every map-feasible candidate fails the full path / collision evaluation (see full_eval_failures)",
+  "elapsed": 63.50181698799133
+ },
+ {
+  "target": "T3",
+  "mode": "front",
+  "shelf": 3,
+  "box": "agent_monorail",
+  "which": "mid",
+  "pull_m": 0.1,
+  "yaw180": false,
+  "carton": "agent_monorail_016",
+  "lift_split_between_phases": false,
+  "candidates_inside_both_reach_maps": 1426,
+  "candidates_fully_evaluated": 12,
+  "full_eval_failures": {
+   "left: L0 home->stage": 3,
+   "right: R0 home->stage": 3
+  },
+  "feasible": true,
+  "best_d": 0.41,
+  "lateral_offset_m": 0.005,
+  "lift": -0.6,
+  "slider_left": -0.005973,
+  "slider_right": 0.005973,
+  "feasible_d_window_m": [
+   0.35,
+   0.48
+  ],
+  "feasible_lift_window_m": [
+   -0.62,
+   -0.58
+  ],
+  "feasible_lateral_window_m": [
+   -0.065,
+   0.075
+  ],
+  "corners_box_ok": true,
+  "corner_failures": [],
+  "min_clearance_m": {
+   "left.arm_cabinet": 0.117,
+   "left.arm_blocks": 0.109,
+   "left.arm_carton": 0.109,
+   "left.tool_cabinet": 0.0317,
+   "left.tool_neighbours": 0.0056,
+   "left.robot_amr": 0.5584,
+   "left.robot_stand": 0.0448,
+   "left.arm_arm": 0.0847,
+   "left.tool_tool": 0.3626,
+   "right.arm_cabinet": 0.1884,
+   "right.arm_blocks": 0.2265,
+   "right.arm_carton": 0.1271,
+   "right.tool_cabinet": 0.0397,
+   "right.tool_neighbours": 0.0446,
+   "right.robot_amr": 0.5433,
+   "right.robot_stand": 0.0423,
+   "right.arm_arm": 0.0893,
+   "right.tool_tool": 0.2349
+  },
+  "joint_margin_rad": 0.0811,
+  "min_manipulability": {
+   "left": 0.1004,
+   "right": 0.1443
+  },
+  "stage_variant": [
+   0,
+   1
+  ],
+  "max_ik_jump_rad": 0.0312,
+  "elapsed": 198.1312313079834
+ },
+ {
+  "target": "T4",
+  "mode": "front",
+  "shelf": 3,
+  "box": "conqueror_nc_pro",
+  "which": "mid",
+  "pull_m": 0.1,
+  "yaw180": false,
+  "carton": "conqueror_nc_pro_019",
+  "lift_split_between_phases": false,
+  "candidates_inside_both_reach_maps": 1426,
+  "candidates_fully_evaluated": 12,
+  "full_eval_failures": {
+   "left: L0 home->stage": 4,
+   "right: R0 home->stage": 2
+  },
+  "feasible": true,
+  "best_d": 0.41,
+  "lateral_offset_m": 0.005,
+  "lift": -0.6,
+  "slider_left": -0.005973,
+  "slider_right": 0.005973,
+  "feasible_d_window_m": [
+   0.35,
+   0.48
+  ],
+  "feasible_lift_window_m": [
+   -0.62,
+   -0.58
+  ],
+  "feasible_lateral_window_m": [
+   -0.065,
+   0.075
+  ],
+  "corners_box_ok": true,
+  "corner_failures": [],
+  "min_clearance_m": {
+   "left.arm_cabinet": 0.117,
+   "left.arm_blocks": 0.109,
+   "left.arm_carton": 0.109,
+   "left.tool_cabinet": 0.0317,
+   "left.tool_neighbours": 0.0041,
+   "left.robot_amr": 0.5584,
+   "left.robot_stand": 0.0448,
+   "left.arm_arm": 0.0847,
+   "left.tool_tool": 0.3626,
+   "right.arm_cabinet": 0.2219,
+   "right.arm_blocks": 0.2265,
+   "right.arm_carton": 0.1273,
+   "right.tool_cabinet": 0.0698,
+   "right.tool_neighbours": 0.0446,
+   "right.robot_amr": 0.5433,
+   "right.robot_stand": 0.0423,
+   "right.arm_arm": 0.0893,
+   "right.tool_tool": 0.2354
+  },
+  "joint_margin_rad": 0.0811,
+  "min_manipulability": {
+   "left": 0.1004,
+   "right": 0.1443
+  },
+  "stage_variant": [
+   0,
+   1
+  ],
+  "max_ik_jump_rad": 0.0312,
+  "elapsed": 188.70579886436462
+ },
+ {
+  "target": "T5",
+  "mode": "front",
+  "shelf": 4,
+  "box": "angiolite",
+  "which": "mid",
+  "pull_m": 0.1,
+  "yaw180": false,
+  "carton": "angiolite_029",
+  "lift_split_between_phases": false,
+  "candidates_inside_both_reach_maps": 3072,
+  "candidates_fully_evaluated": 8,
+  "full_eval_failures": {
+   "left: L0 home->stage": 2
+  },
+  "feasible": true,
+  "best_d": 0.44,
+  "lateral_offset_m": 0.055,
+  "lift": -0.46,
+  "slider_left": -0.005973,
+  "slider_right": 0.005973,
+  "feasible_d_window_m": [
+   0.36,
+   0.53
+  ],
+  "feasible_lift_window_m": [
+   -0.62,
+   -0.3
+  ],
+  "feasible_lateral_window_m": [
+   -0.035,
+   0.145
+  ],
+  "corners_box_ok": true,
+  "corner_failures": [],
+  "min_clearance_m": {
+   "left.arm_cabinet": 0.1203,
+   "left.arm_blocks": 0.109,
+   "left.arm_carton": 0.109,
+   "left.tool_cabinet": 0.0462,
+   "left.tool_neighbours": 0.0061,
+   "left.robot_amr": 0.8429,
+   "left.robot_stand": 0.0508,
+   "left.arm_arm": 0.1547,
+   "left.tool_tool": 0.3626,
+   "right.arm_cabinet": 0.2238,
+   "right.arm_blocks": 0.2265,
+   "right.arm_carton": 0.1271,
+   "right.tool_cabinet": 0.096,
+   "right.tool_neighbours": 0.0446,
+   "right.robot_amr": 0.8138,
+   "right.robot_stand": 0.0569,
+   "right.arm_arm": 0.0909,
+   "right.tool_tool": 0.3649
+  },
+  "joint_margin_rad": 0.1082,
+  "min_manipulability": {
+   "left": 0.1095,
+   "right": 0.1313
+  },
+  "stage_variant": [
+   0,
+   0
+  ],
+  "max_ik_jump_rad": 0.0294,
+  "elapsed": 187.8308024406433
+ },
+ {
+  "target": "T6",
+  "mode": "front",
+  "shelf": 5,
+  "box": "agent_monorail",
+  "which": "mid",
+  "pull_m": 0.1,
+  "yaw180": false,
+  "carton": "agent_monorail_031",
+  "lift_split_between_phases": false,
+  "candidates_inside_both_reach_maps": 4479,
+  "candidates_fully_evaluated": 8,
+  "full_eval_failures": {
+   "left: L0 home->stage": 2
+  },
+  "feasible": true,
+  "best_d": 0.44,
+  "lateral_offset_m": 0.055,
+  "lift": -0.21,
+  "slider_left": -0.005973,
+  "slider_right": 0.005973,
+  "feasible_d_window_m": [
+   0.36,
+   0.52
+  ],
+  "feasible_lift_window_m": [
+   -0.45,
+   0.03
+  ],
+  "feasible_lateral_window_m": [
+   -0.035,
+   0.145
+  ],
+  "corners_box_ok": true,
+  "corner_failures": [],
+  "min_clearance_m": {
+   "left.arm_cabinet": 0.117,
+   "left.arm_blocks": 0.109,
+   "left.arm_carton": 0.109,
+   "left.tool_cabinet": 0.0412,
+   "left.tool_neighbours": 0.0056,
+   "left.robot_amr": 1.1212,
+   "left.robot_stand": 0.0644,
+   "left.arm_arm": 0.1564,
+   "left.tool_tool": 0.3626,
+   "right.arm_cabinet": 0.2219,
+   "right.arm_blocks": 0.2265,
+   "right.arm_carton": 0.1271,
+   "right.tool_cabinet": 0.0912,
+   "right.tool_neighbours": 0.0446,
+   "right.robot_amr": 1.1212,
+   "right.robot_stand": 0.0701,
+   "right.arm_arm": 0.0932,
+   "right.tool_tool": 0.3644
+  },
+  "joint_margin_rad": 0.1257,
+  "min_manipulability": {
+   "left": 0.0944,
+   "right": 0.1253
+  },
+  "stage_variant": [
+   0,
+   0
+  ],
+  "max_ik_jump_rad": 0.0295,
+  "elapsed": 218.7003231048584
+ },
+ {
+  "target": "T7",
+  "mode": "front",
+  "shelf": 6,
+  "box": "accuforce",
+  "which": "mid",
+  "pull_m": 0.1,
+  "yaw180": false,
+  "carton": "accuforce_010",
+  "lift_split_between_phases": false,
+  "candidates_inside_both_reach_maps": 4479,
+  "candidates_fully_evaluated": 11,
+  "full_eval_failures": {
+   "left: L0 home->stage": 5
+  },
+  "feasible": true,
+  "best_d": 0.44,
+  "lateral_offset_m": 0.055,
+  "lift": 0.09,
+  "slider_left": -0.005973,
+  "slider_right": 0.005973,
+  "feasible_d_window_m": [
+   0.36,
+   0.52
+  ],
+  "feasible_lift_window_m": [
+   -0.15,
+   0.33
+  ],
+  "feasible_lateral_window_m": [
+   -0.035,
+   0.145
+  ],
+  "corners_box_ok": true,
+  "corner_failures": [],
+  "min_clearance_m": {
+   "left.arm_cabinet": 0.1139,
+   "left.arm_blocks": 0.109,
+   "left.arm_carton": 0.109,
+   "left.tool_cabinet": 0.0362,
+   "left.tool_neighbours": 0.0061,
+   "left.robot_amr": 1.4212,
+   "left.robot_stand": 0.0796,
+   "left.arm_arm": 0.1578,
+   "left.tool_tool": 0.3626,
+   "right.arm_cabinet": 0.2196,
+   "right.arm_blocks": 0.2265,
+   "right.arm_carton": 0.1271,
+   "right.tool_cabinet": 0.0691,
+   "right.tool_neighbours": 0.0446,
+   "right.robot_amr": 1.4212,
+   "right.robot_stand": 0.0745,
+   "right.arm_arm": 0.0925,
+   "right.tool_tool": 0.3644
+  },
+  "joint_margin_rad": 0.1305,
+  "min_manipulability": {
+   "left": 0.0929,
+   "right": 0.1247
+  },
+  "stage_variant": [
+   0,
+   0
+  ],
+  "max_ik_jump_rad": 0.0296,
+  "elapsed": 238.6850848197937
+ },
+ {
+  "target": "T8",
+  "mode": "front",
+  "shelf": 6,
+  "box": "conqueror_nc_pro",
+  "which": "mid",
+  "pull_m": 0.1,
+  "yaw180": false,
+  "carton": "conqueror_nc_pro_013",
+  "lift_split_between_phases": false,
+  "candidates_inside_both_reach_maps": 4239,
+  "candidates_fully_evaluated": 10,
+  "full_eval_failures": {
+   "left: L0 home->stage": 4
+  },
+  "feasible": true,
+  "best_d": 0.44,
+  "lateral_offset_m": 0.055,
+  "lift": 0.1,
+  "slider_left": -0.005973,
+  "slider_right": 0.005973,
+  "feasible_d_window_m": [
+   0.36,
+   0.52
+  ],
+  "feasible_lift_window_m": [
+   -0.14,
+   0.34
+  ],
+  "feasible_lateral_window_m": [
+   -0.035,
+   0.145
+  ],
+  "corners_box_ok": true,
+  "corner_failures": [],
+  "min_clearance_m": {
+   "left.arm_cabinet": 0.1162,
+   "left.arm_blocks": 0.109,
+   "left.arm_carton": 0.109,
+   "left.tool_cabinet": 0.0412,
+   "left.tool_neighbours": 0.0041,
+   "left.robot_amr": 1.4312,
+   "left.robot_stand": 0.0861,
+   "left.arm_arm": 0.1564,
+   "left.tool_tool": 0.3611,
+   "right.arm_cabinet": 0.1879,
+   "right.arm_blocks": 0.2265,
+   "right.arm_carton": 0.1273,
+   "right.tool_cabinet": 0.0667,
+   "right.tool_neighbours": 0.0446,
+   "right.robot_amr": 1.4312,
+   "right.robot_stand": 0.0732,
+   "right.arm_arm": 0.0932,
+   "right.tool_tool": 0.3628
+  },
+  "joint_margin_rad": 0.1257,
+  "min_manipulability": {
+   "left": 0.0944,
+   "right": 0.1253
+  },
+  "stage_variant": [
+   0,
+   0
+  ],
+  "max_ik_jump_rad": 0.0309,
+  "elapsed": 221.98866653442383
+ },
+ {
+  "target": "E1",
+  "mode": "front",
+  "shelf": 3,
+  "box": "agent_monorail",
+  "which": "last",
+  "pull_m": 0.1,
+  "yaw180": false,
+  "carton": "agent_monorail_030",
+  "lift_split_between_phases": false,
+  "candidates_inside_both_reach_maps": 1426,
+  "candidates_fully_evaluated": 12,
+  "full_eval_failures": {
+   "left: L0 home->stage": 3,
+   "right: R0 home->stage": 3
+  },
+  "feasible": true,
+  "best_d": 0.41,
+  "lateral_offset_m": 0.005,
+  "lift": -0.6,
+  "slider_left": -0.005973,
+  "slider_right": 0.005973,
+  "feasible_d_window_m": [
+   0.35,
+   0.48
+  ],
+  "feasible_lift_window_m": [
+   -0.62,
+   -0.58
+  ],
+  "feasible_lateral_window_m": [
+   -0.065,
+   0.075
+  ],
+  "corners_box_ok": true,
+  "corner_failures": [],
+  "min_clearance_m": {
+   "left.arm_cabinet": 0.117,
+   "left.arm_blocks": 0.109,
+   "left.arm_carton": 0.109,
+   "left.tool_cabinet": 0.0317,
+   "left.tool_neighbours": 0.0056,
+   "left.robot_amr": 0.5584,
+   "left.robot_stand": 0.047,
+   "left.arm_arm": 0.0847,
+   "left.tool_tool": 0.3611,
+   "right.arm_cabinet": 0.2219,
+   "right.arm_blocks": 0.2265,
+   "right.arm_carton": 0.1271,
+   "right.tool_cabinet": 0.0697,
+   "right.tool_neighbours": 0.0446,
+   "right.robot_amr": 0.5433,
+   "right.robot_stand": 0.0426,
+   "right.arm_arm": 0.0893,
+   "right.tool_tool": 0.2351
+  },
+  "joint_margin_rad": 0.0811,
+  "min_manipulability": {
+   "left": 0.1004,
+   "right": 0.1443
+  },
+  "stage_variant": [
+   0,
+   1
+  ],
+  "max_ik_jump_rad": 0.0298,
+  "elapsed": 181.25393843650818
+ },
+ {
+  "target": "E2",
+  "mode": "front",
+  "shelf": 6,
+  "box": "angiolite",
+  "which": "first",
+  "pull_m": 0.1,
+  "yaw180": false,
+  "carton": "angiolite_001",
+  "lift_split_between_phases": false,
+  "candidates_inside_both_reach_maps": 4239,
+  "candidates_fully_evaluated": 150,
+  "full_eval_failures": {
+   "left: L0 home->stage": 91,
+   "left: L0b stage->pre": 59
+  },
+  "feasible": false,
+  "reason": "every map-feasible candidate fails the full path / collision evaluation (see full_eval_failures)",
+  "elapsed": 396.13901686668396
+ }
+]

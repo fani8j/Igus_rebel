@@ -1,0 +1,2595 @@
+{
+ "mode": "topdown",
+ "cabinet_clear_mm": {
+  "1": 299.99999999999994,
+  "2": 229.99999999999997,
+  "3": 260.0,
+  "4": 310.00000000000006,
+  "5": 289.99999999999983,
+  "6": 280.0
+ },
+ "runs": [
+  {
+   "pull_out_mm": 100.0,
+   "target": "T1",
+   "shelf": 1,
+   "box": "ultimaster_nagomi",
+   "which": "mid",
+   "variant": "base",
+   "mode": "topdown",
+   "thickness_mm": 16.0,
+   "clear_height_mm": 299.99999999999994,
+   "carton_path": "/World/Cartons/Shelf_01/ultimaster_nagomi_029",
+   "vacuum_kpa": 50.0,
+   "steps": {
+    "1_press": {
+     "compression_mm": [
+      0.49008859787136316,
+      0.4901571082882583,
+      0.4899803316220641
+     ],
+     "carton_pushed_back_mm": 4.499390721321106,
+     "travel_past_contact_mm": 4.989466067248334,
+     "ok": true
+    },
+    "2_vacuum": {
+     "status": "Closed",
+     "gripped": [
+      "/World/Cartons/Shelf_01/ultimaster_nagomi_029"
+     ],
+     "ok": true
+    },
+    "3_pull": {
+     "carton_disp_mm": 104.78600114583969,
+     "carton_net_disp_from_rest_mm": 99.98024255037308,
+     "follow_error_mm": 0.16018655756488975,
+     "status": "Closed",
+     "monitor_tripped": null,
+     "neighbour_disp_mm": 0.007588086230198273,
+     "neighbour_tilt_deg": 0.003425067312745713,
+     "carton_yaw_tilt_deg": 0.0014597638643640502,
+     "ok": 1.0
+    },
+    "4a_approach": {
+     "carton_shift_mm": 4.4117567249860654e-05,
+     "neighbour_disp_mm": 0.00761357315499038,
+     "carton_shift_xyz_mm": [
+      3.166496753692627e-05,
+      7.450580596923828e-06,
+      2.9802322387695312e-05
+     ],
+     "ok": 1.0
+    },
+    "4b_clamp": {
+     "gap_mm": 16.000898640602827,
+     "gap_error_mm": 0.0008986406028269056,
+     "carton_shift_during_close_mm": 0.003987690100797934,
+     "carton_shift_xyz_mm": [
+      0.002993270754814148,
+      -0.0016093254089355469,
+      0.002086162567138672
+     ],
+     "finger_effort_N": 24.83482551574707,
+     "ok": 1.0
+    },
+    "5_release_aside": {
+     "status": "Open",
+     "carton_shift_mm": 0.04220298210560898,
+     "retract_mm": 30,
+     "aside_lateral_mm": 120.0,
+     "ok": 1.0
+    },
+    "6_extract": {
+     "distance_mm": 285.00000000000006,
+     "carton_travel_mm": 285.01398116350174,
+     "gripper_travel_mm": 285.01575998961926,
+     "slip_mm": 0.0797440371220421,
+     "carton_lift_max_mm": 0.013172626495361328,
+     "neighbour_disp_mm": 0.00761357315499038,
+     "neighbour_tilt_deg": 0.0034298357508024185,
+     "carton_rotation_deg": 0.0721208639428276,
+     "carton_fully_clear": true,
+     "ok": true
+    },
+    "7_lift50": {
+     "carton_rise_mm": 49.992263317108154,
+     "slip_mm_total": 0.07689990132401672,
+     "carton_rotation_deg": 0.0721208639428276,
+     "carton_rotation_final_deg": 0.015565024824478982,
+     "ok": true
+    }
+   },
+   "notes": [],
+   "squeezed_cartons": null,
+   "videos": [
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T1_3q.mp4",
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T1_side.mp4"
+   ],
+   "unexpected_contacts": {},
+   "contact_pairs_debug": {
+    "/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_01/ultimaster_nagomi_029": 535,
+    "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_01/ultimaster_nagomi_029": 525,
+    "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_01/ultimaster_nagomi_029": 535,
+    " | ": 1,
+    "/World/Tools/SX/tool/pad_3 | ": 2,
+    "/World/Tools/SX/tool/pad_2 | ": 2,
+    "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_01/ultimaster_nagomi_029": 7398,
+    "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_01/ultimaster_nagomi_029": 7397,
+    "/World/Tools/GR/tool/finger_right | ": 2,
+    "/World/Tools/GR/tool/finger_left | ": 2
+   },
+   "min_clearance_mm": {
+    "SX.shelf_above": 98.59995460511095,
+    "SX.shelf_below": 50.599911481168604,
+    "SX.walls_trim_back": 319.4241077366234,
+    "SX.neighbours": 6.591548752487266,
+    "GR.shelf_above": 9.300022266339504,
+    "GR.shelf_below": 195.73314504712891,
+    "GR.walls_trim_back": 351.5111440997528,
+    "GR.neighbours": 29.299716566192263,
+    "GR.to_other_tool": 19.675016542312736
+   },
+   "min_clearance_by_phase_mm": {
+    "start": {
+     "SX.shelf_above": 98.7267304529363,
+     "SX.shelf_below": 50.84638702056083,
+     "SX.walls_trim_back": 355.0000060601721,
+     "SX.neighbours": 25.85615235688544,
+     "GR.shelf_above": 9.494573167256153,
+     "GR.shelf_below": 265.6750167139216,
+     "GR.walls_trim_back": 351.5111775811346,
+     "GR.neighbours": 33.15273588604119,
+     "GR.to_other_tool": 65.31936054239083
+    },
+    "1_press_2_vacuum_3_pull": {
+     "SX.shelf_above": 98.59995460511095,
+     "SX.shelf_below": 50.599911481168604,
+     "SX.walls_trim_back": 325.19137511174665,
+     "SX.neighbours": 6.591548752487266,
+     "GR.shelf_above": 9.494573167256153,
+     "GR.shelf_below": 265.6750167139216,
+     "GR.walls_trim_back": 351.51117758614976,
+     "GR.neighbours": 33.15272683932563,
+     "GR.to_other_tool": 65.26416003091266
+    },
+    "4_gripper_approach_clamp": {
+     "SX.shelf_above": 126.97140121252451,
+     "SX.shelf_below": 94.6578435785116,
+     "SX.walls_trim_back": 425.153080516704,
+     "SX.neighbours": 100.21452552359203,
+     "GR.shelf_above": 9.300022266339504,
+     "GR.shelf_below": 195.73314504712891,
+     "GR.walls_trim_back": 351.5111747992988,
+     "GR.neighbours": 29.299716566192263,
+     "GR.to_other_tool": 19.675016542312736
+    },
+    "5_release_aside": {
+     "SX.shelf_above": 126.9719392143476,
+     "SX.shelf_below": 94.65857949025381,
+     "SX.walls_trim_back": 319.4242487686137,
+     "SX.neighbours": 100.2164342504302,
+     "GR.shelf_above": 10.62072132051983,
+     "GR.shelf_below": 195.73988250973827,
+     "GR.walls_trim_back": 351.5111440997528,
+     "GR.neighbours": 29.29973825287069,
+     "GR.to_other_tool": 19.692046649599902
+    },
+    "6_extract_7_lift": {
+     "SX.shelf_above": 147.7225881167885,
+     "SX.shelf_below": 121.07978847774655,
+     "SX.walls_trim_back": 319.4241077366234,
+     "SX.neighbours": 130.22141548475932,
+     "GR.shelf_above": 11.743515720364277,
+     "GR.shelf_below": 195.80436100156055,
+     "GR.walls_trim_back": 352.69677140362427,
+     "GR.neighbours": 30.48591208425097,
+     "GR.to_other_tool": 71.1407744094084
+    }
+   },
+   "neighbour_max_disp_mm": 0.00761357315499038,
+   "neighbour_max_tilt_deg": 0.0034298357508024185,
+   "shelf_max_disp_mm": 0.009596822135321134,
+   "carton_max_rotation_deg": 0.0721208639428276,
+   "success": true,
+   "video_frames": 798
+  },
+  {
+   "pull_out_mm": 100.0,
+   "target": "T2",
+   "shelf": 2,
+   "box": "accuforce",
+   "which": "mid",
+   "variant": "base",
+   "mode": "topdown",
+   "thickness_mm": 16.0,
+   "clear_height_mm": 229.99999999999997,
+   "carton_path": "/World/Cartons/Shelf_02/accuforce_029",
+   "vacuum_kpa": 50.0,
+   "steps": {
+    "1_press": {
+     "compression_mm": [
+      0.3088759258389473,
+      0.3088974626734853,
+      0.3086535434704274
+     ],
+     "carton_pushed_back_mm": 4.6844929456710815,
+     "travel_past_contact_mm": 4.993301922998701,
+     "ok": true
+    },
+    "2_vacuum": {
+     "status": "Closed",
+     "gripped": [
+      "/World/Cartons/Shelf_02/accuforce_029"
+     ],
+     "ok": true
+    },
+    "3_pull": {
+     "carton_disp_mm": 104.87117618322372,
+     "carton_net_disp_from_rest_mm": 99.99848157167435,
+     "follow_error_mm": 0.09625624772161001,
+     "status": "Closed",
+     "monitor_tripped": null,
+     "neighbour_disp_mm": 0.00660390481523776,
+     "neighbour_tilt_deg": 0.00321656992801182,
+     "carton_yaw_tilt_deg": 0.0002660217755073693,
+     "ok": 1.0
+    },
+    "4a_approach": {
+     "carton_shift_mm": 0.0005591690520379428,
+     "neighbour_disp_mm": 0.00660390481523776,
+     "carton_shift_xyz_mm": [
+      2.0489096641540527e-05,
+      -0.0005587935447692871,
+      0.0
+     ],
+     "ok": 1.0
+    },
+    "4b_clamp": {
+     "gap_mm": 16.00226302817464,
+     "gap_error_mm": 0.0022630281746385816,
+     "carton_shift_during_close_mm": 0.0046450030851145855,
+     "carton_shift_xyz_mm": [
+      0.0029425136744976044,
+      -0.00035762786865234375,
+      0.0035762786865234375
+     ],
+     "finger_effort_N": 24.243228912353516,
+     "ok": 1.0
+    },
+    "5_release_aside": {
+     "status": "Open",
+     "carton_shift_mm": 0.00020281460268521605,
+     "retract_mm": 30,
+     "aside_lateral_mm": 120.0,
+     "ok": 1.0
+    },
+    "6_extract": {
+     "distance_mm": 240.0,
+     "carton_travel_mm": 240.01213163137436,
+     "gripper_travel_mm": 240.01725390553474,
+     "slip_mm": 0.07762352943523575,
+     "carton_lift_max_mm": 0.008463859558105469,
+     "neighbour_disp_mm": 0.00660390481523776,
+     "neighbour_tilt_deg": 0.00321656992801182,
+     "carton_rotation_deg": 0.06065904852763176,
+     "carton_fully_clear": true,
+     "ok": true
+    },
+    "7_lift50": {
+     "carton_rise_mm": 50.010085105895996,
+     "slip_mm_total": 0.08066895274611137,
+     "carton_rotation_deg": 0.06065904852763176,
+     "carton_rotation_final_deg": 0.05859152213389593,
+     "ok": true
+    }
+   },
+   "notes": [],
+   "squeezed_cartons": null,
+   "videos": [
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T2_3q.mp4",
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T2_side.mp4"
+   ],
+   "unexpected_contacts": {},
+   "contact_pairs_debug": {
+    "/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_02/accuforce_029": 535,
+    "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_02/accuforce_029": 525,
+    "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_02/accuforce_029": 535,
+    " | ": 1,
+    "/World/Tools/SX/tool/pad_3 | ": 2,
+    "/World/Tools/SX/tool/pad_2 | ": 2,
+    "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_02/accuforce_029": 6966,
+    "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_02/accuforce_029": 6961,
+    "/World/Tools/GR/tool/finger_right | ": 2,
+    "/World/Tools/GR/tool/finger_left | ": 2
+   },
+   "min_clearance_mm": {
+    "SX.shelf_above": 43.599981993439954,
+    "SX.shelf_below": 35.59987324476388,
+    "SX.walls_trim_back": 319.4240432272193,
+    "SX.neighbours": 6.5939888417260155,
+    "GR.shelf_above": 9.300023195799422,
+    "GR.shelf_below": 165.77311739760808,
+    "GR.walls_trim_back": 351.51097553443344,
+    "GR.neighbours": 29.299808922755354,
+    "GR.to_other_tool": 19.245139963434703
+   },
+   "min_clearance_by_phase_mm": {
+    "start": {
+     "SX.shelf_above": 43.885908820977,
+     "SX.shelf_below": 35.9492814376711,
+     "SX.walls_trim_back": 355.00001941186474,
+     "SX.neighbours": 25.856353509471283,
+     "GR.shelf_above": 9.300024852246874,
+     "GR.shelf_below": 235.6957638651821,
+     "GR.walls_trim_back": 351.5111775811346,
+     "GR.neighbours": 33.152885679493124,
+     "GR.to_other_tool": 50.6664374815969
+    },
+    "1_press_2_vacuum_3_pull": {
+     "SX.shelf_above": 43.599981993439954,
+     "SX.shelf_below": 35.59987324476388,
+     "SX.walls_trim_back": 325.12530147370177,
+     "SX.neighbours": 6.5939888417260155,
+     "GR.shelf_above": 9.300026723379402,
+     "GR.shelf_below": 235.6957653792638,
+     "GR.walls_trim_back": 351.51117758614976,
+     "GR.neighbours": 33.152885679493124,
+     "GR.to_other_tool": 50.59525693788517
+    },
+    "4_gripper_approach_clamp": {
+     "SX.shelf_above": 91.10945951322358,
+     "SX.shelf_below": 87.56310475204099,
+     "SX.walls_trim_back": 425.14614653856603,
+     "SX.neighbours": 100.21662132406027,
+     "GR.shelf_above": 9.300023195799422,
+     "GR.shelf_below": 165.77311739760808,
+     "GR.walls_trim_back": 351.5110334483957,
+     "GR.neighbours": 29.299888321880463,
+     "GR.to_other_tool": 19.245139963434703
+    },
+    "5_release_aside": {
+     "SX.shelf_above": 91.10955463564771,
+     "SX.shelf_below": 87.56342862051015,
+     "SX.walls_trim_back": 319.424273951745,
+     "SX.neighbours": 100.21723634220847,
+     "GR.shelf_above": 9.999763462356183,
+     "GR.shelf_below": 165.78200702419102,
+     "GR.walls_trim_back": 351.51097553443344,
+     "GR.neighbours": 29.299808922755354,
+     "GR.to_other_tool": 19.877898990562514
+    },
+    "6_extract_7_lift": {
+     "SX.shelf_above": 118.3256401455237,
+     "SX.shelf_below": 115.6170850287852,
+     "SX.walls_trim_back": 319.4240432272193,
+     "SX.neighbours": 130.22171713709224,
+     "GR.shelf_above": 11.186599718669012,
+     "GR.shelf_below": 165.85352206082268,
+     "GR.walls_trim_back": 352.69762434804767,
+     "GR.neighbours": 30.486800609002966,
+     "GR.to_other_tool": 60.54990661305635
+    }
+   },
+   "neighbour_max_disp_mm": 0.00660390481523776,
+   "neighbour_max_tilt_deg": 0.00321656992801182,
+   "shelf_max_disp_mm": 0.01154027352977109,
+   "carton_max_rotation_deg": 0.06065904852763176,
+   "success": true,
+   "video_frames": 771
+  },
+  {
+   "pull_out_mm": 100.0,
+   "target": "T3",
+   "shelf": 3,
+   "box": "agent_monorail",
+   "which": "mid",
+   "variant": "base",
+   "mode": "topdown",
+   "thickness_mm": 15.0,
+   "clear_height_mm": 260.0,
+   "carton_path": "/World/Cartons/Shelf_03/agent_monorail_016",
+   "vacuum_kpa": 50.0,
+   "steps": {
+    "1_press": {
+     "compression_mm": [
+      0.46844640746712685,
+      0.46841660514473915,
+      0.4681833670474589
+     ],
+     "carton_pushed_back_mm": 4.521727561950684,
+     "travel_past_contact_mm": 4.9900763551704586,
+     "ok": true
+    },
+    "2_vacuum": {
+     "status": "Closed",
+     "gripped": [
+      "/World/Cartons/Shelf_03/agent_monorail_016"
+     ],
+     "ok": true
+    },
+    "3_pull": {
+     "carton_disp_mm": 104.81766611337662,
+     "carton_net_disp_from_rest_mm": 99.9835804104805,
+     "follow_error_mm": 0.1331010422436496,
+     "status": "Closed",
+     "monitor_tripped": null,
+     "neighbour_disp_mm": 0.00014675941767984784,
+     "neighbour_tilt_deg": 7.735681353338726e-05,
+     "carton_yaw_tilt_deg": 0.0014666544316422234,
+     "ok": 1.0
+    },
+    "4a_approach": {
+     "carton_shift_mm": 0.0007035178920097874,
+     "neighbour_disp_mm": 0.00014675941767984784,
+     "carton_shift_xyz_mm": [
+      -2.9802322387695312e-05,
+      -0.0007003545761108398,
+      5.9604644775390625e-05
+     ],
+     "ok": 1.0
+    },
+    "4b_clamp": {
+     "gap_mm": 15.002523634582758,
+     "gap_error_mm": 0.0025236345827586715,
+     "carton_shift_during_close_mm": 0.007076043546840266,
+     "carton_shift_xyz_mm": [
+      0.006735324859619141,
+      -0.001385807991027832,
+      0.0016689300537109375
+     ],
+     "finger_effort_N": 24.70720100402832,
+     "ok": 1.0
+    },
+    "5_release_aside": {
+     "status": "Open",
+     "carton_shift_mm": 0.005547161153388467,
+     "retract_mm": 30,
+     "aside_lateral_mm": 120.0,
+     "ok": 1.0
+    },
+    "6_extract": {
+     "distance_mm": 240.0,
+     "carton_travel_mm": 240.00509083271027,
+     "gripper_travel_mm": 240.01819733530283,
+     "slip_mm": 0.07063176715692471,
+     "carton_lift_max_mm": 0.003814697265625,
+     "neighbour_disp_mm": 0.00019371509552001953,
+     "neighbour_tilt_deg": 8.695488716581291e-05,
+     "carton_rotation_deg": 0.0909115551872628,
+     "carton_fully_clear": true,
+     "ok": true
+    },
+    "7_lift50": {
+     "carton_rise_mm": 49.998342990875244,
+     "slip_mm_total": 0.07242896608651005,
+     "carton_rotation_deg": 0.0918753890341931,
+     "carton_rotation_final_deg": 0.09195584299349792,
+     "ok": true
+    }
+   },
+   "notes": [],
+   "squeezed_cartons": null,
+   "videos": [
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T3_3q.mp4",
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T3_side.mp4"
+   ],
+   "unexpected_contacts": {},
+   "contact_pairs_debug": {
+    "/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_03/agent_monorail_016": 535,
+    "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_03/agent_monorail_016": 525,
+    "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_03/agent_monorail_016": 535,
+    " | ": 1,
+    "/World/Tools/SX/tool/pad_3 | ": 2,
+    "/World/Tools/SX/tool/pad_2 | ": 2,
+    "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_03/agent_monorail_016": 6942,
+    "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_03/agent_monorail_016": 6936,
+    "/World/Tools/GR/tool/finger_right | ": 2,
+    "/World/Tools/GR/tool/finger_left | ": 2
+   },
+   "min_clearance_mm": {
+    "SX.shelf_above": 68.59985807539415,
+    "SX.shelf_below": 40.599954515715964,
+    "SX.walls_trim_back": 178.7999763942588,
+    "SX.neighbours": 6.099608969878706,
+    "GR.shelf_above": 9.300022264476848,
+    "GR.shelf_below": 175.75843281758537,
+    "GR.walls_trim_back": 137.69506612259426,
+    "GR.neighbours": 29.299194453949045,
+    "GR.to_other_tool": 18.4707333330185
+   },
+   "min_clearance_by_phase_mm": {
+    "start": {
+     "SX.shelf_above": 68.7819248413648,
+     "SX.shelf_below": 40.90672397460294,
+     "SX.walls_trim_back": 179.51464581322605,
+     "SX.neighbours": 25.733373559654744,
+     "GR.shelf_above": 11.338128219118968,
+     "GR.shelf_below": 245.688343138327,
+     "GR.walls_trim_back": 137.69996339323677,
+     "GR.neighbours": 33.153060069790634,
+     "GR.to_other_tool": 55.53006337446253
+    },
+    "1_press_2_vacuum_3_pull": {
+     "SX.shelf_above": 68.59985807539415,
+     "SX.shelf_below": 40.599954515715964,
+     "SX.walls_trim_back": 178.7999763942588,
+     "SX.neighbours": 6.099608969878706,
+     "GR.shelf_above": 11.345093496572032,
+     "GR.shelf_below": 245.688343138327,
+     "GR.walls_trim_back": 137.70001610113175,
+     "GR.neighbours": 33.15302514843979,
+     "GR.to_other_tool": 55.46515185959863
+    },
+    "4_gripper_approach_clamp": {
+     "SX.shelf_above": 105.38399369086233,
+     "SX.shelf_below": 89.71160489523535,
+     "SX.walls_trim_back": 200.62538503728967,
+     "SX.neighbours": 100.18345020834794,
+     "GR.shelf_above": 9.300022264476848,
+     "GR.shelf_below": 175.75843281758537,
+     "GR.walls_trim_back": 137.69506612259426,
+     "GR.neighbours": 29.299895726115967,
+     "GR.to_other_tool": 18.4707333330185
+    },
+    "5_release_aside": {
+     "SX.shelf_above": 105.38437156177989,
+     "SX.shelf_below": 89.7120556749069,
+     "SX.walls_trim_back": 200.62559050053093,
+     "SX.neighbours": 100.18502492891558,
+     "GR.shelf_above": 9.999265776649876,
+     "GR.shelf_below": 175.76564478173447,
+     "GR.walls_trim_back": 137.69964181985193,
+     "GR.neighbours": 29.299194453949045,
+     "GR.to_other_tool": 18.478075474755055
+    },
+    "6_extract_7_lift": {
+     "SX.shelf_above": 129.637762477114,
+     "SX.shelf_below": 117.25325482291785,
+     "SX.walls_trim_back": 322.370200039027,
+     "SX.neighbours": 130.762218488174,
+     "GR.shelf_above": 10.717874014796326,
+     "GR.shelf_below": 175.80461188265923,
+     "GR.walls_trim_back": 137.69964170169024,
+     "GR.neighbours": 30.017992958212865,
+     "GR.to_other_tool": 64.25989545345612
+    }
+   },
+   "neighbour_max_disp_mm": 0.00019371509552001953,
+   "neighbour_max_tilt_deg": 8.695488716581291e-05,
+   "shelf_max_disp_mm": 0.0002645743028009639,
+   "carton_max_rotation_deg": 0.09195584299349792,
+   "success": true,
+   "video_frames": 770
+  },
+  {
+   "pull_out_mm": 100.0,
+   "target": "T4",
+   "shelf": 3,
+   "box": "conqueror_nc_pro",
+   "which": "mid",
+   "variant": "base",
+   "mode": "topdown",
+   "thickness_mm": 12.0,
+   "clear_height_mm": 260.0,
+   "carton_path": "/World/Cartons/Shelf_03/conqueror_nc_pro_019",
+   "vacuum_kpa": 50.0,
+   "steps": {
+    "1_press": {
+     "compression_mm": [
+      0.3185660170856863,
+      0.31855833367444575,
+      0.3184306260664016
+     ],
+     "carton_pushed_back_mm": 4.67468798160553,
+     "travel_past_contact_mm": 4.993206307214375,
+     "ok": true
+    },
+    "2_vacuum": {
+     "status": "Closed",
+     "gripped": [
+      "/World/Cartons/Shelf_03/conqueror_nc_pro_019"
+     ],
+     "ok": true
+    },
+    "3_pull": {
+     "carton_disp_mm": 104.85443472862244,
+     "carton_net_disp_from_rest_mm": 99.994957447052,
+     "follow_error_mm": 0.109183077816849,
+     "status": "Closed",
+     "monitor_tripped": null,
+     "neighbour_disp_mm": 0.009994903191145802,
+     "neighbour_tilt_deg": 0.004965001816428818,
+     "carton_yaw_tilt_deg": 0.0015883006227221397,
+     "ok": 1.0
+    },
+    "4a_approach": {
+     "carton_shift_mm": 0.00034183471640808765,
+     "neighbour_disp_mm": 0.009994903191145802,
+     "carton_shift_xyz_mm": [
+      -2.9802322387695312e-05,
+      -0.00033527612686157227,
+      -5.9604644775390625e-05
+     ],
+     "ok": 1.0
+    },
+    "4b_clamp": {
+     "gap_mm": 11.996091894805431,
+     "gap_error_mm": -0.003908105194568717,
+     "carton_shift_during_close_mm": 0.012555112616582159,
+     "carton_shift_xyz_mm": [
+      0.012099742889404297,
+      -0.0009313225746154785,
+      0.0032186508178710938
+     ],
+     "finger_effort_N": 25.277563095092773,
+     "ok": 1.0
+    },
+    "5_release_aside": {
+     "status": "Open",
+     "carton_shift_mm": 0.0006253163593517925,
+     "retract_mm": 30,
+     "aside_lateral_mm": -120.0,
+     "ok": 1.0
+    },
+    "6_extract": {
+     "distance_mm": 240.0,
+     "carton_travel_mm": 240.01818895339966,
+     "gripper_travel_mm": 240.01643154770136,
+     "slip_mm": 0.04092672593149504,
+     "carton_lift_max_mm": 0.010669231414794922,
+     "neighbour_disp_mm": 0.009994903191145802,
+     "neighbour_tilt_deg": 0.004965001816428818,
+     "carton_rotation_deg": 0.14753285387670118,
+     "carton_fully_clear": true,
+     "ok": true
+    },
+    "7_lift50": {
+     "carton_rise_mm": 50.00638961791992,
+     "slip_mm_total": 0.07660692880267886,
+     "carton_rotation_deg": 0.14753285387670118,
+     "carton_rotation_final_deg": 0.08057623416577316,
+     "ok": true
+    }
+   },
+   "notes": [],
+   "squeezed_cartons": null,
+   "videos": [
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T4_3q.mp4",
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T4_side.mp4"
+   ],
+   "unexpected_contacts": {},
+   "contact_pairs_debug": {
+    "/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_03/conqueror_nc_pro_019": 535,
+    "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_03/conqueror_nc_pro_019": 525,
+    "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_03/conqueror_nc_pro_019": 535,
+    " | ": 1,
+    "/World/Tools/SX/tool/pad_3 | ": 2,
+    "/World/Tools/SX/tool/pad_2 | ": 2,
+    "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_03/conqueror_nc_pro_019": 6870,
+    "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_03/conqueror_nc_pro_019": 6869,
+    "/World/Tools/GR/tool/finger_right | ": 2,
+    "/World/Tools/GR/tool/finger_left | ": 2
+   },
+   "min_clearance_mm": {
+    "SX.shelf_above": 68.59988637269565,
+    "SX.shelf_below": 40.599982947115976,
+    "SX.walls_trim_back": 178.31840659968339,
+    "SX.neighbours": 4.599424268022164,
+    "GR.shelf_above": 9.300022264476848,
+    "GR.shelf_below": 175.75843281758537,
+    "GR.walls_trim_back": 167.80042706882648,
+    "GR.neighbours": 29.299153330236166,
+    "GR.to_other_tool": 18.084144402415834
+   },
+   "min_clearance_by_phase_mm": {
+    "start": {
+     "SX.shelf_above": 68.7819242997389,
+     "SX.shelf_below": 40.906723063919,
+     "SX.walls_trim_back": 178.31842967852657,
+     "SX.neighbours": 25.41799776890319,
+     "GR.shelf_above": 11.338128733541852,
+     "GR.shelf_below": 245.688343138327,
+     "GR.walls_trim_back": 167.80289691789147,
+     "GR.neighbours": 33.152584046333814,
+     "GR.to_other_tool": 55.530060402081226
+    },
+    "1_press_2_vacuum_3_pull": {
+     "SX.shelf_above": 68.59988637269565,
+     "SX.shelf_below": 40.599982947115976,
+     "SX.walls_trim_back": 178.31840659968339,
+     "SX.neighbours": 4.599424268022164,
+     "GR.shelf_above": 11.345093239405621,
+     "GR.shelf_below": 245.68834323420808,
+     "GR.walls_trim_back": 167.802962513888,
+     "GR.neighbours": 33.152777611663716,
+     "GR.to_other_tool": 55.46518468522011
+    },
+    "4_gripper_approach_clamp": {
+     "SX.shelf_above": 105.38454796786681,
+     "SX.shelf_below": 89.71226858550399,
+     "SX.walls_trim_back": 192.71238989324638,
+     "SX.neighbours": 100.10445279013217,
+     "GR.shelf_above": 9.300022264476848,
+     "GR.shelf_below": 175.75843281758537,
+     "GR.walls_trim_back": 167.80293202086642,
+     "GR.neighbours": 29.299861645874003,
+     "GR.to_other_tool": 18.084144402415834
+    },
+    "5_release_aside": {
+     "SX.shelf_above": 105.38474550155117,
+     "SX.shelf_below": 89.71330431553632,
+     "SX.walls_trim_back": 192.7268318415637,
+     "SX.neighbours": 100.10561598628826,
+     "GR.shelf_above": 9.999197443483043,
+     "GR.shelf_below": 175.77121431893295,
+     "GR.walls_trim_back": 167.8033514196593,
+     "GR.neighbours": 29.299153330236166,
+     "GR.to_other_tool": 18.094462665037614
+    },
+    "6_extract_7_lift": {
+     "SX.shelf_above": 129.63768625797167,
+     "SX.shelf_below": 117.25310248843016,
+     "SX.walls_trim_back": 315.64018502073486,
+     "SX.neighbours": 134.2714989885908,
+     "GR.shelf_above": 11.186496078893237,
+     "GR.shelf_below": 175.835060687843,
+     "GR.walls_trim_back": 167.80042706882648,
+     "GR.neighbours": 30.48652130423274,
+     "GR.to_other_tool": 64.12266965541666
+    }
+   },
+   "neighbour_max_disp_mm": 0.009994903191145802,
+   "neighbour_max_tilt_deg": 0.004965001816428818,
+   "shelf_max_disp_mm": 0.011526768175044793,
+   "carton_max_rotation_deg": 0.14753285387670118,
+   "success": true,
+   "video_frames": 766
+  },
+  {
+   "pull_out_mm": 100.0,
+   "target": "T5",
+   "shelf": 4,
+   "box": "angiolite",
+   "which": "mid",
+   "variant": "base",
+   "mode": "topdown",
+   "thickness_mm": 16.0,
+   "clear_height_mm": 310.00000000000006,
+   "carton_path": "/World/Cartons/Shelf_04/angiolite_029",
+   "vacuum_kpa": 50.0,
+   "steps": {
+    "1_press": {
+     "compression_mm": [
+      0.5271872505545616,
+      0.5271972040645778,
+      0.5270824767649174
+     ],
+     "carton_pushed_back_mm": 4.461616277694702,
+     "travel_past_contact_mm": 4.988771921489388,
+     "ok": true
+    },
+    "2_vacuum": {
+     "status": "Closed",
+     "gripped": [
+      "/World/Cartons/Shelf_04/angiolite_029"
+     ],
+     "ok": true
+    },
+    "3_pull": {
+     "carton_disp_mm": 104.70138490200043,
+     "carton_net_disp_from_rest_mm": 99.96412694454193,
+     "follow_error_mm": 0.22620681521948183,
+     "status": "Closed",
+     "monitor_tripped": null,
+     "neighbour_disp_mm": 0.00023342592910906773,
+     "neighbour_tilt_deg": 0.00010627965297411638,
+     "carton_yaw_tilt_deg": 0.0005729904895475913,
+     "ok": 1.0
+    },
+    "4a_approach": {
+     "carton_shift_mm": 0.0007897627788129315,
+     "neighbour_disp_mm": 0.00024027400458748784,
+     "carton_shift_xyz_mm": [
+      -1.3969838619232178e-06,
+      -0.0007897615432739258,
+      0.0
+     ],
+     "ok": 1.0
+    },
+    "4b_clamp": {
+     "gap_mm": 16.008457720279694,
+     "gap_error_mm": 0.008457720279693437,
+     "carton_shift_during_close_mm": 0.012433390071588793,
+     "carton_shift_xyz_mm": [
+      0.012081116437911987,
+      -0.002332031726837158,
+      0.0017881393432617188
+     ],
+     "finger_effort_N": 24.908578872680664,
+     "ok": 1.0
+    },
+    "5_release_aside": {
+     "status": "Open",
+     "carton_shift_mm": 0.0023033398386602317,
+     "retract_mm": 30,
+     "aside_lateral_mm": 120.0,
+     "ok": 1.0
+    },
+    "6_extract": {
+     "distance_mm": 240.0,
+     "carton_travel_mm": 240.00684171915054,
+     "gripper_travel_mm": 240.01887440681458,
+     "slip_mm": 0.1854963500039583,
+     "carton_lift_max_mm": 0.005245208740234375,
+     "neighbour_disp_mm": 0.0002775341272354126,
+     "neighbour_tilt_deg": 0.00011676336969097328,
+     "carton_rotation_deg": 0.10244129619703005,
+     "carton_fully_clear": true,
+     "ok": true
+    },
+    "7_lift50": {
+     "carton_rise_mm": 49.986958503723145,
+     "slip_mm_total": 0.1887055662748733,
+     "carton_rotation_deg": 0.10300767737042224,
+     "carton_rotation_final_deg": 0.10304418067466345,
+     "ok": true
+    }
+   },
+   "notes": [],
+   "squeezed_cartons": null,
+   "videos": [
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T5_3q.mp4",
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T5_side.mp4"
+   ],
+   "unexpected_contacts": {},
+   "contact_pairs_debug": {
+    "/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_04/angiolite_029": 535,
+    "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_04/angiolite_029": 525,
+    "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_04/angiolite_029": 535,
+    " | ": 1,
+    "/World/Tools/SX/tool/pad_3 | ": 2,
+    "/World/Tools/SX/tool/pad_2 | ": 2,
+    "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_04/angiolite_029": 6966,
+    "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_04/angiolite_029": 6966,
+    "/World/Tools/GR/tool/finger_right | ": 2,
+    "/World/Tools/GR/tool/finger_left | ": 2
+   },
+   "min_clearance_mm": {
+    "SX.shelf_above": 113.59998404982963,
+    "SX.shelf_below": 45.59992587569495,
+    "SX.walls_trim_back": 319.4241218398221,
+    "SX.neighbours": 6.59937595849982,
+    "GR.shelf_above": 9.300021865404823,
+    "GR.shelf_below": 185.7451392983232,
+    "GR.walls_trim_back": 351.51006444004173,
+    "GR.neighbours": 29.298843930265384,
+    "GR.to_other_tool": 18.63154798866713
+   },
+   "min_clearance_by_phase_mm": {
+    "start": {
+     "SX.shelf_above": 113.7100067059825,
+     "SX.shelf_below": 45.87324138371627,
+     "SX.walls_trim_back": 354.9999911590109,
+     "SX.neighbours": 25.856406746230043,
+     "GR.shelf_above": 9.300023116171285,
+     "GR.shelf_below": 255.68153755355993,
+     "GR.walls_trim_back": 351.5111775811346,
+     "GR.neighbours": 33.153031548078154,
+     "GR.to_other_tool": 60.41622770400456
+    },
+    "1_press_2_vacuum_3_pull": {
+     "SX.shelf_above": 113.59998404982963,
+     "SX.shelf_below": 45.59992587569495,
+     "SX.walls_trim_back": 325.2593736114875,
+     "SX.neighbours": 6.59937595849982,
+     "GR.shelf_above": 9.300024128984653,
+     "GR.shelf_below": 255.68153755355993,
+     "GR.walls_trim_back": 351.51117758614976,
+     "GR.neighbours": 33.153032918930634,
+     "GR.to_other_tool": 60.35651544961016
+    },
+    "4_gripper_approach_clamp": {
+     "SX.shelf_above": 138.9409434691305,
+     "SX.shelf_below": 92.0813537963857,
+     "SX.walls_trim_back": 425.1506895889362,
+     "SX.neighbours": 100.21389124791664,
+     "GR.shelf_above": 9.300021865404823,
+     "GR.shelf_below": 185.7451392983232,
+     "GR.walls_trim_back": 351.5111747992988,
+     "GR.neighbours": 29.29991781745217,
+     "GR.to_other_tool": 18.63154798866713
+    },
+    "5_release_aside": {
+     "SX.shelf_above": 138.94198547112296,
+     "SX.shelf_below": 92.08276275698331,
+     "SX.walls_trim_back": 319.42426848979,
+     "SX.neighbours": 100.216617188938,
+     "GR.shelf_above": 13.591108365618945,
+     "GR.shelf_below": 185.75084775911543,
+     "GR.walls_trim_back": 351.51006444004173,
+     "GR.neighbours": 29.298843930265384,
+     "GR.to_other_tool": 18.644324360030208
+    },
+    "6_extract_7_lift": {
+     "SX.shelf_above": 158.12956224966624,
+     "SX.shelf_below": 119.07698254025493,
+     "SX.walls_trim_back": 319.4241218398221,
+     "SX.neighbours": 130.22172916309617,
+     "GR.shelf_above": 14.7710234199542,
+     "GR.shelf_below": 185.81425605797514,
+     "GR.walls_trim_back": 352.69718594261656,
+     "GR.neighbours": 30.48635473201888,
+     "GR.to_other_tool": 67.44166093004294
+    }
+   },
+   "neighbour_max_disp_mm": 0.0002775341272354126,
+   "neighbour_max_tilt_deg": 0.00011676336969097328,
+   "shelf_max_disp_mm": 0.00034305049279991797,
+   "carton_max_rotation_deg": 0.10304418067466345,
+   "success": true,
+   "video_frames": 771
+  },
+  {
+   "pull_out_mm": 100.0,
+   "target": "T6",
+   "shelf": 5,
+   "box": "agent_monorail",
+   "which": "mid",
+   "variant": "base",
+   "mode": "topdown",
+   "thickness_mm": 15.0,
+   "clear_height_mm": 289.99999999999983,
+   "carton_path": "/World/Cartons/Shelf_05/agent_monorail_031",
+   "vacuum_kpa": 50.0,
+   "steps": {
+    "1_press": {
+     "compression_mm": [
+      0.46663498505949974,
+      0.46664499677717686,
+      0.46651746379211545
+     ],
+     "carton_pushed_back_mm": 4.523470997810364,
+     "travel_past_contact_mm": 4.990070146353294,
+     "ok": true
+    },
+    "2_vacuum": {
+     "status": "Closed",
+     "gripped": [
+      "/World/Cartons/Shelf_05/agent_monorail_031"
+     ],
+     "ok": true
+    },
+    "3_pull": {
+     "carton_disp_mm": 104.78395968675613,
+     "carton_net_disp_from_rest_mm": 99.98320788145065,
+     "follow_error_mm": 0.16512117837555462,
+     "status": "Closed",
+     "monitor_tripped": null,
+     "neighbour_disp_mm": 0.00029692690336688123,
+     "neighbour_tilt_deg": 0.00015460865551600924,
+     "carton_yaw_tilt_deg": 9.803212518395576e-05,
+     "ok": 1.0
+    },
+    "4a_approach": {
+     "carton_shift_mm": 0.0004589653393170525,
+     "neighbour_disp_mm": 0.00029692690336688123,
+     "carton_shift_xyz_mm": [
+      -6.397021934390068e-05,
+      -0.0004544854164123535,
+      0.0
+     ],
+     "ok": 1.0
+    },
+    "4b_clamp": {
+     "gap_mm": 15.008361862972379,
+     "gap_error_mm": 0.008361862972379452,
+     "carton_shift_during_close_mm": 0.014948635773760467,
+     "carton_shift_xyz_mm": [
+      0.014641904272139072,
+      -0.0014826655387878418,
+      0.0026226043701171875
+     ],
+     "finger_effort_N": 24.983713150024414,
+     "ok": 1.0
+    },
+    "5_release_aside": {
+     "status": "Open",
+     "carton_shift_mm": 0.009231738944203566,
+     "retract_mm": 30,
+     "aside_lateral_mm": 120.0,
+     "ok": 1.0
+    },
+    "6_extract": {
+     "distance_mm": 240.0,
+     "carton_travel_mm": 239.99493569135666,
+     "gripper_travel_mm": 240.01815263181925,
+     "slip_mm": 0.12008358518880789,
+     "carton_lift_max_mm": 0.006794929504394531,
+     "neighbour_disp_mm": 0.00029692690336688123,
+     "neighbour_tilt_deg": 0.00015460865551600924,
+     "carton_rotation_deg": 0.09322767511914268,
+     "carton_fully_clear": true,
+     "ok": true
+    },
+    "7_lift50": {
+     "carton_rise_mm": 49.99053478240967,
+     "slip_mm_total": 0.12296093523022159,
+     "carton_rotation_deg": 0.09322767511914268,
+     "carton_rotation_final_deg": 0.08857047119973825,
+     "ok": true
+    }
+   },
+   "notes": [],
+   "squeezed_cartons": null,
+   "videos": [
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T6_3q.mp4",
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T6_side.mp4"
+   ],
+   "unexpected_contacts": {},
+   "contact_pairs_debug": {
+    "/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_05/agent_monorail_031": 535,
+    "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_05/agent_monorail_031": 525,
+    "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_05/agent_monorail_031": 535,
+    " | ": 1,
+    "/World/Tools/SX/tool/pad_3 | ": 2,
+    "/World/Tools/SX/tool/pad_2 | ": 2,
+    "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_05/agent_monorail_031": 6942,
+    "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_05/agent_monorail_031": 6936,
+    "/World/Tools/GR/tool/finger_right | ": 2,
+    "/World/Tools/GR/tool/finger_left | ": 2
+   },
+   "min_clearance_mm": {
+    "SX.shelf_above": 98.60005557539009,
+    "SX.shelf_below": 40.59985435010716,
+    "SX.walls_trim_back": 316.1135560590245,
+    "SX.neighbours": 6.099504626198442,
+    "GR.shelf_above": 9.300020935944856,
+    "GR.shelf_below": 175.75832806037204,
+    "GR.walls_trim_back": 351.510148530328,
+    "GR.neighbours": 29.298890533858756,
+    "GR.to_other_tool": 18.468383865091166
+   },
+   "min_clearance_by_phase_mm": {
+    "start": {
+     "SX.shelf_above": 98.72679148531456,
+     "SX.shelf_below": 40.90659067979925,
+     "SX.walls_trim_back": 355.0000045958072,
+     "SX.neighbours": 25.7332856792566,
+     "GR.shelf_above": 9.300023116171285,
+     "GR.shelf_below": 245.68811918548013,
+     "GR.walls_trim_back": 351.51117758127253,
+     "GR.neighbours": 33.15289607132982,
+     "GR.to_other_tool": 55.52999071788879
+    },
+    "1_press_2_vacuum_3_pull": {
+     "SX.shelf_above": 98.60005557539009,
+     "SX.shelf_below": 40.59985435010716,
+     "SX.walls_trim_back": 325.19650973156746,
+     "SX.neighbours": 6.099504626198442,
+     "GR.shelf_above": 9.300024128984653,
+     "GR.shelf_below": 245.68811918548013,
+     "GR.walls_trim_back": 351.51117758614976,
+     "GR.neighbours": 33.15282061520651,
+     "GR.to_other_tool": 55.4650422413958
+    },
+    "4_gripper_approach_clamp": {
+     "SX.shelf_above": 126.97180856021792,
+     "SX.shelf_below": 89.711714858496,
+     "SX.walls_trim_back": 425.13111829500633,
+     "SX.neighbours": 100.18338362662624,
+     "GR.shelf_above": 9.300020935944856,
+     "GR.shelf_below": 175.75832806037204,
+     "GR.walls_trim_back": 351.51104537449055,
+     "GR.neighbours": 29.29981611097582,
+     "GR.to_other_tool": 18.468383865091166
+    },
+    "5_release_aside": {
+     "SX.shelf_above": 126.97198889143455,
+     "SX.shelf_below": 89.7119542272387,
+     "SX.walls_trim_back": 316.11376853315085,
+     "SX.neighbours": 100.1847845818391,
+     "GR.shelf_above": 13.498948922617243,
+     "GR.shelf_below": 175.7669183020682,
+     "GR.walls_trim_back": 351.510148530328,
+     "GR.neighbours": 29.298890533858756,
+     "GR.to_other_tool": 18.480703087550356
+    },
+    "6_extract_7_lift": {
+     "SX.shelf_above": 147.72261634437015,
+     "SX.shelf_below": 117.25319552379617,
+     "SX.walls_trim_back": 316.1135560590245,
+     "SX.neighbours": 130.76216058429884,
+     "GR.shelf_above": 14.216745246570683,
+     "GR.shelf_below": 175.81233282834307,
+     "GR.walls_trim_back": 352.22786259672176,
+     "GR.neighbours": 30.016866283776757,
+     "GR.to_other_tool": 64.26017746465524
+    }
+   },
+   "neighbour_max_disp_mm": 0.00029692690336688123,
+   "neighbour_max_tilt_deg": 0.00015460865551600924,
+   "shelf_max_disp_mm": 0.000983589519900635,
+   "carton_max_rotation_deg": 0.09322767511914268,
+   "success": true,
+   "video_frames": 770
+  },
+  {
+   "pull_out_mm": 150.0,
+   "target": "T7",
+   "shelf": 6,
+   "box": "accuforce",
+   "which": "mid",
+   "variant": "base",
+   "mode": "topdown",
+   "thickness_mm": 16.0,
+   "clear_height_mm": 280.0,
+   "carton_path": "/World/Cartons/Shelf_06/accuforce_010",
+   "vacuum_kpa": 50.0,
+   "steps": {
+    "1_press": {
+     "compression_mm": [
+      0.322053354466334,
+      0.32198792905546725,
+      0.3218125784769654
+     ],
+     "carton_pushed_back_mm": 4.6711266040802,
+     "travel_past_contact_mm": 4.993077891413122,
+     "ok": true
+    },
+    "2_vacuum": {
+     "status": "Closed",
+     "gripped": [
+      "/World/Cartons/Shelf_06/accuforce_010"
+     ],
+     "ok": true
+    },
+    "3_pull": {
+     "carton_disp_mm": 154.82650697231293,
+     "carton_net_disp_from_rest_mm": 150.00151097774506,
+     "follow_error_mm": 0.1424897342221787,
+     "status": "Closed",
+     "monitor_tripped": null,
+     "neighbour_disp_mm": 0.000284905564859493,
+     "neighbour_tilt_deg": 0.000145211723766058,
+     "carton_yaw_tilt_deg": 0.001440042270793171,
+     "ok": 1.0
+    },
+    "4a_approach": {
+     "carton_shift_mm": 5.255993850351297e-05,
+     "neighbour_disp_mm": 0.000284905564859493,
+     "carton_shift_xyz_mm": [
+      6.51925802230835e-06,
+      5.21540641784668e-05,
+      0.0
+     ],
+     "ok": 1.0
+    },
+    "4b_clamp": {
+     "gap_mm": 16.004053961485624,
+     "gap_error_mm": 0.004053961485624147,
+     "carton_shift_during_close_mm": 0.00569936652940566,
+     "carton_shift_xyz_mm": [
+      0.0012568198144435883,
+      0.0009126961231231689,
+      0.0054836273193359375
+     ],
+     "finger_effort_N": 23.582725524902344,
+     "ok": 1.0
+    },
+    "5_release_aside": {
+     "status": "Open",
+     "carton_shift_mm": 0.0018504458523688034,
+     "retract_mm": 30,
+     "aside_lateral_mm": -120.0,
+     "ok": 1.0
+    },
+    "6_extract": {
+     "distance_mm": 190.0,
+     "carton_travel_mm": 190.01389294862747,
+     "gripper_travel_mm": 190.01829251646996,
+     "slip_mm": 0.026015629249572868,
+     "carton_lift_max_mm": 0.010728836059570312,
+     "neighbour_disp_mm": 0.0002865871903864475,
+     "neighbour_tilt_deg": 0.000145211723766058,
+     "carton_rotation_deg": 0.10076150910419429,
+     "carton_fully_clear": true,
+     "ok": true
+    },
+    "7_lift50": {
+     "carton_rise_mm": 49.98970031738281,
+     "slip_mm_total": 0.11479502525459846,
+     "carton_rotation_deg": 0.13887461659442674,
+     "carton_rotation_final_deg": 0.13883420870204377,
+     "ok": true
+    }
+   },
+   "notes": [],
+   "squeezed_cartons": null,
+   "videos": [
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T7_3q.mp4",
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T7_side.mp4"
+   ],
+   "unexpected_contacts": {},
+   "contact_pairs_debug": {
+    "/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_06/accuforce_010": 535,
+    "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_06/accuforce_010": 525,
+    "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_06/accuforce_010": 535,
+    " | ": 1,
+    "/World/Tools/SX/tool/pad_3 | ": 2,
+    "/World/Tools/SX/tool/pad_2 | ": 2,
+    "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_06/accuforce_010": 6483,
+    "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_06/accuforce_010": 6483,
+    "/World/Tools/GR/tool/finger_right | ": 2,
+    "/World/Tools/GR/tool/finger_left | ": 2
+   },
+   "min_clearance_mm": {
+    "SX.shelf_above": 93.59986022121558,
+    "SX.shelf_below": 35.60005453231718,
+    "SX.walls_trim_back": 325.1727017186041,
+    "SX.neighbours": 6.599780778604708,
+    "GR.shelf_above": 59.30002448102489,
+    "GR.shelf_below": 175.81460273184777,
+    "GR.walls_trim_back": 384.4034024278592,
+    "GR.neighbours": 79.29896746575551,
+    "GR.to_other_tool": 19.245588571538985
+   },
+   "min_clearance_by_phase_mm": {
+    "start": {
+     "SX.shelf_above": 93.73337533939272,
+     "SX.shelf_below": 35.949487144317416,
+     "SX.walls_trim_back": 354.9999911590109,
+     "SX.neighbours": 25.856567633864046,
+     "GR.shelf_above": 59.30002678697846,
+     "GR.shelf_below": 242.86313858921355,
+     "GR.walls_trim_back": 384.4078504098239,
+     "GR.neighbours": 80.80307675187503,
+     "GR.to_other_tool": 56.94616103743719
+    },
+    "1_press_2_vacuum_3_pull": {
+     "SX.shelf_above": 93.59986022121558,
+     "SX.shelf_below": 35.60005453231718,
+     "SX.walls_trim_back": 325.1727017186041,
+     "SX.neighbours": 6.599780778604708,
+     "GR.shelf_above": 59.300027668010436,
+     "GR.shelf_below": 242.86313858921355,
+     "GR.walls_trim_back": 384.4078504098239,
+     "GR.neighbours": 80.80302521697168,
+     "GR.to_other_tool": 50.59694225897
+    },
+    "4_gripper_approach_clamp": {
+     "SX.shelf_above": 160.19179101419329,
+     "SX.shelf_below": 134.78628805864568,
+     "SX.walls_trim_back": 431.42143218568344,
+     "SX.neighbours": 150.14425828906914,
+     "GR.shelf_above": 59.30002448102489,
+     "GR.shelf_below": 175.81460273184777,
+     "GR.walls_trim_back": 384.4034024278592,
+     "GR.neighbours": 79.2998928501939,
+     "GR.to_other_tool": 19.245588571538985
+    },
+    "5_release_aside": {
+     "SX.shelf_above": 160.19045910519685,
+     "SX.shelf_below": 134.78638042641023,
+     "SX.walls_trim_back": 348.9168419261173,
+     "SX.neighbours": 150.14516294776013,
+     "GR.shelf_above": 60.336690423203464,
+     "GR.shelf_below": 175.82084449097997,
+     "GR.walls_trim_back": 384.40753427509185,
+     "GR.neighbours": 79.29896746575551,
+     "GR.to_other_tool": 19.876951405679588
+    },
+    "6_extract_7_lift": {
+     "SX.shelf_above": 185.36717566610577,
+     "SX.shelf_below": 163.91257586497568,
+     "SX.walls_trim_back": 348.9166714534386,
+     "SX.neighbours": 180.16025227545694,
+     "GR.shelf_above": 61.50169841618626,
+     "GR.shelf_below": 176.2894123981979,
+     "GR.walls_trim_back": 384.52431029297327,
+     "GR.neighbours": 80.65557470207422,
+     "GR.to_other_tool": 59.524041879564386
+    }
+   },
+   "neighbour_max_disp_mm": 0.0002865871903864475,
+   "neighbour_max_tilt_deg": 0.000145211723766058,
+   "shelf_max_disp_mm": 0.00031442862519635547,
+   "carton_max_rotation_deg": 0.13887461659442674,
+   "success": true,
+   "video_frames": 771
+  },
+  {
+   "pull_out_mm": 150.0,
+   "target": "T8",
+   "shelf": 6,
+   "box": "conqueror_nc_pro",
+   "which": "mid",
+   "variant": "base",
+   "mode": "topdown",
+   "thickness_mm": 12.0,
+   "clear_height_mm": 280.0,
+   "carton_path": "/World/Cartons/Shelf_06/conqueror_nc_pro_013",
+   "vacuum_kpa": 50.0,
+   "steps": {
+    "1_press": {
+     "compression_mm": [
+      0.30981312738731503,
+      0.309894559904933,
+      0.30972459353506565
+     ],
+     "carton_pushed_back_mm": 4.68367338180542,
+     "travel_past_contact_mm": 4.993484142081191,
+     "ok": true
+    },
+    "2_vacuum": {
+     "status": "Closed",
+     "gripped": [
+      "/World/Cartons/Shelf_06/conqueror_nc_pro_013"
+     ],
+     "ok": true
+    },
+    "3_pull": {
+     "carton_disp_mm": 154.8410840332508,
+     "carton_net_disp_from_rest_mm": 149.99549463391304,
+     "follow_error_mm": 0.122790966648606,
+     "status": "Closed",
+     "monitor_tripped": null,
+     "neighbour_disp_mm": 0.0002515605541487654,
+     "neighbour_tilt_deg": 0.00014489131654954804,
+     "carton_yaw_tilt_deg": 0.001029285918762655,
+     "ok": 1.0
+    },
+    "4a_approach": {
+     "carton_shift_mm": 0.0011551043377091583,
+     "neighbour_disp_mm": 0.0002515605541487654,
+     "carton_shift_xyz_mm": [
+      5.9604644775390625e-05,
+      -0.0011473894119262695,
+      0.00011920928955078125
+     ],
+     "ok": 1.0
+    },
+    "4b_clamp": {
+     "gap_mm": 11.998578526079655,
+     "gap_error_mm": -0.0014214739203453897,
+     "carton_shift_during_close_mm": 0.014901407526632564,
+     "carton_shift_xyz_mm": [
+      0.013560056686401367,
+      0.0030659139156341553,
+      0.005364418029785156
+     ],
+     "finger_effort_N": 25.24205207824707,
+     "ok": 1.0
+    },
+    "5_release_aside": {
+     "status": "Open",
+     "carton_shift_mm": 0.25816197261069157,
+     "retract_mm": 30,
+     "aside_lateral_mm": -120.0,
+     "ok": 1.0
+    },
+    "6_extract": {
+     "distance_mm": 190.0,
+     "carton_travel_mm": 189.98945504426956,
+     "gripper_travel_mm": 190.01903012394905,
+     "slip_mm": 0.1027780030488387,
+     "carton_lift_max_mm": 0.013113021850585938,
+     "neighbour_disp_mm": 0.09524852540925216,
+     "neighbour_tilt_deg": 0.029690431142788725,
+     "carton_rotation_deg": 0.18525566133356536,
+     "carton_fully_clear": true,
+     "ok": true
+    },
+    "7_lift50": {
+     "carton_rise_mm": 49.97539520263672,
+     "slip_mm_total": 0.09991697632995694,
+     "carton_rotation_deg": 0.18525566133356536,
+     "carton_rotation_final_deg": 0.13513956802955557,
+     "ok": true
+    }
+   },
+   "notes": [],
+   "squeezed_cartons": null,
+   "videos": [
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T8_3q.mp4",
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T8_side.mp4"
+   ],
+   "unexpected_contacts": {},
+   "contact_pairs_debug": {
+    "/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_06/conqueror_nc_pro_013": 535,
+    "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_06/conqueror_nc_pro_013": 526,
+    "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_06/conqueror_nc_pro_013": 535,
+    " | ": 1,
+    "/World/Tools/SX/tool/pad_3 | ": 2,
+    "/World/Tools/SX/tool/pad_2 | ": 2,
+    "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_06/conqueror_nc_pro_013": 6390,
+    "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_06/conqueror_nc_pro_013": 6387,
+    "/World/Tools/GR/tool/finger_right | ": 2,
+    "/World/Tools/GR/tool/finger_left | ": 2
+   },
+   "min_clearance_mm": {
+    "SX.shelf_above": 88.59989784660249,
+    "SX.shelf_below": 40.60003554823011,
+    "SX.walls_trim_back": 90.39839650980913,
+    "SX.neighbours": 4.599703166907566,
+    "GR.shelf_above": 59.300027668010436,
+    "GR.shelf_below": 185.25931754833067,
+    "GR.walls_trim_back": 83.21272237548895,
+    "GR.neighbours": 79.29752242853974,
+    "GR.to_other_tool": 18.085640694885445
+   },
+   "min_clearance_by_phase_mm": {
+    "start": {
+     "SX.shelf_above": 88.74089996014541,
+     "SX.shelf_below": 40.90679617878484,
+     "SX.walls_trim_back": 90.39845264534874,
+     "SX.neighbours": 25.41961735965476,
+     "GR.shelf_above": 59.33085096239474,
+     "GR.shelf_below": 252.57225501213503,
+     "GR.walls_trim_back": 83.21272237548895,
+     "GR.neighbours": 80.80297748085361,
+     "GR.to_other_tool": 61.36752246212958
+    },
+    "1_press_2_vacuum_3_pull": {
+     "SX.shelf_above": 88.59989784660249,
+     "SX.shelf_below": 40.60003554823011,
+     "SX.walls_trim_back": 90.39839650980913,
+     "SX.neighbours": 4.599703166907566,
+     "GR.shelf_above": 59.33085096239474,
+     "GR.shelf_below": 252.57225501213503,
+     "GR.walls_trim_back": 83.21279930470097,
+     "GR.neighbours": 80.80290158973496,
+     "GR.to_other_tool": 55.4668280428842
+    },
+    "4_gripper_approach_clamp": {
+     "SX.shelf_above": 157.32047932609993,
+     "SX.shelf_below": 136.19142523312044,
+     "SX.walls_trim_back": 152.00305763875912,
+     "SX.neighbours": 150.06948455136867,
+     "GR.shelf_above": 59.300027668010436,
+     "GR.shelf_below": 185.25931754833067,
+     "GR.walls_trim_back": 83.21276110805421,
+     "GR.neighbours": 79.29990434371166,
+     "GR.to_other_tool": 18.085640694885445
+    },
+    "5_release_aside": {
+     "SX.shelf_above": 157.32634133185175,
+     "SX.shelf_below": 136.19978875100304,
+     "SX.walls_trim_back": 152.01236272729452,
+     "SX.neighbours": 150.07634634470878,
+     "GR.shelf_above": 60.10513476064756,
+     "GR.shelf_below": 185.2658820935075,
+     "GR.walls_trim_back": 83.21290080357419,
+     "GR.neighbours": 79.29752242853974,
+     "GR.to_other_tool": 18.093579139366447
+    },
+    "6_extract_7_lift": {
+     "SX.shelf_above": 182.89341144431026,
+     "SX.shelf_below": 165.07071637512468,
+     "SX.walls_trim_back": 260.22137335649177,
+     "SX.neighbours": 183.10888734106163,
+     "GR.shelf_above": 61.46030745726697,
+     "GR.shelf_below": 185.7082732144159,
+     "GR.walls_trim_back": 83.59554745684062,
+     "GR.neighbours": 80.65640162351195,
+     "GR.to_other_tool": 64.13195491274504
+    }
+   },
+   "neighbour_max_disp_mm": 0.09524852540925216,
+   "neighbour_max_tilt_deg": 0.029690431142788725,
+   "shelf_max_disp_mm": 0.09524852540925216,
+   "carton_max_rotation_deg": 0.18525566133356536,
+   "success": true,
+   "video_frames": 766
+  },
+  {
+   "pull_out_mm": 100.0,
+   "target": "E1",
+   "shelf": 3,
+   "box": "agent_monorail",
+   "which": "last",
+   "variant": "base",
+   "mode": "topdown",
+   "thickness_mm": 15.0,
+   "clear_height_mm": 260.0,
+   "carton_path": "/World/Cartons/Shelf_03/agent_monorail_030",
+   "vacuum_kpa": 50.0,
+   "steps": {
+    "1_press": {
+     "compression_mm": [
+      0.4655900120269507,
+      0.46562199713662267,
+      0.4654390795622021
+     ],
+     "carton_pushed_back_mm": 4.524558782577515,
+     "travel_past_contact_mm": 4.990109145486106,
+     "ok": true
+    },
+    "2_vacuum": {
+     "status": "Closed",
+     "gripped": [
+      "/World/Cartons/Shelf_03/agent_monorail_030"
+     ],
+     "ok": true
+    },
+    "3_pull": {
+     "carton_disp_mm": 104.78830337524414,
+     "carton_net_disp_from_rest_mm": 99.97980296611786,
+     "follow_error_mm": 0.15788526763207966,
+     "status": "Closed",
+     "monitor_tripped": null,
+     "neighbour_disp_mm": 0.00015273690223693848,
+     "neighbour_tilt_deg": 6.772112420759196e-05,
+     "carton_yaw_tilt_deg": 0.0003270284039075634,
+     "ok": 1.0
+    },
+    "4a_approach": {
+     "carton_shift_mm": 0.00022389738499763184,
+     "neighbour_disp_mm": 0.0002611957213723377,
+     "carton_shift_xyz_mm": [
+      -1.30385160446167e-05,
+      -0.00022351741790771484,
+      0.0
+     ],
+     "ok": 1.0
+    },
+    "4b_clamp": {
+     "gap_mm": 15.004158105701208,
+     "gap_error_mm": 0.004158105701208836,
+     "carton_shift_during_close_mm": 0.00544393567804295,
+     "carton_shift_xyz_mm": [
+      0.0048782676458358765,
+      -0.00155717134475708,
+      0.0018477439880371094
+     ],
+     "finger_effort_N": 24.43869400024414,
+     "ok": 1.0
+    },
+    "5_release_aside": {
+     "status": "Open",
+     "carton_shift_mm": 0.02475638829938577,
+     "retract_mm": 30,
+     "aside_lateral_mm": 120.0,
+     "ok": 1.0
+    },
+    "6_extract": {
+     "distance_mm": 240.0,
+     "carton_travel_mm": 239.99987542629242,
+     "gripper_travel_mm": 240.01788813620806,
+     "slip_mm": 0.18314336793119068,
+     "carton_lift_max_mm": 0.008761882781982422,
+     "neighbour_disp_mm": 0.0002611957213723377,
+     "neighbour_tilt_deg": 0.00010627174481050114,
+     "carton_rotation_deg": 0.14535054872633185,
+     "carton_fully_clear": true,
+     "ok": true
+    },
+    "7_lift50": {
+     "carton_rise_mm": 49.99947547912598,
+     "slip_mm_total": 0.18558852997733757,
+     "carton_rotation_deg": 0.14535054872633185,
+     "carton_rotation_final_deg": 0.13798217347916208,
+     "ok": true
+    }
+   },
+   "notes": [],
+   "squeezed_cartons": null,
+   "videos": [
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_E1_3q.mp4",
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_E1_side.mp4"
+   ],
+   "unexpected_contacts": {},
+   "contact_pairs_debug": {
+    "/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_03/agent_monorail_030": 535,
+    "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_03/agent_monorail_030": 525,
+    "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_03/agent_monorail_030": 535,
+    " | ": 1,
+    "/World/Tools/SX/tool/pad_3 | ": 2,
+    "/World/Tools/SX/tool/pad_2 | ": 2,
+    "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_03/agent_monorail_030": 6942,
+    "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_03/agent_monorail_030": 6942,
+    "/World/Tools/GR/tool/finger_right | ": 2,
+    "/World/Tools/GR/tool/finger_left | ": 2
+   },
+   "min_clearance_mm": {
+    "SX.shelf_above": 68.59987698495729,
+    "SX.shelf_below": 40.59998020529565,
+    "SX.walls_trim_back": 325.1887330465234,
+    "SX.neighbours": 6.100081792160849,
+    "GR.shelf_above": 9.300022264476848,
+    "GR.shelf_below": 175.75843281758537,
+    "GR.walls_trim_back": 351.5099708963126,
+    "GR.neighbours": 29.298655493873728,
+    "GR.to_other_tool": 18.4709202202235
+   },
+   "min_clearance_by_phase_mm": {
+    "start": {
+     "SX.shelf_above": 68.7819248413648,
+     "SX.shelf_below": 40.90672397460294,
+     "SX.walls_trim_back": 355.0000060601721,
+     "SX.neighbours": 25.733475208708104,
+     "GR.shelf_above": 11.338128733541852,
+     "GR.shelf_below": 245.688343138327,
+     "GR.walls_trim_back": 351.5111775811346,
+     "GR.neighbours": 33.152869816538335,
+     "GR.to_other_tool": 55.530064527488065
+    },
+    "1_press_2_vacuum_3_pull": {
+     "SX.shelf_above": 68.59987698495729,
+     "SX.shelf_below": 40.59998020529565,
+     "SX.walls_trim_back": 325.1887330465234,
+     "SX.neighbours": 6.100081792160849,
+     "GR.shelf_above": 11.345093496572032,
+     "GR.shelf_below": 245.688343138327,
+     "GR.walls_trim_back": 351.51117758614976,
+     "GR.neighbours": 33.152869816538335,
+     "GR.to_other_tool": 55.46515718839266
+    },
+    "4_gripper_approach_clamp": {
+     "SX.shelf_above": 105.38378805021296,
+     "SX.shelf_below": 89.71136515110412,
+     "SX.walls_trim_back": 412.94725820429477,
+     "SX.neighbours": 100.1841820472581,
+     "GR.shelf_above": 9.300022264476848,
+     "GR.shelf_below": 175.75843281758537,
+     "GR.walls_trim_back": 351.511029542145,
+     "GR.neighbours": 29.299799305287006,
+     "GR.to_other_tool": 18.4709202202235
+    },
+    "5_release_aside": {
+     "SX.shelf_above": 105.38437156177989,
+     "SX.shelf_below": 89.71202909915746,
+     "SX.walls_trim_back": 331.2795089208399,
+     "SX.neighbours": 100.18516255329266,
+     "GR.shelf_above": 9.998755229583274,
+     "GR.shelf_below": 175.76317663054115,
+     "GR.walls_trim_back": 351.5099708963126,
+     "GR.neighbours": 29.298655493873728,
+     "GR.to_other_tool": 18.47939397701205
+    },
+    "6_extract_7_lift": {
+     "SX.shelf_above": 129.6378469967014,
+     "SX.shelf_below": 117.25325715951244,
+     "SX.walls_trim_back": 331.2793276994122,
+     "SX.neighbours": 132.2150018626213,
+     "GR.shelf_above": 10.717308347800921,
+     "GR.shelf_below": 175.80851297121458,
+     "GR.walls_trim_back": 352.2283527940012,
+     "GR.neighbours": 30.017443432759666,
+     "GR.to_other_tool": 64.24968068358834
+    }
+   },
+   "neighbour_max_disp_mm": 0.0002611957213723377,
+   "neighbour_max_tilt_deg": 0.00010627174481050114,
+   "shelf_max_disp_mm": 0.0002835139273172683,
+   "carton_max_rotation_deg": 0.14535054872633185,
+   "success": true,
+   "video_frames": 770
+  },
+  {
+   "pull_out_mm": 150.0,
+   "target": "E2",
+   "shelf": 6,
+   "box": "angiolite",
+   "which": "first",
+   "variant": "base",
+   "mode": "topdown",
+   "thickness_mm": 16.0,
+   "clear_height_mm": 280.0,
+   "carton_path": "/World/Cartons/Shelf_06/angiolite_001",
+   "vacuum_kpa": 50.0,
+   "steps": {
+    "1_press": {
+     "compression_mm": [
+      0.7042487850412726,
+      4.808382596820593,
+      5.236722528934479
+     ],
+     "carton_pushed_back_mm": 0.0,
+     "travel_past_contact_mm": 3.583117970265448,
+     "ok": true
+    },
+    "2_vacuum": {
+     "status": "Open",
+     "gripped": [],
+     "ok": false
+    },
+    "3_pull": {
+     "carton_disp_mm": 0.0,
+     "carton_net_disp_from_rest_mm": 0.0,
+     "follow_error_mm": 65.13628362119198,
+     "status": "Open",
+     "monitor_tripped": null,
+     "neighbour_disp_mm": 0.0,
+     "neighbour_tilt_deg": 0.0,
+     "carton_yaw_tilt_deg": 0.0,
+     "ok": 0.0
+    },
+    "4a_approach": {
+     "carton_shift_mm": 0.0,
+     "neighbour_disp_mm": 0.0,
+     "carton_shift_xyz_mm": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "ok": 1.0
+    },
+    "4b_clamp": {
+     "gap_mm": 37.39286455512047,
+     "gap_error_mm": 21.392864555120468,
+     "carton_shift_during_close_mm": 0.0,
+     "carton_shift_xyz_mm": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "finger_effort_N": 48.577178955078125,
+     "ok": 0.0
+    },
+    "5_release_aside": {
+     "status": "Open",
+     "carton_shift_mm": 0.0,
+     "retract_mm": 30,
+     "aside_lateral_mm": 120.0,
+     "ok": 1.0
+    },
+    "6_extract": {
+     "distance_mm": 190.0,
+     "carton_travel_mm": 0.0,
+     "gripper_travel_mm": 190.02070277929306,
+     "slip_mm": 190.0352685346995,
+     "carton_lift_max_mm": 0.0,
+     "neighbour_disp_mm": 0.0,
+     "neighbour_tilt_deg": 0.0,
+     "carton_rotation_deg": 0.0,
+     "carton_fully_clear": false,
+     "ok": false
+    },
+    "7_lift50": {
+     "carton_rise_mm": 0.0,
+     "slip_mm_total": 196.37368547931456,
+     "carton_rotation_deg": 0.0,
+     "carton_rotation_final_deg": 0.0,
+     "ok": false
+    }
+   },
+   "notes": [],
+   "squeezed_cartons": null,
+   "videos": [
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_E2_3q.mp4",
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_E2_side.mp4"
+   ],
+   "unexpected_contacts": {
+    "SX->cabinet": 81029,
+    "SX->GR": 1656,
+    "GR->SX": 1656
+   },
+   "contact_pairs_debug": {
+    "/World/Tools/SX/tool/base | /World/Cabinet/Cabinet/Body_Left": 3312,
+    "/World/Tools/SX/tool/base | /World/Cabinet/Cabinet/FrontTrim_Left": 3364,
+    "/World/Tools/SX/tool/pad_3 | /World/Cabinet/Cabinet/FrontTrim_Left": 11851,
+    "/World/Tools/SX/tool/pad_2 | /World/Cabinet/Cabinet/FrontTrim_Left": 12661,
+    "/World/Tools/SX/tool/pad_1 | /World/Cabinet/Cabinet/FrontTrim_Left": 12656,
+    "/World/Tools/SX/tool/pad_3 | /World/Cabinet/Cabinet/Body_Left": 11858,
+    "/World/Tools/SX/tool/pad_2 | /World/Cabinet/Cabinet/Body_Left": 12668,
+    "/World/Tools/SX/tool/pad_1 | /World/Cabinet/Cabinet/Body_Left": 12659,
+    " | ": 1,
+    " | /World/Cabinet/Cabinet/Body_Left": 2,
+    "/World/Tools/SX/tool/base | ": 6,
+    "/World/Tools/SX/tool/pad_3 | ": 2,
+    "/World/Tools/SX/tool/pad_2 | ": 3,
+    "/World/Tools/SX/tool/base | /World/Tools/GR/tool/finger_left": 1656
+   },
+   "min_clearance_mm": {
+    "SX.shelf_above": 91.84875197365665,
+    "SX.shelf_below": 58.06346611361562,
+    "SX.walls_trim_back": 0.0,
+    "SX.neighbours": 57.93195148316882,
+    "GR.shelf_above": 59.300027666147784,
+    "GR.shelf_below": 195.18701108903173,
+    "GR.walls_trim_back": 1.462668774642427,
+    "GR.neighbours": 79.24700833623147,
+    "GR.to_other_tool": 0.23187782823308295
+   },
+   "min_clearance_by_phase_mm": {
+    "start": {
+     "SX.shelf_above": 91.8848670675002,
+     "SX.shelf_below": 58.078196652450785,
+     "SX.walls_trim_back": 0.0,
+     "SX.neighbours": 57.93831605053921,
+     "GR.shelf_above": 60.48465928047382,
+     "GR.shelf_below": 262.30322822442884,
+     "GR.walls_trim_back": 1.5111820361450103,
+     "GR.neighbours": 80.80296656504791,
+     "GR.to_other_tool": 59.640349322184775
+    },
+    "1_press_2_vacuum_3_pull": {
+     "SX.shelf_above": 91.84875197365665,
+     "SX.shelf_below": 58.06346611361562,
+     "SX.walls_trim_back": 0.0,
+     "SX.neighbours": 57.93195148316882,
+     "GR.shelf_above": 60.48465928047382,
+     "GR.shelf_below": 262.30322822442884,
+     "GR.walls_trim_back": 1.5111820564981602,
+     "GR.neighbours": 80.80296656504791,
+     "GR.to_other_tool": 59.497921719692314
+    },
+    "4_gripper_approach_clamp": {
+     "SX.shelf_above": 93.35033961233192,
+     "SX.shelf_below": 62.20224355574458,
+     "SX.walls_trim_back": 0.0,
+     "SX.neighbours": 64.40106901914444,
+     "GR.shelf_above": 59.300027666147784,
+     "GR.shelf_below": 195.18701108903173,
+     "GR.walls_trim_back": 1.462668774642427,
+     "GR.neighbours": 79.25205524871282,
+     "GR.to_other_tool": 4.453735753948506
+    },
+    "5_release_aside": {
+     "SX.shelf_above": 93.53193372762192,
+     "SX.shelf_below": 62.21589984709378,
+     "SX.walls_trim_back": 0.0,
+     "SX.neighbours": 64.60319817500667,
+     "GR.shelf_above": 59.95139370360107,
+     "GR.shelf_below": 195.19195060661582,
+     "GR.walls_trim_back": 1.465381060244575,
+     "GR.neighbours": 79.24700833623147,
+     "GR.to_other_tool": 4.153313573831389
+    },
+    "6_extract_7_lift": {
+     "SX.shelf_above": 92.41832681514371,
+     "SX.shelf_below": 61.74052384044808,
+     "SX.walls_trim_back": 0.0,
+     "SX.neighbours": 61.38471069204727,
+     "GR.shelf_above": 61.319940909220264,
+     "GR.shelf_below": 195.61567981745574,
+     "GR.walls_trim_back": 2.8313364602899003,
+     "GR.neighbours": 80.6195728828062,
+     "GR.to_other_tool": 0.23187782823308295
+    }
+   },
+   "neighbour_max_disp_mm": 0.0,
+   "neighbour_max_tilt_deg": 0.0,
+   "shelf_max_disp_mm": 0.0,
+   "carton_max_rotation_deg": 0.0,
+   "success": false,
+   "video_frames": 771
+  },
+  {
+   "pull_out_mm": 100.0,
+   "target": "T5",
+   "shelf": 4,
+   "box": "angiolite",
+   "which": "mid",
+   "variant": "vac35",
+   "mode": "topdown",
+   "thickness_mm": 16.0,
+   "clear_height_mm": 310.00000000000006,
+   "carton_path": "/World/Cartons/Shelf_04/angiolite_029",
+   "vacuum_kpa": 35.0,
+   "steps": {
+    "1_press": {
+     "compression_mm": [
+      0.5271872505545616,
+      0.5271972040645778,
+      0.5270824767649174
+     ],
+     "carton_pushed_back_mm": 4.461616277694702,
+     "travel_past_contact_mm": 4.988771921489388,
+     "ok": true
+    },
+    "2_vacuum": {
+     "status": "Closed",
+     "gripped": [
+      "/World/Cartons/Shelf_04/angiolite_029"
+     ],
+     "ok": true
+    },
+    "3_pull": {
+     "carton_disp_mm": 104.70138490200043,
+     "carton_net_disp_from_rest_mm": 99.96412694454193,
+     "follow_error_mm": 0.22620681521948183,
+     "status": "Closed",
+     "monitor_tripped": null,
+     "neighbour_disp_mm": 0.00023342592910906773,
+     "neighbour_tilt_deg": 0.00010627965297411638,
+     "carton_yaw_tilt_deg": 0.0005729904895475913,
+     "ok": 1.0
+    },
+    "4a_approach": {
+     "carton_shift_mm": 0.0007897627788129315,
+     "neighbour_disp_mm": 0.00024027400458748784,
+     "carton_shift_xyz_mm": [
+      -1.3969838619232178e-06,
+      -0.0007897615432739258,
+      0.0
+     ],
+     "ok": 1.0
+    },
+    "4b_clamp": {
+     "gap_mm": 16.008457720279694,
+     "gap_error_mm": 0.008457720279693437,
+     "carton_shift_during_close_mm": 0.012433390071588793,
+     "carton_shift_xyz_mm": [
+      0.012081116437911987,
+      -0.002332031726837158,
+      0.0017881393432617188
+     ],
+     "finger_effort_N": 24.908578872680664,
+     "ok": 1.0
+    },
+    "5_release_aside": {
+     "status": "Open",
+     "carton_shift_mm": 0.0023033398386602317,
+     "retract_mm": 30,
+     "aside_lateral_mm": 120.0,
+     "ok": 1.0
+    },
+    "6_extract": {
+     "distance_mm": 240.0,
+     "carton_travel_mm": 240.00684171915054,
+     "gripper_travel_mm": 240.01887440681458,
+     "slip_mm": 0.1854963500039583,
+     "carton_lift_max_mm": 0.005245208740234375,
+     "neighbour_disp_mm": 0.0002775341272354126,
+     "neighbour_tilt_deg": 0.00011676336969097328,
+     "carton_rotation_deg": 0.10244129619703005,
+     "carton_fully_clear": true,
+     "ok": true
+    },
+    "7_lift50": {
+     "carton_rise_mm": 49.986958503723145,
+     "slip_mm_total": 0.1887055662748733,
+     "carton_rotation_deg": 0.10300767737042224,
+     "carton_rotation_final_deg": 0.10304418067466345,
+     "ok": true
+    }
+   },
+   "notes": [],
+   "squeezed_cartons": null,
+   "videos": [
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T5_vac35_3q.mp4",
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T5_vac35_side.mp4"
+   ],
+   "unexpected_contacts": {},
+   "contact_pairs_debug": {
+    "/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_04/angiolite_029": 535,
+    "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_04/angiolite_029": 525,
+    "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_04/angiolite_029": 535,
+    " | ": 1,
+    "/World/Tools/SX/tool/pad_3 | ": 2,
+    "/World/Tools/SX/tool/pad_2 | ": 2,
+    "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_04/angiolite_029": 6966,
+    "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_04/angiolite_029": 6966,
+    "/World/Tools/GR/tool/finger_right | ": 2,
+    "/World/Tools/GR/tool/finger_left | ": 2
+   },
+   "min_clearance_mm": {
+    "SX.shelf_above": 113.59998404982963,
+    "SX.shelf_below": 45.59992587569495,
+    "SX.walls_trim_back": 319.4241218398221,
+    "SX.neighbours": 6.59937595849982,
+    "GR.shelf_above": 9.300021865404823,
+    "GR.shelf_below": 185.7451392983232,
+    "GR.walls_trim_back": 351.51006444004173,
+    "GR.neighbours": 29.298843930265384,
+    "GR.to_other_tool": 18.63154798866713
+   },
+   "min_clearance_by_phase_mm": {
+    "start": {
+     "SX.shelf_above": 113.7100067059825,
+     "SX.shelf_below": 45.87324138371627,
+     "SX.walls_trim_back": 354.9999911590109,
+     "SX.neighbours": 25.856406746230043,
+     "GR.shelf_above": 9.300023116171285,
+     "GR.shelf_below": 255.68153755355993,
+     "GR.walls_trim_back": 351.5111775811346,
+     "GR.neighbours": 33.153031548078154,
+     "GR.to_other_tool": 60.41622770400456
+    },
+    "1_press_2_vacuum_3_pull": {
+     "SX.shelf_above": 113.59998404982963,
+     "SX.shelf_below": 45.59992587569495,
+     "SX.walls_trim_back": 325.2593736114875,
+     "SX.neighbours": 6.59937595849982,
+     "GR.shelf_above": 9.300024128984653,
+     "GR.shelf_below": 255.68153755355993,
+     "GR.walls_trim_back": 351.51117758614976,
+     "GR.neighbours": 33.153032918930634,
+     "GR.to_other_tool": 60.35651544961016
+    },
+    "4_gripper_approach_clamp": {
+     "SX.shelf_above": 138.9409434691305,
+     "SX.shelf_below": 92.0813537963857,
+     "SX.walls_trim_back": 425.1506895889362,
+     "SX.neighbours": 100.21389124791664,
+     "GR.shelf_above": 9.300021865404823,
+     "GR.shelf_below": 185.7451392983232,
+     "GR.walls_trim_back": 351.5111747992988,
+     "GR.neighbours": 29.29991781745217,
+     "GR.to_other_tool": 18.63154798866713
+    },
+    "5_release_aside": {
+     "SX.shelf_above": 138.94198547112296,
+     "SX.shelf_below": 92.08276275698331,
+     "SX.walls_trim_back": 319.42426848979,
+     "SX.neighbours": 100.216617188938,
+     "GR.shelf_above": 13.591108365618945,
+     "GR.shelf_below": 185.75084775911543,
+     "GR.walls_trim_back": 351.51006444004173,
+     "GR.neighbours": 29.298843930265384,
+     "GR.to_other_tool": 18.644324360030208
+    },
+    "6_extract_7_lift": {
+     "SX.shelf_above": 158.12956224966624,
+     "SX.shelf_below": 119.07698254025493,
+     "SX.walls_trim_back": 319.4241218398221,
+     "SX.neighbours": 130.22172916309617,
+     "GR.shelf_above": 14.7710234199542,
+     "GR.shelf_below": 185.81425605797514,
+     "GR.walls_trim_back": 352.69718594261656,
+     "GR.neighbours": 30.48635473201888,
+     "GR.to_other_tool": 67.44166093004294
+    }
+   },
+   "neighbour_max_disp_mm": 0.0002775341272354126,
+   "neighbour_max_tilt_deg": 0.00011676336969097328,
+   "shelf_max_disp_mm": 0.00034305049279991797,
+   "carton_max_rotation_deg": 0.10304418067466345,
+   "success": true,
+   "video_frames": 771
+  },
+  {
+   "pull_out_mm": 100.0,
+   "target": "T5",
+   "shelf": 4,
+   "box": "angiolite",
+   "which": "mid",
+   "variant": "squeeze",
+   "mode": "topdown",
+   "thickness_mm": 16.0,
+   "clear_height_mm": 310.00000000000006,
+   "carton_path": "/World/Cartons/Shelf_04/angiolite_029",
+   "vacuum_kpa": 50.0,
+   "steps": {
+    "1_press": {
+     "compression_mm": [
+      0.5348912673071027,
+      0.5349328857846558,
+      0.5347144324332476
+     ],
+     "carton_pushed_back_mm": 4.453733563423157,
+     "travel_past_contact_mm": 4.988579758598159,
+     "ok": true
+    },
+    "2_vacuum": {
+     "status": "Closed",
+     "gripped": [
+      "/World/Cartons/Shelf_04/angiolite_029"
+     ],
+     "ok": true
+    },
+    "3_pull": {
+     "carton_disp_mm": 104.67912256717682,
+     "carton_net_disp_from_rest_mm": 99.96296465396881,
+     "follow_error_mm": 0.24671583343297,
+     "status": "Closed",
+     "monitor_tripped": null,
+     "neighbour_disp_mm": 0.00025572564516953254,
+     "neighbour_tilt_deg": 3.915266826449365e-05,
+     "carton_yaw_tilt_deg": 3.57872817179416e-05,
+     "ok": 1.0
+    },
+    "4a_approach": {
+     "carton_shift_mm": 0.0030101435184514596,
+     "neighbour_disp_mm": 0.00027233502802965397,
+     "carton_shift_xyz_mm": [
+      -2.561137080192566e-05,
+      -0.0030100345611572266,
+      0.0
+     ],
+     "ok": 1.0
+    },
+    "4b_clamp": {
+     "gap_mm": 16.00016149878502,
+     "gap_error_mm": 0.00016149878501875436,
+     "carton_shift_during_close_mm": 0.0034419031728316098,
+     "carton_shift_xyz_mm": [
+      -0.0017960555851459503,
+      -0.0017136335372924805,
+      0.002384185791015625
+     ],
+     "finger_effort_N": 24.099782943725586,
+     "ok": 1.0
+    },
+    "5_release_aside": {
+     "status": "Open",
+     "carton_shift_mm": 0.0006541453900954355,
+     "retract_mm": 30,
+     "aside_lateral_mm": 120.0,
+     "ok": 1.0
+    },
+    "6_extract": {
+     "distance_mm": 240.0,
+     "carton_travel_mm": 239.996999502182,
+     "gripper_travel_mm": 240.01839384436607,
+     "slip_mm": 0.1317557546749212,
+     "carton_lift_max_mm": 0.0034570693969726562,
+     "neighbour_disp_mm": 0.01985972942412916,
+     "neighbour_tilt_deg": 0.007773528305957492,
+     "carton_rotation_deg": 0.10093980322043829,
+     "carton_fully_clear": true,
+     "ok": true
+    },
+    "7_lift50": {
+     "carton_rise_mm": 49.99411106109619,
+     "slip_mm_total": 0.132535108526178,
+     "carton_rotation_deg": 0.10093980322043829,
+     "carton_rotation_final_deg": 0.06111483293032807,
+     "ok": true
+    }
+   },
+   "notes": [],
+   "squeezed_cartons": 56,
+   "videos": [
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T5_squeeze_3q.mp4",
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T5_squeeze_side.mp4"
+   ],
+   "unexpected_contacts": {},
+   "contact_pairs_debug": {
+    "/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_04/angiolite_029": 535,
+    "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_04/angiolite_029": 525,
+    "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_04/angiolite_029": 535,
+    " | ": 1,
+    "/World/Tools/SX/tool/pad_3 | ": 2,
+    "/World/Tools/SX/tool/pad_2 | ": 2,
+    "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_04/angiolite_029": 6966,
+    "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_04/angiolite_029": 6966,
+    "/World/Tools/GR/tool/finger_right | ": 2,
+    "/World/Tools/GR/tool/finger_left | ": 2
+   },
+   "min_clearance_mm": {
+    "SX.shelf_above": 113.60000282530902,
+    "SX.shelf_below": 45.59992113712741,
+    "SX.walls_trim_back": 319.4241218398221,
+    "SX.neighbours": 5.599523435101188,
+    "GR.shelf_above": 9.300021865404823,
+    "GR.shelf_below": 185.7451392983232,
+    "GR.walls_trim_back": 351.51061163883315,
+    "GR.neighbours": 29.298652219414993,
+    "GR.to_other_tool": 18.621503407274897
+   },
+   "min_clearance_by_phase_mm": {
+    "start": {
+     "SX.shelf_above": 113.7100067059825,
+     "SX.shelf_below": 45.87324138371627,
+     "SX.walls_trim_back": 354.9999911590109,
+     "SX.neighbours": 25.619477293278045,
+     "GR.shelf_above": 9.300023116171285,
+     "GR.shelf_below": 255.68153755355993,
+     "GR.walls_trim_back": 351.5111775811346,
+     "GR.neighbours": 33.1530777272453,
+     "GR.to_other_tool": 60.41622770400456
+    },
+    "1_press_2_vacuum_3_pull": {
+     "SX.shelf_above": 113.60000282530902,
+     "SX.shelf_below": 45.59992113712741,
+     "SX.walls_trim_back": 325.2802788410211,
+     "SX.neighbours": 5.599523435101188,
+     "GR.shelf_above": 9.300024128984653,
+     "GR.shelf_below": 255.68153755355993,
+     "GR.walls_trim_back": 351.51117758614976,
+     "GR.neighbours": 33.152964619029405,
+     "GR.to_other_tool": 60.35652196039876
+    },
+    "4_gripper_approach_clamp": {
+     "SX.shelf_above": 138.9408452818414,
+     "SX.shelf_below": 92.0810839089223,
+     "SX.walls_trim_back": 425.13798747033036,
+     "SX.neighbours": 100.15386341971553,
+     "GR.shelf_above": 9.300021865404823,
+     "GR.shelf_below": 185.7451392983232,
+     "GR.walls_trim_back": 351.5109131746471,
+     "GR.neighbours": 29.299728299242044,
+     "GR.to_other_tool": 18.621503407274897
+    },
+    "5_release_aside": {
+     "SX.shelf_above": 138.94196831167176,
+     "SX.shelf_below": 92.08278943719326,
+     "SX.walls_trim_back": 319.4242636789288,
+     "SX.neighbours": 100.15507333752167,
+     "GR.shelf_above": 13.591764743274734,
+     "GR.shelf_below": 185.75043959436456,
+     "GR.walls_trim_back": 351.51061163883315,
+     "GR.neighbours": 29.298652219414993,
+     "GR.to_other_tool": 18.643575775615467
+    },
+    "6_extract_7_lift": {
+     "SX.shelf_above": 158.12954151821927,
+     "SX.shelf_below": 119.07695500973546,
+     "SX.walls_trim_back": 319.4241218398221,
+     "SX.neighbours": 130.7090158619098,
+     "GR.shelf_above": 14.762937822461664,
+     "GR.shelf_below": 185.80984254209437,
+     "GR.walls_trim_back": 352.6885884225179,
+     "GR.neighbours": 30.47781982870315,
+     "GR.to_other_tool": 67.42627212184561
+    }
+   },
+   "neighbour_max_disp_mm": 0.01985972942412916,
+   "neighbour_max_tilt_deg": 0.007773528305957492,
+   "shelf_max_disp_mm": 0.02992701150789894,
+   "carton_max_rotation_deg": 0.10093980322043829,
+   "success": true,
+   "video_frames": 771
+  },
+  {
+   "pull_out_mm": 100.0,
+   "target": "T5",
+   "shelf": 4,
+   "box": "angiolite",
+   "which": "mid",
+   "variant": "lat2",
+   "mode": "topdown",
+   "thickness_mm": 16.0,
+   "clear_height_mm": 310.00000000000006,
+   "carton_path": "/World/Cartons/Shelf_04/angiolite_029",
+   "vacuum_kpa": 50.0,
+   "steps": {
+    "1_press": {
+     "compression_mm": [
+      0.5317737231962383,
+      0.5317697650752962,
+      0.5318025359883904
+     ],
+     "carton_pushed_back_mm": 4.456758499145508,
+     "travel_past_contact_mm": 4.988540507232149,
+     "ok": true
+    },
+    "2_vacuum": {
+     "status": "Closed",
+     "gripped": [
+      "/World/Cartons/Shelf_04/angiolite_029"
+     ],
+     "ok": true
+    },
+    "3_pull": {
+     "carton_disp_mm": 104.70041632652283,
+     "carton_net_disp_from_rest_mm": 99.96679425239563,
+     "follow_error_mm": 0.22949326341040188,
+     "status": "Closed",
+     "monitor_tripped": null,
+     "neighbour_disp_mm": 0.0002236493163555732,
+     "neighbour_tilt_deg": 8.764076658016658e-05,
+     "carton_yaw_tilt_deg": 0.013577130370602293,
+     "ok": 1.0
+    },
+    "4a_approach": {
+     "carton_shift_mm": 0.0009109326279588608,
+     "neighbour_disp_mm": 0.0002872341353625243,
+     "carton_shift_xyz_mm": [
+      -4.190951585769653e-06,
+      -0.0008791685104370117,
+      -0.0002384185791015625
+     ],
+     "ok": 1.0
+    },
+    "4b_clamp": {
+     "gap_mm": 16.002962917089462,
+     "gap_error_mm": 0.0029629170894621137,
+     "carton_shift_during_close_mm": 0.018512244532584387,
+     "carton_shift_xyz_mm": [
+      0.018333550542593002,
+      -0.0018402934074401855,
+      0.0017881393432617188
+     ],
+     "finger_effort_N": 25.697843551635742,
+     "ok": 1.0
+    },
+    "5_release_aside": {
+     "status": "Open",
+     "carton_shift_mm": 0.005723162118520167,
+     "retract_mm": 30,
+     "aside_lateral_mm": 120.0,
+     "ok": 1.0
+    },
+    "6_extract": {
+     "distance_mm": 240.0,
+     "carton_travel_mm": 239.99609053134918,
+     "gripper_travel_mm": 240.0186052545905,
+     "slip_mm": 0.07417539763327675,
+     "carton_lift_max_mm": 0.003337860107421875,
+     "neighbour_disp_mm": 0.0002872341353625243,
+     "neighbour_tilt_deg": 0.00011696850495202766,
+     "carton_rotation_deg": 0.12172222930178508,
+     "carton_fully_clear": true,
+     "ok": true
+    },
+    "7_lift50": {
+     "carton_rise_mm": 49.990296363830566,
+     "slip_mm_total": 0.07608399253356038,
+     "carton_rotation_deg": 0.12172222930178508,
+     "carton_rotation_final_deg": 0.0689856835618919,
+     "ok": true
+    }
+   },
+   "notes": [],
+   "squeezed_cartons": null,
+   "videos": [
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T5_lat2_3q.mp4",
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T5_lat2_side.mp4"
+   ],
+   "unexpected_contacts": {},
+   "contact_pairs_debug": {
+    "/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_04/angiolite_029": 535,
+    "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_04/angiolite_029": 525,
+    "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_04/angiolite_029": 535,
+    " | ": 1,
+    "/World/Tools/SX/tool/pad_3 | ": 2,
+    "/World/Tools/SX/tool/pad_2 | ": 2,
+    "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_04/angiolite_029": 6949,
+    "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_04/angiolite_029": 6964,
+    "/World/Tools/GR/tool/finger_right | ": 2,
+    "/World/Tools/GR/tool/finger_left | ": 2
+   },
+   "min_clearance_mm": {
+    "SX.shelf_above": 113.59999343756466,
+    "SX.shelf_below": 45.59992113711475,
+    "SX.walls_trim_back": 317.53181886042387,
+    "SX.neighbours": 4.599510408121214,
+    "GR.shelf_above": 9.300021865404823,
+    "GR.shelf_below": 185.7451392983232,
+    "GR.walls_trim_back": 351.51036710881425,
+    "GR.neighbours": 29.299180999988295,
+    "GR.to_other_tool": 18.071834221057735
+   },
+   "min_clearance_by_phase_mm": {
+    "start": {
+     "SX.shelf_above": 113.7100060507351,
+     "SX.shelf_below": 45.87324138371627,
+     "SX.walls_trim_back": 355.0000060601721,
+     "SX.neighbours": 25.419592646312253,
+     "GR.shelf_above": 9.300023116171285,
+     "GR.shelf_below": 255.68153755355993,
+     "GR.walls_trim_back": 351.5111775811346,
+     "GR.neighbours": 33.153031548078154,
+     "GR.to_other_tool": 60.08379141960454
+    },
+    "1_press_2_vacuum_3_pull": {
+     "SX.shelf_above": 113.59999343756466,
+     "SX.shelf_below": 45.59992113711475,
+     "SX.walls_trim_back": 325.2627125922345,
+     "SX.neighbours": 4.599510408121214,
+     "GR.shelf_above": 9.300024128984653,
+     "GR.shelf_below": 255.68153755355993,
+     "GR.walls_trim_back": 351.51117758614976,
+     "GR.neighbours": 33.15299207550465,
+     "GR.to_other_tool": 60.022665783859495
+    },
+    "4_gripper_approach_clamp": {
+     "SX.shelf_above": 138.94098326057957,
+     "SX.shelf_below": 92.08139381663918,
+     "SX.walls_trim_back": 426.5913389534757,
+     "SX.neighbours": 100.10165052871888,
+     "GR.shelf_above": 9.300021865404823,
+     "GR.shelf_below": 185.7451392983232,
+     "GR.walls_trim_back": 351.5111747992988,
+     "GR.neighbours": 29.299907705118283,
+     "GR.to_other_tool": 18.071834221057735
+    },
+    "5_release_aside": {
+     "SX.shelf_above": 138.94195973195568,
+     "SX.shelf_below": 92.08277609708227,
+     "SX.walls_trim_back": 317.53203596963385,
+     "SX.neighbours": 100.10466096795268,
+     "GR.shelf_above": 13.591397258100576,
+     "GR.shelf_below": 185.75125439256595,
+     "GR.walls_trim_back": 351.51036710881425,
+     "GR.neighbours": 29.299180999988295,
+     "GR.to_other_tool": 18.08594323740123
+    },
+    "6_extract_7_lift": {
+     "SX.shelf_above": 158.12956224966624,
+     "SX.shelf_below": 119.07698254025493,
+     "SX.walls_trim_back": 317.53181886042387,
+     "SX.neighbours": 130.35374058270634,
+     "GR.shelf_above": 14.770900345567247,
+     "GR.shelf_below": 185.81437817722232,
+     "GR.walls_trim_back": 352.6971002605552,
+     "GR.neighbours": 30.486180909442634,
+     "GR.to_other_tool": 68.81454931431094
+    }
+   },
+   "neighbour_max_disp_mm": 0.0002872341353625243,
+   "neighbour_max_tilt_deg": 0.00011696850495202766,
+   "shelf_max_disp_mm": 0.0003579381748874281,
+   "carton_max_rotation_deg": 0.12172222930178508,
+   "success": true,
+   "video_frames": 771
+  },
+  {
+   "pull_out_mm": 100.0,
+   "target": "T5",
+   "shelf": 4,
+   "box": "angiolite",
+   "which": "mid",
+   "variant": "tilt3",
+   "mode": "topdown",
+   "thickness_mm": 16.0,
+   "clear_height_mm": 310.00000000000006,
+   "carton_path": "/World/Cartons/Shelf_04/angiolite_029",
+   "vacuum_kpa": 50.0,
+   "steps": {
+    "1_press": {
+     "compression_mm": [
+      0.5274806753732264,
+      0.5275079165585339,
+      0.5273385322652757
+     ],
+     "carton_pushed_back_mm": 4.582911729812622,
+     "travel_past_contact_mm": 5.110354104544967,
+     "ok": true
+    },
+    "2_vacuum": {
+     "status": "Closed",
+     "gripped": [
+      "/World/Cartons/Shelf_04/angiolite_029"
+     ],
+     "ok": true
+    },
+    "3_pull": {
+     "carton_disp_mm": 104.47818785905838,
+     "carton_net_disp_from_rest_mm": 99.4473472237587,
+     "follow_error_mm": 0.24868732690810913,
+     "status": "Closed",
+     "monitor_tripped": null,
+     "neighbour_disp_mm": 4.426196469652474,
+     "neighbour_tilt_deg": 0.0524222449495622,
+     "carton_yaw_tilt_deg": 0.051020184746595205,
+     "ok": 0.0
+    },
+    "4a_approach": {
+     "carton_shift_mm": 1.8362426003928731,
+     "neighbour_disp_mm": 4.426196469652474,
+     "carton_shift_xyz_mm": [
+      -1.8293985049240291,
+      0.13335049152374268,
+      0.08547306060791016
+     ],
+     "ok": 1.0
+    },
+    "4b_clamp": {
+     "gap_mm": 16.603848051279783,
+     "gap_error_mm": 0.603848051279783,
+     "carton_shift_during_close_mm": 2.0686439789379607,
+     "carton_shift_xyz_mm": [
+      -2.068332687485963,
+      -0.030763447284698486,
+      0.018477439880371094
+     ],
+     "finger_effort_N": 23.85076332092285,
+     "ok": 1.0
+    },
+    "5_release_aside": {
+     "status": "Open",
+     "carton_shift_mm": 0.0001700626643078525,
+     "retract_mm": 30,
+     "aside_lateral_mm": 120.0,
+     "ok": 1.0
+    },
+    "6_extract": {
+     "distance_mm": 240.0,
+     "carton_travel_mm": 240.0130107998848,
+     "gripper_travel_mm": 240.01631326973438,
+     "slip_mm": 0.010304902470748735,
+     "carton_lift_max_mm": 0.1367330551147461,
+     "neighbour_disp_mm": 4.426196469652474,
+     "neighbour_tilt_deg": 0.08335609826494397,
+     "carton_rotation_deg": 1.157903276223244,
+     "carton_fully_clear": true,
+     "ok": 0.0
+    },
+    "7_lift50": {
+     "carton_rise_mm": 49.99744892120361,
+     "slip_mm_total": 0.00751497193169847,
+     "carton_rotation_deg": 1.157903276223244,
+     "carton_rotation_final_deg": 0.34245912051210764,
+     "ok": true
+    }
+   },
+   "notes": [],
+   "squeezed_cartons": null,
+   "videos": [
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T5_tilt3_3q.mp4",
+    "/home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/sim_assets/medical_box_tools/tests/results/videos/topdown_T5_tilt3_side.mp4"
+   ],
+   "unexpected_contacts": {},
+   "contact_pairs_debug": {
+    "/World/Tools/SX/tool/pad_2 | /World/Cartons/Shelf_04/angiolite_029": 1164,
+    "/World/Tools/SX/tool/pad_1 | /World/Cartons/Shelf_04/angiolite_029": 482,
+    "/World/Tools/SX/tool/pad_3 | /World/Cartons/Shelf_04/angiolite_029": 1643,
+    " | ": 7,
+    "/World/Tools/SX/tool/pad_3 | ": 20,
+    "/World/Tools/SX/tool/pad_2 | ": 20,
+    "/World/Tools/GR/tool/finger_right | /World/Cartons/Shelf_04/angiolite_029": 7687,
+    "/World/Tools/GR/tool/finger_right | ": 22,
+    "/World/Tools/GR/tool/finger_left | /World/Cartons/Shelf_04/angiolite_029": 6319,
+    "/World/Tools/GR/tool/finger_left | ": 11
+   },
+   "min_clearance_mm": {
+    "SX.shelf_above": 113.59998762980261,
+    "SX.shelf_below": 45.59992154659432,
+    "SX.walls_trim_back": 308.1207524369206,
+    "SX.neighbours": 6.352757645467368,
+    "GR.shelf_above": 9.300021865404823,
+    "GR.shelf_below": 185.75087882484442,
+    "GR.walls_trim_back": 351.5101704595872,
+    "GR.neighbours": 28.81701078026308,
+    "GR.to_other_tool": 17.34888247510514
+   },
+   "min_clearance_by_phase_mm": {
+    "start": {
+     "SX.shelf_above": 113.70856716245446,
+     "SX.shelf_below": 45.8696290431575,
+     "SX.walls_trim_back": 354.8401867853451,
+     "SX.neighbours": 25.398150705238102,
+     "GR.shelf_above": 9.300023116171285,
+     "GR.shelf_below": 255.68153755355993,
+     "GR.walls_trim_back": 351.5111775811346,
+     "GR.neighbours": 33.153031548078154,
+     "GR.to_other_tool": 60.194607727744696
+    },
+    "1_press_2_vacuum_3_pull": {
+     "SX.shelf_above": 113.59998762980261,
+     "SX.shelf_below": 45.59992154659432,
+     "SX.walls_trim_back": 325.09434340338106,
+     "SX.neighbours": 6.352757645467368,
+     "GR.shelf_above": 9.300024128984653,
+     "GR.shelf_below": 255.68153755355993,
+     "GR.walls_trim_back": 351.51117758614976,
+     "GR.neighbours": 32.732642532866784,
+     "GR.to_other_tool": 60.09875637591909
+    },
+    "4_gripper_approach_clamp": {
+     "SX.shelf_above": 138.85663998378084,
+     "SX.shelf_below": 91.94633244300316,
+     "SX.walls_trim_back": 420.781390159007,
+     "SX.neighbours": 99.4047749578495,
+     "GR.shelf_above": 9.300021865404823,
+     "GR.shelf_below": 185.75324370380733,
+     "GR.walls_trim_back": 351.5101704595872,
+     "GR.neighbours": 28.81701078026308,
+     "GR.to_other_tool": 17.51356380255851
+    },
+    "5_release_aside": {
+     "SX.shelf_above": 138.8607149132918,
+     "SX.shelf_below": 91.9600876589032,
+     "SX.walls_trim_back": 308.1207808247189,
+     "SX.neighbours": 99.42079506857523,
+     "GR.shelf_above": 13.593980477691863,
+     "GR.shelf_below": 185.75087882484442,
+     "GR.walls_trim_back": 351.5128204669459,
+     "GR.neighbours": 28.82216625994846,
+     "GR.to_other_tool": 17.34888247510514
+    },
+    "6_extract_7_lift": {
+     "SX.shelf_above": 153.70684426176217,
+     "SX.shelf_below": 113.13372714823021,
+     "SX.walls_trim_back": 308.1207524369206,
+     "SX.neighbours": 124.48436934587008,
+     "GR.shelf_above": 14.772612028216702,
+     "GR.shelf_below": 185.81208289511113,
+     "GR.walls_trim_back": 352.6985372785479,
+     "GR.neighbours": 30.00825343799346,
+     "GR.to_other_tool": 75.29298121677618
+    }
+   },
+   "neighbour_max_disp_mm": 4.426196469652474,
+   "neighbour_max_tilt_deg": 0.08335609826494397,
+   "shelf_max_disp_mm": 4.426196469652474,
+   "carton_max_rotation_deg": 1.157903276223244,
+   "success": false,
+   "video_frames": 771
+  }
+ ]
+}

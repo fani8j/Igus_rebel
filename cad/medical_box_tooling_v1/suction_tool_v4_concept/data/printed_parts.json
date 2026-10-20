@@ -1,0 +1,34 @@
+[
+ {
+  "part": "hub_stem",
+  "volume_cm3": 37.45219939531183,
+  "mass_g": 26.160361277625316,
+  "bbox_mm": [
+   -28.0086421632888,
+   28.0086421632888,
+   -28.0086421632888,
+   28.003402875444507,
+   52.6913578367112,
+   118.5006528177983
+  ],
+  "watertight": true,
+  "material": "PETG (PA12-CF optional)",
+  "orient": "flange face (z = 52.7) on the bed, stem vertical; supports: collar gussets are 45 deg, windows/holes small"
+ },
+ {
+  "part": "sensor_pod",
+  "volume_cm3": 66.77712862433982,
+  "mass_g": 46.64382434410137,
+  "bbox_mm": [
+   -59.041279243886635,
+   37.50000010000003,
+   11.099999899999982,
+   65.70442399191424,
+   62.499999899999985,
+   116.886481688503
+  ],
+  "watertight": true,
+  "material": "PETG",
+  "orient": "see printability in data/verify.json"
+ }
+]

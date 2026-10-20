@@ -1,0 +1,393 @@
+{
+ "question": "can a small pump hold the carton during the 100 mm pull?",
+ "required": {
+  "loose (0 N per side)": {
+   "pull_force_n": 0.88575,
+   "worst_pad_n": 0.9696875,
+   "required_pad_vacuum_kpa": 16.71875
+  },
+  "packed (1 N per side)": {
+   "pull_force_n": 1.68575,
+   "worst_pad_n": 1.2363541666666666,
+   "required_pad_vacuum_kpa": 21.316451149425287
+  },
+  "tight (3 N per side)": {
+   "pull_force_n": 3.28575,
+   "worst_pad_n": 1.7696875,
+   "required_pad_vacuum_kpa": 30.51185344827586
+  },
+  "jammed (6 N per side)": {
+   "pull_force_n": 5.685750000000001,
+   "worst_pad_n": 2.5696875000000006,
+   "required_pad_vacuum_kpa": 44.30495689655173
+  }
+ },
+ "pumps": {
+  "igus REBEL-EQU-SLZ-100 (Schmalz ECBPMi), on the tool": {
+   "src": "Schmalz 10.03.01.00500: 1.6 L/min max, 60 % evacuation (MATCH datasheet); curve shape ASSUMED",
+   "trunk_mm": [
+    [
+     150.0,
+     4.0
+    ]
+   ],
+   "mass_kg": null,
+   "watts": 7.2,
+   "curve_mbar_lpm": [
+    [
+     400.0,
+     0.0
+    ],
+    [
+     466.66666666666663,
+     0.14117647058823532
+    ],
+    [
+     533.3333333333333,
+     0.25882352941176473
+    ],
+    [
+     600.0,
+     0.42352941176470593
+    ],
+    [
+     666.6666666666666,
+     0.611764705882353
+    ],
+    [
+     733.3333333333334,
+     0.8235294117647058
+    ],
+    [
+     866.6666666666667,
+     1.223529411764706
+    ],
+    [
+     1000.0,
+     1.6
+    ]
+   ]
+  },
+  "Schmalz ECBPi 12 (on the stand)": {
+   "src": "Schmalz 10.03.01.00314 (M12-8; 00364 is the TB-8 variant, same data): 12 L/min, 750 mbar; curve shape ASSUMED",
+   "trunk_mm": [
+    [
+     1600.0,
+     4.0
+    ]
+   ],
+   "mass_kg": 0.775,
+   "watts": 13.0,
+   "curve_mbar_lpm": [
+    [
+     250.0,
+     0.0
+    ],
+    [
+     333.3333333333333,
+     1.0588235294117647
+    ],
+    [
+     416.66666666666663,
+     1.9411764705882355
+    ],
+    [
+     500.0,
+     3.1764705882352944
+    ],
+    [
+     583.3333333333333,
+     4.588235294117647
+    ],
+    [
+     666.6666666666667,
+     6.1764705882352935
+    ],
+    [
+     833.3333333333334,
+     9.176470588235293
+    ],
+    [
+     1000.0,
+     12.0
+    ]
+   ]
+  },
+  "1 x Thomas 1520VDP BLDC HP (on the stand)": {
+   "src": "Thomas datasheet: 15/16 L/min, 80 %; curve shape ASSUMED",
+   "trunk_mm": [
+    [
+     1600.0,
+     4.0
+    ]
+   ],
+   "mass_kg": 0.42,
+   "watts": 31.0,
+   "curve_mbar_lpm": [
+    [
+     199.99999999999994,
+     0.0
+    ],
+    [
+     288.8888888888888,
+     1.411764705882353
+    ],
+    [
+     377.7777777777777,
+     2.588235294117647
+    ],
+    [
+     466.6666666666666,
+     4.235294117647059
+    ],
+    [
+     555.5555555555554,
+     6.117647058823529
+    ],
+    [
+     644.4444444444443,
+     8.235294117647058
+    ],
+    [
+     822.2222222222222,
+     12.235294117647058
+    ],
+    [
+     1000.0,
+     16.0
+    ]
+   ]
+  },
+  "2 x Thomas 1520VDP BLDC HP (on the stand)": {
+   "src": "two of the above in parallel",
+   "trunk_mm": [
+    [
+     1600.0,
+     4.0
+    ]
+   ],
+   "mass_kg": 0.84,
+   "watts": 62.0,
+   "curve_mbar_lpm": [
+    [
+     199.99999999999994,
+     0.0
+    ],
+    [
+     288.8888888888888,
+     2.823529411764706
+    ],
+    [
+     377.7777777777777,
+     5.176470588235294
+    ],
+    [
+     466.6666666666666,
+     8.470588235294118
+    ],
+    [
+     555.5555555555554,
+     12.235294117647058
+    ],
+    [
+     644.4444444444443,
+     16.470588235294116
+    ],
+    [
+     822.2222222222222,
+     24.470588235294116
+    ],
+    [
+     1000.0,
+     32.0
+    ]
+   ]
+  },
+  "KNF N 838 KN.29DC-B (on the stand)": {
+   "src": "KNF datasheet curve (2024-10)",
+   "trunk_mm": [
+    [
+     1600.0,
+     4.0
+    ]
+   ],
+   "mass_kg": 1.9,
+   "watts": 55.0,
+   "curve_mbar_lpm": [
+    [
+     100.0,
+     0.0
+    ],
+    [
+     200.0,
+     3.0
+    ],
+    [
+     300.0,
+     5.5
+    ],
+    [
+     400.0,
+     9.0
+    ],
+    [
+     500.0,
+     13.0
+    ],
+    [
+     600.0,
+     17.5
+    ],
+    [
+     800.0,
+     26.0
+    ],
+    [
+     1000.0,
+     34.0
+    ]
+   ]
+  }
+ },
+ "results": {
+  "igus REBEL-EQU-SLZ-100 (Schmalz ECBPMi), on the tool": {
+   "loose (0 N per side)": {
+    "max_leak_per_pad_lpm": 0.5,
+    "evac_s_at_half_that_leak": 0.176
+   },
+   "packed (1 N per side)": {
+    "max_leak_per_pad_lpm": 0.4,
+    "evac_s_at_half_that_leak": 0.235
+   },
+   "tight (3 N per side)": {
+    "max_leak_per_pad_lpm": 0.25,
+    "evac_s_at_half_that_leak": 0.375
+   },
+   "jammed (6 N per side)": {
+    "max_leak_per_pad_lpm": 0.11,
+    "evac_s_at_half_that_leak": 0.726
+   },
+   "_vacuum_at_leak_kpa": {
+    "0.0": 60.0,
+    "0.25": 30.9,
+    "0.5": 16.9,
+    "1.0": 6.1,
+    "2.0": 1.7,
+    "4.0": 0.4
+   }
+  },
+  "Schmalz ECBPi 12 (on the stand)": {
+   "loose (0 N per side)": {
+    "max_leak_per_pad_lpm": 3.98,
+    "evac_s_at_half_that_leak": 0.051
+   },
+   "packed (1 N per side)": {
+    "max_leak_per_pad_lpm": 3.3,
+    "evac_s_at_half_that_leak": 0.067
+   },
+   "tight (3 N per side)": {
+    "max_leak_per_pad_lpm": 2.37,
+    "evac_s_at_half_that_leak": 0.104
+   },
+   "jammed (6 N per side)": {
+    "max_leak_per_pad_lpm": 1.36,
+    "evac_s_at_half_that_leak": 0.175
+   },
+   "_vacuum_at_leak_kpa": {
+    "0.0": 75.0,
+    "0.25": 68.9,
+    "0.5": 62.2,
+    "1.0": 50.7,
+    "2.0": 35.1,
+    "4.0": 16.6
+   }
+  },
+  "1 x Thomas 1520VDP BLDC HP (on the stand)": {
+   "loose (0 N per side)": {
+    "max_leak_per_pad_lpm": 5.31,
+    "evac_s_at_half_that_leak": 0.038
+   },
+   "packed (1 N per side)": {
+    "max_leak_per_pad_lpm": 4.44,
+    "evac_s_at_half_that_leak": 0.051
+   },
+   "tight (3 N per side)": {
+    "max_leak_per_pad_lpm": 3.23,
+    "evac_s_at_half_that_leak": 0.078
+   },
+   "jammed (6 N per side)": {
+    "max_leak_per_pad_lpm": 2.01,
+    "evac_s_at_half_that_leak": 0.13
+   },
+   "_vacuum_at_leak_kpa": {
+    "0.0": 80.0,
+    "0.25": 75.0,
+    "0.5": 70.1,
+    "1.0": 59.4,
+    "2.0": 44.4,
+    "4.0": 24.2
+   }
+  },
+  "2 x Thomas 1520VDP BLDC HP (on the stand)": {
+   "loose (0 N per side)": {
+    "max_leak_per_pad_lpm": 9.52,
+    "evac_s_at_half_that_leak": 0.021
+   },
+   "packed (1 N per side)": {
+    "max_leak_per_pad_lpm": 7.97,
+    "evac_s_at_half_that_leak": 0.028
+   },
+   "tight (3 N per side)": {
+    "max_leak_per_pad_lpm": 5.81,
+    "evac_s_at_half_that_leak": 0.043
+   },
+   "jammed (6 N per side)": {
+    "max_leak_per_pad_lpm": 3.6,
+    "evac_s_at_half_that_leak": 0.072
+   },
+   "_vacuum_at_leak_kpa": {
+    "0.0": 80.0,
+    "0.25": 77.4,
+    "0.5": 74.8,
+    "1.0": 69.7,
+    "2.0": 58.8,
+    "4.0": 41.3
+   }
+  },
+  "KNF N 838 KN.29DC-B (on the stand)": {
+   "loose (0 N per side)": {
+    "max_leak_per_pad_lpm": 10.43,
+    "evac_s_at_half_that_leak": 0.02
+   },
+   "packed (1 N per side)": {
+    "max_leak_per_pad_lpm": 8.82,
+    "evac_s_at_half_that_leak": 0.026
+   },
+   "tight (3 N per side)": {
+    "max_leak_per_pad_lpm": 6.63,
+    "evac_s_at_half_that_leak": 0.04
+   },
+   "jammed (6 N per side)": {
+    "max_leak_per_pad_lpm": 4.42,
+    "evac_s_at_half_that_leak": 0.065
+   },
+   "_vacuum_at_leak_kpa": {
+    "0.0": 90.0,
+    "0.25": 87.0,
+    "0.5": 84.2,
+    "1.0": 78.9,
+    "2.0": 67.1,
+    "4.0": 47.7
+   }
+  }
+ },
+ "assumptions": [
+  "carton mass 0.15 kg (ASSUMED max, not weighed); floor mu 0.5, side mu 0.4, pull acceleration 1.0 m/s2 (ASSUMED)",
+  "neighbour side force per face 0/1/3/6 N for loose/packed/tight/jammed - NOT measured; this dominates the pull force",
+  "most loaded pad = pull/3 + floor-friction moment (lever 110 mm, pad span 120 mm); safety factor 2.0; pad area 1.16 cm2",
+  "leak per pad given as the choked leak flow (reached at >= ~50 kPa), ISO 6358 b=0.5 - same model as suction_tool/verify.py 5c",
+  "pump curves: only the KNF curve is published; others use the KNF shape scaled to their free flow and max vacuum",
+  "trunk: on-tool pump 150 mm phi4, stand pumps 1.6 m phi4 bore; filter/valve losses not included",
+  "buffer spring force (1-3 N per pad) ignored; pad lip peel on a 12-16 mm spine not modelled"
+ ]
+}

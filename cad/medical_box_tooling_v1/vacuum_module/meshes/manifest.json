@@ -1,0 +1,447 @@
+{
+ "units": "metres",
+ "frame": "module frame: x = service door side, y = width, z up, origin at the underside of the base plate; the 4 spacers reach z = -0.012",
+ "mesh_path_convention": "package://vacuum_module/meshes/visual/<file>",
+ "visual": [
+  {
+   "file": "meshes/visual/base_plate.stl",
+   "kind": "printed",
+   "color": [
+    0.88,
+    0.88,
+    0.9
+   ],
+   "triangles": 9808,
+   "mass_kg": 0.30472073569212377
+  },
+  {
+   "file": "meshes/visual/housing.stl",
+   "kind": "printed",
+   "color": [
+    0.93,
+    0.93,
+    0.95
+   ],
+   "triangles": 7002,
+   "mass_kg": 0.8054398341958705
+  },
+  {
+   "file": "meshes/visual/door.stl",
+   "kind": "printed",
+   "color": [
+    0.85,
+    0.9,
+    0.95
+   ],
+   "triangles": 1100,
+   "mass_kg": 0.18673456500938634
+  },
+  {
+   "file": "meshes/visual/deck.stl",
+   "kind": "printed",
+   "color": [
+    0.8,
+    0.82,
+    0.88
+   ],
+   "triangles": 1448,
+   "mass_kg": 0.07694757307932841
+  },
+  {
+   "file": "meshes/visual/pump.stl",
+   "kind": "hardware",
+   "color": [
+    0.3,
+    0.45,
+    0.7
+   ],
+   "triangles": 712,
+   "mass_kg": 1.9
+  },
+  {
+   "file": "meshes/visual/mounts.stl",
+   "kind": "hardware",
+   "color": [
+    0.1,
+    0.1,
+    0.1
+   ],
+   "triangles": 1520,
+   "mass_kg": 0.06
+  },
+  {
+   "file": "meshes/visual/elbow_in.stl",
+   "kind": "hardware",
+   "color": [
+    0.55,
+    0.55,
+    0.6
+   ],
+   "triangles": 268,
+   "mass_kg": 0.012
+  },
+  {
+   "file": "meshes/visual/elbow_out.stl",
+   "kind": "hardware",
+   "color": [
+    0.55,
+    0.55,
+    0.6
+   ],
+   "triangles": 268,
+   "mass_kg": 0.012
+  },
+  {
+   "file": "meshes/visual/muffler.stl",
+   "kind": "hardware",
+   "color": [
+    0.7,
+    0.55,
+    0.3
+   ],
+   "triangles": 124,
+   "mass_kg": 0.03
+  },
+  {
+   "file": "meshes/visual/hepa_filter.stl",
+   "kind": "hardware",
+   "color": [
+    0.95,
+    0.95,
+    0.85
+   ],
+   "triangles": 124,
+   "mass_kg": 0.05
+  },
+  {
+   "file": "meshes/visual/exhaust_fitting.stl",
+   "kind": "hardware",
+   "color": [
+    0.15,
+    0.15,
+    0.15
+   ],
+   "triangles": 508,
+   "mass_kg": 0.012
+  },
+  {
+   "file": "meshes/visual/dust_filter.stl",
+   "kind": "hardware",
+   "color": [
+    0.4,
+    0.7,
+    0.8
+   ],
+   "triangles": 124,
+   "mass_kg": 0.08
+  },
+  {
+   "file": "meshes/visual/manifold.stl",
+   "kind": "hardware",
+   "color": [
+    0.7,
+    0.7,
+    0.72
+   ],
+   "triangles": 12,
+   "mass_kg": 0.06
+  },
+  {
+   "file": "meshes/visual/bulkhead_fitting.stl",
+   "kind": "hardware",
+   "color": [
+    0.15,
+    0.15,
+    0.15
+   ],
+   "triangles": 764,
+   "mass_kg": 0.025
+  },
+  {
+   "file": "meshes/visual/vacuum_switch.stl",
+   "kind": "hardware",
+   "color": [
+    0.2,
+    0.6,
+    0.3
+   ],
+   "triangles": 12,
+   "mass_kg": 0.1
+  },
+  {
+   "file": "meshes/visual/vent_valve.stl",
+   "kind": "hardware",
+   "color": [
+    0.8,
+    0.5,
+    0.2
+   ],
+   "triangles": 140,
+   "mass_kg": 0.12
+  },
+  {
+   "file": "meshes/visual/terminal_blocks.stl",
+   "kind": "hardware",
+   "color": [
+    0.9,
+    0.6,
+    0.1
+   ],
+   "triangles": 12,
+   "mass_kg": 0.12
+  },
+  {
+   "file": "meshes/visual/fan.stl",
+   "kind": "hardware",
+   "color": [
+    0.2,
+    0.2,
+    0.2
+   ],
+   "triangles": 12,
+   "mass_kg": 0.025
+  },
+  {
+   "file": "meshes/visual/m12_connector.stl",
+   "kind": "hardware",
+   "color": [
+    0.15,
+    0.15,
+    0.15
+   ],
+   "triangles": 140,
+   "mass_kg": 0.04
+  },
+  {
+   "file": "meshes/visual/spacer_0.stl",
+   "kind": "hardware",
+   "color": [
+    0.6,
+    0.6,
+    0.62
+   ],
+   "triangles": 124,
+   "mass_kg": 0.008244795760081055
+  },
+  {
+   "file": "meshes/visual/m6_washer_head_0.stl",
+   "kind": "hardware",
+   "color": [
+    0.6,
+    0.6,
+    0.62
+   ],
+   "triangles": 140,
+   "mass_kg": 0.00941402534960198
+  },
+  {
+   "file": "meshes/visual/spacer_1.stl",
+   "kind": "hardware",
+   "color": [
+    0.6,
+    0.6,
+    0.62
+   ],
+   "triangles": 124,
+   "mass_kg": 0.008244795760081055
+  },
+  {
+   "file": "meshes/visual/m6_washer_head_1.stl",
+   "kind": "hardware",
+   "color": [
+    0.6,
+    0.6,
+    0.62
+   ],
+   "triangles": 140,
+   "mass_kg": 0.00941402534960198
+  },
+  {
+   "file": "meshes/visual/spacer_2.stl",
+   "kind": "hardware",
+   "color": [
+    0.6,
+    0.6,
+    0.62
+   ],
+   "triangles": 124,
+   "mass_kg": 0.008244795760081055
+  },
+  {
+   "file": "meshes/visual/m6_washer_head_2.stl",
+   "kind": "hardware",
+   "color": [
+    0.6,
+    0.6,
+    0.62
+   ],
+   "triangles": 140,
+   "mass_kg": 0.00941402534960198
+  },
+  {
+   "file": "meshes/visual/spacer_3.stl",
+   "kind": "hardware",
+   "color": [
+    0.6,
+    0.6,
+    0.62
+   ],
+   "triangles": 124,
+   "mass_kg": 0.008244795760081055
+  },
+  {
+   "file": "meshes/visual/m6_washer_head_3.stl",
+   "kind": "hardware",
+   "color": [
+    0.6,
+    0.6,
+    0.62
+   ],
+   "triangles": 140,
+   "mass_kg": 0.00941402534960198
+  },
+  {
+   "file": "meshes/visual/tube_exhaust_pump_muffler.stl",
+   "kind": "tube",
+   "color": [
+    0.15,
+    0.15,
+    0.17
+   ],
+   "triangles": 124,
+   "mass_kg": 0.00029405307237600445
+  },
+  {
+   "file": "meshes/visual/tube_exhaust_muffler_hepa.stl",
+   "kind": "tube",
+   "color": [
+    0.15,
+    0.15,
+    0.17
+   ],
+   "triangles": 700,
+   "mass_kg": 0.004807537384379517
+  },
+  {
+   "file": "meshes/visual/tube_exhaust_hepa_outlet.stl",
+   "kind": "tube",
+   "color": [
+    0.15,
+    0.15,
+    0.17
+   ],
+   "triangles": 124,
+   "mass_kg": 0.00036191147369354416
+  },
+  {
+   "file": "meshes/visual/tube_vac_filter_pump.stl",
+   "kind": "tube",
+   "color": [
+    0.15,
+    0.15,
+    0.17
+   ],
+   "triangles": 124,
+   "mass_kg": 0.0013797874934566362
+  },
+  {
+   "file": "meshes/visual/tube_vac_manifold_filter.stl",
+   "kind": "tube",
+   "color": [
+    0.15,
+    0.15,
+    0.17
+   ],
+   "triangles": 124,
+   "mass_kg": 0.00045238934211693
+  },
+  {
+   "file": "meshes/visual/tube_vac_bulkhead_manifold.stl",
+   "kind": "tube",
+   "color": [
+    0.15,
+    0.15,
+    0.17
+   ],
+   "triangles": 124,
+   "mass_kg": 0.0006785840131753952
+  },
+  {
+   "file": "meshes/visual/tube_vac_manifold_valve.stl",
+   "kind": "tube",
+   "color": [
+    0.15,
+    0.15,
+    0.17
+   ],
+   "triangles": 124,
+   "mass_kg": 0.0005428672105403159
+  },
+  {
+   "file": "meshes/visual/tube_vac_manifold_switch.stl",
+   "kind": "tube",
+   "color": [
+    0.15,
+    0.15,
+    0.17
+   ],
+   "triangles": 124,
+   "mass_kg": 0.000542867210540316
+  },
+  {
+   "file": "meshes/visual/foam_roof.stl",
+   "kind": "foam",
+   "color": [
+    0.95,
+    0.85,
+    0.35
+   ],
+   "triangles": 780,
+   "mass_kg": 0.01188538344402316
+  },
+  {
+   "file": "meshes/visual/foam_rear.stl",
+   "kind": "foam",
+   "color": [
+    0.95,
+    0.85,
+    0.35
+   ],
+   "triangles": 268,
+   "mass_kg": 0.010237274351968917
+  },
+  {
+   "file": "meshes/visual/foam_left.stl",
+   "kind": "foam",
+   "color": [
+    0.95,
+    0.85,
+    0.35
+   ],
+   "triangles": 290,
+   "mass_kg": 0.010106198343379292
+  },
+  {
+   "file": "meshes/visual/foam_right.stl",
+   "kind": "foam",
+   "color": [
+    0.95,
+    0.85,
+    0.35
+   ],
+   "triangles": 288,
+   "mass_kg": 0.010094480123329117
+  },
+  {
+   "file": "meshes/visual/foam_door.stl",
+   "kind": "foam",
+   "color": [
+    0.95,
+    0.85,
+    0.35
+   ],
+   "triangles": 556,
+   "mass_kg": 0.011131085175370557
+  }
+ ]
+}

@@ -1,0 +1,457 @@
+#usda 1.0
+(
+    defaultPrim = "D200"
+    kilogramsPerUnit = 1
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "D200" (
+    customData = {
+        string d200_usd = "/media/farhan/My Passport/igus_nvidia/sim_assets_ext/d200/d200_with_dual_arm.usd"
+    }
+    doc = "MAIN rig: dual-arm stand on the D200 AMR (operator zip d200_with_dual_arm_20261015, referenced) with the medical tools: suction tool v5 on arm_left/link6, LEHF20K2-48 gripper on arm_right/link6, XEG-32 tooling removed. Home: lift -0.2, sliders -+0.005973, arms upright. The AMR is a STATIC placeholder (base welded to the world, wheels locked). No ground / PhysicsScene (see d200_rig_test_scene.usda)."
+    prepend references = @/media/farhan/My Passport/igus_nvidia/sim_assets_ext/d200/d200_with_dual_arm.usd@
+)
+{
+    over "UpperAssembly"
+    {
+        over "dual_arm_rig"
+        {
+            over "arm_left"
+            {
+                over "xeg32_base_link" (
+                    active = false
+                )
+                {
+                }
+
+                over "xeg32_left_carriage_link" (
+                    active = false
+                )
+                {
+                }
+
+                over "xeg32_right_carriage_link" (
+                    active = false
+                )
+                {
+                }
+
+                over "xeg32_camera_mount_link" (
+                    active = false
+                )
+                {
+                }
+
+                def Xform "left_suction_tool" (
+                    delete apiSchemas = ["PhysicsArticulationRootAPI"]
+                    prepend references = @./left_suction_tool_arm_left.usda@
+                )
+                {
+                    matrix4d xformOp:transform = ( (-0.9999999999730159, -0.00000734641025682567, 0, 0), (0.00000734641025682567, -0.9999999999730159, 0, 0), (0, 0, 1, 0), (-0.0013449814287440909, -9.880785245552914e-9, 0.8699994074013562, 1) )
+                    uniform token[] xformOpOrder = ["xformOp:transform"]
+
+                    over "joints"
+                    {
+                        over "world_anchor" (
+                            active = false
+                        )
+                        {
+                        }
+                    }
+                }
+            }
+
+            over "Joints"
+            {
+                over "arm_left_xeg32_mount_joint" (
+                    active = false
+                )
+                {
+                }
+
+                over "arm_left_xeg32_left_carriage_joint" (
+                    active = false
+                )
+                {
+                }
+
+                over "arm_left_xeg32_right_carriage_joint" (
+                    active = false
+                )
+                {
+                }
+
+                over "arm_left_xeg32_camera_tilt_joint" (
+                    active = false
+                )
+                {
+                }
+
+                def PhysicsFixedJoint "arm_left_medical_tool_mount"
+                {
+                    rel physics:body0 = </D200/UpperAssembly/dual_arm_rig/arm_left/link6>
+                    rel physics:body1 = </D200/UpperAssembly/dual_arm_rig/arm_left/left_suction_tool/base>
+                    point3f physics:localPos0 = (0, 0, 0)
+                    point3f physics:localPos1 = (0, 0, 0)
+                    quatf physics:localRot0 = (1, 0, 0, 0)
+                    quatf physics:localRot1 = (1, 0, 0, 0)
+                }
+
+                over "arm_right_xeg32_mount_joint" (
+                    active = false
+                )
+                {
+                }
+
+                over "arm_right_xeg32_left_carriage_joint" (
+                    active = false
+                )
+                {
+                }
+
+                over "arm_right_xeg32_right_carriage_joint" (
+                    active = false
+                )
+                {
+                }
+
+                over "arm_right_xeg32_camera_tilt_joint" (
+                    active = false
+                )
+                {
+                }
+
+                def PhysicsFixedJoint "arm_right_medical_tool_mount"
+                {
+                    rel physics:body0 = </D200/UpperAssembly/dual_arm_rig/arm_right/link6>
+                    rel physics:body1 = </D200/UpperAssembly/dual_arm_rig/arm_right/right_gripper_tool/base>
+                    point3f physics:localPos0 = (0, 0, 0)
+                    point3f physics:localPos1 = (0, 0, 0)
+                    quatf physics:localRot0 = (1, 0, 0, 0)
+                    quatf physics:localRot1 = (1, 0, 0, 0)
+                }
+
+                over "lift_joint" (
+                    prepend apiSchemas = ["PhysicsDriveAPI:linear", "PhysicsJointStateAPI:linear"]
+                )
+                {
+                    float drive:linear:physics:targetPosition = -0.2
+                    float state:linear:physics:position = -0.2
+                    float state:linear:physics:velocity = 0
+                }
+
+                over "slider_left_joint" (
+                    prepend apiSchemas = ["PhysicsDriveAPI:linear", "PhysicsJointStateAPI:linear"]
+                )
+                {
+                    float drive:linear:physics:targetPosition = -0.005973
+                    float state:linear:physics:position = -0.005973
+                    float state:linear:physics:velocity = 0
+                }
+
+                over "slider_right_joint" (
+                    prepend apiSchemas = ["PhysicsDriveAPI:linear", "PhysicsJointStateAPI:linear"]
+                )
+                {
+                    float drive:linear:physics:targetPosition = 0.005973
+                    float state:linear:physics:position = 0.005973
+                    float state:linear:physics:velocity = 0
+                }
+
+                over "arm_left_joint1" (
+                    prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+                )
+                {
+                    float drive:angular:physics:targetPosition = 0
+                    float state:angular:physics:position = 0
+                    float state:angular:physics:velocity = 0
+                }
+
+                over "arm_left_joint2" (
+                    prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+                )
+                {
+                    float drive:angular:physics:targetPosition = 0
+                    float state:angular:physics:position = 0
+                    float state:angular:physics:velocity = 0
+                }
+
+                over "arm_left_joint3" (
+                    prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+                )
+                {
+                    float drive:angular:physics:targetPosition = 0
+                    float state:angular:physics:position = 0
+                    float state:angular:physics:velocity = 0
+                }
+
+                over "arm_left_joint4" (
+                    prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+                )
+                {
+                    float drive:angular:physics:targetPosition = 0
+                    float state:angular:physics:position = 0
+                    float state:angular:physics:velocity = 0
+                }
+
+                over "arm_left_joint5" (
+                    prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+                )
+                {
+                    float drive:angular:physics:targetPosition = 0
+                    float state:angular:physics:position = 0
+                    float state:angular:physics:velocity = 0
+                }
+
+                over "arm_left_joint6" (
+                    prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+                )
+                {
+                    float drive:angular:physics:targetPosition = 0
+                    float state:angular:physics:position = 0
+                    float state:angular:physics:velocity = 0
+                }
+
+                over "arm_right_joint1" (
+                    prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+                )
+                {
+                    float drive:angular:physics:targetPosition = 0
+                    float state:angular:physics:position = 0
+                    float state:angular:physics:velocity = 0
+                }
+
+                over "arm_right_joint2" (
+                    prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+                )
+                {
+                    float drive:angular:physics:targetPosition = 0
+                    float state:angular:physics:position = 0
+                    float state:angular:physics:velocity = 0
+                }
+
+                over "arm_right_joint3" (
+                    prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+                )
+                {
+                    float drive:angular:physics:targetPosition = 0
+                    float state:angular:physics:position = 0
+                    float state:angular:physics:velocity = 0
+                }
+
+                over "arm_right_joint4" (
+                    prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+                )
+                {
+                    float drive:angular:physics:targetPosition = 0
+                    float state:angular:physics:position = 0
+                    float state:angular:physics:velocity = 0
+                }
+
+                over "arm_right_joint5" (
+                    prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+                )
+                {
+                    float drive:angular:physics:targetPosition = 0
+                    float state:angular:physics:position = 0
+                    float state:angular:physics:velocity = 0
+                }
+
+                over "arm_right_joint6" (
+                    prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+                )
+                {
+                    float drive:angular:physics:targetPosition = 0
+                    float state:angular:physics:position = 0
+                    float state:angular:physics:velocity = 0
+                }
+            }
+
+            over "arm_right"
+            {
+                over "xeg32_base_link" (
+                    active = false
+                )
+                {
+                }
+
+                over "xeg32_left_carriage_link" (
+                    active = false
+                )
+                {
+                }
+
+                over "xeg32_right_carriage_link" (
+                    active = false
+                )
+                {
+                }
+
+                over "xeg32_camera_mount_link" (
+                    active = false
+                )
+                {
+                }
+
+                def Xform "right_gripper_tool" (
+                    delete apiSchemas = ["PhysicsArticulationRootAPI"]
+                    prepend references = @./right_gripper_tool_arm_right.usda@
+                )
+                {
+                    matrix4d xformOp:transform = ( (-0.9999999999730159, -0.00000734641025682567, 0, 0), (0.00000734641025682567, -0.9999999999730159, 0, 0), (0, 0, 1, 0), (-0.0013449814287441186, -9.880785301064066e-9, 0.8699994074013562, 1) )
+                    uniform token[] xformOpOrder = ["xformOp:transform"]
+
+                    over "joints"
+                    {
+                        over "world_anchor" (
+                            active = false
+                        )
+                        {
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    over "joints"
+    {
+        def PhysicsFixedJoint "world_fix"
+        {
+            rel physics:body1 = </D200/base_link>
+            point3f physics:localPos0 = (0, 0, 0.0762)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+            quatf physics:localRot1 = (1, 0, 0, 0)
+        }
+
+        over "left_wheel_joint" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular"]
+        )
+        {
+            float drive:angular:physics:targetVelocity = 0
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 0
+        }
+
+        over "right_wheel_joint" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular"]
+        )
+        {
+            float drive:angular:physics:targetVelocity = 0
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 0
+        }
+
+        over "front_left_swivel_joint" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular"]
+        )
+        {
+            float drive:angular:physics:targetVelocity = 0
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 0
+        }
+
+        over "front_right_swivel_joint" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular"]
+        )
+        {
+            float drive:angular:physics:targetVelocity = 0
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 0
+        }
+
+        over "rear_left_swivel_joint" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular"]
+        )
+        {
+            float drive:angular:physics:targetVelocity = 0
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 0
+        }
+
+        over "rear_right_swivel_joint" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular"]
+        )
+        {
+            float drive:angular:physics:targetVelocity = 0
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 0
+        }
+
+        over "front_left_wheel_1_joint" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular"]
+        )
+        {
+            float drive:angular:physics:targetVelocity = 0
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 0
+        }
+
+        over "front_left_wheel_2_joint" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular"]
+        )
+        {
+            float drive:angular:physics:targetVelocity = 0
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 0
+        }
+
+        over "front_right_wheel_1_joint" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular"]
+        )
+        {
+            float drive:angular:physics:targetVelocity = 0
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 0
+        }
+
+        over "front_right_wheel_2_joint" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular"]
+        )
+        {
+            float drive:angular:physics:targetVelocity = 0
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 0
+        }
+
+        over "rear_left_wheel_1_joint" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular"]
+        )
+        {
+            float drive:angular:physics:targetVelocity = 0
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 0
+        }
+
+        over "rear_left_wheel_2_joint" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular"]
+        )
+        {
+            float drive:angular:physics:targetVelocity = 0
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 0
+        }
+
+        over "rear_right_wheel_1_joint" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular"]
+        )
+        {
+            float drive:angular:physics:targetVelocity = 0
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 0
+        }
+
+        over "rear_right_wheel_2_joint" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular"]
+        )
+        {
+            float drive:angular:physics:targetVelocity = 0
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 0
+        }
+    }
+}
+

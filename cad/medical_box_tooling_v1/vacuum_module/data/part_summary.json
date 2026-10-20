@@ -1,0 +1,239 @@
+{
+ "base_plate": {
+  "kind": "printed",
+  "material": "PETG",
+  "volume_mm3": 343209.83237210533,
+  "area_mm2": 128445.94088843855,
+  "est_mass_kg": 0.30472073569212377,
+  "stl_triangles": 9808
+ },
+ "housing": {
+  "kind": "printed",
+  "material": "PETG",
+  "volume_mm3": 634204.5938550162,
+  "area_mm2": 408582.461902798,
+  "est_mass_kg": 0.8054398341958705,
+  "stl_triangles": 7002
+ },
+ "door": {
+  "kind": "printed",
+  "material": "PETG",
+  "volume_mm3": 147035.09055857194,
+  "area_mm2": 99277.66277879899,
+  "est_mass_kg": 0.18673456500938634,
+  "stl_triangles": 1100
+ },
+ "deck": {
+  "kind": "printed",
+  "material": "PETG",
+  "volume_mm3": 60588.640219943634,
+  "area_mm2": 38475.82748764808,
+  "est_mass_kg": 0.07694757307932841,
+  "stl_triangles": 1448
+ },
+ "pump": {
+  "kind": "hardware",
+  "volume_mm3": 1010061.708774721,
+  "mass_kg": 1.9
+ },
+ "mounts": {
+  "kind": "hardware",
+  "volume_mm3": 20885.307961064947,
+  "mass_kg": 0.06
+ },
+ "elbow_in": {
+  "kind": "hardware",
+  "volume_mm3": 3241.6604140291183,
+  "mass_kg": 0.012
+ },
+ "elbow_out": {
+  "kind": "hardware",
+  "volume_mm3": 3241.660414029043,
+  "mass_kg": 0.012
+ },
+ "muffler": {
+  "kind": "hardware",
+  "volume_mm3": 12566.370614359172,
+  "mass_kg": 0.03
+ },
+ "hepa_filter": {
+  "kind": "hardware",
+  "volume_mm3": 73890.25921243196,
+  "mass_kg": 0.05
+ },
+ "exhaust_fitting": {
+  "kind": "hardware",
+  "volume_mm3": 2827.778963422709,
+  "mass_kg": 0.012
+ },
+ "dust_filter": {
+  "kind": "hardware",
+  "volume_mm3": 29452.43112740431,
+  "mass_kg": 0.08
+ },
+ "manifold": {
+  "kind": "hardware",
+  "volume_mm3": 7168.0,
+  "mass_kg": 0.06
+ },
+ "bulkhead_fitting": {
+  "kind": "hardware",
+  "volume_mm3": 7426.72503308627,
+  "mass_kg": 0.025
+ },
+ "vacuum_switch": {
+  "kind": "hardware",
+  "volume_mm3": 22500.0,
+  "mass_kg": 0.1
+ },
+ "vent_valve": {
+  "kind": "hardware",
+  "volume_mm3": 25557.16802635079,
+  "mass_kg": 0.12
+ },
+ "terminal_blocks": {
+  "kind": "hardware",
+  "volume_mm3": 8400.0,
+  "mass_kg": 0.12
+ },
+ "fan": {
+  "kind": "hardware",
+  "volume_mm3": 15999.999999999996,
+  "mass_kg": 0.025
+ },
+ "m12_connector": {
+  "kind": "hardware",
+  "volume_mm3": 4276.247526395125,
+  "mass_kg": 0.04
+ },
+ "spacer_0": {
+  "kind": "hardware",
+  "volume_mm3": 3053.6280592892795,
+  "mass_kg": 0.008244795760081055
+ },
+ "m6_washer_head_0": {
+  "kind": "hardware",
+  "volume_mm3": 1199.238898038469,
+  "mass_kg": 0.00941402534960198
+ },
+ "spacer_1": {
+  "kind": "hardware",
+  "volume_mm3": 3053.6280592892795,
+  "mass_kg": 0.008244795760081055
+ },
+ "m6_washer_head_1": {
+  "kind": "hardware",
+  "volume_mm3": 1199.238898038469,
+  "mass_kg": 0.00941402534960198
+ },
+ "spacer_2": {
+  "kind": "hardware",
+  "volume_mm3": 3053.6280592892795,
+  "mass_kg": 0.008244795760081055
+ },
+ "m6_washer_head_2": {
+  "kind": "hardware",
+  "volume_mm3": 1199.238898038469,
+  "mass_kg": 0.00941402534960198
+ },
+ "spacer_3": {
+  "kind": "hardware",
+  "volume_mm3": 3053.6280592892795,
+  "mass_kg": 0.008244795760081055
+ },
+ "m6_washer_head_3": {
+  "kind": "hardware",
+  "volume_mm3": 1199.238898038469,
+  "mass_kg": 0.00941402534960198
+ },
+ "tube_exhaust_pump_muffler": {
+  "kind": "tube",
+  "volume_mm3": 326.7256359733383,
+  "mass_kg": 0.00029405307237600445
+ },
+ "tube_exhaust_muffler_hepa": {
+  "kind": "tube",
+  "volume_mm3": 5341.7082048661305,
+  "mass_kg": 0.004807537384379517
+ },
+ "tube_exhaust_hepa_outlet": {
+  "kind": "tube",
+  "volume_mm3": 402.1238596594935,
+  "mass_kg": 0.00036191147369354416
+ },
+ "tube_vac_filter_pump": {
+  "kind": "tube",
+  "volume_mm3": 1533.0972149518182,
+  "mass_kg": 0.0013797874934566362
+ },
+ "tube_vac_manifold_filter": {
+  "kind": "tube",
+  "volume_mm3": 502.6548245743666,
+  "mass_kg": 0.00045238934211693
+ },
+ "tube_vac_bulkhead_manifold": {
+  "kind": "tube",
+  "volume_mm3": 753.9822368615503,
+  "mass_kg": 0.0006785840131753952
+ },
+ "tube_vac_manifold_valve": {
+  "kind": "tube",
+  "volume_mm3": 603.1857894892399,
+  "mass_kg": 0.0005428672105403159
+ },
+ "tube_vac_manifold_switch": {
+  "kind": "tube",
+  "volume_mm3": 603.18578948924,
+  "mass_kg": 0.000542867210540316
+ },
+ "foam_roof": {
+  "kind": "foam",
+  "volume_mm3": 396179.44813410536,
+  "mass_kg": 0.01188538344402316
+ },
+ "foam_rear": {
+  "kind": "foam",
+  "volume_mm3": 341242.4783989639,
+  "mass_kg": 0.010237274351968917
+ },
+ "foam_left": {
+  "kind": "foam",
+  "volume_mm3": 336873.2781126431,
+  "mass_kg": 0.010106198343379292
+ },
+ "foam_right": {
+  "kind": "foam",
+  "volume_mm3": 336482.6707776373,
+  "mass_kg": 0.010094480123329117
+ },
+ "foam_door": {
+  "kind": "foam",
+  "volume_mm3": 371036.17251235194,
+  "mass_kg": 0.011131085175370557
+ },
+ "film_roof": {
+  "kind": "film",
+  "volume_mm3": 11944.083197365375,
+  "mass_kg": 0.01660227564433787
+ },
+ "film_rear": {
+  "kind": "film",
+  "volume_mm3": 10221.074351968822,
+  "mass_kg": 0.014207293349236663
+ },
+ "film_left": {
+  "kind": "film",
+  "volume_mm3": 10087.253999999903,
+  "mass_kg": 0.014021283059999865
+ },
+ "film_right": {
+  "kind": "film",
+  "volume_mm3": 10087.253999999906,
+  "mass_kg": 0.01402128305999987
+ },
+ "film_door": {
+  "kind": "film",
+  "volume_mm3": 11131.085175370452,
+  "mass_kg": 0.015472208393764928
+ }
+}

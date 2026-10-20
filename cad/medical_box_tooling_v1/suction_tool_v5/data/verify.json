@@ -1,0 +1,1654 @@
+{
+ "interference": {
+  "parts": [
+   "tool_body",
+   "pad_L",
+   "elbow_L",
+   "nut_front_L",
+   "washer_L",
+   "nut_rear_L",
+   "tube_L",
+   "pad_M",
+   "elbow_M",
+   "nut_front_M",
+   "washer_M",
+   "nut_rear_M",
+   "tube_M",
+   "pad_R",
+   "elbow_R",
+   "nut_front_R",
+   "washer_R",
+   "nut_rear_R",
+   "tube_R",
+   "collector",
+   "trunk_tube",
+   "camera_gemini305"
+  ],
+  "n_pairs": 231,
+  "pairs_with_overlap": [],
+  "max_overlap_mm3": 0.0,
+  "pairs_closer_than_3mm": [
+   [
+    "tool_body",
+    "washer_L",
+    0.0
+   ],
+   [
+    "tool_body",
+    "washer_M",
+    0.0
+   ],
+   [
+    "tool_body",
+    "washer_R",
+    0.0
+   ],
+   [
+    "tool_body",
+    "collector",
+    0.0
+   ],
+   [
+    "pad_L",
+    "elbow_L",
+    0.0
+   ],
+   [
+    "elbow_L",
+    "tube_L",
+    0.0
+   ],
+   [
+    "washer_L",
+    "nut_rear_L",
+    0.0
+   ],
+   [
+    "tube_L",
+    "collector",
+    0.0
+   ],
+   [
+    "pad_M",
+    "elbow_M",
+    0.0
+   ],
+   [
+    "elbow_M",
+    "tube_M",
+    0.0
+   ],
+   [
+    "washer_M",
+    "nut_rear_M",
+    0.0
+   ],
+   [
+    "tube_M",
+    "collector",
+    0.0
+   ],
+   [
+    "pad_R",
+    "elbow_R",
+    0.0
+   ],
+   [
+    "elbow_R",
+    "tube_R",
+    0.0
+   ],
+   [
+    "washer_R",
+    "nut_rear_R",
+    0.0
+   ],
+   [
+    "tube_R",
+    "collector",
+    0.0
+   ],
+   [
+    "collector",
+    "trunk_tube",
+    0.0
+   ],
+   [
+    "pad_L",
+    "nut_front_L",
+    0.05
+   ],
+   [
+    "pad_L",
+    "nut_rear_L",
+    0.05
+   ],
+   [
+    "pad_M",
+    "nut_front_M",
+    0.05
+   ],
+   [
+    "pad_M",
+    "nut_rear_M",
+    0.05
+   ],
+   [
+    "pad_R",
+    "nut_front_R",
+    0.05
+   ],
+   [
+    "pad_R",
+    "nut_rear_R",
+    0.05
+   ],
+   [
+    "tool_body",
+    "camera_gemini305",
+    0.055
+   ],
+   [
+    "tool_body",
+    "nut_front_L",
+    0.125
+   ],
+   [
+    "tool_body",
+    "nut_front_M",
+    0.125
+   ],
+   [
+    "tool_body",
+    "nut_front_R",
+    0.125
+   ],
+   [
+    "tool_body",
+    "pad_L",
+    0.3
+   ],
+   [
+    "tool_body",
+    "pad_M",
+    0.3
+   ],
+   [
+    "tool_body",
+    "pad_R",
+    0.3
+   ],
+   [
+    "pad_L",
+    "washer_L",
+    0.3
+   ],
+   [
+    "pad_M",
+    "washer_M",
+    0.3
+   ],
+   [
+    "pad_R",
+    "washer_R",
+    0.3
+   ],
+   [
+    "tool_body",
+    "nut_rear_M",
+    0.792
+   ],
+   [
+    "tool_body",
+    "nut_rear_L",
+    1.0
+   ],
+   [
+    "tool_body",
+    "nut_rear_R",
+    1.0
+   ]
+  ],
+  "note": "screws, zip ties and plugs are not modelled"
+ },
+ "keepout": {
+  "limit_z": 119.0,
+  "parts_in_slab_above_limit": {
+   "tool_body": {
+    "zmax": 133.51,
+    "y": [
+     -11.61,
+     11.61
+    ],
+    "x": [
+     -75.01,
+     75.01
+    ]
+   },
+   "nut_front_L": {
+    "zmax": 133.5,
+    "y": [
+     -7.0,
+     7.0
+    ],
+    "x": [
+     -68.08,
+     -51.92
+    ]
+   },
+   "washer_L": {
+    "zmax": 127.01,
+    "y": [
+     -10.01,
+     10.01
+    ],
+    "x": [
+     -70.01,
+     -49.99
+    ]
+   },
+   "nut_rear_L": {
+    "zmax": 126.0,
+    "y": [
+     -7.0,
+     7.0
+    ],
+    "x": [
+     -68.08,
+     -51.92
+    ]
+   },
+   "nut_front_M": {
+    "zmax": 133.5,
+    "y": [
+     -7.0,
+     7.0
+    ],
+    "x": [
+     -8.08,
+     8.08
+    ]
+   },
+   "washer_M": {
+    "zmax": 127.01,
+    "y": [
+     -10.01,
+     10.01
+    ],
+    "x": [
+     -10.01,
+     10.01
+    ]
+   },
+   "nut_rear_M": {
+    "zmax": 126.0,
+    "y": [
+     -8.08,
+     8.08
+    ],
+    "x": [
+     -7.0,
+     7.0
+    ]
+   },
+   "nut_front_R": {
+    "zmax": 133.5,
+    "y": [
+     -7.0,
+     7.0
+    ],
+    "x": [
+     51.92,
+     68.08
+    ]
+   },
+   "washer_R": {
+    "zmax": 127.01,
+    "y": [
+     -10.01,
+     10.01
+    ],
+    "x": [
+     49.99,
+     70.01
+    ]
+   },
+   "nut_rear_R": {
+    "zmax": 126.0,
+    "y": [
+     -7.0,
+     7.0
+    ],
+    "x": [
+     51.92,
+     68.08
+    ]
+   }
+  },
+  "volume_outside_bar_envelope_mm3": {
+   "tool_body": 0.0,
+   "nut_front_L": 0.0,
+   "washer_L": 0.0,
+   "nut_rear_L": 0.0,
+   "nut_front_M": 0.0,
+   "washer_M": 0.0,
+   "nut_rear_M": 0.0,
+   "nut_front_R": 0.0,
+   "washer_R": 0.0,
+   "nut_rear_R": 0.0
+  },
+  "bar_envelope": "stadium 150.8 x 24 (|y| <= 12), z <= 133.5",
+  "max_z_non_pad": 133.5081119244546,
+  "camera_max_z": 118.02329671164964,
+  "pass_": true,
+  "note": "the rear nuts / washers (z 123..127) are inside the bar envelope; everything else but the pads and the bar is at z <= 119"
+ },
+ "pressed_pose": {
+  "per_box": {
+   "1": {
+    "box": "Boston Scientific Agent MONORAIL",
+    "thickness": 15.0,
+    "spine_tool_z": 154.0,
+    "tcp_z": 154.0,
+    "min_clearance_all_parts_except_pad_heads_mm": {
+     "value": 3.5,
+     "part": "pad_L",
+     "box": "nb0"
+    },
+    "pad_heads_distance_mm": {
+     "target": 0.0,
+     "nb0": 3.5,
+     "nb1": 3.5
+    },
+    "min_clearance_to_neighbours_any_part_mm": 3.5,
+    "camera_to_nearest_box_mm": 20.976703388350685,
+    "gap_bar_front_to_neighbour_front_plane_mm": 5.5,
+    "five_closest_parts_mm": {
+     "pad_L": 3.5,
+     "pad_M": 3.5,
+     "pad_R": 3.5,
+     "tool_body": 5.5,
+     "nut_front_L": 5.52
+    }
+   },
+   "2": {
+    "box": "iVascular angiolite",
+    "thickness": 16.0,
+    "spine_tool_z": 154.0,
+    "tcp_z": 154.0,
+    "min_clearance_all_parts_except_pad_heads_mm": {
+     "value": 4.0,
+     "part": "pad_L",
+     "box": "nb0"
+    },
+    "pad_heads_distance_mm": {
+     "target": 0.0,
+     "nb0": 4.0,
+     "nb1": 4.0
+    },
+    "min_clearance_to_neighbours_any_part_mm": 4.0,
+    "camera_to_nearest_box_mm": 20.976703388350685,
+    "gap_bar_front_to_neighbour_front_plane_mm": 5.5,
+    "five_closest_parts_mm": {
+     "pad_L": 4.0,
+     "pad_M": 4.0,
+     "pad_R": 4.0,
+     "tool_body": 5.5,
+     "nut_front_L": 5.59
+    }
+   },
+   "3": {
+    "box": "Terumo Accuforce",
+    "thickness": 16.0,
+    "spine_tool_z": 154.0,
+    "tcp_z": 154.0,
+    "min_clearance_all_parts_except_pad_heads_mm": {
+     "value": 4.0,
+     "part": "pad_L",
+     "box": "nb0"
+    },
+    "pad_heads_distance_mm": {
+     "target": 0.0,
+     "nb0": 4.0,
+     "nb1": 4.0
+    },
+    "min_clearance_to_neighbours_any_part_mm": 4.0,
+    "camera_to_nearest_box_mm": 20.976703388350685,
+    "gap_bar_front_to_neighbour_front_plane_mm": 5.5,
+    "five_closest_parts_mm": {
+     "pad_L": 4.0,
+     "pad_M": 4.0,
+     "pad_R": 4.0,
+     "tool_body": 5.5,
+     "nut_front_L": 5.59
+    }
+   },
+   "4": {
+    "box": "Terumo Ultimaster Nagomi",
+    "thickness": 16.0,
+    "spine_tool_z": 154.0,
+    "tcp_z": 154.0,
+    "min_clearance_all_parts_except_pad_heads_mm": {
+     "value": 4.0,
+     "part": "pad_L",
+     "box": "nb0"
+    },
+    "pad_heads_distance_mm": {
+     "target": 0.0,
+     "nb0": 4.0,
+     "nb1": 4.0
+    },
+    "min_clearance_to_neighbours_any_part_mm": 4.0,
+    "camera_to_nearest_box_mm": 20.976703388350685,
+    "gap_bar_front_to_neighbour_front_plane_mm": 5.5,
+    "five_closest_parts_mm": {
+     "pad_L": 4.0,
+     "pad_M": 4.0,
+     "pad_R": 4.0,
+     "tool_body": 5.5,
+     "nut_front_L": 5.59
+    }
+   },
+   "5": {
+    "box": "unknown (photo missing)",
+    "thickness": 12.0,
+    "spine_tool_z": 154.0,
+    "tcp_z": 154.0,
+    "min_clearance_all_parts_except_pad_heads_mm": {
+     "value": 2.0,
+     "part": "pad_L",
+     "box": "nb0"
+    },
+    "pad_heads_distance_mm": {
+     "target": 0.0,
+     "nb0": 2.0,
+     "nb1": 2.0
+    },
+    "min_clearance_to_neighbours_any_part_mm": 2.0,
+    "camera_to_nearest_box_mm": 20.976703388350685,
+    "gap_bar_front_to_neighbour_front_plane_mm": 5.5,
+    "five_closest_parts_mm": {
+     "pad_L": 2.0,
+     "pad_M": 2.0,
+     "pad_R": 2.0,
+     "tool_body": 5.5,
+     "nut_front_L": 5.5
+    }
+   }
+  },
+  "protrusion_mm": 15.0,
+  "method": "handoff.suction_link6_pose(pulled=False) (compressed TCP z = 154 on the spine), neighbours 15 mm proud, exact solid distance (OCC); pad heads retracted 5 mm",
+  "min_clearance_overall_mm": 2.0,
+  "min_camera_clearance_mm": 20.976703388350685,
+  "min_clearance_to_neighbours_mm": 2.0
+ },
+ "camera": {
+  "front_face_centre_mm": [
+   0.0,
+   32.65,
+   118.0
+  ],
+  "optical_axis": [
+   0.0,
+   -0.0,
+   1.0
+  ],
+  "tilt_deg": 0.0,
+  "approach_gap_lip_to_spine_mm": 50.0,
+  "approach_spine_z": 209.0,
+  "aim_point": [
+   0.0,
+   0.0,
+   209.0
+  ],
+  "depth_along_axis_to_aim_mm": 91.0,
+  "range_to_aim_mm": 96.68000051717004,
+  "good_depth_min_mm": 90.0,
+  "aim_in_good_depth": true,
+  "camera_max_y": 53.68150970319828,
+  "camera_max_z": 118.02329671164964,
+  "z_limit": 119.0,
+  "tool_max_y_incl_camera": 53.68150970319828,
+  "blocked_pct_depth_fov_at_approach": 0.0,
+  "blocked_pct_per_origin_centre_left_right": [
+   0.0,
+   0.0,
+   0.0
+  ],
+  "blocked_pct_within_300mm": 0.0,
+  "blocking_parts_pct": {},
+  "rays": 4455,
+  "fov_margin_deg_at_spine_plane": {
+   "y_plus_24_tilt_deg": 27.07006755547448,
+   "y_minus_24_tilt_deg": 0.5966017552838352,
+   "centre_h_deg": 44.0,
+   "x_minus_60_h_deg": 10.601511532012758,
+   "x_plus_60_h_deg": 10.601511532012758
+  },
+  "y_visible_at_x0_on_spine_plane_mm": [
+   -25.32339373348188,
+   90.62339373348188
+  ],
+  "standoff_needed_for_pm24mm_in_fov": {
+   "nominal_65deg": {
+    "lip_to_spine_mm": 47.922687943705824,
+    "depth_mm": 88.92268794370582
+   },
+   "minus_3deg_62deg": {
+    "lip_to_spine_mm": 59.12853602015974,
+    "depth_mm": 100.12853602015974
+   }
+  },
+  "visibility": {
+   "1": {
+    "flush": {
+     "target_spine": {
+      "in_fov_pct": 100.0,
+      "line_of_sight_clear_pct": 100.0,
+      "visible_pct": 100.0
+     },
+     "neighbour_spines": {
+      "in_fov_pct": 100.0,
+      "line_of_sight_clear_pct": 100.0,
+      "visible_pct": 100.0
+     },
+     "target_spine_width_visible_at_x0_mm": 15.0
+    },
+    "proud15": {
+     "target_spine": {
+      "in_fov_pct": 100.0,
+      "line_of_sight_clear_pct": 66.66666666666666,
+      "visible_pct": 66.66666666666666
+     },
+     "neighbour_spines": {
+      "in_fov_pct": 77.77777777777779,
+      "line_of_sight_clear_pct": 100.0,
+      "visible_pct": 77.77777777777779
+     },
+     "target_spine_width_visible_at_x0_mm": 10.062111801242237
+    }
+   },
+   "2": {
+    "flush": {
+     "target_spine": {
+      "in_fov_pct": 100.0,
+      "line_of_sight_clear_pct": 100.0,
+      "visible_pct": 100.0
+     },
+     "neighbour_spines": {
+      "in_fov_pct": 100.0,
+      "line_of_sight_clear_pct": 100.0,
+      "visible_pct": 100.0
+     },
+     "target_spine_width_visible_at_x0_mm": 16.0
+    },
+    "proud15": {
+     "target_spine": {
+      "in_fov_pct": 100.0,
+      "line_of_sight_clear_pct": 66.66666666666666,
+      "visible_pct": 66.66666666666666
+     },
+     "neighbour_spines": {
+      "in_fov_pct": 72.22222222222221,
+      "line_of_sight_clear_pct": 98.88888888888889,
+      "visible_pct": 72.22222222222221
+     },
+     "target_spine_width_visible_at_x0_mm": 11.130434782608695
+    }
+   },
+   "3": {
+    "flush": {
+     "target_spine": {
+      "in_fov_pct": 100.0,
+      "line_of_sight_clear_pct": 100.0,
+      "visible_pct": 100.0
+     },
+     "neighbour_spines": {
+      "in_fov_pct": 100.0,
+      "line_of_sight_clear_pct": 100.0,
+      "visible_pct": 100.0
+     },
+     "target_spine_width_visible_at_x0_mm": 16.0
+    },
+    "proud15": {
+     "target_spine": {
+      "in_fov_pct": 100.0,
+      "line_of_sight_clear_pct": 66.66666666666666,
+      "visible_pct": 66.66666666666666
+     },
+     "neighbour_spines": {
+      "in_fov_pct": 72.22222222222221,
+      "line_of_sight_clear_pct": 98.88888888888889,
+      "visible_pct": 72.22222222222221
+     },
+     "target_spine_width_visible_at_x0_mm": 11.130434782608695
+    }
+   },
+   "4": {
+    "flush": {
+     "target_spine": {
+      "in_fov_pct": 100.0,
+      "line_of_sight_clear_pct": 100.0,
+      "visible_pct": 100.0
+     },
+     "neighbour_spines": {
+      "in_fov_pct": 100.0,
+      "line_of_sight_clear_pct": 100.0,
+      "visible_pct": 100.0
+     },
+     "target_spine_width_visible_at_x0_mm": 16.0
+    },
+    "proud15": {
+     "target_spine": {
+      "in_fov_pct": 100.0,
+      "line_of_sight_clear_pct": 66.66666666666666,
+      "visible_pct": 66.66666666666666
+     },
+     "neighbour_spines": {
+      "in_fov_pct": 72.22222222222221,
+      "line_of_sight_clear_pct": 98.88888888888889,
+      "visible_pct": 72.22222222222221
+     },
+     "target_spine_width_visible_at_x0_mm": 11.130434782608695
+    }
+   },
+   "5": {
+    "flush": {
+     "target_spine": {
+      "in_fov_pct": 100.0,
+      "line_of_sight_clear_pct": 100.0,
+      "visible_pct": 100.0
+     },
+     "neighbour_spines": {
+      "in_fov_pct": 100.0,
+      "line_of_sight_clear_pct": 100.0,
+      "visible_pct": 100.0
+     },
+     "target_spine_width_visible_at_x0_mm": 12.0
+    },
+    "proud15": {
+     "target_spine": {
+      "in_fov_pct": 100.0,
+      "line_of_sight_clear_pct": 55.55555555555556,
+      "visible_pct": 55.55555555555556
+     },
+     "neighbour_spines": {
+      "in_fov_pct": 88.88888888888889,
+      "line_of_sight_clear_pct": 100.0,
+      "visible_pct": 88.88888888888889
+     },
+     "target_spine_width_visible_at_x0_mm": 6.70807453416149
+    }
+   }
+  },
+  "shadow_of_proud_neighbour_fraction_of_target_spine_width": {
+   "30": {
+    "4": 0.5838509316770186,
+    "5": 0.40372670807453415
+   },
+   "45": {
+    "4": 0.6708074534161491,
+    "5": 0.5279503105590062
+   },
+   "60": {
+    "4": 0.7329192546583851,
+    "5": 0.6149068322981367
+   },
+   "90": {
+    "4": 0.8012422360248447,
+    "5": 0.7142857142857143
+   }
+  },
+  "barcode_px_per_module": {
+   "lip+30 (spine z 189)": {
+    "depth_mm": 71.0,
+    "pitch_simple_mm_per_px": 0.11896590376836322,
+    "pitch_along_x_mm_per_px": 0.11896590376836323,
+    "pitch_along_tilt_mm_per_px": 0.11972526173953092,
+    "px_per_module_simple": {
+     "DataMatrix 10 mil (0.254 mm)": 2.135065526796314,
+     "DataMatrix 15 mil (0.381 mm)": 3.2025982901944707,
+     "DataMatrix 20 mil (0.508 mm)": 4.270131053592628,
+     "EAN-13 (0.33 mm module)": 2.773904030877101
+    },
+    "px_per_module_worst_axis": {
+     "DataMatrix 10 mil (0.254 mm)": 2.1215238648013264,
+     "DataMatrix 15 mil (0.381 mm)": 3.1822857972019896,
+     "DataMatrix 20 mil (0.508 mm)": 4.243047729602653,
+     "EAN-13 (0.33 mm module)": 2.7563105330095974
+    },
+    "y_range_visible_at_x0_mm": [
+     -12.581988517332015,
+     77.88198851733202
+    ],
+    "depth_ge_good_min": false,
+    "depth_ge_min": true
+   },
+   "lip+33 (spine z 192)": {
+    "depth_mm": 74.0,
+    "pitch_simple_mm_per_px": 0.12399263209660391,
+    "pitch_along_x_mm_per_px": 0.12399263209660391,
+    "pitch_along_tilt_mm_per_px": 0.12478407561584935,
+    "px_per_module_simple": {
+     "DataMatrix 10 mil (0.254 mm)": 2.0485088162505174,
+     "DataMatrix 15 mil (0.381 mm)": 3.0727632243757763,
+     "DataMatrix 20 mil (0.508 mm)": 4.097017632501035,
+     "EAN-13 (0.33 mm module)": 2.661448462057759
+    },
+    "px_per_module_worst_axis": {
+     "DataMatrix 10 mil (0.254 mm)": 2.03551614055262,
+     "DataMatrix 15 mil (0.381 mm)": 3.0532742108289304,
+     "DataMatrix 20 mil (0.508 mm)": 4.07103228110524,
+     "EAN-13 (0.33 mm module)": 2.6445682141037983
+    },
+    "y_range_visible_at_x0_mm": [
+     -14.493199299754494,
+     79.79319929975449
+    ],
+    "depth_ge_good_min": false,
+    "depth_ge_min": true
+   },
+   "lip+36 (spine z 195)": {
+    "depth_mm": 77.0,
+    "pitch_simple_mm_per_px": 0.12901936042484463,
+    "pitch_along_x_mm_per_px": 0.1290193604248446,
+    "pitch_along_tilt_mm_per_px": 0.12984288949216768,
+    "px_per_module_simple": {
+     "DataMatrix 10 mil (0.254 mm)": 1.968696784448549,
+     "DataMatrix 15 mil (0.381 mm)": 2.9530451766728234,
+     "DataMatrix 20 mil (0.508 mm)": 3.937393568897098,
+     "EAN-13 (0.33 mm module)": 2.5577556648347293
+    },
+    "px_per_module_worst_axis": {
+     "DataMatrix 10 mil (0.254 mm)": 1.9562103168947242,
+     "DataMatrix 15 mil (0.381 mm)": 2.9343154753420864,
+     "DataMatrix 20 mil (0.508 mm)": 3.9124206337894485,
+     "EAN-13 (0.33 mm module)": 2.5415330888789724
+    },
+    "y_range_visible_at_x0_mm": [
+     -16.404410082176973,
+     81.70441008217696
+    ],
+    "depth_ge_good_min": false,
+    "depth_ge_min": true
+   },
+   "lip+45 (spine z 204)": {
+    "depth_mm": 86.0,
+    "pitch_simple_mm_per_px": 0.14409954540956674,
+    "pitch_along_x_mm_per_px": 0.1440995454095667,
+    "pitch_along_tilt_mm_per_px": 0.14501933112112242,
+    "px_per_module_simple": {
+     "DataMatrix 10 mil (0.254 mm)": 1.7626703767737009,
+     "DataMatrix 15 mil (0.381 mm)": 2.644005565160551,
+     "DataMatrix 20 mil (0.508 mm)": 3.5253407535474017,
+     "EAN-13 (0.33 mm module)": 2.2900835603752805
+    },
+    "px_per_module_worst_axis": {
+     "DataMatrix 10 mil (0.254 mm)": 1.7514906325685313,
+     "DataMatrix 15 mil (0.381 mm)": 2.627235948852797,
+     "DataMatrix 20 mil (0.508 mm)": 3.5029812651370626,
+     "EAN-13 (0.33 mm module)": 2.2755586958567533
+    },
+    "y_range_visible_at_x0_mm": [
+     -22.13804242944442,
+     87.43804242944441
+    ],
+    "depth_ge_good_min": false,
+    "depth_ge_min": true
+   },
+   "lip+50 (spine z 209)": {
+    "depth_mm": 91.0,
+    "pitch_simple_mm_per_px": 0.15247742595663455,
+    "pitch_along_x_mm_per_px": 0.15247742595663455,
+    "pitch_along_tilt_mm_per_px": 0.15345068758165256,
+    "px_per_module_simple": {
+     "DataMatrix 10 mil (0.254 mm)": 1.6658203560718494,
+     "DataMatrix 15 mil (0.381 mm)": 2.498730534107774,
+     "DataMatrix 20 mil (0.508 mm)": 3.331640712143699,
+     "EAN-13 (0.33 mm module)": 2.1642547933216942
+    },
+    "px_per_module_worst_axis": {
+     "DataMatrix 10 mil (0.254 mm)": 1.6552548835263068,
+     "DataMatrix 15 mil (0.381 mm)": 2.4828823252894603,
+     "DataMatrix 20 mil (0.508 mm)": 3.3105097670526136,
+     "EAN-13 (0.33 mm module)": 2.1505279982822096
+    },
+    "y_range_visible_at_x0_mm": [
+     -25.32339373348188,
+     90.62339373348188
+    ],
+    "depth_ge_good_min": true,
+    "depth_ge_min": true
+   },
+   "lip+15 (spine z 174)": {
+    "depth_mm": 56.0,
+    "pitch_simple_mm_per_px": 0.09383226212715973,
+    "pitch_along_x_mm_per_px": 0.09383226212715973,
+    "pitch_along_tilt_mm_per_px": 0.09443119235793994,
+    "px_per_module_simple": {
+     "DataMatrix 10 mil (0.254 mm)": 2.706958078616755,
+     "DataMatrix 15 mil (0.381 mm)": 4.060437117925132,
+     "DataMatrix 20 mil (0.508 mm)": 5.41391615723351,
+     "EAN-13 (0.33 mm module)": 3.5169140391477525
+    },
+    "px_per_module_worst_axis": {
+     "DataMatrix 10 mil (0.254 mm)": 2.6897891857302514,
+     "DataMatrix 15 mil (0.381 mm)": 4.034683778595377,
+     "DataMatrix 20 mil (0.508 mm)": 5.379578371460503,
+     "EAN-13 (0.33 mm module)": 3.4946079972085946
+    },
+    "y_range_visible_at_x0_mm": [
+     -3.025934605219618,
+     68.32593460521962
+    ],
+    "depth_ge_good_min": false,
+    "depth_ge_min": true
+   },
+   "lip+20 (spine z 179)": {
+    "depth_mm": 61.0,
+    "pitch_simple_mm_per_px": 0.10221014267422757,
+    "pitch_along_x_mm_per_px": 0.10221014267422755,
+    "pitch_along_tilt_mm_per_px": 0.10286254881847048,
+    "px_per_module_simple": {
+     "DataMatrix 10 mil (0.254 mm)": 2.48507626889407,
+     "DataMatrix 15 mil (0.381 mm)": 3.727614403341105,
+     "DataMatrix 20 mil (0.508 mm)": 4.97015253778814,
+     "EAN-13 (0.33 mm module)": 3.228642396594658
+    },
+    "px_per_module_worst_axis": {
+     "DataMatrix 10 mil (0.254 mm)": 2.4693146623097344,
+     "DataMatrix 15 mil (0.381 mm)": 3.7039719934646014,
+     "DataMatrix 20 mil (0.508 mm)": 4.938629324619469,
+     "EAN-13 (0.33 mm module)": 3.2081647187488675
+    },
+    "y_range_visible_at_x0_mm": [
+     -6.211285909257086,
+     71.51128590925708
+    ],
+    "depth_ge_good_min": false,
+    "depth_ge_min": true
+   }
+  },
+  "barcode_max_depth_for_2p5_px_per_module": {
+   "DataMatrix 10 mil (0.254 mm)": {
+    "max_depth_mm": 60.63586096101531,
+    "depth_ge_min_50": true,
+    "depth_ge_good_90": false,
+    "spine_link6_z": 178.6358609610153,
+    "lip_to_spine_mm": 19.63586096101531,
+    "pressed_depth_mm": 36.0
+   },
+   "DataMatrix 15 mil (0.381 mm)": {
+    "max_depth_mm": 90.95379144152297,
+    "depth_ge_min_50": true,
+    "depth_ge_good_90": true,
+    "spine_link6_z": 208.95379144152298,
+    "lip_to_spine_mm": 49.95379144152298,
+    "pressed_depth_mm": 36.0
+   },
+   "DataMatrix 20 mil (0.508 mm)": {
+    "max_depth_mm": 121.27172192203062,
+    "depth_ge_min_50": true,
+    "depth_ge_good_90": true,
+    "spine_link6_z": 239.27172192203062,
+    "lip_to_spine_mm": 80.27172192203062,
+    "pressed_depth_mm": 36.0
+   },
+   "EAN-13 (0.33 mm module)": {
+    "max_depth_mm": 78.77887447690966,
+    "depth_ge_min_50": true,
+    "depth_ge_good_90": false,
+    "spine_link6_z": 196.77887447690966,
+    "lip_to_spine_mm": 37.778874476909664,
+    "pressed_depth_mm": 36.0
+   }
+  },
+  "f_px_colour": [
+   596.8096551281035,
+   593.024387405096
+  ],
+  "usb_c": {
+   "face": "+x",
+   "camera_frame_t_range": [
+    -22.6,
+    -12.7
+   ],
+   "tie_slot_in_ear": true,
+   "note": "vendor STEP recess vertices and the datasheet right-hand view agree; v3 had the relief lug on -x (wrong side)"
+  },
+  "targets": {
+   "blocked_le_10pct": true,
+   "spine_pm1_neighbour_in_fov": true,
+   "aim_in_good_depth": true,
+   "y_le_60": true
+  }
+ },
+ "buffer_stroke": {
+  "stroke_mm": 10.0,
+  "collisions": [],
+  "gap_adapter_to_bar_front_at_full_stroke_mm": 1.5,
+  "note": "the sliding head is in front of the bar; buffer body, rear hex, elbow and tube are on the clamped (fixed) body: the stroke does not move the tubes (ASSUMED from the catalog drawing: inlet on the rear of the fixed body)",
+  "pass_": true
+ },
+ "tubes": {
+  "rows": [
+   {
+    "tube": "tube_L",
+    "min_bend_radius_mm": 10.0,
+    "bend_angles_deg": [
+     54.3
+    ],
+    "straight_segments_mm": [
+     42.7,
+     5.9
+    ],
+    "length_mm": 58.027007224122784,
+    "chord_mm": 54.96350205064603,
+    "slack_mm": 3.0635051734767558,
+    "z_range": [
+     86.05,
+     89.95
+    ],
+    "loop_below_bar": false,
+    "z_below_bar_rear_face_mm": 37.045237999249935
+   },
+   {
+    "tube": "tube_M",
+    "min_bend_radius_mm": null,
+    "bend_angles_deg": [],
+    "straight_segments_mm": [
+     27.5
+    ],
+    "length_mm": 27.5,
+    "chord_mm": 27.5,
+    "slack_mm": 0.0,
+    "z_range": [
+     86.05,
+     89.95
+    ],
+    "loop_below_bar": false,
+    "z_below_bar_rear_face_mm": 37.048636274337355
+   },
+   {
+    "tube": "tube_R",
+    "min_bend_radius_mm": 10.0,
+    "bend_angles_deg": [
+     54.3
+    ],
+    "straight_segments_mm": [
+     42.7,
+     5.9
+    ],
+    "length_mm": 58.027007224122784,
+    "chord_mm": 54.96350205064603,
+    "slack_mm": 3.0635051734767558,
+    "z_range": [
+     86.05,
+     89.95
+    ],
+    "loop_below_bar": false,
+    "z_below_bar_rear_face_mm": 37.045237999249935
+   }
+  ],
+  "trunk_vs_wrist_housing": {
+   "trunk_axis_radius_mm": 44.5,
+   "trunk_outer_radius_mm": 3.0,
+   "housing_max_extent_toward_minus_y_mm": {
+    "link6": 40.22521153092384,
+    "link5": 39.97709974646568
+   },
+   "clearance_to_housing_mm": 1.2747884690761566,
+   "pass_": true
+  },
+  "tube_axis_z": 88.0,
+  "bend_radius_min_required_mm": 10.0,
+  "trunk": "phi6 leaves the collector straight down (-z) at y = -44 (hub rim r = 28): no bend inside the CAD, bend radius assumed >= 15 mm when dressed",
+  "stroke_if_inlet_moved": {
+   "tube_L": {
+    "chord_at_minus10_0_plus10_mm": [
+     55.86579058485945,
+     54.96350205064603,
+     55.86579058485945
+    ],
+    "length_mm": 58.027007224122784,
+    "taut_if_inlet_moved": false
+   },
+   "tube_M": {
+    "chord_at_minus10_0_plus10_mm": [
+     29.261749776799064,
+     27.5,
+     29.261749776799064
+    ],
+    "length_mm": 27.5,
+    "taut_if_inlet_moved": true
+   },
+   "tube_R": {
+    "chord_at_minus10_0_plus10_mm": [
+     55.86579058485945,
+     54.96350205064603,
+     55.86579058485945
+    ],
+    "length_mm": 58.027007224122784,
+    "taut_if_inlet_moved": false
+   }
+  },
+  "pass_": true
+ },
+ "strength": {
+  "E_MPa": 3500.0,
+  "sigma_allow_MPa": 25.0,
+  "method": "bar = cantilever from the stem face (x = 15.5) to the pad axis (x = 60) with EI(x) from the CAD cross-sections (skin + ribs + bosses, pad hole included) integrated twice, plus rigid rotation of the stem top (C-section I from z sections) under the net moment; bending stress M c / I along the bar and in the stem walls (+ axial); first-order, no FEA, no layer-adhesion knock-down",
+  "section_at_root": {
+   "I_mm4": 2633.8939935043454,
+   "c_mm": 9.390692640692663,
+   "area_mm2": 138.6000000000003
+  },
+  "section_at_pad": {
+   "I_mm4": 231.15583672560751,
+   "c_mm": 3.452781724040989,
+   "area_mm2": 66.314976896546
+  },
+  "stem": {
+   "I_mm4": 29234.197999999997,
+   "area_mm2": 193.7999999999999,
+   "height_mm": 72.8
+  },
+  "cases": {
+   "a_push_on": {
+    "deflection_bar_mm": 0.07694990900793525,
+    "stem_rotation_rad": 0.0008537945867370812,
+    "deflection_from_stem_rotation_mm": 0.05122767520422487,
+    "deflection_total_mm": 0.12817758421216013,
+    "sigma_bar_max_MPa": 3.6491119010303037,
+    "x_of_sigma_max": 15.5,
+    "name": "a_push_on",
+    "description": "buffers fully compressed (3 N each) + 20 N arm push on the +x outer pad",
+    "loads_N": {
+     "-60.0": 3.0,
+     "0.0": 3.0,
+     "60.0": 23.0
+    },
+    "stem_moment_Nmm": 1200.0,
+    "sigma_stem_MPa": 0.7858799612753826,
+    "sigma_max_MPa": 3.6491119010303037,
+    "safety_factor": 6.850982013717203,
+    "safety_factor_Kt2": 3.4254910068586013
+   },
+   "b_pull": {
+    "deflection_bar_mm": 0.03104761546059301,
+    "stem_rotation_rad": 0.0,
+    "deflection_from_stem_rotation_mm": 0.0,
+    "deflection_total_mm": 0.03104761546059301,
+    "sigma_bar_max_MPa": 1.4723373235461399,
+    "x_of_sigma_max": 15.5,
+    "name": "b_pull",
+    "description": "3 pads x 80 kPa x 1.16 cm2 = 9.28 N tension each (symmetric: no net stem moment)",
+    "loads_N": {
+     "-60.0": 9.28,
+     "0.0": 9.28,
+     "60.0": 9.28
+    },
+    "stem_moment_Nmm": 0.0,
+    "sigma_stem_MPa": 0.14365325077399385,
+    "sigma_max_MPa": 1.4723373235461399,
+    "safety_factor": 16.979804559859446,
+    "safety_factor_Kt2": 8.489902279929723
+   },
+   "c_one_outer_pad_only": {
+    "deflection_bar_mm": 0.07694990900793525,
+    "stem_rotation_rad": 0.0009818637747476433,
+    "deflection_from_stem_rotation_mm": 0.0589118264848586,
+    "deflection_total_mm": 0.13586173549279384,
+    "sigma_bar_max_MPa": 3.6491119010303037,
+    "x_of_sigma_max": 15.5,
+    "name": "c_one_outer_pad_only",
+    "description": "worst case: only the +x outer pad loaded, 3 N spring + 20 N arm push = 23 N (a single pad cannot hold more than 9.28 N in pull)",
+    "loads_N": {
+     "60.0": 23.0
+    },
+    "stem_moment_Nmm": 1380.0,
+    "sigma_stem_MPa": 0.850356382711272,
+    "sigma_max_MPa": 3.6491119010303037,
+    "safety_factor": 6.850982013717203,
+    "safety_factor_Kt2": 3.4254910068586013
+   },
+   "b1_one_outer_pad_pull": {
+    "deflection_bar_mm": 0.03104761546059301,
+    "stem_rotation_rad": 0.0003961606882460056,
+    "deflection_from_stem_rotation_mm": 0.023769641294760335,
+    "deflection_total_mm": 0.054817256755353344,
+    "sigma_bar_max_MPa": 1.4723373235461399,
+    "x_of_sigma_max": 15.5,
+    "name": "b1_one_outer_pad_pull",
+    "description": "only the +x outer pad holds (others lost vacuum), 9.28 N tension",
+    "loads_N": {
+     "60.0": 9.28
+    },
+    "stem_moment_Nmm": 556.8,
+    "sigma_stem_MPa": 0.3431003144156784,
+    "sigma_max_MPa": 1.4723373235461399,
+    "safety_factor": 16.979804559859446,
+    "safety_factor_Kt2": 8.489902279929723
+   }
+  },
+  "nut_bearing": {
+   "torque_Nm": 0.3,
+   "K": 0.2,
+   "preload_N": 150.0,
+   "front_nut_bearing_mm2": 46.142142099600086,
+   "front_nut_stress_MPa": 3.749284106198862,
+   "front_nut_SF": 6.667939609768799,
+   "rear_washer_bearing_mm2": 227.56911784441064,
+   "rear_washer_stress_MPa": 0.7602085978919176,
+   "rear_washer_SF": 32.88571067115761,
+   "at_SMC_torque_3Nm_front_nut_stress_MPa": 32.508243695365856,
+   "SF_min": 6.667939609768799
+  },
+  "targets": {
+   "outer_pad_deflection_b_le_0p3mm": true,
+   "safety_factor_ge_3_all_cases": true,
+   "safety_factor_ge_3_with_Kt2": true
+  }
+ },
+ "access": {
+  "flange_screws_camera_removed": {
+   "screw_0 (15.2, 15.2)": {
+    "blocked_mm3": 0.0,
+    "by": null
+   },
+   "screw_1 (-5.6, 20.8)": {
+    "blocked_mm3": 0.0,
+    "by": null
+   },
+   "screw_2 (-20.8, 5.6)": {
+    "blocked_mm3": 0.0,
+    "by": null
+   },
+   "screw_3 (-15.2, -15.2)": {
+    "blocked_mm3": 0.0,
+    "by": null
+   },
+   "screw_4 (5.6, -20.8)": {
+    "blocked_mm3": 0.0,
+    "by": null
+   },
+   "screw_5 (20.8, -5.6)": {
+    "blocked_mm3": 0.0,
+    "by": null
+   }
+  },
+  "camera_screws_from_minus_y": {
+   "x=-10": {
+    "blocked_mm3": 0.0,
+    "by": null,
+    "body_blocked_mm3": 0.0
+   },
+   "x=+10": {
+    "blocked_mm3": 0.0,
+    "by": null,
+    "body_blocked_mm3": 0.0
+   }
+  },
+  "rear_nut_spanner": {
+   "nut_rear_M": {
+    "blocked_mm3": 0.0,
+    "by": null,
+    "tool": "open-end spanner 14 mm, jaw wall 4.5, thickness 3, from +y through the wall window"
+   },
+   "nut_rear_L": {
+    "blocked_mm3": 0.0,
+    "by": null,
+    "tool": "deep socket 14 mm, OD 19, from behind, elbows fitted afterwards (pad body excluded: it passes through the socket)"
+   },
+   "nut_rear_R": {
+    "blocked_mm3": 0.0,
+    "by": null,
+    "tool": "deep socket 14 mm, OD 19, from behind, elbows fitted afterwards (pad body excluded: it passes through the socket)"
+   }
+  },
+  "collector_drop_in_from_plus_z": {
+   "blocked_with_body_mm3": 0.0,
+   "note": "sweep of body, port bosses and the trunk boss (phi11) straight up from the seat; the cheek slots are open to +z"
+  },
+  "pads_in_from_front_blocked_mm3": {
+   "pad_L": 0.0,
+   "pad_M": 0.0,
+   "pad_R": 0.0
+  },
+  "all_ok": true
+ },
+ "printability": {
+  "material": "PA12-CF (carbon-fibre nylon), FDM/SLS",
+  "printed_parts": 1,
+  "build_orientation_up": "-z",
+  "support_volume_cm3_bridge_aware": 11.481,
+  "support_pct_of_part": 21.826631364506483,
+  "voxel_model_all_axes_cm3": {
+   "+z": 90.53,
+   "-z": 11.481,
+   "+x": 118.493,
+   "-x": 104.738,
+   "+y": 104.085,
+   "-y": 56.191
+  },
+  "raw_upper_bound_cm3_all_axes": {
+   "+z": 226.82926911129903,
+   "-z": 130.51036549452755,
+   "+x": 213.88268443598346,
+   "-x": 216.51286041331628,
+   "+y": 189.65500807174394,
+   "-y": 86.99909101396841
+  },
+  "raw_upper_bound_cm3_at_build_orientation": 130.51036549452755,
+  "raw_best_axis": "-y",
+  "raw_best_cm3": 86.99909101396841,
+  "part_volume_cm3": 52.60087921157592,
+  "bbox_mm": [
+   150.0162238489092,
+   80.71958046592488,
+   80.82769229037945
+  ],
+  "footprint_on_bed_mm": [
+   150.0162238489092,
+   80.71958046592488
+  ],
+  "height_mm": 80.82769229037945,
+  "fits_220_x_220_bed": true,
+  "design_wall_mm": 3.0,
+  "min_wall": {
+   "samples": 60000,
+   "valid_samples": 54790,
+   "min_mm": 2.9999999999999947,
+   "p01_mm": 2.9999999999999947,
+   "p1_mm": 2.9999999999999947,
+   "n_thin_samples": 0,
+   "thinnest_regions": []
+  },
+  "min_wall_ok": true,
+  "same_method_v3": {
+   "parts": {
+    "camera_arm.stl": {
+     "best_up": "+y",
+     "voxel_support_cm3": 0.749,
+     "raw_upper_bound_best_cm3": 15.852765202075052
+    },
+    "carrier.stl": {
+     "best_up": "-y",
+     "voxel_support_cm3": 66.384,
+     "raw_upper_bound_best_cm3": 87.72066631764146
+    },
+    "scanner_arm.stl": {
+     "best_up": "-y",
+     "voxel_support_cm3": 0.438,
+     "raw_upper_bound_best_cm3": 10.887693628602143
+    }
+   },
+   "voxel_support_total_cm3": 67.571,
+   "raw_upper_bound_total_best_dir_per_part_cm3": 114.46112514831864
+  },
+  "same_method_v4": {
+   "parts": {
+    "hub_stem.stl": {
+     "best_up": "+z",
+     "voxel_support_cm3": 0.0,
+     "raw_upper_bound_best_cm3": 1.6560840284209242
+    },
+    "sensor_pod.stl": {
+     "best_up": "-y",
+     "voxel_support_cm3": 1.498,
+     "raw_upper_bound_best_cm3": 30.979556035610415
+    }
+   },
+   "voxel_support_total_cm3": 1.498,
+   "raw_upper_bound_total_best_dir_per_part_cm3": 32.635640064031335
+  },
+  "method": "bridge-aware voxel model (support_model.py): 45 deg rule + bridges up to 12 mm; the raw bound (v3/v4 method) = every down-facing face x its free drop, no bridging; wall check = inward-normal ray thickness on 60000 surface samples",
+  "orientation_note": "bar front face (z = 133.5, the hex-pocket side) on the bed, stem growing up, flange face on top: pads holes / pockets are bed-side features; the flange face is the last (top) surface"
+ },
+ "mass": {
+  "total_kg": 0.203808949548502,
+  "total_with_fasteners_kg": 0.20880894954850202,
+  "budget_kg": 0.22,
+  "within_budget": true,
+  "printed_kg": 0.056808949548501984,
+  "cog_mm": [
+   0.07549129895841349,
+   7.131217783757952,
+   106.51039416583913
+  ],
+  "inertia_kg_mm2": [
+   [
+    225.72192622882204,
+    0.07518335864343283,
+    0.2593777173568322
+   ],
+   [
+    0.07518335864343283,
+    316.6994682115053,
+    -16.527684304582213
+   ],
+   [
+    0.2593777173568322,
+    -16.527684304582213,
+    313.522021385126
+   ]
+  ],
+  "bodies": {
+   "tool_body": [
+    0.0568,
+    [
+     0.3,
+     -2.0,
+     93.4
+    ]
+   ],
+   "pad_L": [
+    0.012,
+    [
+     -60.0,
+     0.0,
+     129.6
+    ]
+   ],
+   "elbow_L": [
+    0.003,
+    [
+     -59.4,
+     -0.8,
+     90.0
+    ]
+   ],
+   "nut_front_L": [
+    0.0025,
+    [
+     -60.0,
+     -0.0,
+     132.0
+    ]
+   ],
+   "washer_L": [
+    0.001,
+    [
+     -60.0,
+     0.0,
+     126.5
+    ]
+   ],
+   "nut_rear_L": [
+    0.0025,
+    [
+     -60.0,
+     -0.0,
+     124.5
+    ]
+   ],
+   "tube_L": [
+    0.001,
+    [
+     -38.5,
+     -28.4,
+     88.0
+    ]
+   ],
+   "pad_M": [
+    0.012,
+    [
+     0.0,
+     0.0,
+     129.6
+    ]
+   ],
+   "elbow_M": [
+    0.003,
+    [
+     0.0,
+     -1.0,
+     90.0
+    ]
+   ],
+   "nut_front_M": [
+    0.0025,
+    [
+     -0.0,
+     0.0,
+     132.0
+    ]
+   ],
+   "washer_M": [
+    0.001,
+    [
+     0.0,
+     -0.0,
+     126.5
+    ]
+   ],
+   "nut_rear_M": [
+    0.0025,
+    [
+     -0.0,
+     0.0,
+     124.5
+    ]
+   ],
+   "tube_M": [
+    0.001,
+    [
+     -0.0,
+     -20.8,
+     88.0
+    ]
+   ],
+   "pad_R": [
+    0.012,
+    [
+     60.0,
+     0.0,
+     129.6
+    ]
+   ],
+   "elbow_R": [
+    0.003,
+    [
+     59.4,
+     -0.8,
+     90.0
+    ]
+   ],
+   "nut_front_R": [
+    0.0025,
+    [
+     60.0,
+     0.0,
+     132.0
+    ]
+   ],
+   "washer_R": [
+    0.001,
+    [
+     60.0,
+     0.0,
+     126.5
+    ]
+   ],
+   "nut_rear_R": [
+    0.0025,
+    [
+     60.0,
+     0.0,
+     124.5
+    ]
+   ],
+   "tube_R": [
+    0.001,
+    [
+     38.5,
+     -28.4,
+     88.0
+    ]
+   ],
+   "collector": [
+    0.012,
+    [
+     0.0,
+     -44.0,
+     87.3
+    ]
+   ],
+   "trunk_tube": [
+    0.001,
+    [
+     0.0,
+     -44.5,
+     69.0
+    ]
+   ],
+   "camera_gemini305": [
+    0.068,
+    [
+     -0.0,
+     32.7,
+     106.6
+    ]
+   ]
+  },
+  "fasteners": {
+   "flange_csk_m3x10": 0.0036,
+   "camera_m3x10": 0.0014,
+   "note": "ASSUMED: steel M3 CSK 0.6 g, M3 pan 0.7 g; zip ties / plugs not counted"
+  },
+  "vs": {
+   "v3_kg": 0.2781672935159285,
+   "v4_aluminium_bar_kg": 0.33197373316062556,
+   "v4_pa12cf_bar_kg": 0.2647133580800019
+  },
+  "model": "printed = volume x 1.20 g/cm3 x 0.90 fill (ASSUMED); purchased as MASS_PURCHASED (pad 12 g + elbow 3 g, collector 12 g ASSUMED, camera 68 g); screws counted separately, zip ties / plugs not counted"
+ },
+ "compactness": {
+  "bbox_min": [
+   -75.4,
+   -52.7,
+   52.68
+  ],
+  "bbox_max": [
+   75.4,
+   53.68,
+   159.0
+  ],
+  "size": [
+   150.8,
+   106.38,
+   106.32
+  ],
+  "bbox_volume_cm3": 1705.6788653845413,
+  "hull_cm3": 716.0174026970255,
+  "n_printed": 1,
+  "n_purchased_solids": 21,
+  "n_solids": 22,
+  "v3": {
+   "size": [
+    150.8,
+    148.62,
+    106.3
+   ],
+   "hull_cm3": 1150.5902098795054
+  },
+  "v4": {
+   "size": [
+    150.8,
+    95.71,
+    106.32
+   ],
+   "hull_cm3": 723.2835346801544
+  }
+ },
+ "lips": {
+  "lip_z": {
+   "pad_L": 159.00167840850784,
+   "pad_M": 159.00167840850784,
+   "pad_R": 159.00167840850784
+  },
+  "coplanarity_spread_mm": 0.0,
+  "pad_span_outer_edges_mm": 150.8,
+  "pad_centres_x": [
+   -60.0,
+   0.0,
+   60.0
+  ],
+  "pad_pitch_mm": 60.0
+ },
+ "pad_span_margins": {
+  "1": {
+   "box": "Boston Scientific Agent MONORAIL",
+   "h": 230.0,
+   "margin_to_each_spine_end_mm": 39.599999999999994,
+   "ok_ge_25": true
+  },
+  "2": {
+   "box": "iVascular angiolite",
+   "h": 240.0,
+   "margin_to_each_spine_end_mm": 44.599999999999994,
+   "ok_ge_25": true
+  },
+  "3": {
+   "box": "Terumo Accuforce",
+   "h": 220.0,
+   "margin_to_each_spine_end_mm": 34.599999999999994,
+   "ok_ge_25": true
+  },
+  "4": {
+   "box": "Terumo Ultimaster Nagomi",
+   "h": 250.0,
+   "margin_to_each_spine_end_mm": 49.599999999999994,
+   "ok_ge_25": true
+  },
+  "5": {
+   "box": "unknown (photo missing)",
+   "h": 230.0,
+   "margin_to_each_spine_end_mm": 39.599999999999994,
+   "ok_ge_25": true
+  }
+ },
+ "reimport": {
+  "max_rel_volume_error": 2.1742339955120223e-09,
+  "step_parts": 22,
+  "stl_printed": {
+   "tool_body": {
+    "exists": true,
+    "watertight": true
+   }
+  },
+  "assembly_step_solids": 22,
+  "expected_assembly_solids": 22,
+  "pass_": true
+ },
+ "summary": {
+  "mass_kg": 0.203808949548502,
+  "mass_with_fasteners_kg": 0.20880894954850202,
+  "target_mass_kg": 0.22,
+  "printed_parts": 1,
+  "n_solids": 22,
+  "bbox_mm": [
+   150.8,
+   106.4,
+   106.3
+  ],
+  "interference_ok": true,
+  "keepout_ok": true,
+  "stroke_ok": true,
+  "tubes_ok": true,
+  "access_ok": true,
+  "min_clearance_pressed_mm": 2.0,
+  "min_camera_clearance_pressed_mm": 20.976703388350685,
+  "camera_blocked_pct": 0.0,
+  "camera_aim_depth_mm": 91.0,
+  "camera_max_y": 53.68150970319828,
+  "deflection_b_mm": 0.03104761546059301,
+  "sf_min": 6.850982013717203,
+  "support_cm3": 11.481,
+  "support_raw_bound_cm3": 130.51036549452755,
+  "thin_wall_samples": 0,
+  "min_wall_mm": 2.9999999999999947,
+  "reimport_ok": true,
+  "seconds": 121
+ }
+}

@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Medicine Shelf-Pick Study</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: single reading column (~72ch) with full-width figures and tables; a to-scale cabinet elevation anchors the reach section. */
+:root{
+  --bg:#f6f7f9; --surface:#ffffff; --fg:#17202b; --muted:#566273; --rule:#d9dee5;
+  --accent:#1d4ed8; --accent-soft:#e3eafc;
+  --ok:#157f3d; --ok-soft:#e2f4e8; --bad:#b42318; --bad-soft:#fbe7e5; --wait:#9a5b00; --wait-soft:#fdf0d9;
+  --shelf:#8b97a8; --cab:#c9d0da; --reach:#1d4ed8;
+  color-scheme:light;
+  --f-display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --f-body:"Source Sans 3","Segoe UI",Roboto,Arial,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:17px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:32px 64px}
+.wrap{max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:56px}
+.prose{max-width:72ch}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;line-height:1.15;margin:0}
+h1{font-size:2.4rem;font-weight:800;letter-spacing:-.01em}
+h2{font-size:1.55rem;font-weight:700;padding-bottom:8px;border-bottom:2px solid var(--fg)}
+h3{font-size:1.1rem;font-weight:700}
+p{margin:0}
+section{display:flex;flex-direction:column;gap:18px}
+.eyebrow{font-family:var(--f-mono);font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.meta{display:flex;flex-wrap:wrap;gap:8px 24px;font-family:var(--f-mono);font-size:.85rem;color:var(--muted)}
+header{display:flex;flex-direction:column;gap:14px}
+.lede{font-size:1.15rem;max-width:68ch}
+ul.findings{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+ul.findings li{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:baseline;max-width:80ch}
+.pill{font-family:var(--f-mono);font-size:.72rem;font-weight:600;letter-spacing:.04em;padding:2px 7px;border-radius:3px;white-space:nowrap}
+.ok{background:var(--ok-soft);color:var(--ok)} .bad{background:var(--bad-soft);color:var(--bad)} .wait{background:var(--wait-soft);color:var(--wait)}
+.tablewrap{overflow-x:auto;border:1px solid var(--rule);border-radius:4px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.92rem}
+th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--rule);white-space:nowrap}
+th{font-family:var(--f-mono);font-size:.74rem;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:600;background:var(--bg)}
+td.n{font-family:var(--f-mono);font-variant-numeric:tabular-nums;text-align:right}
+tr:last-child td{border-bottom:0}
+.caption{font-size:.88rem;color:var(--muted);max-width:80ch}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px;align-items:start}
+.two>*{min-width:0}
+figure{margin:0;display:flex;flex-direction:column;gap:8px}
+figure img,figure video{width:100%;max-width:100%;border-radius:4px;border:1px solid var(--rule);display:block;background:#000}
+.steps{margin:0;padding-left:1.4em;display:flex;flex-direction:column;gap:6px;max-width:72ch}
+.spec{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;align-items:start}
+.spec>div{background:var(--surface);border:1px solid var(--rule);border-radius:4px;padding:14px 16px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.spec dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:.92rem}
+.spec dt{color:var(--muted)} .spec dd{margin:0;font-family:var(--f-mono);font-size:.85rem}
+.callout{border-left:4px solid var(--wait);background:var(--wait-soft);padding:14px 16px;border-radius:0 4px 4px 0;max-width:80ch}
+.callout.bad{border-color:var(--bad);background:var(--bad-soft);color:var(--fg)}
+.elev{width:100%;max-width:520px;height:auto}
+.elev text{font-family:var(--f-mono);font-size:11px;fill:var(--muted)}
+.elev .lab{fill:var(--fg);font-weight:600}
+code{font-family:var(--f-mono);font-size:.85em;background:var(--accent-soft);padding:1px 5px;border-radius:3px;word-break:break-all}
+ol.decisions{margin:0;padding-left:1.4em;display:flex;flex-direction:column;gap:10px;max-width:80ch}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (max-width:520px){h1{font-size:1.8rem} body{font-size:16px}}
+.viewers{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px}
+.viewers>*{min-width:0}
+.viewer figcaption{display:flex;flex-direction:column;gap:6px}
+.vbox{position:relative;width:100%;aspect-ratio:1/1;max-width:100%;border:1px solid var(--rule);border-radius:4px;background:var(--surface);overflow:hidden;touch-action:none}
+.vbox canvas{display:block;width:100%;height:100%}
+.vmsg{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:.9rem;text-align:center;padding:16px}
+.legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:.8rem;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px;border:1px solid var(--rule)}
+.slider{display:flex;flex-direction:column;gap:4px;font-size:.88rem}
+.slider output{font-family:var(--f-mono);font-size:.82rem}
+.slider input{width:100%}
+tr.pick td{background:var(--accent-soft)}
+.tablewrap{background:linear-gradient(to right,var(--surface) 30%,rgba(255,255,255,0)),linear-gradient(to left,var(--surface) 30%,rgba(255,255,255,0)) 100% 0,linear-gradient(to right,rgba(0,0,0,.12),transparent) 0 0,linear-gradient(to left,rgba(0,0,0,.12),transparent) 100% 0;background-color:var(--surface);background-repeat:no-repeat;background-size:40px 100%,40px 100%,14px 100%,14px 100%;background-attachment:local,local,scroll,scroll}
+.placement td:nth-child(2),.placement td:last-child{white-space:normal;min-width:20ch}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header>
+  <span class="eyebrow">Dual igus ReBeL on a lift stand · medicine carton shelf pick</span>
+  <h1>Medicine Shelf-Pick Study</h1>
+  <div class="meta"><span>2026-10-15</span><span>Isaac Sim 5.1 · MoveIt 2 Humble (mock)</span></div>
+  <p class="lede">Can the dual-arm robot pull a medicine carton out of the real stocked cabinet with a suction tool and then take it with the gripper? This report covers the tool design, the vacuum pump choice, tool-only grasp tests, and the full-robot test.</p>
+</header>
+
+<section>
+  <h2>Key findings</h2>
+  <ul class="findings">
+    <li><span class="pill wait">SIM</span><span><b>All results are from simulation (Isaac Sim 5.1); nothing has been built or measured yet.</b> The cabinet is measured, but carton mass, friction, side forces between cartons and pad leakage are estimates. The grasp runs test reach, clearances and how much the cartons move. They do not test suction holding force: the most loaded pad carried at most 0.7 N, against a release limit of about 5.8 N per pad (17.4 N for all three).</span></li>
+    <li><span class="pill ok">PASS</span><span><b>The front grasp passed for the 7 tested cartons on shelves 3–6.</b> One run each, on the full robot model: carton pulled 100 mm, neighbours moved ≤ 1.3 mm, slip ≤ 0.3 mm, no arm contact with the cabinet.</span></li>
+    <li><span class="pill bad">FAIL</span><span><b>Shelves 1 and 2 cannot be reached</b> (carton floors at 0.17 m and 0.49 m), even with the lift at its lowest. Shelf 1 is 12–20 cm short; shelf 2 is a near miss (the suction pose is 24 mm short with a pad touching a neighbour, and the path down from home is blocked); it would need about 250 mm more lift travel downward.</span></li>
+    <li><span class="pill bad">FAIL</span><span><b>The first carton next to the cabinet side wall (E2) cannot be picked.</b> The carton lies completely behind the cabinet's 18 mm front trim, so the suction pads hit the trim and the tool hits the side wall. With a straight approach, turning the tool 180° or making it longer does not help. Options: stock the first carton 25–33 mm from the wall, pick wall cartons by hand, or design a tool for an angled approach (not studied in detail).</span></li>
+    <li><span class="pill wait">RISK</span><span><b>The grasp does not tolerate a 3° tool angle.</b> At 3° of yaw the pull pushes the neighbour 4.4 mm and the run fails. Only 0° and 3° were tested, so the allowed angle is not known; the wrist camera should measure the spine angle before pressing.</span></li>
+  </ul>
+</section>
+
+<section>
+  <h2>Hardware</h2>
+  <div class="spec">
+    <div><h3>Left arm · suction tool v5</h3><dl>
+      <dt>Pads</dt><dd>3 × SMC ZP2-T4030WNK10-B5</dd>
+      <dt>Camera</dt><dd>1 × Orbbec Gemini 305</dd>
+      <dt>Body</dt><dd>1 printed part, PA12-CF</dd>
+      <dt>Mass</dt><dd>0.204 kg (0.209 with screws)</dd>
+      <dt>Barcode</dt><dd>decoded from colour stream</dd></dl></div>
+    <div><h3>Right arm · gripper</h3><dl>
+      <dt>Model</dt><dd>SMC LEHF20K2-48</dd>
+      <dt>Force</dt><dd>24.3 N per finger nominal (±25 %)</dd>
+      <dt>Stroke</dt><dd>0–24 mm per finger</dd></dl></div>
+    <div><h3>Vacuum pump</h3><dl>
+      <dt>Preferred</dt><dd>Schmalz ECBPi 12 24V-DC (pending bench test)</dd>
+      <dt>Part no.</dt><dd>10.03.01.00314</dd>
+      <dt>Rating</dt><dd>12 L/min · −75 kPa max · 13 W</dd>
+      <dt>Mass</dt><dd>0.775 kg</dd>
+      <dt>Location</dt><dd>lift carriage pocket P1</dd></dl></div>
+    <div><h3>Robot</h3><dl>
+      <dt>Lift</dt><dd>ZLW-20120, 1250 mm stroke</dd>
+      <dt>Arms</dt><dd>2 × igus ReBeL, 460 mm apart</dd>
+      <dt>Sliders</dt><dd>660 mm X rail</dd>
+      <dt>Head camera</dt><dd>Gemini 336L, 1.79 m up the stand</dd></dl></div>
+  </div>
+  <p class="caption">Pump sizing: the worst case modelled (cartons jammed at 6 N per side) needs −44 kPa at the pads. The ECBPi still holds about −51 kPa with a 1 L/min leak per pad. A single small on-tool pump (igus SLZ-100) drops to −17 kPa at a 0.5 L/min leak and is not enough. Carton mass, friction and side forces are estimates, not measurements.</p>
+</section>
+
+<section>
+  <h2>Grasp sequence (front mode)</h2>
+  <ol class="steps">
+    <li>The suction tool presses the carton spine about 5 mm past first contact; the pads compress under 1 mm and the loose carton is pushed back about 4.5 mm.</li>
+    <li>Vacuum on, −50 kPa.</li>
+    <li>Pull the carton 100 mm out of the row.</li>
+    <li>Release the vacuum; the suction arm returns home.</li>
+    <li>The gripper approaches from the front and clamps the exposed part of the carton.</li>
+    <li>Extract the carton fully and lift 50 mm.</li>
+  </ol>
+</section>
+
+<section>
+  <h2>Test 1: tools only, real cabinet</h2>
+  <p class="prose">The two tools were moved along set paths without arms, to test only the contact physics (pull, effect on neighbours, clamp, slip). The simulated suction release is enforced by a software monitor set to the calculated pull-off force (pad area × vacuum): it released at 17.2 N against 17.4 N calculated at −50 kPa. This does not model real seal leakage, peeling or carton flex.</p>
+  <p class="prose">Target names: T1–T8 are cartons in the middle of a row; E1 and E2 are cartons at the end of a row (E2 next to the cabinet side wall). Top-down: the gripper takes the carton from above after the pull. Front: it takes it from the front (the method used on the full robot).</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Target</th><th>Shelf</th><th>Carton</th><th>Thickness</th><th>Top-down</th><th>Front</th></tr></thead>
+    <tbody>
+      <tr><td>T1</td><td class="n">1</td><td>Ultimaster</td><td class="n">16 mm</td><td><span class="pill ok">OK</span></td><td><span class="pill ok">OK</span></td></tr>
+      <tr><td>T2</td><td class="n">2</td><td>Accuforce</td><td class="n">16 mm</td><td><span class="pill ok">OK</span></td><td><span class="pill ok">OK</span></td></tr>
+      <tr><td>T3</td><td class="n">3</td><td>Agent</td><td class="n">15 mm</td><td><span class="pill ok">OK</span></td><td><span class="pill ok">OK</span></td></tr>
+      <tr><td>T4</td><td class="n">3</td><td>Conqueror</td><td class="n">12 mm</td><td><span class="pill ok">OK</span></td><td><span class="pill ok">OK</span></td></tr>
+      <tr><td>T5</td><td class="n">4</td><td>Angiolite</td><td class="n">16 mm</td><td><span class="pill ok">OK</span></td><td><span class="pill ok">OK</span></td></tr>
+      <tr><td>T6</td><td class="n">5</td><td>Agent</td><td class="n">15 mm</td><td><span class="pill ok">OK</span></td><td><span class="pill ok">OK</span></td></tr>
+      <tr><td>T7</td><td class="n">6</td><td>Accuforce</td><td class="n">16 mm</td><td><span class="pill ok">OK</span> 150 mm pull</td><td><span class="pill ok">OK</span></td></tr>
+      <tr><td>T8</td><td class="n">6</td><td>Conqueror</td><td class="n">12 mm</td><td><span class="pill ok">OK</span> 150 mm pull</td><td><span class="pill ok">OK</span></td></tr>
+      <tr><td>E1</td><td class="n">3</td><td>Agent, end of group</td><td class="n">15 mm</td><td><span class="pill ok">OK</span></td><td><span class="pill ok">OK</span></td></tr>
+      <tr><td>E2</td><td class="n">6</td><td>Angiolite, next to side wall</td><td class="n">16 mm</td><td><span class="pill bad">FAIL</span></td><td><span class="pill bad">FAIL</span></td></tr>
+    </tbody></table></div>
+  <div class="two">
+    <figure><img src="media/carrier_E2_3q.jpg" alt="Suction tool against the cabinet side wall at target E2" loading="lazy"><figcaption class="caption">E2: the pads hit the cabinet's front trim at the side wall before they reach the carton, then the tool body hits the wall and trim. The carton centre is only 10 mm from the wall face.</figcaption></figure>
+    <div class="prose" style="display:flex;flex-direction:column;gap:12px">
+      <p>On the passing targets the pull is exact (100 mm, follow error ≤ 0.26 mm), neighbours move ≤ 0.1 mm and the carton slips ≤ 0.2 mm on extraction.</p>
+      <p>Front gives 86–125 mm to the shelves above and below. Top-down leaves only 9 mm to the shelf above, and on shelf 6 it needs a 150 mm pull to clear the top panel.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Sensitivity checks</h2>
+  <p class="prose">Target T5 (Angiolite, shelf 4) was repeated with one condition changed at a time, using the front grasp and the tools without arms.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Condition</th><th>Result</th><th>Pull mm</th><th>Neighbour moved mm</th><th>Carton turned °</th><th>Shift when gripper closes mm</th><th>Min gap to neighbour mm</th></tr></thead>
+    <tbody>
+      <tr><td>Baseline (−50 kPa)</td><td><span class="pill ok">OK</span></td><td class="n">100.0</td><td class="n">0.00</td><td class="n">0.06</td><td class="n">0.02</td><td class="n">6.6</td></tr>
+      <tr><td>Weak vacuum, −35 kPa</td><td><span class="pill ok">OK</span></td><td class="n">100.0</td><td class="n">0.00</td><td class="n">0.06</td><td class="n">0.02</td><td class="n">6.6</td></tr>
+      <tr><td>Tightly packed, no gaps</td><td><span class="pill ok">OK</span></td><td class="n">100.0</td><td class="n">0.04</td><td class="n">0.11</td><td class="n">0.01</td><td class="n">5.6</td></tr>
+      <tr><td>Tool 2 mm off-centre</td><td><span class="pill ok">OK</span></td><td class="n">100.0</td><td class="n">0.00</td><td class="n">0.06</td><td class="n">0.03</td><td class="n">4.6</td></tr>
+      <tr><td>Tool turned 3°</td><td><span class="pill bad">FAIL</span></td><td class="n">99.4</td><td class="n">4.43</td><td class="n">1.31</td><td class="n">3.32</td><td class="n">6.4</td></tr>
+    </tbody></table></div>
+  <p class="caption">At T5 the grasp passed each of these single changes: weaker vacuum, tight packing and a 2 mm sideways error. Because the pads carry very little force in these runs, the weaker-vacuum pass says little about real holding. Combined errors were not tested. It does not tolerate angle errors: at 3° the pads twist the carton, the neighbour is dragged 4.4 mm (limit 3 mm) and the gripper then pushes the twisted carton. Only 0° and 3° were tested, so the exact angle limit is not known; measuring the spine angle with the wrist camera before pressing is a proposed fix, not yet tested.</p>
+</section>
+
+<section>
+  <h2>Test 2: full robot</h2>
+  <p class="prose">The robot model (stand, lift and both arms with their tools) was placed in front of the cabinet. For each target, the lift height was chosen so that both arms can do the whole sequence: every point reachable within joint limits, straight-line contact moves, and clearance from the cabinet, the other cartons, the robot's own stand and the other arm. The robot's position in front of the cabinet was also adjusted per shelf group (410–440 mm from the cabinet front, up to 55 mm sideways). Each target was run once; the motions were time-scheduled joint paths, not a camera-driven run.</p>
+
+  <div class="two">
+    <figure>
+      <svg class="elev" viewBox="0 0 360 470" role="img" aria-label="Cabinet elevation to scale with shelf heights; shelves 3 to 6 shaded as reachable">
+        <!-- 200 px per metre; z=0 at y=450 -->
+        <rect x="40" y="18" width="196" height="432" fill="none" stroke="var(--cab)" stroke-width="3"/>
+        <rect x="40" y="18" width="196" height="6" fill="var(--cab)"/>
+        <rect x="43" y="62" width="190" height="240" fill="var(--accent-soft)" stroke="none"/>
+        <g fill="var(--shelf)">
+          <rect x="40" y="416" width="196" height="4"/>
+          <rect x="40" y="352" width="196" height="4"/>
+          <rect x="40" y="302" width="196" height="4"/>
+          <rect x="40" y="246" width="196" height="4"/>
+          <rect x="40" y="180" width="196" height="4"/>
+          <rect x="40" y="118" width="196" height="4"/>
+          <rect x="40" y="58" width="196" height="4"/>
+        </g>
+        <line x1="20" y1="450" x2="340" y2="450" stroke="var(--fg)" stroke-width="1.5"/>
+        <g text-anchor="end">
+          <text x="34" y="420">0.17</text><text x="34" y="356">0.49</text><text x="34" y="306">0.74</text>
+          <text x="34" y="250">1.02</text><text x="34" y="184">1.35</text><text x="34" y="122">1.66</text><text x="34" y="62">1.96</text>
+        </g>
+        <g>
+          <text class="lab" x="246" y="400">S1</text><text x="268" y="400" fill="var(--bad)" style="fill:var(--bad)">no reach</text>
+          <text class="lab" x="246" y="340">S2</text><text x="268" y="340" style="fill:var(--bad)">no reach</text>
+          <text class="lab" x="246" y="288">S3</text><text x="268" y="288" style="fill:var(--ok)">OK</text>
+          <text class="lab" x="246" y="225">S4</text><text x="268" y="225" style="fill:var(--ok)">OK</text>
+          <text class="lab" x="246" y="160">S5</text><text x="268" y="160" style="fill:var(--ok)">OK</text>
+          <text class="lab" x="246" y="98">S6</text><text x="246" y="50">top panel</text><text x="268" y="98" style="fill:var(--ok)">OK</text>
+        </g>
+        <text x="40" y="466">floor · heights in m · shelf floor tops</text>
+      </svg>
+      <figcaption class="caption">Cabinet elevation to scale (2.16 m tall, 0.98 m inside width). The shaded band marks the shelves the robot can reach (3–6). Labels give the result per shelf.</figcaption>
+    </figure>
+    <div class="tablewrap" style="align-self:start"><table>
+      <thead><tr><th>Target</th><th>Shelf</th><th>Result</th><th>Lift</th></tr></thead>
+      <tbody>
+        <tr><td>T1</td><td class="n">1</td><td><span class="pill bad">not reachable</span></td><td class="n">–</td></tr>
+        <tr><td>T2</td><td class="n">2</td><td><span class="pill bad">not reachable</span></td><td class="n">–</td></tr>
+        <tr><td>T3</td><td class="n">3</td><td><span class="pill ok">reachable</span></td><td class="n">24</td></tr>
+        <tr><td>T4</td><td class="n">3</td><td><span class="pill ok">reachable</span></td><td class="n">24</td></tr>
+        <tr><td>E1</td><td class="n">3</td><td><span class="pill ok">reachable</span></td><td class="n">24</td></tr>
+        <tr><td>T5</td><td class="n">4</td><td><span class="pill ok">reachable</span></td><td class="n">164</td></tr>
+        <tr><td>T6</td><td class="n">5</td><td><span class="pill ok">reachable</span></td><td class="n">414</td></tr>
+        <tr><td>T7</td><td class="n">6</td><td><span class="pill ok">reachable</span></td><td class="n">714</td></tr>
+        <tr><td>T8</td><td class="n">6</td><td><span class="pill ok">reachable</span></td><td class="n">724</td></tr>
+        <tr><td>E2</td><td class="n">6</td><td><span class="pill bad">not reachable</span></td><td class="n">–</td></tr>
+      </tbody></table></div>
+  </div>
+  <p class="caption">Lift: height above the lift's lowest position, mm (stroke 1250 mm). The arm sliders stay at their home position.</p>
+
+  <h3>Grasp results on the full robot (front mode)</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Target</th><th>Result</th><th>Pull mm</th><th>Neighbour mm</th><th>Slip mm</th><th>Carton raised mm</th><th>Rotation °</th><th>Min clearance mm</th></tr></thead>
+    <tbody>
+      <tr><td>T3</td><td><span class="pill ok">OK</span></td><td class="n">100.6</td><td class="n">0.58</td><td class="n">0.10</td><td class="n">50.0</td><td class="n">0.15</td><td class="n">6.0</td></tr>
+      <tr><td>T4</td><td><span class="pill ok">OK</span></td><td class="n">100.6</td><td class="n">0.10</td><td class="n">0.09</td><td class="n">50.2</td><td class="n">0.16</td><td class="n">4.5</td></tr>
+      <tr><td>T5</td><td><span class="pill ok">OK</span></td><td class="n">99.9</td><td class="n">0.38</td><td class="n">0.29</td><td class="n">49.8</td><td class="n">0.24</td><td class="n">6.6</td></tr>
+      <tr><td>T6</td><td><span class="pill ok">OK</span></td><td class="n">99.9</td><td class="n">0.45</td><td class="n">0.08</td><td class="n">50.2</td><td class="n">0.22</td><td class="n">6.1</td></tr>
+      <tr><td>T7</td><td><span class="pill ok">OK</span></td><td class="n">99.8</td><td class="n">0.64</td><td class="n">0.03</td><td class="n">50.2</td><td class="n">0.24</td><td class="n">6.6</td></tr>
+      <tr><td>T8</td><td><span class="pill ok">OK</span></td><td class="n">99.9</td><td class="n">0.57</td><td class="n">0.10</td><td class="n">50.2</td><td class="n">0.24</td><td class="n">4.6</td></tr>
+      <tr><td>E1</td><td><span class="pill ok">OK</span></td><td class="n">99.9</td><td class="n">1.30</td><td class="n">0.19</td><td class="n">50.1</td><td class="n">0.19</td><td class="n">6.0</td></tr>
+    </tbody></table></div>
+  <p class="caption">Min clearance is suction tool to neighbouring carton during the press. Arm joint tracking error ≤ 38.5 mrad; joint effort ≤ 15 % of the limit; no robot–cabinet contact. Separately, MoveIt planned the T3 and T8 sequences successfully (plan only, no execution).</p>
+
+  <figure>
+    <video src="media/front_T5_tiled.mp4" controls muted playsinline preload="metadata" poster="media/front_T5_tiled.jpg"></video>
+    <figcaption class="caption">T5, shelf 4: front-left view (large), side close-up and head camera.</figcaption>
+  </figure>
+  <div class="two">
+    <figure><img src="media/front_T3_3q.jpg" alt="Robot picking from shelf 3 with the lift near its lowest" loading="lazy"><figcaption class="caption">T3, shelf 3: the lowest reachable shelf. The lift is about 24 mm above its lower limit.</figcaption></figure>
+    <figure><img src="media/front_T8_side.jpg" alt="Side close-up of the gripper on shelf 6" loading="lazy"><figcaption class="caption">T8, shelf 6: the thinnest carton (12 mm), pulled out by the suction tool, with the gripper arm moving in.</figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <h2>Shelves 1 and 2: closest attempt</h2>
+  <p class="prose">With the robot 410 mm in front of the cabinet, the lift at its lowest position and the sliders at home, each arm was moved as close to its target pose as it can get under relaxed clearance checks. Gaps are tool point minus target; "above" means the tool stops higher than the target.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Target</th><th>Arm</th><th>Gap</th><th>Vertical</th><th>Depth</th><th>Sideways</th><th>Angle</th><th>Blocked by</th></tr></thead>
+    <tbody>
+      <tr><td>T1 · shelf 1</td><td>Suction</td><td class="n">195 mm</td><td class="n">150 above</td><td class="n">117 short</td><td class="n">46</td><td class="n">41°</td><td><span class="pill bad">joint 2 at 139° limit</span></td></tr>
+      <tr><td>T1 · shelf 1</td><td>Gripper</td><td class="n">116 mm</td><td class="n">97 above</td><td class="n">56 short</td><td class="n">29</td><td class="n">43°</td><td><span class="pill bad">joint 2 at 139° limit</span></td></tr>
+      <tr><td>T2 · shelf 2</td><td>Suction</td><td class="n">24 mm</td><td class="n">15 above</td><td class="n">18 short</td><td class="n">6</td><td class="n">13°</td><td><span class="pill bad">tool hits neighbouring cartons</span></td></tr>
+      <tr><td>T2 · shelf 2</td><td>Gripper</td><td class="n">0 mm</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">0°</td><td><span class="pill ok">reaches</span></td></tr>
+    </tbody></table></div>
+  <div class="two">
+    <figure>
+      <video src="media/front_T1_closest_tiled.mp4" controls muted playsinline preload="metadata" poster="media/front_T1_closest_tiled.jpg"></video>
+      <figcaption class="caption">T1, shelf 1: the suction pad stops 195 mm from the press point with the shoulder joint at its limit. The red bar marks the gap.</figcaption>
+    </figure>
+    <figure><img src="media/front_T2_closest_tiled.jpg" alt="Suction tool stopping just short of a shelf 2 carton" loading="lazy"><figcaption class="caption">T2, shelf 2: the suction tool gets within 24 mm but meets the neighbouring cartons at a 13° angle.</figcaption></figure>
+  </div>
+  <ul class="steps">
+    <li><b>Shelf 1 is far out of reach.</b> Both arms run out of shoulder travel 10–15 cm above the carton.</li>
+    <li><b>Shelf 2 is a near miss.</b> The gripper arm reaches; the suction arm cannot get square to the spine. The path from home is also blocked: at the start pose the wrist links come within 2–7 mm of the stand and lift, and the direct path down from home hits the cartons on shelf 5.</li>
+    <li><b>What-if, lower lift:</b> shelf 2 becomes reachable if the lift's lower limit is 250 mm lower (robot 360–460 mm from the cabinet). Shelf 1 stays unreachable even at 800 mm lower. This is a what-if on the lift range only; whether the stand can be built that low was not checked.</li>
+  </ul>
+  <p class="caption">These closest poses were accepted down to 1.5 mm clearance (the shelf 2 suction pose has 2.0 mm), instead of the 15 mm arm-to-cabinet and 3 mm tool-to-carton clearances used elsewhere. In the simulation the T1 gripper finger touches the cabinet and a T2 pad rests on a neighbour at the stop pose. Approach paths were checked in the study model only, not in MoveIt.</p>
+</section>
+
+<section>
+  <h2>Tool and pump designs</h2>
+  <p class="prose">Drag to rotate, scroll to zoom, right-drag to pan. Models are in the tool flange frame (link6); the grid is 10 mm.</p>
+  <div class="viewers">
+    <figure class="viewer">
+      <div class="vbox" id="v-suction"><span class="vmsg">Loading 3D model…</span></div>
+      <figcaption><div><b>Suction tool v5</b> · left arm</div><span class="caption">3 × ZP2 pads on a 60 mm pitch, Gemini 305 beside the pad row, one printed PA12-CF body. 0.204 kg.</span>
+        <div class="legend" id="lg-suction"></div></figcaption>
+    </figure>
+    <figure class="viewer">
+      <div class="vbox" id="v-gripper"><span class="vmsg">Loading 3D model…</span></div>
+      <figcaption><div><b>Gripper</b> · right arm</div><span class="caption">SMC LEHF20K2-48 with custom fingers and a top stop, 24.3 N per finger nominal (±25 %).</span>
+        <label class="slider" for="finger-open">Finger opening <output id="finger-out">24 mm</output>
+          <input type="range" id="finger-open" min="0" max="24" step="0.5" value="12"></label>
+        <div class="legend" id="lg-gripper"></div></figcaption>
+    </figure>
+    <figure class="viewer">
+      <div class="vbox" id="v-pump"><span class="vmsg">Loading 3D model…</span></div>
+      <figcaption><div><b>Vacuum pump</b> · Schmalz ECBPi 12 24V-DC</div><span class="caption">Simplified shape from the datasheet drawing: rounded-triangle body 151.5 mm across, Ø76 mm collar, 88.6 mm tall, 0.775 kg. Not the Schmalz CAD. Integrated sensor, vent valve and IO-Link; M12-8 connector.</span>
+        <div class="legend"><span><i style="background:#c9ced6"></i>Housing</span><span><i style="background:#2b6fd6"></i>Ø76 collar</span><span><i style="background:#2b2f36"></i>M12 connector</span></div></figcaption>
+    </figure>
+  </div>
+  <div class="two">
+    <figure><img src="media/pump_location_P1.png" alt="Pump box location P1 in the lift carriage bracket pocket" loading="lazy"><figcaption class="caption">Pump location P1: the pocket in the lift carriage bracket, under the X rail. The pump moves with the lift, so no drag chain is needed. The box shown is the 110 × 200 × 100 mm search envelope. The ECBPi body is 151.5 mm across and 88.6 mm tall, so it should fit the 194 mm wide pocket lying flat, but not across the search box's 110 mm side; confirm with the Schmalz CAD. Tube to the suction tool about 1.6 m, Ø4.</figcaption></figure>
+    <div class="prose" style="display:flex;flex-direction:column;gap:12px">
+      <h3>Why this pump (preferred, pending tests)</h3>
+      <p>The ECBPi is a 24 V electric vacuum generator with the vacuum sensor, the vent (release) valve and part-present output built in, so no extra valve block or sensor is needed. It draws 0.6 A at 24 V.</p>
+      <p>There is no room for it on the platform beside the stand, and on the tool it would add 0.775 kg at the wrist, so it goes on the lift carriage. Fallback if more flow is needed: 2 × Thomas 1520VDP BLDC.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Pump comparison</h2>
+  <p class="prose">Five vacuum sources were simulated with the 3 suction pads, the tube from the pump to the tool, and air leaking past each pad. Leakage depends on the carton surface and is not measured yet, so the question is how much leak each pump can tolerate before the vacuum drops below what the pull needs.</p>
+  <figure><img src="media/pump_vacuum_vs_leak.png" alt="Line chart of the vacuum each pump holds at the pads versus leakage per pad, with the vacuum needed for loose, packed, tight and jammed cartons" loading="lazy"><figcaption class="caption">Vacuum each pump holds at the pads versus air leaking past each pad. Dashed lines: vacuum needed to pull the carton for four packing cases (safety factor 2). A pump is good enough for a case as long as its curve stays above that line.</figcaption></figure>
+  <h3>Vacuum needed to pull one carton</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Packing case</th><th>Side force per face</th><th>Pull force</th><th>Most loaded pad</th><th>Vacuum needed</th></tr></thead>
+    <tbody>
+      <tr><td>Loose</td><td class="n">0 N</td><td class="n">0.9 N</td><td class="n">1.0 N</td><td class="n">17 kPa</td></tr>
+      <tr><td>Packed</td><td class="n">1 N</td><td class="n">1.7 N</td><td class="n">1.2 N</td><td class="n">21 kPa</td></tr>
+      <tr><td>Tight</td><td class="n">3 N</td><td class="n">3.3 N</td><td class="n">1.8 N</td><td class="n">31 kPa</td></tr>
+      <tr><td>Jammed</td><td class="n">6 N</td><td class="n">5.7 N</td><td class="n">2.6 N</td><td class="n">44 kPa</td></tr>
+    </tbody></table></div>
+  <h3>Largest leak per pad each pump tolerates</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Pump</th><th>Where</th><th>Free flow</th><th>Max vacuum</th><th>Power</th><th>Mass</th><th>Loose</th><th>Packed</th><th>Tight</th><th>Jammed</th></tr></thead>
+    <tbody>
+      <tr><td>igus SLZ-100 (Schmalz ECBPMi)</td><td>on tool</td><td class="n">1.6 L/min</td><td class="n">60 kPa</td><td class="n">7 W</td><td class="n">–</td><td class="n">0.50</td><td class="n">0.40</td><td class="n">0.25</td><td class="n">0.11</td></tr>
+      <tr class="pick"><td><b>Schmalz ECBPi 12 (preferred)</b></td><td>stand P1</td><td class="n">12 L/min</td><td class="n">75 kPa</td><td class="n">13 W</td><td class="n">0.78 kg</td><td class="n">3.98</td><td class="n">3.30</td><td class="n">2.37</td><td class="n">1.36</td></tr>
+      <tr><td>1 × Thomas 1520VDP BLDC</td><td>stand</td><td class="n">16 L/min</td><td class="n">80 kPa</td><td class="n">31 W</td><td class="n">0.42 kg</td><td class="n">5.31</td><td class="n">4.44</td><td class="n">3.23</td><td class="n">2.01</td></tr>
+      <tr><td>2 × Thomas 1520VDP BLDC</td><td>stand</td><td class="n">32 L/min</td><td class="n">80 kPa</td><td class="n">62 W</td><td class="n">0.84 kg</td><td class="n">9.52</td><td class="n">7.97</td><td class="n">5.81</td><td class="n">3.60</td></tr>
+      <tr><td>KNF N 838 KN.29DC-B</td><td>stand</td><td class="n">34 L/min</td><td class="n">90 kPa</td><td class="n">55 W</td><td class="n">1.9 kg</td><td class="n">10.43</td><td class="n">8.82</td><td class="n">6.63</td><td class="n">4.42</td></tr>
+    </tbody></table></div>
+  <p class="caption">Leak values in L/min per pad. The ECBPi evacuates the pads in 0.05–0.18 s (at half the leak it tolerates in each case) and has the sensor, vent valve and part-present output built in. The on-tool SLZ-100 only works if the pads hardly leak. Assumptions: carton 0.15 kg, floor friction 0.5, side friction 0.4, pull acceleration 1 m/s², safety factor 2, pad area 1.16 cm², choked leak model (ISO 6358, b = 0.5), Ø4 tube 1.6 m from the stand (0.15 m for the on-tool pump), no filter or valve losses. Only the KNF curve is published; the other curves use the KNF shape scaled to each pump's rated flow and vacuum. Side forces between cartons are estimates and dominate the result.</p>
+</section>
+
+<section>
+  <h2>Pump placement on the stand</h2>
+  <p class="prose">The team reports no room for the pump on the platform beside the stand, so six spots on the stand were ranked for a 110 × 200 × 100 mm box (room for the pump, valve and wiring) with at least 10 mm clearance over the full lift stroke and slider travel.</p>
+  <figure><img src="media/pump_candidates.png" alt="Stand with the candidate pump box locations highlighted" loading="lazy"><figcaption class="caption">Candidate locations on the stand.</figcaption></figure>
+  <div class="tablewrap"><table class="placement">
+    <thead><tr><th>Rank</th><th>In image</th><th>Location</th><th>Moves with</th><th>Tube to tool</th><th>Search-box clearance</th><th>Issue</th></tr></thead>
+    <tbody>
+      <tr class="pick"><td>1</td><td>P1</td><td><b>Bracket pocket on the lift carriage (preferred)</b></td><td>lift</td><td class="n">1.58 m</td><td class="n">24.9 mm</td><td>None; mounts to the 8 mm bracket floor plate</td></tr>
+      <tr><td>2</td><td>P2</td><td>Same pocket, under the rail shelf, lying</td><td>lift</td><td class="n">1.43 m</td><td class="n">12.8 mm</td><td>Front edge 33 mm past the shelf</td></tr>
+      <tr><td>3</td><td>–</td><td>Beside the bracket on the carriage</td><td>lift</td><td class="n">1.42 m</td><td class="n">12.1 mm</td><td>Needs an extra L-bracket</td></tr>
+      <tr><td>4</td><td>P3</td><td>Under the rail on the arm's slider</td><td>lift + slider</td><td class="n">1.38 m</td><td class="n">13.0 mm</td><td>Cantilevered, nothing solid to mount to</td></tr>
+      <tr><td>5</td><td>P4</td><td>Column side face, under the lift</td><td>fixed</td><td class="n">up to 2.26 m</td><td class="n">14.7 mm</td><td>Arms can reach it; needs a drag chain</td></tr>
+      <tr><td>6</td><td>P5</td><td>Column wing front face, base</td><td>fixed</td><td class="n">up to 2.71 m</td><td class="n">12.1 mm</td><td>Long tube, needs a drag chain</td></tr>
+    </tbody></table></div>
+  <p class="caption">P1 travels with the lift, so the tube does not have to absorb the 1250 mm stroke. Not yet checked: the lift carriage payload with the pump, heat in the pocket, and 24 V supply on the carriage.</p>
+</section>
+
+<section>
+  <h2>Highlight reel</h2>
+  <figure>
+    <video src="media/highlights_robot.mp4" controls muted playsinline preload="metadata" poster="media/front_T5_tiled.jpg"></video>
+    <figcaption class="caption">Full robot, front grasp, shelves 3–6 (T3 to T8): front-left view with the side close-up and the stand head camera. </figcaption>
+  </figure>
+</section>
+
+</div>
+
+<script src="vendor/three.min.js"></script>
+<script src="vendor/OrbitControls.js"></script>
+<script src="media/models.js"></script>
+<script>
+(function () {
+  function fail(id, msg) { var el = document.getElementById(id); if (el) el.querySelector('.vmsg').textContent = msg; }
+  if (!window.THREE || !window.MODELS) {
+    ['v-suction', 'v-gripper', 'v-pump'].forEach(function (id) { fail(id, 'The 3D viewer needs the vendor/ and media/ folders next to this file.'); });
+    return;
+  }
+  var dark = function () { return false; };   // the report is light mode only
+  function b64(s, T) { var b = atob(s), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return new T(u.buffer); }
+  function mesh(part) {
+    var g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(b64(part.pos, Float32Array), 3));
+    g.setIndex(new THREE.BufferAttribute(b64(part.idx, Uint32Array), 1));
+    var ng = g.toNonIndexed(); ng.computeVertexNormals();
+    return new THREE.Mesh(ng, new THREE.MeshStandardMaterial({ color: part.color, roughness: 0.6, metalness: 0.1 }));
+  }
+  function legend(id, parts) {
+    var seen = {}, el = document.getElementById(id); if (!el) return;
+    parts.forEach(function (p) {
+      if (seen[p.label]) return; seen[p.label] = 1;
+      var s = document.createElement('span'), i = document.createElement('i');
+      i.style.background = p.color; s.appendChild(i); s.appendChild(document.createTextNode(p.label)); el.appendChild(s);
+    });
+  }
+  var viewers = [];
+  function viewer(id, build) {
+    var box = document.getElementById(id);
+    var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    box.innerHTML = ''; box.appendChild(renderer.domElement);
+    var scene = new THREE.Scene();
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 0.9));
+    var d1 = new THREE.DirectionalLight(0xffffff, 0.8); d1.position.set(0.3, 0.5, 0.4); scene.add(d1);
+    var d2 = new THREE.DirectionalLight(0xffffff, 0.35); d2.position.set(-0.4, 0.2, -0.3); scene.add(d2);
+    var root = new THREE.Group(); root.rotation.x = -Math.PI / 2; scene.add(root);   // tool z (approach) points up the screen
+    var api = build(root) || {};
+    var bb = new THREE.Box3().setFromObject(root), c = bb.getCenter(new THREE.Vector3()), r = bb.getSize(new THREE.Vector3()).length() / 2;
+    var grid = new THREE.GridHelper(0.3, 30); grid.position.y = bb.min.y - 0.002; scene.add(grid);
+    var cam = new THREE.PerspectiveCamera(35, 1, 0.001, 10);
+    cam.position.set(c.x + r * 2.2, c.y + r * 1.4, c.z + r * 2.6);
+    var ctl = new THREE.OrbitControls(cam, renderer.domElement); ctl.target.copy(c); ctl.enableDamping = true; ctl.update();
+    function theme() { var dk = dark(); grid.material.color.set(dk ? 0x3a4554 : 0xc9d0da); grid.material.opacity = 0.8; grid.material.transparent = true; }
+    function size() { var w = box.clientWidth, h = box.clientHeight || w; renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); }
+    theme(); size();
+    var v = { size: size, theme: theme, frame: function () { ctl.update(); renderer.render(scene, cam); }, api: api };
+    viewers.push(v); return v;
+  }
+  var M = window.MODELS;
+  viewer('v-suction', function (root) { M.suction.forEach(function (p) { root.add(mesh(p)); }); });
+  legend('lg-suction', M.suction);
+  var g = viewer('v-gripper', function (root) {
+    M.gripper_base.forEach(function (p) { root.add(mesh(p)); });
+    var fl = new THREE.Group(), fr = new THREE.Group();
+    fl.position.z = fr.position.z = M.finger_joint_z;
+    M.finger_left.forEach(function (p) { fl.add(mesh(p)); });
+    M.finger_right.forEach(function (p) { fr.add(mesh(p)); });
+    root.add(fl); root.add(fr);
+    return { set: function (q) { fl.position.x = -q; fr.position.x = q; } };   // URDF axes: left -x, right +x
+  });
+  legend('lg-gripper', M.gripper_base.concat(M.finger_left));
+  var sl = document.getElementById('finger-open'), out = document.getElementById('finger-out');
+  function setFinger() { var q = parseFloat(sl.value) / 1000; g.api.set(q); out.textContent = sl.value + ' mm per finger'; }
+  sl.addEventListener('input', setFinger); setFinger();
+  viewer('v-pump', function (root) {   // simplified ECBPi 12 from the datasheet drawing: rounded-triangle body 151.5 mm across, collar D2 76 mm, total height L 88.6 mm (split body/collar assumed)
+    var mat = function (c) { return new THREE.MeshStandardMaterial({ color: c, roughness: 0.55, metalness: 0.15 }); };
+    var R = 0.15150 / 2, sh = new THREE.Shape();
+    for (var i = 0; i <= 120; i++) {
+      var t = i / 120 * Math.PI * 2, r = R * (0.875 + 0.125 * Math.cos(3 * t));
+      if (i === 0) sh.moveTo(r * Math.cos(t), r * Math.sin(t)); else sh.lineTo(r * Math.cos(t), r * Math.sin(t));
+    }
+    var body = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: 0.0666, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 3 }), mat('#c9ced6'));
+    body.position.z = 0.004; root.add(body);
+    var col = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.038, 0.014, 48), mat('#2b6fd6'));
+    col.rotation.x = Math.PI / 2; col.position.z = 0.0816; root.add(col);
+    var con = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.022, 24), mat('#2b2f36'));
+    con.rotation.z = Math.PI / 2; con.position.set(-0.066, 0, 0.04); root.add(con);
+  });
+  function loop() { viewers.forEach(function (v) { v.frame(); }); requestAnimationFrame(loop); }
+  window.addEventListener('resize', function () { viewers.forEach(function (v) { v.size(); }); });
+  loop();
+})();
+</script>
+</body>
+</html>

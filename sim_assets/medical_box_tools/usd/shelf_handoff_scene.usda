@@ -1,0 +1,401 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    kilogramsPerUnit = 1
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "World" (
+    assetInfo = {
+        string name = "World"
+        string version = "2.0.0"
+    }
+    customData = {
+        string generator_version = "2.0.0"
+        int[] sequence = [1, 2, 3, 4, 5, 1, 2, 3]
+        string source = "cad/medical_box_tooling_v1/common/{handoff,params}.py + sim_assets/medical_boxes/usd"
+        int target_index = 2
+    }
+    doc = "Shelf handoff demo. Frame W: origin floor / front edge below the target carton, +X along the shelf, +Y into the shelf, +Z up (metres). Cartons stand like books, spine toward -Y; tools are kinematic."
+    kind = "assembly"
+)
+{
+    def PhysicsScene "PhysicsScene"
+    {
+        vector3f physics:gravityDirection = (0, 0, -1)
+        float physics:gravityMagnitude = 9.81
+    }
+
+    def Scope "Looks"
+    {
+        def Material "shelf_grey"
+        {
+            token outputs:surface.connect = </World/Looks/shelf_grey/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.78, 0.78, 0.8)
+                float inputs:metallic = 0
+                float inputs:roughness = 0.8
+                token outputs:surface
+            }
+        }
+
+        def Material "ground"
+        {
+            token outputs:surface.connect = </World/Looks/ground/Surface.outputs:surface>
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.35, 0.37, 0.4)
+                float inputs:metallic = 0
+                float inputs:roughness = 0.9
+                token outputs:surface
+            }
+        }
+
+        def Material "shelf_physics" (
+            prepend apiSchemas = ["PhysicsMaterialAPI"]
+        )
+        {
+            float physics:dynamicFriction = 0.4
+            float physics:restitution = 0
+            float physics:staticFriction = 0.5
+        }
+    }
+
+    def Xform "Shelf"
+    {
+        def Cube "floor_board" (
+            prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI"]
+        )
+        {
+            rel material:binding = </World/Looks/shelf_grey>
+            rel material:binding:physics = </World/Looks/shelf_physics> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+            color3f[] primvars:displayColor = [(0.8, 0.8, 0.82)]
+            double size = 1
+            float3 xformOp:scale = (0.438, 0.338, 0.018)
+            double3 xformOp:translate = (0.021999999999999992, 0.16, -0.009)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        }
+
+        def Cube "back_board" (
+            prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI"]
+        )
+        {
+            rel material:binding = </World/Looks/shelf_grey>
+            rel material:binding:physics = </World/Looks/shelf_physics> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+            color3f[] primvars:displayColor = [(0.8, 0.8, 0.82)]
+            double size = 1
+            float3 xformOp:scale = (0.438, 0.018, 0.318)
+            double3 xformOp:translate = (0.021999999999999992, 0.329, 0.159)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        }
+
+        def Cube "side_left" (
+            prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI"]
+        )
+        {
+            rel material:binding = </World/Looks/shelf_grey>
+            rel material:binding:physics = </World/Looks/shelf_physics> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+            color3f[] primvars:displayColor = [(0.8, 0.8, 0.82)]
+            double size = 1
+            float3 xformOp:scale = (0.018, 0.32, 0.318)
+            double3 xformOp:translate = (-0.18800000000000003, 0.16, 0.159)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        }
+
+        def Cube "side_right" (
+            prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI"]
+        )
+        {
+            rel material:binding = </World/Looks/shelf_grey>
+            rel material:binding:physics = </World/Looks/shelf_physics> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+            color3f[] primvars:displayColor = [(0.8, 0.8, 0.82)]
+            double size = 1
+            float3 xformOp:scale = (0.018, 0.32, 0.318)
+            double3 xformOp:translate = (0.232, 0.16, 0.159)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        }
+
+        def Cube "upper_board" (
+            prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI"]
+        )
+        {
+            rel material:binding = </World/Looks/shelf_grey>
+            rel material:binding:physics = </World/Looks/shelf_physics> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+            color3f[] primvars:displayColor = [(0.8, 0.8, 0.82)]
+            double size = 1
+            float3 xformOp:scale = (0.438, 0.32, 0.018)
+            double3 xformOp:translate = (0.021999999999999992, 0.16, 0.309)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        }
+    }
+
+    def Xform "Ground"
+    {
+        def Cube "slab" (
+            prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI"]
+        )
+        {
+            rel material:binding = </World/Looks/ground>
+            rel material:binding:physics = </World/Looks/shelf_physics> (
+                bindMaterialAs = "weakerThanDescendants"
+            )
+            color3f[] primvars:displayColor = [(0.35, 0.37, 0.4)]
+            double size = 1
+            float3 xformOp:scale = (6, 6, 0.1)
+            double3 xformOp:translate = (0.021999999999999992, 0.4, -0.068)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        }
+    }
+
+    def Xform "Cartons"
+    {
+        def Xform "carton_0_agent_monorail" (
+            customData = {
+                int box_id = 1
+                bool is_target = 0
+            }
+            prepend references = @../../medical_boxes/usd/agent_monorail.usda@
+        )
+        {
+            matrix4d xformOp:transform = ( (0, 0, 1, 0), (0, -1, 0, 0), (1, 0, 0, 0), (-0.0315, 0.125, 0.115, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        def Xform "carton_1_angiolite" (
+            customData = {
+                int box_id = 2
+                bool is_target = 0
+            }
+            prepend references = @../../medical_boxes/usd/angiolite.usda@
+        )
+        {
+            matrix4d xformOp:transform = ( (0, 0, 1, 0), (0, -1, 0, 0), (1, 0, 0, 0), (-0.016, 0.125, 0.12, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        def Xform "carton_2_accuforce" (
+            customData = {
+                int box_id = 3
+                bool is_target = 1
+            }
+            prepend references = @../../medical_boxes/usd/accuforce.usda@
+        )
+        {
+            matrix4d xformOp:transform = ( (0, 0, 1, 0), (0, -1, 0, 0), (1, 0, 0, 0), (0, 0.024999999999999994, 0.11, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        def Xform "carton_3_ultimaster_nagomi" (
+            customData = {
+                int box_id = 4
+                bool is_target = 0
+            }
+            prepend references = @../../medical_boxes/usd/ultimaster_nagomi.usda@
+        )
+        {
+            matrix4d xformOp:transform = ( (0, 0, 1, 0), (0, -1, 0, 0), (1, 0, 0, 0), (0.016, 0.1475, 0.125, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        def Xform "carton_4_conqueror_nc_pro" (
+            customData = {
+                int box_id = 5
+                bool is_target = 0
+            }
+            prepend references = @../../medical_boxes/usd/conqueror_nc_pro.usda@
+        )
+        {
+            matrix4d xformOp:transform = ( (0, 0, 1, 0), (0, -1, 0, 0), (1, 0, 0, 0), (0.030000000000000006, 0.125, 0.115, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        def Xform "carton_5_agent_monorail" (
+            customData = {
+                int box_id = 1
+                bool is_target = 0
+            }
+            prepend references = @../../medical_boxes/usd/agent_monorail.usda@
+        )
+        {
+            matrix4d xformOp:transform = ( (0, 0, 1, 0), (0, -1, 0, 0), (1, 0, 0, 0), (0.04349999999999999, 0.125, 0.115, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        def Xform "carton_6_angiolite" (
+            customData = {
+                int box_id = 2
+                bool is_target = 0
+            }
+            prepend references = @../../medical_boxes/usd/angiolite.usda@
+        )
+        {
+            matrix4d xformOp:transform = ( (0, 0, 1, 0), (0, -1, 0, 0), (1, 0, 0, 0), (0.059000000000000004, 0.125, 0.12, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        def Xform "carton_7_accuforce" (
+            customData = {
+                int box_id = 3
+                bool is_target = 0
+            }
+            prepend references = @../../medical_boxes/usd/accuforce.usda@
+        )
+        {
+            matrix4d xformOp:transform = ( (0, 0, 1, 0), (0, -1, 0, 0), (1, 0, 0, 0), (0.07499999999999998, 0.125, 0.11, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+    }
+
+    def Xform "Tools"
+    {
+        def Xform "left_suction_tool" (
+            delete apiSchemas = ["PhysicsArticulationRootAPI"]
+            prepend references = @./left_suction_tool.usda@
+        )
+        {
+            matrix4d xformOp:transform = ( (0, 0, 1, 0), (1, 0, 0, 0), (0, 1, 0, 0), (0, -0.254, 0.11, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+
+            over "base" (
+                prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI"]
+            )
+            {
+                bool physics:kinematicEnabled = 1
+                custom bool physxRigidBody:disableGravity = 1
+            }
+
+            over "pad_1" (
+                prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI"]
+            )
+            {
+                bool physics:kinematicEnabled = 1
+                custom bool physxRigidBody:disableGravity = 1
+                matrix4d xformOp:transform = ( (1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (0, 0, -0.005, 1) )
+                uniform token[] xformOpOrder = ["xformOp:transform"]
+            }
+
+            over "pad_2" (
+                prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI"]
+            )
+            {
+                bool physics:kinematicEnabled = 1
+                custom bool physxRigidBody:disableGravity = 1
+                matrix4d xformOp:transform = ( (1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (0, 0, -0.005, 1) )
+                uniform token[] xformOpOrder = ["xformOp:transform"]
+            }
+
+            over "pad_3" (
+                prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI"]
+            )
+            {
+                bool physics:kinematicEnabled = 1
+                custom bool physxRigidBody:disableGravity = 1
+                matrix4d xformOp:transform = ( (1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (0, 0, -0.005, 1) )
+                uniform token[] xformOpOrder = ["xformOp:transform"]
+            }
+
+            over "joints" (
+                active = false
+            )
+            {
+            }
+
+            over "surface_gripper_joints" (
+                active = false
+            )
+            {
+            }
+
+            over "surface_gripper" (
+                active = false
+            )
+            {
+            }
+        }
+
+        def Xform "right_gripper_tool" (
+            delete apiSchemas = ["PhysicsArticulationRootAPI"]
+            prepend references = @./right_gripper_tool_independent.usda@
+        )
+        {
+            matrix4d xformOp:transform = ( (1, 0, 0, 0), (0, -1, 0, 0), (0, 0, -1, 0), (0, -0.0575, 0.3915, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+
+            over "base" (
+                prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI"]
+            )
+            {
+                bool physics:kinematicEnabled = 1
+                custom bool physxRigidBody:disableGravity = 1
+            }
+
+            over "finger_left" (
+                prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI"]
+            )
+            {
+                bool physics:kinematicEnabled = 1
+                custom bool physxRigidBody:disableGravity = 1
+                matrix4d xformOp:transform = ( (1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (-0.004, 0, 0.15, 1) )
+                uniform token[] xformOpOrder = ["xformOp:transform"]
+            }
+
+            over "finger_right" (
+                prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI"]
+            )
+            {
+                bool physics:kinematicEnabled = 1
+                custom bool physxRigidBody:disableGravity = 1
+                matrix4d xformOp:transform = ( (1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (0.004, 0, 0.15, 1) )
+                uniform token[] xformOpOrder = ["xformOp:transform"]
+            }
+
+            over "joints"
+            {
+                over "world_anchor" (
+                    active = false
+                )
+                {
+                }
+
+                over "finger_left_joint" (
+                    active = false
+                )
+                {
+                }
+
+                over "finger_right_joint" (
+                    active = false
+                )
+                {
+                }
+            }
+        }
+    }
+
+    def Camera "Camera"
+    {
+        float2 clippingRange = (0.01, 100)
+        float focalLength = 18
+        float horizontalAperture = 20.955
+        float verticalAperture = 15.2908
+        matrix4d xformOp:transform = ( (0.7866117519855085, 0.6174479343542163, -0, 0), (-0.21104229278687178, 0.26886209902985037, 0.939773548446924, 0), (0.5802612362492854, -0.7392369174134732, 0.34179771450300367, 0), (0.75, -0.95, 0.6, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+    }
+}
+

@@ -1,0 +1,47 @@
+[
+ {
+  "part": "carrier",
+  "volume_cm3": 108.19323292112078,
+  "mass_g": 75.57297319540287,
+  "bbox_mm": [
+   -72.00000010000002,
+   72.00000010000002,
+   -43.000000100000136,
+   28.008703003977207,
+   52.69129699602279,
+   133.50372991599022
+  ],
+  "watertight": true,
+  "orient": "flange face (z = 52.7, floor underside) down on the bed, ribs vertical; supports only inside the bracket hex pockets (bridged) and under the bracket overhang ends"
+ },
+ {
+  "part": "camera_arm",
+  "volume_cm3": 42.59053704655924,
+  "mass_g": 29.749490127021634,
+  "bbox_mm": [
+   -44.00000010000003,
+   36.00000010000002,
+   11.999471509401374,
+   86.59688505535817,
+   67.39253964136229,
+   104.28427188795344
+  ],
+  "watertight": true,
+  "orient": "attach plate (+y face of the ribs) on the bed; beam grows up; cradle plate underside needs support"
+ },
+ {
+  "part": "scanner_arm",
+  "volume_cm3": 21.538769067292723,
+  "mass_g": 15.044830193503966,
+  "bbox_mm": [
+   -36.00000010000003,
+   36.00000010000003,
+   -41.952219670122865,
+   -11.999471509401376,
+   82.84771023986798,
+   115.00000010000002
+  ],
+  "watertight": true,
+  "orient": "attach plate (-y face of the ribs... i.e. the y = -12 contact face) on the bed; decoder pocket opens to the bed (39 x 6.8 mm roof bridged)"
+ }
+]

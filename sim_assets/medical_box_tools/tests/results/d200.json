@@ -1,0 +1,137 @@
+{
+ "n_dof": 34,
+ "dof_names": [
+  "left_wheel_joint",
+  "right_wheel_joint",
+  "front_left_swivel_joint",
+  "front_right_swivel_joint",
+  "rear_left_swivel_joint",
+  "rear_right_swivel_joint",
+  "front_left_wheel_1_joint",
+  "front_left_wheel_2_joint",
+  "front_right_wheel_1_joint",
+  "front_right_wheel_2_joint",
+  "rear_left_wheel_1_joint",
+  "rear_left_wheel_2_joint",
+  "rear_right_wheel_1_joint",
+  "rear_right_wheel_2_joint",
+  "lift_joint",
+  "slider_left_joint",
+  "slider_right_joint",
+  "arm_left_joint1",
+  "arm_right_joint1",
+  "arm_left_joint2",
+  "arm_right_joint2",
+  "arm_left_joint3",
+  "arm_right_joint3",
+  "arm_left_joint4",
+  "arm_right_joint4",
+  "arm_left_joint5",
+  "arm_right_joint5",
+  "arm_left_joint6",
+  "arm_right_joint6",
+  "arm_left_pad_1_buffer_joint",
+  "arm_left_pad_2_buffer_joint",
+  "arm_left_pad_3_buffer_joint",
+  "arm_right_finger_left_joint",
+  "arm_right_finger_right_joint"
+ ],
+ "missing": [],
+ "extra": [],
+ "start_transient_xy_mm": 9.332626405011979e-05,
+ "stand": {
+  "excursion_mm": 4.263264546076895e-11,
+  "base_z_m": 0.07620000094175339,
+  "drift_xy_mm": 0.0,
+  "dz_mm": 0.0,
+  "yaw_drift_deg": 0.0,
+  "max_tilt_deg": 9.77188602642399e-06,
+  "tilt_end_deg": 9.77188602642399e-06,
+  "link6_left_world": [
+   0.3448241055011749,
+   0.22223612666130066,
+   2.0433926582336426
+  ],
+  "link6_motion_mm": 0.0
+ },
+ "home_state": {
+  "lift_joint": -0.20040732622146606,
+  "slider_left_joint": -0.005973040591925383,
+  "slider_right_joint": 0.005973150487989187
+ },
+ "arm_joint_max_abs_rad": 5.32785406903713e-06,
+ "fingers": {
+  "start_gap_mm": 55.99995757639408,
+  "closed_gap_mm": 8.000031460493766,
+  "open_gap_mm": 55.99993336200714,
+  "asym_mm": -1.2622000333806227e-05
+ },
+ "suction": {
+  "status": "Closed",
+  "gripped": [
+   "/World/test_block"
+  ]
+ },
+ "checks": [
+  [
+   "articulation root = AMR base_link, 34 DOFs (15 stand/arm + 14 AMR + 5 tool = 34)",
+   true,
+   "34"
+  ],
+  [
+   "no joint missing (lift, sliders, arm_*_joint1..6, wheels, swivels, caster wheels, pads, fingers)",
+   true,
+   "[]"
+  ],
+  [
+   "no unexpected joint (the XEG-32 joints are gone)",
+   true,
+   "[]"
+  ],
+  [
+   "joint names agree with the MoveIt URDF / ros2_control (lift, sliders, arm_right_finger_left (driver) / finger_right (mimic), arm_*_joint1..6 by prefix)",
+   true,
+   ""
+  ],
+  [
+   "stands on the ground for 5 s (wheels 0, arms home): base_link z = 0.0792 +-5 mm (axle height + 3 mm)",
+   true,
+   "0.0762"
+  ],
+  [
+   "no drift (static AMR; after a 3 s start transient of 0 mm): net xy < 10 mm, wander (casters) < 15 mm, yaw < 0.2 deg over 5 s",
+   true,
+   "(0.0, 0.0, 0.0)"
+  ],
+  [
+   "no tipping / sinking: max tilt < 0.1 deg, dz < 2 mm",
+   true,
+   "(0.0, 0.0)"
+  ],
+  [
+   "home state: lift -0.2, sliders -+0.005973 (+-1 mm), arms upright (|q| < 1.5 deg)",
+   true,
+   "({'lift_joint': -0.20041, 'slider_left_joint': -0.00597, 'slider_right_joint': 0.00597}, 0.0)"
+  ],
+  [
+   "fingers: open 56 mm, close to the 8 mm stop (symmetric), reopen 56 mm",
+   true,
+   "(56.0, 8.0, 56.0)"
+  ],
+  [
+   "Surface Gripper on arm_left closes on the block at the pad lips (Closed, gripped = block)",
+   true,
+   "('Closed', ['/World/test_block'])"
+  ],
+  [
+   "Surface Gripper opens",
+   true,
+   ""
+  ],
+  [
+   "pad buffers respond (finite, 0..10 mm)",
+   true,
+   "[-0.0, -0.0, -0.0]"
+  ]
+ ]
+}

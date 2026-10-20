@@ -1,0 +1,671 @@
+{
+ "nominal": {
+  "tag": "nominal",
+  "mass_kg": 0.0820000022649765,
+  "compression_mm": [
+   4.299200605601072,
+   4.300963599234819,
+   4.300692584365606
+  ],
+  "spring_force_N": [
+   1.8598401211202147,
+   1.860192719846964,
+   1.8601385168731215
+  ],
+  "measured_pad_effort_N": [
+   1.8634289503097534,
+   1.862225890159607,
+   1.8602476119995117
+  ],
+  "carton_pushed_mm": 0.5001425743103027,
+  "status_after_close": "Closed",
+  "gripped": [
+   "/World/Cartons/carton_2_accuforce"
+  ],
+  "attachment_body1": [
+   "/World/Tools/left_suction_tool/base",
+   "/World/Tools/left_suction_tool/base",
+   "/World/Tools/left_suction_tool/base"
+  ],
+  "first_open_event_force_N": null,
+  "carton_disp_mm": 100.46139918267727,
+  "tool_disp_mm": 104.82758283615112,
+  "status_after_pull": "Closed",
+  "peak_slide_force_N": 5.231673717498779,
+  "max_spine_to_lip_mm": 0.10010039806365723,
+  "neighbours_y_mm": [],
+  "status_after_release": "Open",
+  "carton_moved_after_release_mm": 5.9604644775390625e-05,
+  "gripped_after_release": []
+ },
+ "sweep_50kPa": {
+  "vacuum_kpa": 50.0,
+  "physical_total_N": 17.4,
+  "authored_coaxial_N": 5.800000190734863,
+  "authored_shear_N": 6.380000114440918,
+  "rows": [
+   {
+    "tag": "50.0 kPa, 2.0 kg",
+    "mass_kg": 2.0,
+    "compression_mm": [
+     4.791594110429287,
+     4.791598301380873,
+     4.791483748704195
+    ],
+    "spring_force_N": [
+     1.9583188220858576,
+     1.9583196602761748,
+     1.9582967497408392
+    ],
+    "measured_pad_effort_N": [
+     1.9620916843414307,
+     1.9605062007904053,
+     1.9584248065948486
+    ],
+    "carton_pushed_mm": 0.0002682209014892578,
+    "status_after_close": "Closed",
+    "gripped": [
+     "/World/Cartons/carton_2_accuforce"
+    ],
+    "attachment_body1": [
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base"
+    ],
+    "first_open_event_force_N": null,
+    "carton_disp_mm": 98.38083945214748,
+    "tool_disp_mm": 104.68789935112,
+    "status_after_pull": "Closed",
+    "peak_slide_force_N": 9.212505340576172,
+    "max_spine_to_lip_mm": 2.8481203913688633,
+    "detached": false,
+    "vacuum_kpa": 50.0
+   },
+   {
+    "tag": "50.0 kPa, 3.0 kg",
+    "mass_kg": 3.0,
+    "compression_mm": [
+     4.791859071701765,
+     4.791786428540945,
+     4.7916993498802185
+    ],
+    "spring_force_N": [
+     1.9583718143403532,
+     1.9583572857081892,
+     1.958339869976044
+    ],
+    "measured_pad_effort_N": [
+     1.962174892425537,
+     1.9605612754821777,
+     1.9584916830062866
+    ],
+    "carton_pushed_mm": 0.00019371509552001953,
+    "status_after_close": "Closed",
+    "gripped": [
+     "/World/Cartons/carton_2_accuforce"
+    ],
+    "attachment_body1": [
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base"
+    ],
+    "first_open_event_force_N": null,
+    "carton_disp_mm": 97.4661186337471,
+    "tool_disp_mm": 104.61229085922241,
+    "status_after_pull": "Closed",
+    "peak_slide_force_N": 13.373856544494629,
+    "max_spine_to_lip_mm": 4.293726742267606,
+    "detached": false,
+    "vacuum_kpa": 50.0
+   },
+   {
+    "tag": "50.0 kPa, 3.5 kg",
+    "mass_kg": 3.5,
+    "compression_mm": [
+     4.79199318215251,
+     4.791970830410719,
+     4.791678860783577
+    ],
+    "spring_force_N": [
+     1.9583986364305022,
+     1.958394166082144,
+     1.9583357721567156
+    ],
+    "measured_pad_effort_N": [
+     1.9622081518173218,
+     1.9605684280395508,
+     1.9584459066390991
+    ],
+    "carton_pushed_mm": 0.00024586915969848633,
+    "status_after_close": "Closed",
+    "gripped": [
+     "/World/Cartons/carton_2_accuforce"
+    ],
+    "attachment_body1": [
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base"
+    ],
+    "first_open_event_force_N": null,
+    "carton_disp_mm": 96.93810157477856,
+    "tool_disp_mm": 104.56869006156921,
+    "status_after_pull": "Closed",
+    "peak_slide_force_N": 15.580601692199707,
+    "max_spine_to_lip_mm": 5.0479117631912205,
+    "detached": false,
+    "vacuum_kpa": 50.0
+   },
+   {
+    "tag": "50.0 kPa, 4.0 kg",
+    "mass_kg": 4.0,
+    "compression_mm": [
+     4.791880492120981,
+     4.7918944619596004,
+     4.79173893108964
+    ],
+    "spring_force_N": [
+     1.9583760984241965,
+     1.9583788923919203,
+     1.9583477862179282
+    ],
+    "measured_pad_effort_N": [
+     1.9621269702911377,
+     1.9605281352996826,
+     1.9584441184997559
+    ],
+    "carton_pushed_mm": 0.00014901161193847656,
+    "status_after_close": "Closed",
+    "gripped": [
+     "/World/Cartons/carton_2_accuforce"
+    ],
+    "attachment_body1": [
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base"
+    ],
+    "first_open_event_force_N": 17.39763641357422,
+    "carton_disp_mm": 0.16204267740249634,
+    "tool_disp_mm": 104.82175648212433,
+    "status_after_pull": "Open",
+    "peak_slide_force_N": 17.59651756286621,
+    "max_spine_to_lip_mm": 98.43401795625687,
+    "detached": true,
+    "vacuum_kpa": 50.0
+   },
+   {
+    "tag": "50.0 kPa, 4.5 kg",
+    "mass_kg": 4.5,
+    "compression_mm": [
+     4.791975021362305,
+     4.7919913195073605,
+     4.7918688505887985
+    ],
+    "spring_force_N": [
+     1.9583950042724612,
+     1.9583982639014723,
+     1.95837377011776
+    ],
+    "measured_pad_effort_N": [
+     1.9621589183807373,
+     1.9605858325958252,
+     1.9585260152816772
+    ],
+    "carton_pushed_mm": 7.450580596923828e-05,
+    "status_after_close": "Closed",
+    "gripped": [
+     "/World/Cartons/carton_2_accuforce"
+    ],
+    "attachment_body1": [
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base"
+    ],
+    "first_open_event_force_N": 17.449892044067383,
+    "carton_disp_mm": 0.00426173210144043,
+    "tool_disp_mm": 104.82178628444672,
+    "status_after_pull": "Open",
+    "peak_slide_force_N": 17.997024536132812,
+    "max_spine_to_lip_mm": 98.59215652942657,
+    "detached": true,
+    "vacuum_kpa": 50.0
+   },
+   {
+    "tag": "50.0 kPa, 5.0 kg",
+    "mass_kg": 5.0,
+    "compression_mm": [
+     4.791782703250647,
+     4.7917962074279785,
+     4.791646264493465
+    ],
+    "spring_force_N": [
+     1.9583565406501295,
+     1.958359241485596,
+     1.9583292528986933
+    ],
+    "measured_pad_effort_N": [
+     1.9620988368988037,
+     1.9605250358581543,
+     1.958426833152771
+    ],
+    "carton_pushed_mm": 0.00017881393432617188,
+    "status_after_close": "Closed",
+    "gripped": [
+     "/World/Cartons/carton_2_accuforce"
+    ],
+    "attachment_body1": [
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base"
+    ],
+    "first_open_event_force_N": 17.45488739013672,
+    "carton_disp_mm": 0.0007525086402893066,
+    "tool_disp_mm": 104.82177138328552,
+    "status_after_pull": "Open",
+    "peak_slide_force_N": 18.022493362426758,
+    "max_spine_to_lip_mm": 98.59565830230713,
+    "detached": true,
+    "vacuum_kpa": 50.0
+   },
+   {
+    "tag": "50.0 kPa, 6.0 kg",
+    "mass_kg": 6.0,
+    "compression_mm": [
+     4.791807848960161,
+     4.79188421741128,
+     4.79179760441184
+    ],
+    "spring_force_N": [
+     1.9583615697920325,
+     1.9583768434822562,
+     1.9583595208823683
+    ],
+    "measured_pad_effort_N": [
+     1.9621200561523438,
+     1.9605317115783691,
+     1.9584672451019287
+    ],
+    "carton_pushed_mm": 0.00011920928955078125,
+    "status_after_close": "Closed",
+    "gripped": [
+     "/World/Cartons/carton_2_accuforce"
+    ],
+    "attachment_body1": [
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base"
+    ],
+    "first_open_event_force_N": 17.45663833618164,
+    "carton_disp_mm": 0.0004917383193969727,
+    "tool_disp_mm": 104.82178628444672,
+    "status_after_pull": "Open",
+    "peak_slide_force_N": 18.028308868408203,
+    "max_spine_to_lip_mm": 98.59576261043549,
+    "detached": true,
+    "vacuum_kpa": 50.0
+   },
+   {
+    "tag": "50.0 kPa, 8.0 kg",
+    "mass_kg": 8.0,
+    "compression_mm": [
+     4.791912157088518,
+     4.791890271008015,
+     4.79178037494421
+    ],
+    "spring_force_N": [
+     1.9583824314177039,
+     1.9583780542016032,
+     1.9583560749888422
+    ],
+    "measured_pad_effort_N": [
+     1.9621623754501343,
+     1.960569143295288,
+     1.9584587812423706
+    ],
+    "carton_pushed_mm": 8.940696716308594e-05,
+    "status_after_close": "Closed",
+    "gripped": [
+     "/World/Cartons/carton_2_accuforce"
+    ],
+    "attachment_body1": [
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base"
+    ],
+    "first_open_event_force_N": 17.46044921875,
+    "carton_disp_mm": 0.0003203749656677246,
+    "tool_disp_mm": 104.82174158096313,
+    "status_after_pull": "Open",
+    "peak_slide_force_N": 18.031469345092773,
+    "max_spine_to_lip_mm": 98.59590417146683,
+    "detached": true,
+    "vacuum_kpa": 50.0
+   }
+  ],
+  "max_held_mass_kg": 3.5,
+  "min_detached_mass_kg": 4.0,
+  "detach_force_N": 17.39763641357422
+ },
+ "sweep_25kPa": {
+  "vacuum_kpa": 25.0,
+  "physical_total_N": 8.7,
+  "authored_coaxial_N": 2.9000000953674316,
+  "authored_shear_N": 3.190000057220459,
+  "rows": [
+   {
+    "tag": "25.0 kPa, 1.0 kg",
+    "mass_kg": 1.0,
+    "compression_mm": [
+     4.302253481000662,
+     4.3023317120969296,
+     4.302260931581259
+    ],
+    "spring_force_N": [
+     1.8604506962001326,
+     1.8604663424193861,
+     1.860452186316252
+    ],
+    "measured_pad_effort_N": [
+     1.8640193939208984,
+     1.8625341653823853,
+     1.8605656623840332
+    ],
+    "carton_pushed_mm": 0.4998892545700073,
+    "status_after_close": "Closed",
+    "gripped": [
+     "/World/Cartons/carton_2_accuforce"
+    ],
+    "attachment_body1": [
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base"
+    ],
+    "first_open_event_force_N": null,
+    "carton_disp_mm": 99.7092928737402,
+    "tool_disp_mm": 104.76541519165039,
+    "status_after_pull": "Closed",
+    "peak_slide_force_N": 5.23529052734375,
+    "max_spine_to_lip_mm": 1.3017076849937415,
+    "detached": false,
+    "vacuum_kpa": 25.0
+   },
+   {
+    "tag": "25.0 kPa, 1.5 kg",
+    "mass_kg": 1.5,
+    "compression_mm": [
+     4.302313085645437,
+     4.302394110709429,
+     4.302347078919411
+    ],
+    "spring_force_N": [
+     1.8604626171290877,
+     1.860478822141886,
+     1.8604694157838824
+    ],
+    "measured_pad_effort_N": [
+     1.8640300035476685,
+     1.8625494241714478,
+     1.8605709075927734
+    ],
+    "carton_pushed_mm": 0.49990415573120117,
+    "status_after_close": "Closed",
+    "gripped": [
+     "/World/Cartons/carton_2_accuforce"
+    ],
+    "attachment_body1": [
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base"
+    ],
+    "first_open_event_force_N": null,
+    "carton_disp_mm": 99.30274076759815,
+    "tool_disp_mm": 104.73185777664185,
+    "status_after_pull": "Closed",
+    "peak_slide_force_N": 6.883175849914551,
+    "max_spine_to_lip_mm": 2.0594242811202976,
+    "detached": false,
+    "vacuum_kpa": 25.0
+   },
+   {
+    "tag": "25.0 kPa, 2.0 kg",
+    "mass_kg": 2.0,
+    "compression_mm": [
+     4.791594110429287,
+     4.791598301380873,
+     4.791483748704195
+    ],
+    "spring_force_N": [
+     1.9583188220858576,
+     1.9583196602761748,
+     1.9582967497408392
+    ],
+    "measured_pad_effort_N": [
+     1.9620916843414307,
+     1.9605062007904053,
+     1.9584248065948486
+    ],
+    "carton_pushed_mm": 0.0002682209014892578,
+    "status_after_close": "Closed",
+    "gripped": [
+     "/World/Cartons/carton_2_accuforce"
+    ],
+    "attachment_body1": [
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base"
+    ],
+    "first_open_event_force_N": 8.807801246643066,
+    "carton_disp_mm": 0.06631016731262207,
+    "tool_disp_mm": 104.82180118560791,
+    "status_after_pull": "Open",
+    "peak_slide_force_N": 9.031657218933105,
+    "max_spine_to_lip_mm": 98.5305923819542,
+    "detached": true,
+    "vacuum_kpa": 25.0
+   },
+   {
+    "tag": "25.0 kPa, 2.5 kg",
+    "mass_kg": 2.5,
+    "compression_mm": [
+     4.791620187461376,
+     4.791772458702326,
+     4.791571758687496
+    ],
+    "spring_force_N": [
+     1.9583240374922755,
+     1.9583544917404654,
+     1.9583143517374995
+    ],
+    "measured_pad_effort_N": [
+     1.9620939493179321,
+     1.9605354070663452,
+     1.9584349393844604
+    ],
+    "carton_pushed_mm": 0.00028312206268310547,
+    "status_after_close": "Closed",
+    "gripped": [
+     "/World/Cartons/carton_2_accuforce"
+    ],
+    "attachment_body1": [
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base"
+    ],
+    "first_open_event_force_N": 8.989307403564453,
+    "carton_disp_mm": 0.0021830201148986816,
+    "tool_disp_mm": 104.82178628444672,
+    "status_after_pull": "Open",
+    "peak_slide_force_N": 9.5421781539917,
+    "max_spine_to_lip_mm": 98.59425759315491,
+    "detached": true,
+    "vacuum_kpa": 25.0
+   },
+   {
+    "tag": "25.0 kPa, 3.0 kg",
+    "mass_kg": 3.0,
+    "compression_mm": [
+     4.791859071701765,
+     4.791786428540945,
+     4.7916993498802185
+    ],
+    "spring_force_N": [
+     1.9583718143403532,
+     1.9583572857081892,
+     1.958339869976044
+    ],
+    "measured_pad_effort_N": [
+     1.962174892425537,
+     1.9605612754821777,
+     1.9584916830062866
+    ],
+    "carton_pushed_mm": 0.00019371509552001953,
+    "status_after_close": "Closed",
+    "gripped": [
+     "/World/Cartons/carton_2_accuforce"
+    ],
+    "attachment_body1": [
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base",
+     "/World/Tools/left_suction_tool/base"
+    ],
+    "first_open_event_force_N": 8.997125625610352,
+    "carton_disp_mm": 0.0005513429641723633,
+    "tool_disp_mm": 104.82177138328552,
+    "status_after_pull": "Open",
+    "peak_slide_force_N": 9.554577827453613,
+    "max_spine_to_lip_mm": 98.59578496217728,
+    "detached": true,
+    "vacuum_kpa": 25.0
+   }
+  ],
+  "max_held_mass_kg": 1.5,
+  "min_detached_mass_kg": 2.0,
+  "detach_force_N": 8.807801246643066
+ },
+ "one_pad_4kg": {
+  "tag": "1 pad only, 4 kg",
+  "mass_kg": 4.0,
+  "compression_mm": [
+   4.221091046929359,
+   4.22164611518383,
+   4.220897331833839
+  ],
+  "spring_force_N": [
+   1.844218209385872,
+   1.8443292230367663,
+   1.844179466366768
+  ],
+  "measured_pad_effort_N": [
+   1.8477418422698975,
+   1.846350908279419,
+   1.844254493713379
+  ],
+  "carton_pushed_mm": 0.4996955394744873,
+  "status_after_close": "Closed",
+  "gripped": [
+   "/World/Cartons/carton_2_accuforce"
+  ],
+  "attachment_body1": [
+   "/World/Tools/left_suction_tool/base",
+   "/World/Tools/left_suction_tool/base",
+   "/World/Tools/left_suction_tool/base"
+  ],
+  "first_open_event_force_N": 3.0026979446411133,
+  "carton_disp_mm": 0.00017881393432617188,
+  "tool_disp_mm": 104.74886000156403,
+  "status_after_pull": "Open",
+  "peak_slide_force_N": 13.192593574523926,
+  "max_spine_to_lip_mm": 99.09614360332489
+ },
+ "checks": [
+  [
+   "buffers compressed ~5 mm on all 3 pads",
+   true,
+   "[4.3, 4.3, 4.3]"
+  ],
+  [
+   "spring force 2.0 N +-0.3 at 5 mm (200 N/m, preload 1 N)",
+   true,
+   "[1.86, 1.86, 1.86]"
+  ],
+  [
+   "carton not pushed by the pressing (< 1 mm)",
+   true,
+   "0.5"
+  ],
+  [
+   "surface gripper status Closed",
+   true,
+   "Closed"
+  ],
+  [
+   "gripped object = target carton",
+   true,
+   "['/World/Cartons/carton_2_accuforce']"
+  ],
+  [
+   "3 attachment points registered in the IsaacSurfaceGripper",
+   true,
+   ""
+  ],
+  [
+   "carton followed the pull: displacement 100 mm +-3",
+   true,
+   "100.46"
+  ],
+  [
+   "still Closed + gripped after the pull",
+   true,
+   "('Closed', ['/World/Cartons/carton_2_accuforce'])"
+  ],
+  [
+   "spine stays on the pad lip during the pull (< 3 mm)",
+   true,
+   "0.1"
+  ],
+  [
+   "release: status Open, nothing gripped",
+   true,
+   "('Open', [])"
+  ],
+  [
+   "release: carton stays (moves < 1 mm over 2 s incl. tool retract)",
+   true,
+   "0.0"
+  ],
+  [
+   "carton still resting on the shelf floor (z = h/2 +-1 mm)",
+   true,
+   "0.11"
+  ],
+  [
+   "50 kPa: friction pull detaches at the PHYSICAL pull-off limit 3 x coaxial = 17.4 N +-15 % (first detaching carton 4.0 kg, pull 17.4 N)",
+   true,
+   "1.0"
+  ],
+  [
+   "50 kPa: lighter cartons held (largest held 3.5 kg), all heavier ones detach",
+   true,
+   ""
+  ],
+  [
+   "25 kPa: friction pull detaches at the PHYSICAL pull-off limit 3 x coaxial = 8.7 N +-15 % (first detaching carton 2.0 kg, pull 8.8 N)",
+   true,
+   "1.012"
+  ],
+  [
+   "25 kPa: lighter cartons held (largest held 1.5 kg), all heavier ones detach",
+   true,
+   ""
+  ],
+  [
+   "lower vacuum (-25 kPa) detaches at a lower carton mass than -50 kPa",
+   true,
+   "(2.0, 4.0)"
+  ],
+  [
+   "a single attachment point (lost pad) cannot hold 4 kg (3 pads hold it below the limit)",
+   true,
+   "0.0"
+  ]
+ ]
+}

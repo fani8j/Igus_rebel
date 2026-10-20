@@ -1,0 +1,236 @@
+[
+ {
+  "id": "P1",
+  "family": "CARRIAGE",
+  "index": 3,
+  "label": "lift carriage: bracket pocket, upright (best)",
+  "rgb": [
+   0.1,
+   0.65,
+   0.2
+  ],
+  "ghost_dy": [
+   -625,
+   625
+  ],
+  "lo": [
+   -690.0,
+   -605.0,
+   805.0
+  ],
+  "hi": [
+   -580.0,
+   -405.0,
+   905.0
+  ],
+  "metrics": {
+   "leg_to_target_base_mm": 474,
+   "tube_total_worst_mm": 1584,
+   "tube_total_nominal_mm": 1584,
+   "min_clearance_exact_mm": 24.9,
+   "near_solids": [
+    "rail bracket"
+   ],
+   "height_above_deck_mm": [
+    746,
+    946
+   ],
+   "in_reach_target": false,
+   "outside_stand_envelope_mm": 0
+  }
+ },
+ {
+  "id": "P2",
+  "family": "CARRIAGE",
+  "index": 1,
+  "label": "lift carriage: under rail shelf (shortest tube)",
+  "rgb": [
+   0.0,
+   0.6,
+   0.7
+  ],
+  "ghost_dy": [
+   -625,
+   625
+  ],
+  "lo": [
+   -685.0,
+   -405.0,
+   760.0
+  ],
+  "hi": [
+   -575.0,
+   -305.0,
+   960.0
+  ],
+  "metrics": {
+   "leg_to_target_base_mm": 324,
+   "tube_total_worst_mm": 1434,
+   "tube_total_nominal_mm": 1434,
+   "min_clearance_exact_mm": 12.8,
+   "near_solids": [
+    "ZLW body",
+    "ZLW carriage",
+    "rail bracket",
+    "X rail"
+   ],
+   "height_above_deck_mm": [
+    946,
+    1046
+   ],
+   "in_reach_target": false,
+   "outside_stand_envelope_mm": 0
+  }
+ },
+ {
+  "id": "P3",
+  "family": "ARM_A",
+  "index": 2,
+  "label": "on arm-A X-carriage, below rail",
+  "rgb": [
+   0.95,
+   0.5,
+   0.0
+  ],
+  "ghost_dy": [],
+  "lo": [
+   -525.0,
+   -430.0,
+   940.0
+  ],
+  "hi": [
+   -325.0,
+   -320.0,
+   1040.0
+  ],
+  "metrics": {
+   "leg_to_target_base_mm": 269,
+   "tube_total_worst_mm": 1379,
+   "tube_total_nominal_mm": 1379,
+   "min_clearance_exact_mm": 13.0,
+   "near_solids": [
+    "rail bracket",
+    "X rail",
+    "carriage A",
+    "clamp A"
+   ],
+   "height_above_deck_mm": [
+    921,
+    1031
+   ],
+   "in_reach_target": false,
+   "outside_stand_envelope_mm": 40
+  }
+ },
+ {
+  "id": "P4",
+  "family": "FIXED",
+  "index": 13,
+  "label": "column side (fixed), inside arm reach",
+  "rgb": [
+   0.15,
+   0.25,
+   0.9
+  ],
+  "ghost_dy": [],
+  "lo": [
+   -585.0,
+   -490.0,
+   580.0
+  ],
+  "hi": [
+   -475.0,
+   -290.0,
+   680.0
+  ],
+  "metrics": {
+   "leg_to_target_base_mm": 1152,
+   "tube_total_worst_mm": 2262,
+   "tube_total_nominal_mm": 1589,
+   "min_clearance_exact_mm": 14.7,
+   "near_solids": [
+    "gusset/column",
+    "ZLW body",
+    "ZLW carriage"
+   ],
+   "height_above_deck_mm": [
+    861,
+    1061
+   ],
+   "in_reach_target": true,
+   "outside_stand_envelope_mm": 0
+  }
+ },
+ {
+  "id": "P5",
+  "family": "FIXED",
+  "index": 0,
+  "label": "column base wing, front face (fixed)",
+  "rgb": [
+   0.55,
+   0.2,
+   0.8
+  ],
+  "ghost_dy": [],
+  "lo": [
+   -535.0,
+   -1030.0,
+   715.0
+  ],
+  "hi": [
+   -435.0,
+   -920.0,
+   915.0
+  ],
+  "metrics": {
+   "leg_to_target_base_mm": 1597,
+   "tube_total_worst_mm": 2707,
+   "tube_total_nominal_mm": 1944,
+   "min_clearance_exact_mm": 12.1,
+   "near_solids": [
+    "side plate"
+   ],
+   "height_above_deck_mm": [
+    321,
+    431
+   ],
+   "in_reach_target": false,
+   "outside_stand_envelope_mm": 0
+  }
+ },
+ {
+  "id": "P6",
+  "family": "DECK",
+  "index": 0,
+  "label": "AMR deck beside column (assumed deck)",
+  "rgb": [
+   0.85,
+   0.1,
+   0.1
+  ],
+  "ghost_dy": [],
+  "lo": [
+   -655.0,
+   -1325.0,
+   810.0
+  ],
+  "hi": [
+   -455.0,
+   -1215.0,
+   910.0
+  ],
+  "metrics": {
+   "leg_to_target_base_mm": 1789,
+   "tube_total_worst_mm": 2899,
+   "tube_total_nominal_mm": 2274,
+   "min_clearance_exact_mm": 14.9,
+   "near_solids": [],
+   "height_above_deck_mm": [
+    26,
+    136
+   ],
+   "in_reach_target": false,
+   "outside_stand_envelope_mm": 0
+  }
+ }
+]

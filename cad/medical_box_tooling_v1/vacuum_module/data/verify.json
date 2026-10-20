@@ -1,0 +1,725 @@
+{
+ "clearances": {
+  "required_mm": 3.0,
+  "min_gap_mm": 3.7,
+  "min_pair": [
+   "housing",
+   "m6_washer_head_0"
+  ],
+  "closest_pairs": [
+   {
+    "gap_mm": 3.7,
+    "a": "door",
+    "b": "m6_washer_head_2"
+   },
+   {
+    "gap_mm": 3.7,
+    "a": "door",
+    "b": "m6_washer_head_3"
+   },
+   {
+    "gap_mm": 3.7,
+    "a": "housing",
+    "b": "m6_washer_head_0"
+   },
+   {
+    "gap_mm": 3.7,
+    "a": "housing",
+    "b": "m6_washer_head_1"
+   },
+   {
+    "gap_mm": 3.83,
+    "a": "m6_washer_head_2",
+    "b": "film_door"
+   },
+   {
+    "gap_mm": 3.83,
+    "a": "m6_washer_head_3",
+    "b": "film_door"
+   },
+   {
+    "gap_mm": 4.0,
+    "a": "tube_vac_manifold_filter",
+    "b": "tube_vac_manifold_valve"
+   },
+   {
+    "gap_mm": 4.12,
+    "a": "m6_washer_head_2",
+    "b": "foam_door"
+   },
+   {
+    "gap_mm": 4.12,
+    "a": "m6_washer_head_3",
+    "b": "foam_door"
+   },
+   {
+    "gap_mm": 5.0,
+    "a": "deck",
+    "b": "tube_vac_manifold_switch"
+   },
+   {
+    "gap_mm": 5.0,
+    "a": "deck",
+    "b": "tube_vac_manifold_valve"
+   },
+   {
+    "gap_mm": 5.66,
+    "a": "deck",
+    "b": "tube_vac_manifold_filter"
+   },
+   {
+    "gap_mm": 5.7,
+    "a": "housing",
+    "b": "deck"
+   },
+   {
+    "gap_mm": 6.2,
+    "a": "vacuum_switch",
+    "b": "film_door"
+   }
+  ],
+  "violations": [],
+  "pairs_checked": 337,
+  "touching_by_design": 117,
+  "touching_by_design_note": "mounts/pads/saddles/ports/bonded foam (listed in verify.py allowed_contact); everything else must be >= 3 mm",
+  "pass": true
+ },
+ "foam": {
+  "foam_roof": {
+   "thickness_mm": 10.0,
+   "foam_inner_face_area_mm2": 39618,
+   "film_area_mm2": 39814,
+   "film_covers_foam": true
+  },
+  "foam_rear": {
+   "thickness_mm": 10.0,
+   "foam_inner_face_area_mm2": 34124,
+   "film_area_mm2": 34070,
+   "film_covers_foam": true
+  },
+  "foam_left": {
+   "thickness_mm": 10.0,
+   "foam_inner_face_area_mm2": 33687,
+   "film_area_mm2": 33624,
+   "film_covers_foam": true
+  },
+  "foam_right": {
+   "thickness_mm": 10.0,
+   "foam_inner_face_area_mm2": 33648,
+   "film_area_mm2": 33624,
+   "film_covers_foam": true
+  },
+  "foam_door": {
+   "thickness_mm": 10.0,
+   "foam_inner_face_area_mm2": 37104,
+   "film_area_mm2": 37104,
+   "film_covers_foam": true
+  },
+  "pass": true,
+  "required_mm": 10.0,
+  "holder": "PET film 0.3 mm bonded over every foam inner face; duct partitions/inner walls and the roof/M12 sleeves are printed so no cut foam edge faces the cabin"
+ },
+ "tubes": {
+  "tubes": {
+   "tube_exhaust_pump_muffler": {
+    "od_mm": 8.0,
+    "bends": 0,
+    "bend_radius_mm": null,
+    "required_mm": 25.0,
+    "straight_margin_mm": null,
+    "ends": [
+     "elbow_out",
+     "muffler"
+    ],
+    "ok": true
+   },
+   "tube_exhaust_muffler_hepa": {
+    "od_mm": 8.0,
+    "bends": 1,
+    "bend_radius_mm": 25.0,
+    "required_mm": 25.0,
+    "straight_margin_mm": 7.0,
+    "ends": [
+     "muffler",
+     "hepa_filter"
+    ],
+    "ok": true
+   },
+   "tube_exhaust_hepa_outlet": {
+    "od_mm": 8.0,
+    "bends": 0,
+    "bend_radius_mm": null,
+    "required_mm": 25.0,
+    "straight_margin_mm": null,
+    "ends": [
+     "hepa_filter",
+     "exhaust_fitting"
+    ],
+    "ok": true
+   },
+   "tube_vac_filter_pump": {
+    "od_mm": 8.0,
+    "bends": 0,
+    "bend_radius_mm": null,
+    "required_mm": 25.0,
+    "straight_margin_mm": null,
+    "ends": [
+     "dust_filter",
+     "elbow_in"
+    ],
+    "ok": true
+   },
+   "tube_vac_manifold_filter": {
+    "od_mm": 8.0,
+    "bends": 0,
+    "bend_radius_mm": null,
+    "required_mm": 25.0,
+    "straight_margin_mm": null,
+    "ends": [
+     "manifold",
+     "dust_filter"
+    ],
+    "ok": true
+   },
+   "tube_vac_bulkhead_manifold": {
+    "od_mm": 8.0,
+    "bends": 0,
+    "bend_radius_mm": null,
+    "required_mm": 25.0,
+    "straight_margin_mm": null,
+    "ends": [
+     "bulkhead_fitting",
+     "manifold"
+    ],
+    "ok": true
+   },
+   "tube_vac_manifold_valve": {
+    "od_mm": 8.0,
+    "bends": 0,
+    "bend_radius_mm": null,
+    "required_mm": 25.0,
+    "straight_margin_mm": null,
+    "ends": [
+     "manifold",
+     "vent_valve"
+    ],
+    "ok": true
+   },
+   "tube_vac_manifold_switch": {
+    "od_mm": 8.0,
+    "bends": 0,
+    "bend_radius_mm": null,
+    "required_mm": 25.0,
+    "straight_margin_mm": null,
+    "ends": [
+     "manifold",
+     "vacuum_switch"
+    ],
+    "ok": true
+   }
+  },
+  "pass_": true,
+  "rule": "od4 >= 15, od6 >= 20, od8 >= 25 mm; all internal tubes are 8 mm; only the exhaust line to the HEPA bends (r = 25)"
+ },
+ "mass_footprint": {
+  "mass_kg": {
+   "total": 4.477,
+   "printed": 1.374,
+   "pump": 1.9,
+   "foam_film": 0.128,
+   "items": {
+    "base_plate": 0.3047,
+    "housing": 0.8054,
+    "door": 0.1867,
+    "deck": 0.0769,
+    "pump": 1.9,
+    "mounts": 0.06,
+    "elbow_in": 0.012,
+    "elbow_out": 0.012,
+    "muffler": 0.03,
+    "hepa_filter": 0.05,
+    "exhaust_fitting": 0.012,
+    "dust_filter": 0.08,
+    "manifold": 0.06,
+    "bulkhead_fitting": 0.025,
+    "vacuum_switch": 0.1,
+    "vent_valve": 0.12,
+    "terminal_blocks": 0.12,
+    "fan": 0.025,
+    "m12_connector": 0.04,
+    "spacer_0": 0.0082,
+    "m6_washer_head_0": 0.0094,
+    "spacer_1": 0.0082,
+    "m6_washer_head_1": 0.0094,
+    "spacer_2": 0.0082,
+    "m6_washer_head_2": 0.0094,
+    "spacer_3": 0.0082,
+    "m6_washer_head_3": 0.0094,
+    "tube_exhaust_pump_muffler": 0.0003,
+    "tube_exhaust_muffler_hepa": 0.0048,
+    "tube_exhaust_hepa_outlet": 0.0004,
+    "tube_vac_filter_pump": 0.0014,
+    "tube_vac_manifold_filter": 0.0005,
+    "tube_vac_bulkhead_manifold": 0.0007,
+    "tube_vac_manifold_valve": 0.0005,
+    "tube_vac_manifold_switch": 0.0005,
+    "foam_roof": 0.0119,
+    "foam_rear": 0.0102,
+    "foam_left": 0.0101,
+    "foam_right": 0.0101,
+    "foam_door": 0.0111,
+    "film_roof": 0.0166,
+    "film_rear": 0.0142,
+    "film_left": 0.014,
+    "film_right": 0.014,
+    "film_door": 0.0155,
+    "misc_fasteners_cables": 0.25
+   }
+  },
+  "cog_module_frame_mm": [
+   -12.2,
+   1.2,
+   100.0
+  ],
+  "footprint_mm": {
+   "x": 240.0,
+   "y": 186.0,
+   "target": "about 220 x 170 (brief)",
+   "area_ratio_to_target": 1.19
+  },
+  "height_mm": {
+   "housing_top_above_plate_underside": 220.0,
+   "with_arm_tube_stub": 264.0,
+   "spacers_below_plate": 12.0
+  },
+  "overall_bbox_mm": {
+   "x": [
+    -120.0,
+    120.0
+   ],
+   "y": [
+    -93.0,
+    93.0
+   ],
+   "z": [
+    -12.0,
+    264.0
+   ]
+  },
+  "amr_slots": {
+   "pattern_xy_mm": [
+    180.0,
+    100.0
+   ],
+   "count": 4,
+   "size_mm": "M6 slot 10.6 long x 6.6 wide, adjustable +-2 mm along x"
+  }
+ },
+ "print_fit": {
+  "base_plate": {
+   "print_extents_mm": [
+    240.0,
+    186.0,
+    143.0
+   ],
+   "fits_250x250_bed": true
+  },
+  "housing": {
+   "print_extents_mm": [
+    226.7,
+    186.0,
+    214.0
+   ],
+   "fits_250x250_bed": true
+  },
+  "door": {
+   "print_extents_mm": [
+    214.0,
+    186.0,
+    13.3
+   ],
+   "fits_250x250_bed": true
+  },
+  "deck": {
+   "print_extents_mm": [
+    116.0,
+    148.0,
+    16.0
+   ],
+   "fits_250x250_bed": true
+  },
+  "orientation": {
+   "base_plate": "flat, legs pointing up (standing legs, 12 x 10 mm)",
+   "housing": "roof down, open side up (no support except the vent slots/bosses are bridged by design)",
+   "door": "outer plate down, rim up",
+   "deck": "flat, pads up"
+  },
+  "pass": true,
+  "parts_printed": 4,
+  "aluminium_needed": "none: all four parts print in PETG; the deck legs (12 x 10 x 137 mm) can be swapped for 12 mm aluminium square tube if they wobble"
+ },
+ "thermal": {
+  "inputs": {
+   "ambient_C": 25.0,
+   "duty_on_s": 8.0,
+   "period_s": 30.0,
+   "pump_power_typ_w": 48.0,
+   "pump_power_max_w": 55.0,
+   "assume_all_electrical_power_is_heat": true,
+   "wall_R_m2K_per_W": 0.598,
+   "outer_area_m2": 0.277,
+   "thermal_capacity_J_per_K": 3000.0,
+   "fan_flow_m3_per_h": 3.0
+  },
+  "UA_W_per_K": {
+   "walls_and_base_only": 0.487,
+   "vent_airflow_with_fan": 1.01,
+   "total_with_fan": 1.49
+  },
+  "mean_heat_W": {
+   "typical": 12.8,
+   "at_55W": 14.7
+  },
+  "steady_rise_K": {
+   "no_fan": 26.3,
+   "with_fan": 8.6,
+   "no_fan_at_55W": 30.1,
+   "with_fan_at_55W": 9.8,
+   "continuous_48W_with_fan": 32.2
+  },
+  "time_constant_min": {
+   "no_fan": 103.0,
+   "with_fan": 34.0
+  },
+  "sim_4h_no_fan": {
+   "peak_rise_K": 23.8,
+   "end_rise_K": 23.7,
+   "rise_every_30min_K": [
+    0.0,
+    6.7,
+    11.6,
+    15.3,
+    18.1,
+    20.2,
+    21.7,
+    22.9
+   ],
+   "peak_internal_C": 48.8,
+   "pump_limit_C": 40.0,
+   "ok": false
+  },
+  "sim_4h_with_fan": {
+   "peak_rise_K": 8.6,
+   "end_rise_K": 8.5,
+   "rise_every_30min_K": [
+    0.0,
+    5.1,
+    7.1,
+    8.0,
+    8.3,
+    8.4,
+    8.5,
+    8.5
+   ],
+   "peak_internal_C": 33.6,
+   "pump_limit_C": 40.0,
+   "ok": true
+  },
+  "fan_needed": true,
+  "conclusion": "FAN NEEDED: without a fan the cabin air would settle about 26 K above ambient (ASSUMED duty 8 s per 30 s, 48 W) and the pump limit is +40 C ambient; with one 24 V 40 x 10 mm fan pulling 3 m3/h through the two baffled ducts the rise stays about 9 K (34 C at 25 C ambient); a continuous 48 W run would still reach about 32 K, so the pump must stay duty-limited.",
+  "fan_choice": "quiet 24 V 40 x 40 x 10 mm fan, >= 7 m3/h free air at <= 22 dB(A) (model to choose); mounted on the -y duct opening, powered with the pump (or from a thermostat); blows INTO the cabin, exhaust duct on the +y wall at the top",
+  "caveat": "single-node model, all electrical power treated as heat, no pump internal temperature rise above the cabin air (typically +5..10 K at the head): measure in the bench test"
+ },
+ "line_of_sight": {
+  "from_pump_surface": {
+   "origins": 300,
+   "rays": 90000,
+   "escaping": 0
+  },
+  "from_duct_openings": {
+   "origins": 300,
+   "rays": 90000,
+   "escaping": 0
+  },
+  "from_random_cabin_points": {
+   "origins": 300,
+   "rays": 60000,
+   "escaping": 0
+  },
+  "control_door_removed": {
+   "rays": 90000,
+   "escaping": 9120,
+   "detects_open_path": true
+  },
+  "blockers": "housing (with ducts and slots), door, base plate (z <= 6.2 only, with slots/holes), bulkhead/M12/exhaust fittings, M6 washers; foam, film, deck, fan treated as transparent (conservative)",
+  "pass": true
+ },
+ "summary": {
+  "clearances_ge_3mm": true,
+  "foam_10mm_covered": true,
+  "tube_bends_ok": true,
+  "print_fits": true,
+  "no_line_of_sight": true,
+  "fan_needed": true,
+  "mass_kg": 4.477,
+  "footprint_mm": [
+   240.0,
+   186.0
+  ]
+ },
+ "assumed": [
+  {
+   "name": "pump foot hole x (from head end)",
+   "value": [
+    63.0,
+    113.0
+   ],
+   "why": "drawing p.3: 50 mm hole pitch read at 400 dpi, absolute position from the head end +-3 mm"
+  },
+  {
+   "name": "foot plate x range / thickness",
+   "value": [
+    56.5,
+    119.5,
+    5.0
+   ],
+   "why": "read off the drawing, +-2 mm"
+  },
+  {
+   "name": "head block x 0..79, y +-41.5, z 5..104; cap z 104..129",
+   "value": [
+    79.0,
+    41.5,
+    104.0
+   ],
+   "why": "read off the drawing, +-2 mm (envelope 134 x 115 x 129 is from the datasheet)"
+  },
+  {
+   "name": "motor cylinder d56, axis x, z centre 45, x 79..134",
+   "value": [
+    56.0,
+    45.0
+   ],
+   "why": "read off the drawing, +-3 mm"
+  },
+  {
+   "name": "pump port x (G1/8, on the cap top)",
+   "value": 71.0,
+   "why": "drawing p.3 shows the G1/8 (2x) bosses at the right end of the cap; +-4 mm"
+  },
+  {
+   "name": "pump port y (inlet -, outlet +)",
+   "value": 20.0,
+   "why": "drawing shows only one port in the side view; which port is inlet/outlet is NOT readable - check the KNF CAD"
+  },
+  {
+   "name": "anti-vibration mount height/diameter (M6 stud + M6 female)",
+   "value": [
+    15.0,
+    20.0
+   ],
+   "why": "rubber mount to choose (e.g. a 20 x 15 type M6/M6, Shore 55)"
+  },
+  {
+   "name": "pump x of the head end in the module",
+   "value": -99.5,
+   "why": "layout: 6 mm from the rear cabin face"
+  },
+  {
+   "name": "G1/8 -> 8 mm push-in elbow envelope d14, rises 12 mm above the port, stub 8 mm",
+   "value": [
+    14.0,
+    12.0,
+    8.0
+   ],
+   "why": "SMC KQ2L08-01 style (to confirm)"
+  },
+  {
+   "name": "vacuum switch SMC ZSE20B with fitting",
+   "value": [
+    25.0,
+    30.0,
+    30.0
+   ],
+   "why": "task brief: about 30 x 30 x 25; port assumed on the -y face at mid height"
+  },
+  {
+   "name": "switch mass",
+   "value": 0.1,
+   "why": "to check"
+  },
+  {
+   "name": "vent valve 2/2 N.C. 24 V",
+   "value": [
+    22.0,
+    22.0,
+    50.0
+   ],
+   "why": "task brief: about 22 x 22 x 50; vacuum port assumed on the +y face 17 mm above its bottom"
+  },
+  {
+   "name": "vent valve intake filter (foam/sintered)",
+   "value": [
+    12.0,
+    12.0
+   ],
+   "why": "d12 x 12 on the -y face; model to choose"
+  },
+  {
+   "name": "valve mass",
+   "value": 0.12,
+   "why": "to check"
+  },
+  {
+   "name": "inline dust filter (SMC ZFC-like), axis x",
+   "value": [
+    25.0,
+    60.0
+   ],
+   "why": "task brief: about d25 x 60"
+  },
+  {
+   "name": "dust filter mass",
+   "value": 0.08,
+   "why": "to check"
+  },
+  {
+   "name": "HEPA exhaust filter (Whatman HEPA-VENT 50, axis x)",
+   "value": [
+    56.0,
+    30.0
+   ],
+   "why": "task brief: about d56 x 30 with barbs; ports assumed on the rim (top = inlet, bottom = outlet)"
+  },
+  {
+   "name": "HEPA mass",
+   "value": 0.05,
+   "why": "to check"
+  },
+  {
+   "name": "exhaust muffler, axis x",
+   "value": [
+    20.0,
+    40.0
+   ],
+   "why": "G1/8-type silencer d20 x 40 (to choose)"
+  },
+  {
+   "name": "muffler mass",
+   "value": 0.03,
+   "why": "to check"
+  },
+  {
+   "name": "4-port vacuum manifold (R in, filter, valve, switch)",
+   "value": [
+    16.0,
+    28.0,
+    16.0
+   ],
+   "why": "x, y, z; small aluminium/plastic block with 8 mm push-in ports (to choose)"
+  },
+  {
+   "name": "manifold mass",
+   "value": 0.06,
+   "why": "to check"
+  },
+  {
+   "name": "cooling fan 24 V, 40 x 40 x 10 mm",
+   "value": [
+    40.0,
+    40.0,
+    10.0
+   ],
+   "why": "quiet 24 V fan to choose; about 7 m3/h free air, <= 22 dB(A) is the target (ASSUMED)"
+  },
+  {
+   "name": "fan mass",
+   "value": 0.025,
+   "why": "to check"
+  },
+  {
+   "name": "terminal blocks (24 V, GND, speed, valve, switch, fan)",
+   "value": [
+    50.0,
+    14.0,
+    12.0
+   ],
+   "why": "DIN-less spring terminal strip (to choose)"
+  },
+  {
+   "name": "terminal block + wires mass",
+   "value": 0.12,
+   "why": "to check"
+  },
+  {
+   "name": "M12 panel connector (A-coded, rear mount, M16 thread)",
+   "value": [
+    20.0,
+    20.0,
+    3.0
+   ],
+   "why": "flange 20 x 20 x 3 outside, body d16 through the wall, ends 2 mm into the cabin; pin count and current rating to choose"
+  },
+  {
+   "name": "M12 connector mass",
+   "value": 0.04,
+   "why": "to check"
+  },
+  {
+   "name": "push-in fittings + internal tubes + screws + inserts (total)",
+   "value": 0.25,
+   "why": "to check"
+  },
+  {
+   "name": "acoustic foam density (PU, 30 kg/m3)",
+   "value": 3e-08,
+   "why": "kg/mm3; open-cell foam sheet to choose, fire/hospital grade (e.g. B1/V0)"
+  },
+  {
+   "name": "PET film 0.3 mm",
+   "value": 1.39e-06,
+   "why": "kg/mm3"
+  },
+  {
+   "name": "printer build height",
+   "value": 250.0,
+   "why": "at least 250 mm assumed; the housing is 214 mm tall printed roof-down"
+  },
+  {
+   "name": "M6 heat-set insert hole d",
+   "value": 8.0,
+   "why": "for the pump mount studs (M6 female mount is bolted from below instead if preferred)"
+  },
+  {
+   "name": "ambient in the hospital hallway",
+   "value": 25.0,
+   "why": "C; pump rated +5..+40 C ambient (datasheet)"
+  },
+  {
+   "name": "duty: pump on per pick / period",
+   "value": [
+    8.0,
+    30.0
+   ],
+   "why": "task brief"
+  },
+  {
+   "name": "film-side / outer-side surface coefficients W/m2K",
+   "value": [
+    5.0,
+    7.5
+   ],
+   "why": "natural convection + radiation"
+  },
+  {
+   "name": "fan flow through the labyrinth with the fan running",
+   "value": 3.0,
+   "why": "about 40 % of a 7 m3/h free-air fan against the two ducts (ASSUMED)"
+  },
+  {
+   "name": "lumped thermal capacity of pump + parts + air",
+   "value": 3000.0,
+   "why": "J/K: pump 1.9 kg x ~0.7 kJ/kgK + other parts + air"
+  }
+ ]
+}

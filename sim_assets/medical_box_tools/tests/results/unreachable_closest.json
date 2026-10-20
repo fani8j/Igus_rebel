@@ -1,0 +1,431 @@
+{
+ "T1": {
+  "target": "T1",
+  "parking": {
+   "d_m": 0.41,
+   "lateral_m": 0.005,
+   "lift_m": -0.6235,
+   "slider_left": -0.005973,
+   "slider_right": 0.005973
+  },
+  "arms": {
+   "left": {
+    "error": {
+     "total_mm": 195.28524210524486,
+     "vertical_mm": 149.59028899374084,
+     "depth_mm": -116.96955746299464,
+     "lateral_mm": -45.57624216392127,
+     "orientation_deg": 41.13179129100419,
+     "tcp_cabinet": [
+      -0.04957624216392122,
+      -0.046969557462994686,
+      0.44559028899374087
+     ],
+     "target_cabinet": [
+      -0.003999999999999955,
+      0.06999999999999995,
+      0.29600000000000004
+     ]
+    },
+    "collision_free_at_pose": true,
+    "joint_deg": [
+     -21.29,
+     139.0,
+     1.25,
+     -26.43,
+     -12.3,
+     16.4
+    ],
+    "joints_at_limit": [
+     "joint2 (139.0 deg, limit 139 deg)"
+    ],
+    "active_clearances_mm": {},
+    "blocked_by": "joint limit: joint2 (139.0 deg, limit 139 deg)",
+    "approach_path_collision_free": true,
+    "approach_staging_back_m": "joint-space staging pose (random search, trial 4)",
+    "approach_path_min_clearance_rule": ">= 1.5 mm to cabinet/stock/stand/AMR/other arm along the whole path",
+    "min_clearance_at_pose_mm": 23.3,
+    "caption": "suction pad stops 195 mm from the press point (150 mm above), joint limit: joint2",
+    "short_block": "joint limit: joint2"
+   },
+   "right": {
+    "error": {
+     "total_mm": 116.1694587642771,
+     "vertical_mm": 97.37744085156802,
+     "depth_mm": -56.18131268269843,
+     "lateral_mm": 29.26836633693987,
+     "orientation_deg": 42.837300053354525,
+     "tcp_cabinet": [
+      0.025268366336939917,
+      -0.06448131268269841,
+      0.39337744085156806
+     ],
+     "target_cabinet": [
+      -0.003999999999999955,
+      -0.008299999999999974,
+      0.29600000000000004
+     ]
+    },
+    "collision_free_at_pose": true,
+    "joint_deg": [
+     27.52,
+     139.0,
+     8.21,
+     31.45,
+     -18.46,
+     73.7
+    ],
+    "joints_at_limit": [
+     "joint2 (139.0 deg, limit 139 deg)"
+    ],
+    "active_clearances_mm": {},
+    "blocked_by": "joint limit: joint2 (139.0 deg, limit 139 deg)",
+    "approach_path_collision_free": true,
+    "approach_staging_back_m": "joint-space staging pose (random search, trial 14)",
+    "approach_path_min_clearance_rule": ">= 1.5 mm to cabinet/stock/stand/AMR/other arm along the whole path",
+    "min_clearance_at_pose_mm": 20.3,
+    "caption": "gripper stops 116 mm from the grasp point (97 mm above), joint limit: joint2",
+    "short_block": "joint limit: joint2"
+   }
+  },
+  "cabinet_to_world": {
+   "R": [
+    [
+     1.1102230246251565e-16,
+     1.0,
+     0.0
+    ],
+    [
+     -1.0,
+     1.1102230246251565e-16,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     1.0
+    ]
+   ],
+   "t": [
+    0.8939999999999999,
+    0.0010000000000000451,
+    0.0
+   ]
+  },
+  "stage_transit_diagnosis": {
+   "stage_pose_ik_solutions": 0,
+   "note": "no IK solution for the stage pose"
+  },
+  "isaac_run": {
+   "target": "T1",
+   "arms": {
+    "left": {
+     "hold_start_s": 10.629166666666666,
+     "joint_tracking_error_deg_at_hold": 0.03213282938139314,
+     "planned": {
+      "total_mm": 195.28524210524486,
+      "vertical_mm": 149.59028899374084,
+      "depth_mm": -116.96955746299464,
+      "lateral_mm": -45.57624216392127,
+      "orientation_deg": 41.13179129100419,
+      "tcp_cabinet": [
+       -0.04957624216392122,
+       -0.046969557462994686,
+       0.44559028899374087
+      ],
+      "target_cabinet": [
+       -0.003999999999999955,
+       0.06999999999999995,
+       0.29600000000000004
+      ]
+     }
+    },
+    "right": {
+     "hold_start_s": 31.891666666666666,
+     "joint_tracking_error_deg_at_hold": 0.030844338758820214,
+     "planned": {
+      "total_mm": 116.1694587642771,
+      "vertical_mm": 97.37744085156802,
+      "depth_mm": -56.18131268269843,
+      "lateral_mm": 29.26836633693987,
+      "orientation_deg": 42.837300053354525,
+      "tcp_cabinet": [
+       0.025268366336939917,
+       -0.06448131268269841,
+       0.39337744085156806
+      ],
+      "target_cabinet": [
+       -0.003999999999999955,
+       -0.008299999999999974,
+       0.29600000000000004
+      ]
+     }
+    }
+   },
+   "robot_cabinet_or_stock_contacts": {
+    "finger_right -> Cabinet": 69
+   },
+   "frames": 1350
+  }
+ },
+ "T2": {
+  "target": "T2",
+  "parking": {
+   "d_m": 0.41,
+   "lateral_m": 0.005,
+   "lift_m": -0.6235,
+   "slider_left": -0.005973,
+   "slider_right": 0.005973
+  },
+  "arms": {
+   "left": {
+    "error": {
+     "total_mm": 24.449562554887127,
+     "vertical_mm": 14.746783833300636,
+     "depth_mm": -18.39994730325678,
+     "lateral_mm": -6.461842998449844,
+     "orientation_deg": 12.591579771414876,
+     "tcp_cabinet": [
+      -0.0104618429984498,
+      0.05160005269674328,
+      0.6157467838333006
+     ],
+     "target_cabinet": [
+      -0.003999999999999955,
+      0.07000000000000006,
+      0.601
+     ]
+    },
+    "collision_free_at_pose": false,
+    "joint_deg": [
+     -26.31,
+     131.71,
+     -3.79,
+     -38.32,
+     -32.43,
+     30.05
+    ],
+    "joints_at_limit": [],
+    "active_clearances_mm": {
+     "tool_neighbours": 2.0
+    },
+    "blocked_by": "collision: arm_left_suction_tool vs carton:Shelf_02:0:0 (2.0 mm)",
+    "approach_path_collision_free": true,
+    "approach_staging_back_m": "joint-space staging pose (random search, trial 28)",
+    "approach_path_min_clearance_rule": ">= 1.5 mm to cabinet/stock/stand/AMR/other arm along the whole path",
+    "min_clearance_at_pose_mm": 2.0,
+    "caption": "suction pad stops 24 mm from the press point (15 mm above), collision: suction_tool vs stock Shelf_02:0:0",
+    "short_block": "collision: suction_tool vs stock Shelf_02:0:0"
+   },
+   "right": {
+    "error": {
+     "total_mm": 1.1247979657955549e-12,
+     "vertical_mm": 6.661338147750939e-13,
+     "depth_mm": -5.551115123125784e-13,
+     "lateral_mm": 7.164407955784212e-13,
+     "orientation_deg": 1.219449054533845e-14,
+     "tcp_cabinet": [
+      -0.0039999999999992385,
+      -0.00830000000000053,
+      0.6010000000000006
+     ],
+     "target_cabinet": [
+      -0.003999999999999955,
+      -0.008299999999999974,
+      0.601
+     ]
+    },
+    "collision_free_at_pose": true,
+    "joint_deg": [
+     40.57,
+     129.69,
+     16.22,
+     45.95,
+     -64.8,
+     66.24
+    ],
+    "joints_at_limit": [],
+    "active_clearances_mm": {},
+    "blocked_by": "pure reach (no joint at a limit, no clearance active)",
+    "approach_path_collision_free": true,
+    "approach_staging_back_m": 0.18,
+    "approach_path_min_clearance_rule": ">= 1.5 mm to cabinet/stock/stand/AMR/other arm along the whole path",
+    "min_clearance_at_pose_mm": 44.6,
+    "caption": "gripper reaches its handoff grasp pose (gap 0 mm): not the limiting arm for this target",
+    "short_block": "pure reach"
+   }
+  },
+  "cabinet_to_world": {
+   "R": [
+    [
+     1.1102230246251565e-16,
+     1.0,
+     0.0
+    ],
+    [
+     -1.0,
+     1.1102230246251565e-16,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     1.0
+    ]
+   ],
+   "t": [
+    0.8939999999999999,
+    0.0010000000000000451,
+    0.0
+   ]
+  },
+  "stage_transit_diagnosis": {
+   "stage_pose_ik_solutions": 2,
+   "clearance_at_stage_mm": {
+    "robot_stand": 1.8
+   },
+   "links_at_stage": [
+    [
+     "arm_left_motor4",
+     "stand/lift/sliders/camera",
+     15.0
+    ],
+    [
+     "arm_left_link4",
+     "stand/lift/sliders/camera",
+     6.5
+    ],
+    [
+     "arm_left_motor5",
+     "stand/lift/sliders/camera",
+     4.8
+    ],
+    [
+     "arm_left_link5",
+     "stand/lift/sliders/camera",
+     1.8
+    ]
+   ],
+   "first_violation_on_direct_transit": {
+    "step": "5/12 of the direct joint interpolation",
+    "violated": [
+     "tool_neighbours"
+    ],
+    "links": [
+     [
+      "arm_left_suction_tool",
+      "carton:Shelf_05:0:0",
+      0.0
+     ]
+    ]
+   },
+   "full_left_sequence_result": "L0 home->stage: collision in every tried joint-space transit (direct, joint-ordered, random via points) (all 2 IK branches of the stage pose tried)"
+  },
+  "isaac_run": {
+   "target": "T2",
+   "arms": {
+    "left": {
+     "hold_start_s": 10.85,
+     "joint_tracking_error_deg_at_hold": 0.03751448541703367,
+     "planned": {
+      "total_mm": 24.449562554887127,
+      "vertical_mm": 14.746783833300636,
+      "depth_mm": -18.39994730325678,
+      "lateral_mm": -6.461842998449844,
+      "orientation_deg": 12.591579771414876,
+      "tcp_cabinet": [
+       -0.0104618429984498,
+       0.05160005269674328,
+       0.6157467838333006
+      ],
+      "target_cabinet": [
+       -0.003999999999999955,
+       0.07000000000000006,
+       0.601
+      ]
+     }
+    },
+    "right": {
+     "hold_start_s": 34.42916666666667,
+     "joint_tracking_error_deg_at_hold": 0.03315274207388233,
+     "planned": {
+      "total_mm": 1.1247979657955549e-12,
+      "vertical_mm": 6.661338147750939e-13,
+      "depth_mm": -5.551115123125784e-13,
+      "lateral_mm": 7.164407955784212e-13,
+      "orientation_deg": 1.219449054533845e-14,
+      "tcp_cabinet": [
+       -0.0039999999999992385,
+       -0.00830000000000053,
+       0.6010000000000006
+      ],
+      "target_cabinet": [
+       -0.003999999999999955,
+       -0.008299999999999974,
+       0.601
+      ]
+     }
+    }
+   },
+   "robot_cabinet_or_stock_contacts": {
+    "pad_3 -> Cartons": 1573
+   },
+   "frames": 1489
+  }
+ },
+ "what_if_lower_lift": {
+  "T1": {
+   "0.00": [],
+   "0.05": [],
+   "0.10": [],
+   "0.15": [],
+   "0.20": [],
+   "0.25": [],
+   "0.30": [],
+   "0.35": [],
+   "0.40": [],
+   "0.45": [],
+   "0.50": [],
+   "0.55": [],
+   "0.60": [],
+   "0.65": [],
+   "0.70": [],
+   "0.75": [],
+   "0.80": []
+  },
+  "T2": {
+   "0.00": [],
+   "0.05": [],
+   "0.10": [],
+   "0.15": [],
+   "0.20": [],
+   "0.25": [
+    [
+     0.36,
+     0.005
+    ],
+    [
+     0.36,
+     0.055
+    ],
+    [
+     0.41,
+     0.005
+    ],
+    [
+     0.41,
+     0.055
+    ],
+    [
+     0.46,
+     0.005
+    ],
+    [
+     0.46,
+     0.055
+    ]
+   ]
+  }
+ },
+ "note": "best-effort poses: d 410 mm, lateral 5 mm, lift at lowest limit -0.6235, sliders home; errors in the cabinet frame (vertical = z, depth = y into the cabinet, lateral = x), sign = TCP minus target."
+}

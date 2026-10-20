@@ -1,0 +1,393 @@
+[
+ {
+  "component": "NAUO1 (carriage)",
+  "name": "2026_06_12_05_56_45_0290_2",
+  "instances": 1,
+  "leaf_solids": 1,
+  "distinct_parts": 1,
+  "bbox_mm": [
+   -738.1,
+   -610.5,
+   694.7,
+   -566.1,
+   -310.5,
+   739.2
+  ],
+  "size_mm": [
+   172.0,
+   300.0,
+   44.5
+  ],
+  "volume_cm3": 675.4,
+  "group": "zlw_carriage",
+  "guess": "ZLW-20120S carriage (300 mm, lift carriage, travels in Y)"
+ },
+ {
+  "component": "NAUO1 (body)",
+  "name": "2026_06_12_05_56_45_0322_2",
+  "instances": 1,
+  "leaf_solids": 1,
+  "distinct_parts": 1,
+  "bbox_mm": [
+   -738.1,
+   -1333.5,
+   675.2,
+   -566.1,
+   412.5,
+   738.2
+  ],
+  "size_mm": [
+   172.0,
+   1746.0,
+   63.0
+  ],
+  "volume_cm3": 3202.7,
+  "group": "zlw_body",
+  "guess": "ZLW_20120S_K0BW0_D0A4B_0A0A0_1250: toothed-belt axis body, 1746 mm along Y, 1250 mm stroke, drive end at y=-1333"
+ },
+ {
+  "component": "NAUO2",
+  "name": "支撐架for滑軌 (support frame for slide rail)",
+  "instances": 1,
+  "leaf_solids": 1,
+  "distinct_parts": 1,
+  "bbox_mm": [
+   -757.1,
+   -631.5,
+   739.2,
+   -547.1,
+   -283.5,
+   927.0
+  ],
+  "size_mm": [
+   210.0,
+   348.0,
+   187.8
+  ],
+  "volume_cm3": 1106.7,
+  "group": "rail_support",
+  "guess": "rail bracket: U/channel with two triangular gussets, bolted on the ZLW carriage; carries the X rail"
+ },
+ {
+  "component": "NAUO3",
+  "name": "WW-16-120-20",
+  "instances": 1,
+  "leaf_solids": 1,
+  "distinct_parts": 1,
+  "bbox_mm": [
+   -523.9,
+   -280.2,
+   786.5,
+   -323.9,
+   -246.7,
+   952.5
+  ],
+  "size_mm": [
+   200.0,
+   33.5,
+   166.0
+  ],
+  "volume_cm3": 335.6,
+  "group": "rail_x",
+  "guess": "WW-16-120-20 rail carriage (arm A)"
+ },
+ {
+  "component": "NAUO4",
+  "name": "WHKD-1620",
+  "instances": 1,
+  "leaf_solids": 1,
+  "distinct_parts": 1,
+  "bbox_mm": [
+   -523.9,
+   -298.6,
+   918.0,
+   -323.9,
+   -254.7,
+   999.5
+  ],
+  "size_mm": [
+   200.0,
+   43.9,
+   81.5
+  ],
+  "volume_cm3": 112.0,
+  "group": "rail_x",
+  "guess": "WHKD-1620 clamp/lock (arm A)"
+ },
+ {
+  "component": "NAUO5",
+  "name": "WS-16-120-660",
+  "instances": 1,
+  "leaf_solids": 1,
+  "distinct_parts": 1,
+  "bbox_mm": [
+   -983.6,
+   -281.7,
+   801.5,
+   -323.6,
+   -259.7,
+   937.5
+  ],
+  "size_mm": [
+   660.0,
+   22.0,
+   136.0
+  ],
+  "volume_cm3": 767.4,
+  "group": "rail_x",
+  "guess": "WS-16-120-660 drylin W rail, 660 mm, along X"
+ },
+ {
+  "component": "NAUO6",
+  "name": "WW-16-120-20",
+  "instances": 1,
+  "leaf_solids": 1,
+  "distinct_parts": 1,
+  "bbox_mm": [
+   -983.8,
+   -280.2,
+   786.5,
+   -783.8,
+   -246.7,
+   952.5
+  ],
+  "size_mm": [
+   200.0,
+   33.5,
+   166.0
+  ],
+  "volume_cm3": 335.6,
+  "group": "rail_x",
+  "guess": "WW-16-120-20 rail carriage (arm B)"
+ },
+ {
+  "component": "NAUO7",
+  "name": "WHKD-1620",
+  "instances": 1,
+  "leaf_solids": 1,
+  "distinct_parts": 1,
+  "bbox_mm": [
+   -983.8,
+   -298.6,
+   918.0,
+   -783.8,
+   -254.7,
+   999.5
+  ],
+  "size_mm": [
+   200.0,
+   43.9,
+   81.5
+  ],
+  "volume_cm3": 112.0,
+  "group": "rail_x",
+  "guess": "WHKD-1620 clamp/lock (arm B)"
+ },
+ {
+  "component": "NAUO8",
+  "name": "上版for... (upper plate)",
+  "instances": 1,
+  "leaf_solids": 1,
+  "distinct_parts": 1,
+  "bbox_mm": [
+   -548.9,
+   -246.7,
+   764.5,
+   -298.9,
+   -241.7,
+   964.5
+  ],
+  "size_mm": [
+   250.0,
+   5.0,
+   200.0
+  ],
+  "volume_cm3": 173.9,
+  "group": "plates",
+  "guess": "upper (mounting) plate on carriage A, arm base bolts to it"
+ },
+ {
+  "component": "NAUO9",
+  "name": "上版for... (upper plate)",
+  "instances": 1,
+  "leaf_solids": 1,
+  "distinct_parts": 1,
+  "bbox_mm": [
+   -1008.8,
+   -246.7,
+   764.5,
+   -758.8,
+   -241.7,
+   964.5
+  ],
+  "size_mm": [
+   250.0,
+   5.0,
+   200.0
+  ],
+  "volume_cm3": 173.9,
+  "group": "plates",
+  "guess": "upper (mounting) plate on carriage B"
+ },
+ {
+  "component": "NAUO10",
+  "name": "D00391412.ipt",
+  "instances": 1,
+  "leaf_solids": 150,
+  "distinct_parts": 41,
+  "bbox_mm": [
+   -515.1,
+   -241.7,
+   741.6,
+   -332.7,
+   681.0,
+   945.7
+  ],
+  "size_mm": [
+   182.4,
+   922.7,
+   204.1
+  ],
+  "volume_cm3": 2890.2,
+  "group": "arm_A",
+  "guess": "ReBeL arm A: 150 igus D00xxxxxx parts, straight pose along +Y"
+ },
+ {
+  "component": "NAUO11",
+  "name": "D00391412.ipt",
+  "instances": 1,
+  "leaf_solids": 150,
+  "distinct_parts": 41,
+  "bbox_mm": [
+   -975.0,
+   -241.7,
+   741.6,
+   -792.6,
+   681.0,
+   945.7
+  ],
+  "size_mm": [
+   182.4,
+   922.7,
+   204.1
+  ],
+  "volume_cm3": 2890.2,
+  "group": "arm_B",
+  "guess": "ReBeL arm B: identical copy"
+ },
+ {
+  "component": "NAUO12",
+  "name": "三角支撐 (triangular support)",
+  "instances": 1,
+  "leaf_solids": 1,
+  "distinct_parts": 1,
+  "bbox_mm": [
+   -702.1,
+   -1351.0,
+   278.3,
+   -602.1,
+   -200.5,
+   675.2
+  ],
+  "size_mm": [
+   100.0,
+   1150.5,
+   396.9
+  ],
+  "volume_cm3": 21189.1,
+  "group": "gusset",
+  "guess": "gusset/column: 100 mm thick plate, y -1351..-200, slanted underside; the only fixed structure"
+ },
+ {
+  "component": "NAUO13",
+  "name": "三角形板側 (triangular side plate)",
+  "instances": 1,
+  "leaf_solids": 1,
+  "distinct_parts": 1,
+  "bbox_mm": [
+   -602.1,
+   -1351.0,
+   605.2,
+   -453.2,
+   -751.0,
+   675.2
+  ],
+  "size_mm": [
+   148.9,
+   600.0,
+   70.0
+  ],
+  "volume_cm3": 3124.6,
+  "group": "side_plate",
+  "guess": "side wing plate (70 mm thick) on the gusset top at the rear end"
+ },
+ {
+  "component": "NAUO14",
+  "name": "三角形板側 (triangular side plate)",
+  "instances": 1,
+  "leaf_solids": 1,
+  "distinct_parts": 1,
+  "bbox_mm": [
+   -851.0,
+   -1351.0,
+   605.2,
+   -702.1,
+   -751.0,
+   675.2
+  ],
+  "size_mm": [
+   148.9,
+   600.0,
+   70.0
+  ],
+  "volume_cm3": 3124.6,
+  "group": "side_plate",
+  "guess": "side wing plate, mirror"
+ },
+ {
+  "component": "NAUO15",
+  "name": "載板for雙臂 (carrier plate for dual arms)",
+  "instances": 1,
+  "leaf_solids": 1,
+  "distinct_parts": 1,
+  "bbox_mm": [
+   -323.0,
+   -241.7,
+   722.0,
+   2.0,
+   -238.7,
+   1022.0
+  ],
+  "size_mm": [
+   325.0,
+   3.0,
+   300.0
+  ],
+  "volume_cm3": 277.5,
+  "group": "plates",
+  "guess": "3 mm plate 325x300 at the +X end of the rail (not attached to anything; probably stray/for later)"
+ },
+ {
+  "component": "NAUO16",
+  "name": "載板for雙臂 (carrier plate for dual arms)",
+  "instances": 1,
+  "leaf_solids": 1,
+  "distinct_parts": 1,
+  "bbox_mm": [
+   -1309.7,
+   -241.7,
+   722.0,
+   -984.7,
+   -238.7,
+   1022.0
+  ],
+  "size_mm": [
+   325.0,
+   3.0,
+   300.0
+  ],
+  "volume_cm3": 277.5,
+  "group": "plates",
+  "guess": "3 mm plate at the -X end of the rail"
+ }
+]

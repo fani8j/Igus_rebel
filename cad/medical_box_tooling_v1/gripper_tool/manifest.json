@@ -1,0 +1,259 @@
+{
+ "units": "metres",
+ "frames": "base_* in link6; finger_* in the finger-joint frame (origin = (0,0,0.1500) m of link6, axes parallel to link6, closed position)",
+ "mesh_path_convention": "package://right_gripper_tool/meshes/{visual,collision}/<file>; xacro arg mesh_root overrides the prefix",
+ "visual": [
+  {
+   "file": "meshes/visual/base_flange_disc.stl",
+   "link": "gripper_base",
+   "frame": "link6",
+   "color": [
+    0.93,
+    0.55,
+    0.12
+   ],
+   "triangles": 17180
+  },
+  {
+   "file": "meshes/visual/base_gripper_plate.stl",
+   "link": "gripper_base",
+   "frame": "link6",
+   "color": [
+    0.93,
+    0.55,
+    0.12
+   ],
+   "triangles": 7660
+  },
+  {
+   "file": "meshes/visual/base_top_stop.stl",
+   "link": "gripper_base",
+   "frame": "link6",
+   "color": [
+    0.85,
+    0.2,
+    0.2
+   ],
+   "triangles": 2124
+  },
+  {
+   "file": "meshes/visual/base_smc_body.stl",
+   "link": "gripper_base",
+   "frame": "link6",
+   "color": [
+    0.75,
+    0.75,
+    0.78
+   ],
+   "triangles": 7035
+  },
+  {
+   "file": "meshes/visual/finger_left.stl",
+   "link": "finger_left",
+   "frame": "finger_left",
+   "color": [
+    0.15,
+    0.55,
+    0.85
+   ],
+   "triangles": 1932
+  },
+  {
+   "file": "meshes/visual/finger_pad_left.stl",
+   "link": "finger_left",
+   "frame": "finger_left",
+   "color": [
+    0.1,
+    0.1,
+    0.1
+   ],
+   "triangles": 1308
+  },
+  {
+   "file": "meshes/visual/finger_jaw_left.stl",
+   "link": "finger_left",
+   "frame": "finger_left",
+   "color": [
+    0.6,
+    0.62,
+    0.66
+   ],
+   "triangles": 1778
+  },
+  {
+   "file": "meshes/visual/finger_right.stl",
+   "link": "finger_right",
+   "frame": "finger_right",
+   "color": [
+    0.15,
+    0.55,
+    0.85
+   ],
+   "triangles": 1932
+  },
+  {
+   "file": "meshes/visual/finger_pad_right.stl",
+   "link": "finger_right",
+   "frame": "finger_right",
+   "color": [
+    0.1,
+    0.1,
+    0.1
+   ],
+   "triangles": 1308
+  },
+  {
+   "file": "meshes/visual/finger_jaw_right.stl",
+   "link": "finger_right",
+   "frame": "finger_right",
+   "color": [
+    0.6,
+    0.62,
+    0.66
+   ],
+   "triangles": 1778
+  }
+ ],
+ "collision": [
+  {
+   "file": "meshes/collision/base_flange_disc.stl",
+   "link": "gripper_base",
+   "frame": "link6",
+   "triangles": 500,
+   "hull_volume_mm3": 33779.48004112418
+  },
+  {
+   "file": "meshes/collision/base_gripper_plate.stl",
+   "link": "gripper_base",
+   "frame": "link6",
+   "triangles": 60,
+   "hull_volume_mm3": 21427.740633919366
+  },
+  {
+   "file": "meshes/collision/base_top_stop_bar.stl",
+   "link": "gripper_base",
+   "frame": "link6",
+   "triangles": 12,
+   "hull_volume_mm3": 1402.5
+  },
+  {
+   "file": "meshes/collision/base_top_stop_neg.stl",
+   "link": "gripper_base",
+   "frame": "link6",
+   "triangles": 32,
+   "hull_volume_mm3": 16558.791666666668
+  },
+  {
+   "file": "meshes/collision/base_top_stop_pos.stl",
+   "link": "gripper_base",
+   "frame": "link6",
+   "triangles": 32,
+   "hull_volume_mm3": 16558.791666666668
+  },
+  {
+   "file": "meshes/collision/base_smc_body_0.stl",
+   "link": "gripper_base",
+   "frame": "link6",
+   "triangles": 396,
+   "hull_volume_mm3": 37095.53455882661
+  },
+  {
+   "file": "meshes/collision/base_smc_body_1.stl",
+   "link": "gripper_base",
+   "frame": "link6",
+   "triangles": 788,
+   "hull_volume_mm3": 309423.22743261553
+  },
+  {
+   "file": "meshes/collision/base_smc_body_2.stl",
+   "link": "gripper_base",
+   "frame": "link6",
+   "triangles": 664,
+   "hull_volume_mm3": 4061.5013949860245
+  },
+  {
+   "file": "meshes/collision/finger_left_foot.stl",
+   "link": "finger_left",
+   "frame": "finger_left",
+   "triangles": 20,
+   "hull_volume_mm3": 7561.092293054234
+  },
+  {
+   "file": "meshes/collision/finger_left_column.stl",
+   "link": "finger_left",
+   "frame": "finger_left",
+   "triangles": 12,
+   "hull_volume_mm3": 3037.0915318744046
+  },
+  {
+   "file": "meshes/collision/finger_left_block.stl",
+   "link": "finger_left",
+   "frame": "finger_left",
+   "triangles": 16,
+   "hull_volume_mm3": 38279.805179999996
+  },
+  {
+   "file": "meshes/collision/finger_pad_left.stl",
+   "link": "finger_left",
+   "frame": "finger_left",
+   "triangles": 20,
+   "hull_volume_mm3": 6715.584
+  },
+  {
+   "file": "meshes/collision/finger_jaw_left_top.stl",
+   "link": "finger_left",
+   "frame": "finger_left",
+   "triangles": 28,
+   "hull_volume_mm3": 4111.213333333339
+  },
+  {
+   "file": "meshes/collision/finger_jaw_left_low.stl",
+   "link": "finger_left",
+   "frame": "finger_left",
+   "triangles": 20,
+   "hull_volume_mm3": 1494.41333333333
+  },
+  {
+   "file": "meshes/collision/finger_right_foot.stl",
+   "link": "finger_right",
+   "frame": "finger_right",
+   "triangles": 20,
+   "hull_volume_mm3": 7561.092293054234
+  },
+  {
+   "file": "meshes/collision/finger_right_column.stl",
+   "link": "finger_right",
+   "frame": "finger_right",
+   "triangles": 12,
+   "hull_volume_mm3": 3037.0915318744046
+  },
+  {
+   "file": "meshes/collision/finger_right_block.stl",
+   "link": "finger_right",
+   "frame": "finger_right",
+   "triangles": 16,
+   "hull_volume_mm3": 38279.805179999996
+  },
+  {
+   "file": "meshes/collision/finger_pad_right.stl",
+   "link": "finger_right",
+   "frame": "finger_right",
+   "triangles": 20,
+   "hull_volume_mm3": 6715.584
+  },
+  {
+   "file": "meshes/collision/finger_jaw_right_top.stl",
+   "link": "finger_right",
+   "frame": "finger_right",
+   "triangles": 28,
+   "hull_volume_mm3": 4111.213333333339
+  },
+  {
+   "file": "meshes/collision/finger_jaw_right_low.stl",
+   "link": "finger_right",
+   "frame": "finger_right",
+   "triangles": 20,
+   "hull_volume_mm3": 1494.41333333333
+  }
+ ]
+}

@@ -1,0 +1,408 @@
+{
+ "frame": "link6 (all pieces rigid in the link6 frame)",
+ "units": "metres",
+ "note": "convex pieces; the tubes (flexible) are excluded; camera = hull envelope",
+ "pieces": [
+  {
+   "file": "meshes/collision/carrier_00.stl",
+   "source": "carrier",
+   "volume_mm3": 14517.314031587563,
+   "faces": 30
+  },
+  {
+   "file": "meshes/collision/carrier_01.stl",
+   "source": "carrier",
+   "volume_mm3": 5729.476833949714,
+   "faces": 20
+  },
+  {
+   "file": "meshes/collision/carrier_02.stl",
+   "source": "carrier",
+   "volume_mm3": 24890.069384415383,
+   "faces": 62
+  },
+  {
+   "file": "meshes/collision/carrier_03.stl",
+   "source": "carrier",
+   "volume_mm3": 1089.0750242291838,
+   "faces": 14
+  },
+  {
+   "file": "meshes/collision/carrier_04.stl",
+   "source": "carrier",
+   "volume_mm3": 3616.0852820977093,
+   "faces": 20
+  },
+  {
+   "file": "meshes/collision/carrier_05.stl",
+   "source": "carrier",
+   "volume_mm3": 1562.03172126902,
+   "faces": 20
+  },
+  {
+   "file": "meshes/collision/carrier_06.stl",
+   "source": "carrier",
+   "volume_mm3": 4856.261335477654,
+   "faces": 60
+  },
+  {
+   "file": "meshes/collision/carrier_07.stl",
+   "source": "carrier",
+   "volume_mm3": 2644.6313697640326,
+   "faces": 20
+  },
+  {
+   "file": "meshes/collision/carrier_08.stl",
+   "source": "carrier",
+   "volume_mm3": 15105.130631765116,
+   "faces": 28
+  },
+  {
+   "file": "meshes/collision/carrier_09.stl",
+   "source": "carrier",
+   "volume_mm3": 5828.1556823016035,
+   "faces": 16
+  },
+  {
+   "file": "meshes/collision/carrier_10.stl",
+   "source": "carrier",
+   "volume_mm3": 5284.210130931616,
+   "faces": 22
+  },
+  {
+   "file": "meshes/collision/carrier_11.stl",
+   "source": "carrier",
+   "volume_mm3": 5285.612011945195,
+   "faces": 22
+  },
+  {
+   "file": "meshes/collision/carrier_12.stl",
+   "source": "carrier",
+   "volume_mm3": 1364.9190483487007,
+   "faces": 216
+  },
+  {
+   "file": "meshes/collision/carrier_13.stl",
+   "source": "carrier",
+   "volume_mm3": 4457.075309273546,
+   "faces": 38
+  },
+  {
+   "file": "meshes/collision/carrier_14.stl",
+   "source": "carrier",
+   "volume_mm3": 9095.85987279539,
+   "faces": 64
+  },
+  {
+   "file": "meshes/collision/carrier_15.stl",
+   "source": "carrier",
+   "volume_mm3": 1176.0836266032334,
+   "faces": 202
+  },
+  {
+   "file": "meshes/collision/carrier_16.stl",
+   "source": "carrier",
+   "volume_mm3": 1182.8070130717442,
+   "faces": 210
+  },
+  {
+   "file": "meshes/collision/carrier_17.stl",
+   "source": "carrier",
+   "volume_mm3": 4162.695269106773,
+   "faces": 46
+  },
+  {
+   "file": "meshes/collision/carrier_18.stl",
+   "source": "carrier",
+   "volume_mm3": 6017.655841792574,
+   "faces": 94
+  },
+  {
+   "file": "meshes/collision/carrier_19.stl",
+   "source": "carrier",
+   "volume_mm3": 1318.2113522059678,
+   "faces": 222
+  },
+  {
+   "file": "meshes/collision/camera_arm_00.stl",
+   "source": "camera_arm",
+   "volume_mm3": 15505.435958245533,
+   "faces": 12
+  },
+  {
+   "file": "meshes/collision/camera_arm_01.stl",
+   "source": "camera_arm",
+   "volume_mm3": 1721.238969199588,
+   "faces": 12
+  },
+  {
+   "file": "meshes/collision/camera_arm_02.stl",
+   "source": "camera_arm",
+   "volume_mm3": 10155.722435507758,
+   "faces": 44
+  },
+  {
+   "file": "meshes/collision/camera_arm_03.stl",
+   "source": "camera_arm",
+   "volume_mm3": 2050.078560221522,
+   "faces": 20
+  },
+  {
+   "file": "meshes/collision/camera_arm_04.stl",
+   "source": "camera_arm",
+   "volume_mm3": 936.9454672267843,
+   "faces": 24
+  },
+  {
+   "file": "meshes/collision/camera_arm_05.stl",
+   "source": "camera_arm",
+   "volume_mm3": 11319.944957568767,
+   "faces": 36
+  },
+  {
+   "file": "meshes/collision/camera_arm_06.stl",
+   "source": "camera_arm",
+   "volume_mm3": 3095.178164309136,
+   "faces": 34
+  },
+  {
+   "file": "meshes/collision/camera_arm_07.stl",
+   "source": "camera_arm",
+   "volume_mm3": 2519.9300921002246,
+   "faces": 28
+  },
+  {
+   "file": "meshes/collision/scanner_arm_00.stl",
+   "source": "scanner_arm",
+   "volume_mm3": 858.9211581007984,
+   "faces": 32
+  },
+  {
+   "file": "meshes/collision/scanner_arm_01.stl",
+   "source": "scanner_arm",
+   "volume_mm3": 7021.382269676698,
+   "faces": 40
+  },
+  {
+   "file": "meshes/collision/scanner_arm_02.stl",
+   "source": "scanner_arm",
+   "volume_mm3": 2345.7698236339893,
+   "faces": 48
+  },
+  {
+   "file": "meshes/collision/scanner_arm_03.stl",
+   "source": "scanner_arm",
+   "volume_mm3": 3752.856815060705,
+   "faces": 38
+  },
+  {
+   "file": "meshes/collision/scanner_arm_04.stl",
+   "source": "scanner_arm",
+   "volume_mm3": 10648.534270991566,
+   "faces": 50
+  },
+  {
+   "file": "meshes/collision/scanner_arm_05.stl",
+   "source": "scanner_arm",
+   "volume_mm3": 1684.550122401365,
+   "faces": 28
+  },
+  {
+   "file": "meshes/collision/scanner_arm_06.stl",
+   "source": "scanner_arm",
+   "volume_mm3": 3120.0236720168114,
+   "faces": 52
+  },
+  {
+   "file": "meshes/collision/scanner_arm_07.stl",
+   "source": "scanner_arm",
+   "volume_mm3": 7287.932231512114,
+   "faces": 48
+  },
+  {
+   "file": "meshes/collision/pad_L_00.stl",
+   "source": "pad_L",
+   "volume_mm3": 1215.8776838110573,
+   "faces": 368
+  },
+  {
+   "file": "meshes/collision/pad_L_01.stl",
+   "source": "pad_L",
+   "volume_mm3": 3831.6913155821403,
+   "faces": 332
+  },
+  {
+   "file": "meshes/collision/pad_L_02.stl",
+   "source": "pad_L",
+   "volume_mm3": 255.54644069904765,
+   "faces": 332
+  },
+  {
+   "file": "meshes/collision/pad_L_03.stl",
+   "source": "pad_L",
+   "volume_mm3": 454.4215587921989,
+   "faces": 212
+  },
+  {
+   "file": "meshes/collision/nut_front_L_00.stl",
+   "source": "nut_front_L",
+   "volume_mm3": 509.22293742525005,
+   "faces": 20
+  },
+  {
+   "file": "meshes/collision/washer_L_00.stl",
+   "source": "washer_L",
+   "volume_mm3": 312.56671980047486,
+   "faces": 140
+  },
+  {
+   "file": "meshes/collision/nut_rear_L_00.stl",
+   "source": "nut_rear_L",
+   "volume_mm3": 509.22293742525005,
+   "faces": 20
+  },
+  {
+   "file": "meshes/collision/pad_M_00.stl",
+   "source": "pad_M",
+   "volume_mm3": 1215.8776838110573,
+   "faces": 368
+  },
+  {
+   "file": "meshes/collision/pad_M_01.stl",
+   "source": "pad_M",
+   "volume_mm3": 3831.6913155821385,
+   "faces": 332
+  },
+  {
+   "file": "meshes/collision/pad_M_02.stl",
+   "source": "pad_M",
+   "volume_mm3": 255.54644069904765,
+   "faces": 332
+  },
+  {
+   "file": "meshes/collision/pad_M_03.stl",
+   "source": "pad_M",
+   "volume_mm3": 454.42155879219933,
+   "faces": 212
+  },
+  {
+   "file": "meshes/collision/nut_front_M_00.stl",
+   "source": "nut_front_M",
+   "volume_mm3": 509.2229374252503,
+   "faces": 20
+  },
+  {
+   "file": "meshes/collision/washer_M_00.stl",
+   "source": "washer_M",
+   "volume_mm3": 312.56671980047497,
+   "faces": 140
+  },
+  {
+   "file": "meshes/collision/nut_rear_M_00.stl",
+   "source": "nut_rear_M",
+   "volume_mm3": 509.2229374252503,
+   "faces": 20
+  },
+  {
+   "file": "meshes/collision/pad_R_00.stl",
+   "source": "pad_R",
+   "volume_mm3": 1215.877683811057,
+   "faces": 368
+  },
+  {
+   "file": "meshes/collision/pad_R_01.stl",
+   "source": "pad_R",
+   "volume_mm3": 3831.6913155821394,
+   "faces": 332
+  },
+  {
+   "file": "meshes/collision/pad_R_02.stl",
+   "source": "pad_R",
+   "volume_mm3": 255.54644069904765,
+   "faces": 332
+  },
+  {
+   "file": "meshes/collision/pad_R_03.stl",
+   "source": "pad_R",
+   "volume_mm3": 454.4215587921989,
+   "faces": 212
+  },
+  {
+   "file": "meshes/collision/nut_front_R_00.stl",
+   "source": "nut_front_R",
+   "volume_mm3": 509.22293742525056,
+   "faces": 20
+  },
+  {
+   "file": "meshes/collision/washer_R_00.stl",
+   "source": "washer_R",
+   "volume_mm3": 312.56671980047497,
+   "faces": 140
+  },
+  {
+   "file": "meshes/collision/nut_rear_R_00.stl",
+   "source": "nut_rear_R",
+   "volume_mm3": 509.22293742525056,
+   "faces": 20
+  },
+  {
+   "file": "meshes/collision/collector_00.stl",
+   "source": "collector",
+   "volume_mm3": 1604.265512341966,
+   "faces": 84
+  },
+  {
+   "file": "meshes/collision/collector_01.stl",
+   "source": "collector",
+   "volume_mm3": 2926.986753659324,
+   "faces": 156
+  },
+  {
+   "file": "meshes/collision/collector_02.stl",
+   "source": "collector",
+   "volume_mm3": 1604.08846034632,
+   "faces": 84
+  },
+  {
+   "file": "meshes/collision/scanner_se4710_00.stl",
+   "source": "scanner_se4710",
+   "volume_mm3": 2474.6310000000058,
+   "faces": 12
+  },
+  {
+   "file": "meshes/collision/decoder_pl3307_00.stl",
+   "source": "decoder_pl3307",
+   "volume_mm3": 6692.107968000001,
+   "faces": 12
+  },
+  {
+   "file": "meshes/collision/camera_gemini305_00.stl",
+   "source": "camera_gemini305",
+   "volume_mm3": 38514.63854854306,
+   "faces": 188
+  }
+ ],
+ "hull_over_part_volume": {
+  "carrier": 1.102,
+  "camera_arm": 1.111,
+  "scanner_arm": 1.705,
+  "pad_L": 1.123,
+  "nut_front_L": 1.861,
+  "washer_L": 1.374,
+  "nut_rear_L": 1.861,
+  "pad_M": 1.123,
+  "nut_front_M": 1.861,
+  "washer_M": 1.374,
+  "nut_rear_M": 1.861,
+  "pad_R": 1.123,
+  "nut_front_R": 1.861,
+  "washer_R": 1.374,
+  "nut_rear_R": 1.861,
+  "collector": 1.186,
+  "scanner_se4710": 1.005,
+  "decoder_pl3307": 1.0,
+  "camera_gemini305": 1.0
+ },
+ "n_pieces": 63,
+ "total_hull_over_total_volume": 1.146
+}

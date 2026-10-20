@@ -1,0 +1,357 @@
+{
+ "rebel_left_suction": {
+  "dof_names": [
+   "joint1",
+   "joint2",
+   "joint3",
+   "joint4",
+   "joint5",
+   "joint6",
+   "pad_1_buffer_joint",
+   "pad_2_buffer_joint",
+   "pad_3_buffer_joint"
+  ],
+  "missing_vs_urdf": [],
+  "extra_dofs": [
+   "pad_1_buffer_joint",
+   "pad_2_buffer_joint",
+   "pad_3_buffer_joint"
+  ],
+  "settled_dq_max": 0.0,
+  "settled_tool_move_mm": [
+   0.0
+  ],
+  "max_dq_angular_deg": 0.6459173560142517,
+  "max_dq_linear_mm": 0.0,
+  "tool_drift_mm": [
+   9.372729808092117
+  ],
+  "q_home_deg_or_m": [
+   5.2172993036947446e-08,
+   0.007358758244663477,
+   0.01159716583788395,
+   -6.66891264700098e-06,
+   0.0024292629677802324,
+   -1.6455162040074356e-05,
+   0.0,
+   0.0,
+   0.0
+  ],
+  "suction_close": {
+   "status": "Closed",
+   "gripped": [
+    "/World/test_block"
+   ]
+  },
+  "pad_compression_mm": [
+   0.08859993249643594,
+   0.087663451267872,
+   0.08670432725921273
+  ],
+  "joint6_plus_0p5rad_tool_rotation_deg": 28.668144472586075
+ },
+ "rebel_right_gripper": {
+  "dof_names": [
+   "joint1",
+   "joint2",
+   "joint3",
+   "joint4",
+   "joint5",
+   "joint6",
+   "finger_left_joint",
+   "finger_right_joint"
+  ],
+  "missing_vs_urdf": [],
+  "extra_dofs": [
+   "finger_left_joint",
+   "finger_right_joint"
+  ],
+  "settled_dq_max": 0.0,
+  "settled_tool_move_mm": [
+   0.0
+  ],
+  "max_dq_angular_deg": 0.80433589220047,
+  "max_dq_linear_mm": 0.0,
+  "tool_drift_mm": [
+   11.596303433179855
+  ],
+  "q_home_deg_or_m": [
+   -2.0690414714863437e-08,
+   0.008877405896782875,
+   0.014385954476892948,
+   4.3153918340976816e-06,
+   0.0036506170872598886,
+   4.3738853605646e-07,
+   0.023999128490686417,
+   0.023999931290745735
+  ],
+  "fingers_start_gap_mm": 55.99905978143215,
+  "finger_close_gap_mm": 8.000036627317291,
+  "finger_close_asym_mm": -3.3469977012146046e-05,
+  "finger_open_gap_mm": 55.99912869930267,
+  "joint6_plus_0p5rad_tool_rotation_deg": 28.683988707947552
+ },
+ "dual_arm_rig_medical": {
+  "dof_names": [
+   "lift_joint",
+   "slider_left_joint",
+   "slider_right_joint",
+   "arm_left_joint1",
+   "arm_right_joint1",
+   "arm_left_joint2",
+   "arm_right_joint2",
+   "arm_left_joint3",
+   "arm_right_joint3",
+   "arm_left_joint4",
+   "arm_right_joint4",
+   "arm_left_joint5",
+   "arm_right_joint5",
+   "arm_left_joint6",
+   "arm_right_joint6",
+   "pad_1_buffer_joint",
+   "pad_2_buffer_joint",
+   "pad_3_buffer_joint",
+   "finger_left_joint",
+   "finger_right_joint"
+  ],
+  "missing_vs_urdf": [],
+  "extra_dofs": [
+   "pad_1_buffer_joint",
+   "pad_2_buffer_joint",
+   "pad_3_buffer_joint",
+   "finger_left_joint",
+   "finger_right_joint"
+  ],
+  "settled_dq_max": 6.891787052154541e-08,
+  "settled_tool_move_mm": [
+   4.71216097253091e-05,
+   0.0001281846380152274
+  ],
+  "max_dq_angular_deg": 0.8928037285804749,
+  "max_dq_linear_mm": 18.43954436480999,
+  "tool_drift_mm": [
+   21.000009030103683,
+   28.001487255096436
+  ],
+  "q_start_linear": {
+   "lift_joint": -0.2128681093454361,
+   "slider_left_joint": 0.0,
+   "slider_right_joint": 0.02432401105761528
+  },
+  "settled_linear_mm": 9.778887033462524e-06,
+  "home_state": {
+   "lift_joint": -0.20038293302059174,
+   "slider_left_joint": -0.005913687404245138,
+   "slider_right_joint": 0.005884466227144003
+  },
+  "q_home_deg_or_m": [
+   -0.20038293302059174,
+   -0.005913687404245138,
+   0.005884466227144003,
+   0.0004522755043581128,
+   -4.7156117943814024e-05,
+   0.000973101647105068,
+   -3.77185751858633e-05,
+   7.422002090606838e-05,
+   -3.219658538000658e-05,
+   7.769862349960022e-06,
+   2.028347580562695e-06,
+   4.776076366397319e-06,
+   -8.188029028133315e-07,
+   8.452252586721443e-07,
+   -4.63405092077096e-09,
+   0.0,
+   0.0,
+   0.0,
+   0.024000000208616257,
+   0.02399969846010208
+  ],
+  "suction_close": {
+   "status": "Closed",
+   "gripped": [
+    "/World/test_block"
+   ]
+  },
+  "pad_compression_mm": [
+   0.15819408872630447,
+   0.06317767110886052,
+   0.10090799332829192
+  ],
+  "fingers_start_gap_mm": 55.999290749430656,
+  "finger_close_gap_mm": 8.000306398760586,
+  "finger_close_asym_mm": 0.00030639876058558,
+  "finger_open_gap_mm": 55.99933172762394
+ },
+ "checks": [
+  [
+   "[rebel_left_suction] articulation found, 9 DOFs",
+   true,
+   "9"
+  ],
+  [
+   "[rebel_left_suction] no joint of the URDF is missing (6 expected)",
+   true,
+   "[]"
+  ],
+  [
+   "[rebel_left_suction] finite joint state after 3 s",
+   true,
+   ""
+  ],
+  [
+   "[rebel_left_suction] no collapse: arm joints sag < 2 deg from the start state (3 s)",
+   true,
+   "0.6459"
+  ],
+  [
+   "[rebel_left_suction] settled: joints move < 0.05 deg / 0.05 mm during the last second",
+   true,
+   "0.0"
+  ],
+  [
+   "[rebel_left_suction] tool is at rest (< 0.5 mm in the last second); moved [9.4] mm from the start state",
+   true,
+   "([9.37], [0.0])"
+  ],
+  [
+   "[rebel_left_suction] mounted Surface Gripper closes on the block at the pad lips",
+   true,
+   "('Closed', ['/World/test_block'])"
+  ],
+  [
+   "[rebel_left_suction] pad buffers respond (0 .. 10 mm compression, finite)",
+   true,
+   "[0.09, 0.09, 0.09]"
+  ],
+  [
+   "[rebel_left_suction] mounted Surface Gripper opens",
+   true,
+   ""
+  ],
+  [
+   "[rebel_left_suction] tool follows joint6 (+0.5 rad = 28.6 deg)",
+   true,
+   "28.67"
+  ],
+  [
+   "[rebel_right_gripper] articulation found, 8 DOFs",
+   true,
+   "8"
+  ],
+  [
+   "[rebel_right_gripper] no joint of the URDF is missing (6 expected)",
+   true,
+   "[]"
+  ],
+  [
+   "[rebel_right_gripper] finite joint state after 3 s",
+   true,
+   ""
+  ],
+  [
+   "[rebel_right_gripper] no collapse: arm joints sag < 2 deg from the start state (3 s)",
+   true,
+   "0.8043"
+  ],
+  [
+   "[rebel_right_gripper] settled: joints move < 0.05 deg / 0.05 mm during the last second",
+   true,
+   "0.0"
+  ],
+  [
+   "[rebel_right_gripper] tool is at rest (< 0.5 mm in the last second); moved [11.6] mm from the start state",
+   true,
+   "([11.6], [0.0])"
+  ],
+  [
+   "[rebel_right_gripper] fingers start open (56 mm)",
+   true,
+   "56.0"
+  ],
+  [
+   "[rebel_right_gripper] finger drives close to the 8 mm stop, symmetric",
+   true,
+   "(8.0, -0.0)"
+  ],
+  [
+   "[rebel_right_gripper] finger drives reopen to 56 mm",
+   true,
+   "56.0"
+  ],
+  [
+   "[rebel_right_gripper] tool follows joint6 (+0.5 rad = 28.6 deg)",
+   true,
+   "28.68"
+  ],
+  [
+   "[dual_arm_rig_medical] articulation found, 20 DOFs",
+   true,
+   "20"
+  ],
+  [
+   "[dual_arm_rig_medical] no joint of the URDF is missing (15 expected)",
+   true,
+   "[]"
+  ],
+  [
+   "[dual_arm_rig_medical] finite joint state after 3 s",
+   true,
+   ""
+  ],
+  [
+   "[dual_arm_rig_medical] no collapse: arm joints sag < 2 deg from the start state (3 s)",
+   true,
+   "0.8928"
+  ],
+  [
+   "[dual_arm_rig_medical] settled: joints move < 0.05 deg / 0.05 mm during the last second",
+   true,
+   "6.891787052154541e-08"
+  ],
+  [
+   "[dual_arm_rig_medical] lift/sliders at rest (< 0.05 mm in the last second); start-to-3 s change 18.4 mm (settling from the authored start state)",
+   true,
+   "0.0"
+  ],
+  [
+   "[dual_arm_rig_medical] README home state: lift -0.2, sliders -+0.005973 (+-0.5 mm)",
+   true,
+   "{'lift_joint': -0.20038, 'slider_left_joint': -0.00591, 'slider_right_joint': 0.00588}"
+  ],
+  [
+   "[dual_arm_rig_medical] tool is at rest (< 0.5 mm in the last second); moved [21.0, 28.0] mm from the start state",
+   true,
+   "([21.0, 28.0], [0.0, 0.0])"
+  ],
+  [
+   "[dual_arm_rig_medical] mounted Surface Gripper closes on the block at the pad lips",
+   true,
+   "('Closed', ['/World/test_block'])"
+  ],
+  [
+   "[dual_arm_rig_medical] pad buffers respond (0 .. 10 mm compression, finite)",
+   true,
+   "[0.16, 0.06, 0.1]"
+  ],
+  [
+   "[dual_arm_rig_medical] mounted Surface Gripper opens",
+   true,
+   ""
+  ],
+  [
+   "[dual_arm_rig_medical] fingers start open (56 mm)",
+   true,
+   "56.0"
+  ],
+  [
+   "[dual_arm_rig_medical] finger drives close to the 8 mm stop, symmetric",
+   true,
+   "(8.0, 0.0)"
+  ],
+  [
+   "[dual_arm_rig_medical] finger drives reopen to 56 mm",
+   true,
+   "56.0"
+  ]
+ ]
+}

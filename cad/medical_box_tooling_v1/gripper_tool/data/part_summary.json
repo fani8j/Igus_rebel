@@ -1,0 +1,51 @@
+{
+ "flange_disc": {
+  "volume_mm3": 32219.635472076818,
+  "area_mm2": 11144.214459468909,
+  "est_mass_kg": 0.02464216115228918,
+  "material": "PA12-CF (PETG ok)",
+  "stl_triangles": 17180
+ },
+ "gripper_plate": {
+  "volume_mm3": 20052.943201404854,
+  "area_mm2": 9002.463913495865,
+  "est_mass_kg": 0.01818862137102819,
+  "material": "PA12-CF",
+  "stl_triangles": 7660
+ },
+ "top_stop": {
+  "volume_mm3": 24312.042528438586,
+  "area_mm2": 10997.861925006653,
+  "est_mass_kg": 0.022166761683435274,
+  "material": "PA12-CF",
+  "stl_triangles": 2124
+ },
+ "finger_left": {
+  "volume_mm3": 44469.006893866346,
+  "area_mm2": 13946.844833867171,
+  "est_mass_kg": 0.03203148535272327,
+  "material": "PA12-CF (PETG ok)",
+  "stl_triangles": 5628
+ },
+ "finger_right": {
+  "volume_mm3": 44469.006893866346,
+  "area_mm2": 13946.844833867171,
+  "est_mass_kg": 0.03203148535272327,
+  "material": "PA12-CF (PETG ok)",
+  "stl_triangles": 5628
+ },
+ "pad_left": {
+  "volume_mm3": 6044.3539729129525,
+  "area_mm2": 6167.975317148099,
+  "est_mass_kg": 0.0073136683072246725,
+  "material": "TPU 95A",
+  "stl_triangles": 2612
+ },
+ "pad_right": {
+  "volume_mm3": 6044.3539729129525,
+  "area_mm2": 6167.975317148099,
+  "est_mass_kg": 0.0073136683072246725,
+  "material": "TPU 95A",
+  "stl_triangles": 2612
+ }
+}

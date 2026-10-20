@@ -1,0 +1,17 @@
+[
+ {
+  "part": "tool_body",
+  "volume_cm3": 52.60087921157592,
+  "mass_g": 56.808949548501985,
+  "bbox_mm": [
+   -75.00000010000002,
+   75.00000010000002,
+   -52.700000100000025,
+   28.000000100000005,
+   52.69129699602286,
+   133.50360558879055
+  ],
+  "watertight": true,
+  "orient": "build with the bar front face (z = 133.5, hex-pocket side) on the bed, stem growing up, flange face on top (see data/verify.json printability); 12 hub gussets + 2 cheek walls make the hub plate and the collector ledges self-supporting; no supports needed except a few cm3 under the cheek ends"
+ }
+]

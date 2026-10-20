@@ -1,0 +1,4172 @@
+{
+ "source": {
+  "file": "/home/farhan/Downloads/2 arms step(軌).step",
+  "size_bytes": 106970424,
+  "writer": "SolidWorks 2017, STEP AP214 (SwSTEP 2.0)",
+  "length_unit": "mm (SI_UNIT .MILLI. .METRE.)",
+  "assembly": "1 root, 16 top-level instances (NAUO1..16; NAUO1 holds 2 solids), 315 leaf solid instances, 65 distinct solids; no sub-assembly nesting beyond one level for the arms (150 parts each)",
+  "load": "STEPCAFControl/XCAF: read 4 s, transfer 43 s, full tree walk + bbox/volume/BREP dump ~7 min at nice 19, single process; RAM never an issue (<10 GB machine-wide)"
+ },
+ "axes": {
+  "up": "+Y (inferred: arms are in the upright ReBeL pose, ZLW is a 1250 mm lift, column is triangular with a flat foot at y=-1351)",
+  "forward": "+Z (arms stand in front of the lift face z=739; column foot extends rearwards to z=278)",
+  "lateral": "X; with forward=+Z and up=+Y, robot-left = +X, so arm A (x=-424) is the LEFT arm and arm B (x=-884) the right arm. NOT confirmed by the customer.",
+  "deck_plane": "y=-1351 (lowest face of column and wings). The CAD contains no AMR, no floor plate; height above deck h = y + 1351 mm"
+ },
+ "envelope_mm": {
+  "all": {
+   "x": [
+    -1310,
+    2
+   ],
+   "y": [
+    -1351,
+    681
+   ],
+   "z": [
+    278,
+    1022
+   ]
+  },
+  "without_carrier_plates": {
+   "x": [
+    -1009,
+    -299
+   ],
+   "y": [
+    -1351,
+    681
+   ],
+   "z": [
+    278,
+    1000
+   ]
+  },
+  "height_above_deck_drawn_pose": [
+   0,
+   2032
+  ]
+ },
+ "structure": {
+  "column_gusset": {
+   "x": [
+    -702.1,
+    -602.1
+   ],
+   "y": [
+    -1351.0,
+    -200.5
+   ],
+   "z": [
+    278.3,
+    675.2
+   ],
+   "note": "100 mm thick triangular plate, 1151 tall, depth 405 at the foot tapering to 95 at the top, 3 lightening cut-outs; front face z=675 carries the ZLW (20 x M6.8 holes). Foot face y=-1351 has 4 x d6.8 (counterbore d12) holes on a 50 x 100 mm pattern (x=-677/-627, z=466/566): presumed AMR interface"
+  },
+  "side_wings": {
+   "x": [
+    -851.0,
+    -453.2
+   ],
+   "y": [
+    -1351.0,
+    -751.0
+   ],
+   "z": [
+    605.2,
+    675.2
+   ],
+   "note": "two 149 x 600 x 70 mm triangular rib plates on the column front face, bottom at the deck plane"
+  },
+  "zlw_lift": {
+   "body": {
+    "x": [
+     -738.1,
+     -566.1
+    ],
+    "y": [
+     -1333.5,
+     412.5
+    ],
+    "z": [
+     675.2,
+     738.2
+    ]
+   },
+   "carriage_drawn": {
+    "x": [
+     -738.1,
+     -566.1
+    ],
+    "y": [
+     -610.5,
+     -310.5
+    ],
+    "z": [
+     694.7,
+     739.2
+    ]
+   },
+   "stroke_mm": 1250,
+   "travel_dir": "Y (vertical)",
+   "carriage_centre_range_y": [
+    -1085.5,
+    164.5
+   ],
+   "drawn_pose": "carriage is at mid-stroke (body centre y=-460.5 = carriage centre)",
+   "assumption": "stroke 1250 mm taken from the product name; end-block geometry (carriage y -1235..315 at the ends) agrees"
+  },
+  "rail_bracket": {
+   "x": [
+    -757.1,
+    -547.1
+   ],
+   "y": [
+    -631.5,
+    -283.5
+   ],
+   "z": [
+    739.2,
+    927.0
+   ],
+   "note": "8 mm plate bracket: vertical floor plate on the carriage (z 739-747, 5 holes), shelf at y=-283 carrying the X rail (10 holes), two triangular side gussets with an open pocket between them (inner width 194 mm)"
+  },
+  "x_rail": {
+   "name": "WS-16-120-660",
+   "x": [
+    -983.6,
+    -323.6
+   ],
+   "y": [
+    -281.7,
+    -259.7
+   ],
+   "z": [
+    801.5,
+    937.5
+   ],
+   "centre_x": -653.6,
+   "carriages": "2 x WW-16-120-20 (200 long) + WHKD-1620 clamps; A at the +X end, B at the -X end; each can slide inwards 260 mm (combined free length 660-2x200)"
+  },
+  "upper_plates": "2 x 250x200x5 mm plates at y=-246.7..-241.7 on the carriages = arm base mounting",
+  "carrier_plates": "2 x 325x300x3 mm plates at y=-241.7..-238.7 at x=-323..2 and -1310..-985: not attached to anything, treated as obstacles",
+  "arms": {
+   "A": {
+    "x": [
+     -515.1,
+     -332.7
+    ],
+    "y": [
+     -241.7,
+     681.0
+    ],
+    "z": [
+     741.6,
+     945.7
+    ],
+    "base_centre": [
+     -424,
+     -242,
+     855
+    ],
+    "flange_y": 681.0
+   },
+   "B": {
+    "x": [
+     -975.0,
+     -792.6
+    ],
+    "y": [
+     -241.7,
+     681.0
+    ],
+    "z": [
+     741.6,
+     945.7
+    ],
+    "base_centre": [
+     -884,
+     -242,
+     855
+    ],
+    "flange_y": 681.0
+   },
+   "pose": "upright (all joints near zero), J1 axis along Y, base flange bolted to the upper plate; 923 mm base-to-flange; centre spacing 460 mm; tube path along the arm assumed 960 mm",
+   "note": "no gripper/tool, no cabling, no controller in the CAD"
+  },
+  "electronics": "none in the CAD",
+  "t_slot_profiles": "none; the structure is plate-built, the only extrusions are the ZLW body (172 x 63 mm) and WS rail"
+ },
+ "components": [
+  {
+   "component": "NAUO1 (carriage)",
+   "name": "2026_06_12_05_56_45_0290_2",
+   "instances": 1,
+   "leaf_solids": 1,
+   "distinct_parts": 1,
+   "bbox_mm": [
+    -738.1,
+    -610.5,
+    694.7,
+    -566.1,
+    -310.5,
+    739.2
+   ],
+   "size_mm": [
+    172.0,
+    300.0,
+    44.5
+   ],
+   "volume_cm3": 675.4,
+   "group": "zlw_carriage",
+   "guess": "ZLW-20120S carriage (300 mm, lift carriage, travels in Y)"
+  },
+  {
+   "component": "NAUO1 (body)",
+   "name": "2026_06_12_05_56_45_0322_2",
+   "instances": 1,
+   "leaf_solids": 1,
+   "distinct_parts": 1,
+   "bbox_mm": [
+    -738.1,
+    -1333.5,
+    675.2,
+    -566.1,
+    412.5,
+    738.2
+   ],
+   "size_mm": [
+    172.0,
+    1746.0,
+    63.0
+   ],
+   "volume_cm3": 3202.7,
+   "group": "zlw_body",
+   "guess": "ZLW_20120S_K0BW0_D0A4B_0A0A0_1250: toothed-belt axis body, 1746 mm along Y, 1250 mm stroke, drive end at y=-1333"
+  },
+  {
+   "component": "NAUO2",
+   "name": "支撐架for滑軌 (support frame for slide rail)",
+   "instances": 1,
+   "leaf_solids": 1,
+   "distinct_parts": 1,
+   "bbox_mm": [
+    -757.1,
+    -631.5,
+    739.2,
+    -547.1,
+    -283.5,
+    927.0
+   ],
+   "size_mm": [
+    210.0,
+    348.0,
+    187.8
+   ],
+   "volume_cm3": 1106.7,
+   "group": "rail_support",
+   "guess": "rail bracket: U/channel with two triangular gussets, bolted on the ZLW carriage; carries the X rail"
+  },
+  {
+   "component": "NAUO3",
+   "name": "WW-16-120-20",
+   "instances": 1,
+   "leaf_solids": 1,
+   "distinct_parts": 1,
+   "bbox_mm": [
+    -523.9,
+    -280.2,
+    786.5,
+    -323.9,
+    -246.7,
+    952.5
+   ],
+   "size_mm": [
+    200.0,
+    33.5,
+    166.0
+   ],
+   "volume_cm3": 335.6,
+   "group": "rail_x",
+   "guess": "WW-16-120-20 rail carriage (arm A)"
+  },
+  {
+   "component": "NAUO4",
+   "name": "WHKD-1620",
+   "instances": 1,
+   "leaf_solids": 1,
+   "distinct_parts": 1,
+   "bbox_mm": [
+    -523.9,
+    -298.6,
+    918.0,
+    -323.9,
+    -254.7,
+    999.5
+   ],
+   "size_mm": [
+    200.0,
+    43.9,
+    81.5
+   ],
+   "volume_cm3": 112.0,
+   "group": "rail_x",
+   "guess": "WHKD-1620 clamp/lock (arm A)"
+  },
+  {
+   "component": "NAUO5",
+   "name": "WS-16-120-660",
+   "instances": 1,
+   "leaf_solids": 1,
+   "distinct_parts": 1,
+   "bbox_mm": [
+    -983.6,
+    -281.7,
+    801.5,
+    -323.6,
+    -259.7,
+    937.5
+   ],
+   "size_mm": [
+    660.0,
+    22.0,
+    136.0
+   ],
+   "volume_cm3": 767.4,
+   "group": "rail_x",
+   "guess": "WS-16-120-660 drylin W rail, 660 mm, along X"
+  },
+  {
+   "component": "NAUO6",
+   "name": "WW-16-120-20",
+   "instances": 1,
+   "leaf_solids": 1,
+   "distinct_parts": 1,
+   "bbox_mm": [
+    -983.8,
+    -280.2,
+    786.5,
+    -783.8,
+    -246.7,
+    952.5
+   ],
+   "size_mm": [
+    200.0,
+    33.5,
+    166.0
+   ],
+   "volume_cm3": 335.6,
+   "group": "rail_x",
+   "guess": "WW-16-120-20 rail carriage (arm B)"
+  },
+  {
+   "component": "NAUO7",
+   "name": "WHKD-1620",
+   "instances": 1,
+   "leaf_solids": 1,
+   "distinct_parts": 1,
+   "bbox_mm": [
+    -983.8,
+    -298.6,
+    918.0,
+    -783.8,
+    -254.7,
+    999.5
+   ],
+   "size_mm": [
+    200.0,
+    43.9,
+    81.5
+   ],
+   "volume_cm3": 112.0,
+   "group": "rail_x",
+   "guess": "WHKD-1620 clamp/lock (arm B)"
+  },
+  {
+   "component": "NAUO8",
+   "name": "上版for... (upper plate)",
+   "instances": 1,
+   "leaf_solids": 1,
+   "distinct_parts": 1,
+   "bbox_mm": [
+    -548.9,
+    -246.7,
+    764.5,
+    -298.9,
+    -241.7,
+    964.5
+   ],
+   "size_mm": [
+    250.0,
+    5.0,
+    200.0
+   ],
+   "volume_cm3": 173.9,
+   "group": "plates",
+   "guess": "upper (mounting) plate on carriage A, arm base bolts to it"
+  },
+  {
+   "component": "NAUO9",
+   "name": "上版for... (upper plate)",
+   "instances": 1,
+   "leaf_solids": 1,
+   "distinct_parts": 1,
+   "bbox_mm": [
+    -1008.8,
+    -246.7,
+    764.5,
+    -758.8,
+    -241.7,
+    964.5
+   ],
+   "size_mm": [
+    250.0,
+    5.0,
+    200.0
+   ],
+   "volume_cm3": 173.9,
+   "group": "plates",
+   "guess": "upper (mounting) plate on carriage B"
+  },
+  {
+   "component": "NAUO10",
+   "name": "D00391412.ipt",
+   "instances": 1,
+   "leaf_solids": 150,
+   "distinct_parts": 41,
+   "bbox_mm": [
+    -515.1,
+    -241.7,
+    741.6,
+    -332.7,
+    681.0,
+    945.7
+   ],
+   "size_mm": [
+    182.4,
+    922.7,
+    204.1
+   ],
+   "volume_cm3": 2890.2,
+   "group": "arm_A",
+   "guess": "ReBeL arm A: 150 igus D00xxxxxx parts, straight pose along +Y"
+  },
+  {
+   "component": "NAUO11",
+   "name": "D00391412.ipt",
+   "instances": 1,
+   "leaf_solids": 150,
+   "distinct_parts": 41,
+   "bbox_mm": [
+    -975.0,
+    -241.7,
+    741.6,
+    -792.6,
+    681.0,
+    945.7
+   ],
+   "size_mm": [
+    182.4,
+    922.7,
+    204.1
+   ],
+   "volume_cm3": 2890.2,
+   "group": "arm_B",
+   "guess": "ReBeL arm B: identical copy"
+  },
+  {
+   "component": "NAUO12",
+   "name": "三角支撐 (triangular support)",
+   "instances": 1,
+   "leaf_solids": 1,
+   "distinct_parts": 1,
+   "bbox_mm": [
+    -702.1,
+    -1351.0,
+    278.3,
+    -602.1,
+    -200.5,
+    675.2
+   ],
+   "size_mm": [
+    100.0,
+    1150.5,
+    396.9
+   ],
+   "volume_cm3": 21189.1,
+   "group": "gusset",
+   "guess": "gusset/column: 100 mm thick plate, y -1351..-200, slanted underside; the only fixed structure"
+  },
+  {
+   "component": "NAUO13",
+   "name": "三角形板側 (triangular side plate)",
+   "instances": 1,
+   "leaf_solids": 1,
+   "distinct_parts": 1,
+   "bbox_mm": [
+    -602.1,
+    -1351.0,
+    605.2,
+    -453.2,
+    -751.0,
+    675.2
+   ],
+   "size_mm": [
+    148.9,
+    600.0,
+    70.0
+   ],
+   "volume_cm3": 3124.6,
+   "group": "side_plate",
+   "guess": "side wing plate (70 mm thick) on the gusset top at the rear end"
+  },
+  {
+   "component": "NAUO14",
+   "name": "三角形板側 (triangular side plate)",
+   "instances": 1,
+   "leaf_solids": 1,
+   "distinct_parts": 1,
+   "bbox_mm": [
+    -851.0,
+    -1351.0,
+    605.2,
+    -702.1,
+    -751.0,
+    675.2
+   ],
+   "size_mm": [
+    148.9,
+    600.0,
+    70.0
+   ],
+   "volume_cm3": 3124.6,
+   "group": "side_plate",
+   "guess": "side wing plate, mirror"
+  },
+  {
+   "component": "NAUO15",
+   "name": "載板for雙臂 (carrier plate for dual arms)",
+   "instances": 1,
+   "leaf_solids": 1,
+   "distinct_parts": 1,
+   "bbox_mm": [
+    -323.0,
+    -241.7,
+    722.0,
+    2.0,
+    -238.7,
+    1022.0
+   ],
+   "size_mm": [
+    325.0,
+    3.0,
+    300.0
+   ],
+   "volume_cm3": 277.5,
+   "group": "plates",
+   "guess": "3 mm plate 325x300 at the +X end of the rail (not attached to anything; probably stray/for later)"
+  },
+  {
+   "component": "NAUO16",
+   "name": "載板for雙臂 (carrier plate for dual arms)",
+   "instances": 1,
+   "leaf_solids": 1,
+   "distinct_parts": 1,
+   "bbox_mm": [
+    -1309.7,
+    -241.7,
+    722.0,
+    -984.7,
+    -238.7,
+    1022.0
+   ],
+   "size_mm": [
+    325.0,
+    3.0,
+    300.0
+   ],
+   "volume_cm3": 277.5,
+   "group": "plates",
+   "guess": "3 mm plate at the -X end of the rail"
+  }
+ ],
+ "search": {
+  "box_mm": [
+   200,
+   110,
+   100
+  ],
+  "orientations": "6 axis-aligned permutations (no yaw/tilt)",
+  "clearance_mm": 10,
+  "voxel_mm": 5,
+  "voxel_note": "conservative surface raster + cavity fill (volumes overestimate by 5-15 %); finalists re-checked against ~80k mesh sample points per group (4 mm spacing) over the full sweep",
+  "sweep": {
+   "lift_stroke_mm": [
+    -625,
+    625
+   ],
+   "arm_x_slide_mm": 260,
+   "families": {
+    "FIXED": "rigid with column/wings, clears all moving parts",
+    "DECK": "as FIXED but resting on an assumed deck at y=-1351",
+    "CARRIAGE": "rigid with the ZLW carriage (moves in Y), clears the column over the stroke and the arms sliding in X",
+    "ARM_A": "rigid with arm A's X carriage (moves in X and Y), clears everything else"
+   }
+  },
+  "tube_model": "tube_total = max L1 distance(box centre -> arm base centre over the family's motion) + 960 mm (arm) + 150 mm slack; arm hemisphere test R=700 mm above the base plane",
+  "target_arm": "A (left if robot faces +Z)"
+ },
+ "candidates": {
+  "FIXED": [
+   {
+    "family": "FIXED",
+    "list": "strict",
+    "centre": [
+     -485.0,
+     -975.0,
+     815.0
+    ],
+    "dims_xyz": [
+     100.0,
+     110.0,
+     200.0
+    ],
+    "lo": [
+     -535.0,
+     -1030.0,
+     715.0
+    ],
+    "hi": [
+     -435.0,
+     -920.0,
+     915.0
+    ],
+    "height_above_deck_mm": [
+     321,
+     431
+    ],
+    "leg_to_target_base_mm": 1597,
+    "tube_total_worst_mm": 2707,
+    "tube_total_nominal_mm": 1944,
+    "tube_total_to_other_arm_mm": 2907,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 39.8,
+     "Y": 12.1,
+     "A": 14.8,
+     "B": 14.8
+    },
+    "min_clearance_exact_mm": 12.1,
+    "near_solids": [
+     "side plate"
+    ]
+   },
+   {
+    "family": "FIXED",
+    "list": "strict",
+    "centre": [
+     -460.0,
+     -945.0,
+     670.0
+    ],
+    "dims_xyz": [
+     100.0,
+     110.0,
+     200.0
+    ],
+    "lo": [
+     -510.0,
+     -1000.0,
+     570.0
+    ],
+    "hi": [
+     -410.0,
+     -890.0,
+     770.0
+    ],
+    "height_above_deck_mm": [
+     351,
+     461
+    ],
+    "leg_to_target_base_mm": 1737,
+    "tube_total_worst_mm": 2847,
+    "tube_total_nominal_mm": 2034,
+    "tube_total_to_other_arm_mm": 3047,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 12.1,
+     "Y": 31.6,
+     "A": 16.5,
+     "B": 21.8
+    },
+    "min_clearance_exact_mm": 12.1,
+    "near_solids": [
+     "side plate"
+    ]
+   },
+   {
+    "family": "FIXED",
+    "list": "strict",
+    "centre": [
+     -480.0,
+     -1125.0,
+     815.0
+    ],
+    "dims_xyz": [
+     110.0,
+     100.0,
+     200.0
+    ],
+    "lo": [
+     -535.0,
+     -1175.0,
+     715.0
+    ],
+    "hi": [
+     -425.0,
+     -1075.0,
+     915.0
+    ],
+    "height_above_deck_mm": [
+     176,
+     276
+    ],
+    "leg_to_target_base_mm": 1752,
+    "tube_total_worst_mm": 2862,
+    "tube_total_nominal_mm": 2089,
+    "tube_total_to_other_arm_mm": 3062,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 39.8,
+     "Y": 12.1,
+     "A": 169.8,
+     "B": 169.8
+    },
+    "min_clearance_exact_mm": 12.1,
+    "near_solids": [
+     "side plate"
+    ]
+   },
+   {
+    "family": "FIXED",
+    "list": "strict",
+    "centre": [
+     -825.0,
+     -970.0,
+     815.0
+    ],
+    "dims_xyz": [
+     110.0,
+     100.0,
+     200.0
+    ],
+    "lo": [
+     -880.0,
+     -1020.0,
+     715.0
+    ],
+    "hi": [
+     -770.0,
+     -920.0,
+     915.0
+    ],
+    "height_above_deck_mm": [
+     331,
+     431
+    ],
+    "leg_to_target_base_mm": 1794,
+    "tube_total_worst_mm": 2904,
+    "tube_total_nominal_mm": 2279,
+    "tube_total_to_other_arm_mm": 2704,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 39.8,
+     "Y": 12.9,
+     "A": 14.8,
+     "B": 14.8
+    },
+    "min_clearance_exact_mm": 12.9,
+    "near_solids": [
+     "side plate"
+    ]
+   },
+   {
+    "family": "FIXED",
+    "list": "strict",
+    "centre": [
+     -540.0,
+     -990.0,
+     540.0
+    ],
+    "dims_xyz": [
+     100.0,
+     200.0,
+     110.0
+    ],
+    "lo": [
+     -590.0,
+     -1090.0,
+     485.0
+    ],
+    "hi": [
+     -490.0,
+     -890.0,
+     595.0
+    ],
+    "height_above_deck_mm": [
+     261,
+     461
+    ],
+    "leg_to_target_base_mm": 1832,
+    "tube_total_worst_mm": 2942,
+    "tube_total_nominal_mm": 2289,
+    "tube_total_to_other_arm_mm": 3142,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 10.2,
+     "Y": 99.7,
+     "A": 170.4,
+     "B": 172.4
+    },
+    "min_clearance_exact_mm": 10.2,
+    "near_solids": [
+     "gusset/column",
+     "side plate"
+    ]
+   },
+   {
+    "family": "FIXED",
+    "list": "strict",
+    "centre": [
+     -555.0,
+     -1320.0,
+     815.0
+    ],
+    "dims_xyz": [
+     110.0,
+     100.0,
+     200.0
+    ],
+    "lo": [
+     -610.0,
+     -1370.0,
+     715.0
+    ],
+    "hi": [
+     -500.0,
+     -1270.0,
+     915.0
+    ],
+    "height_above_deck_mm": [
+     -19,
+     81
+    ],
+    "leg_to_target_base_mm": 1874,
+    "tube_total_worst_mm": 2984,
+    "tube_total_nominal_mm": 2359,
+    "tube_total_to_other_arm_mm": 3182,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 11.6,
+     "Y": 13.5,
+     "A": 356.1,
+     "B": 357.1
+    },
+    "min_clearance_exact_mm": 11.6,
+    "near_solids": [
+     "gusset/column",
+     "side plate",
+     "ZLW body"
+    ]
+   },
+   {
+    "family": "FIXED",
+    "list": "strict",
+    "centre": [
+     -390.0,
+     -1075.0,
+     705.0
+    ],
+    "dims_xyz": [
+     100.0,
+     200.0,
+     110.0
+    ],
+    "lo": [
+     -440.0,
+     -1175.0,
+     650.0
+    ],
+    "hi": [
+     -340.0,
+     -975.0,
+     760.0
+    ],
+    "height_above_deck_mm": [
+     176,
+     376
+    ],
+    "leg_to_target_base_mm": 1902,
+    "tube_total_worst_mm": 3012,
+    "tube_total_nominal_mm": 2127,
+    "tube_total_to_other_arm_mm": 3212,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 46.4,
+     "Y": 86.0,
+     "A": 74.9,
+     "B": 112.4
+    },
+    "min_clearance_exact_mm": 46.4,
+    "near_solids": [
+     "side plate"
+    ]
+   },
+   {
+    "family": "FIXED",
+    "list": "strict",
+    "centre": [
+     -535.0,
+     -940.0,
+     395.0
+    ],
+    "dims_xyz": [
+     110.0,
+     100.0,
+     200.0
+    ],
+    "lo": [
+     -590.0,
+     -990.0,
+     295.0
+    ],
+    "hi": [
+     -480.0,
+     -890.0,
+     495.0
+    ],
+    "height_above_deck_mm": [
+     361,
+     461
+    ],
+    "leg_to_target_base_mm": 1932,
+    "tube_total_worst_mm": 3042,
+    "tube_total_nominal_mm": 2379,
+    "tube_total_to_other_arm_mm": 3242,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 12.1,
+     "Y": 199.7,
+     "A": 269.7,
+     "B": 271.3
+    },
+    "min_clearance_exact_mm": 12.1,
+    "near_solids": [
+     "gusset/column"
+    ]
+   },
+   {
+    "family": "FIXED",
+    "list": "strict",
+    "centre": [
+     -850.0,
+     -940.0,
+     670.0
+    ],
+    "dims_xyz": [
+     110.0,
+     100.0,
+     200.0
+    ],
+    "lo": [
+     -905.0,
+     -990.0,
+     570.0
+    ],
+    "hi": [
+     -795.0,
+     -890.0,
+     770.0
+    ],
+    "height_above_deck_mm": [
+     361,
+     461
+    ],
+    "leg_to_target_base_mm": 1934,
+    "tube_total_worst_mm": 3044,
+    "tube_total_nominal_mm": 2419,
+    "tube_total_to_other_arm_mm": 2844,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 14.8,
+     "Y": 31.6,
+     "A": 19.9,
+     "B": 16.5
+    },
+    "min_clearance_exact_mm": 14.8,
+    "near_solids": [
+     "side plate"
+    ]
+   },
+   {
+    "family": "FIXED",
+    "list": "strict",
+    "centre": [
+     -820.0,
+     -1120.0,
+     815.0
+    ],
+    "dims_xyz": [
+     100.0,
+     110.0,
+     200.0
+    ],
+    "lo": [
+     -870.0,
+     -1175.0,
+     715.0
+    ],
+    "hi": [
+     -770.0,
+     -1065.0,
+     915.0
+    ],
+    "height_above_deck_mm": [
+     176,
+     286
+    ],
+    "leg_to_target_base_mm": 1939,
+    "tube_total_worst_mm": 3049,
+    "tube_total_nominal_mm": 2424,
+    "tube_total_to_other_arm_mm": 2849,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 39.8,
+     "Y": 12.9,
+     "A": 159.8,
+     "B": 159.8
+    },
+    "min_clearance_exact_mm": 12.9,
+    "near_solids": [
+     "side plate"
+    ]
+   },
+   {
+    "family": "FIXED",
+    "list": "relaxed",
+    "centre": [
+     -535.0,
+     -240.0,
+     625.0
+    ],
+    "dims_xyz": [
+     100.0,
+     200.0,
+     110.0
+    ],
+    "lo": [
+     -585.0,
+     -340.0,
+     570.0
+    ],
+    "hi": [
+     -485.0,
+     -140.0,
+     680.0
+    ],
+    "height_above_deck_mm": [
+     1011,
+     1211
+    ],
+    "leg_to_target_base_mm": 1006,
+    "tube_total_worst_mm": 2116,
+    "tube_total_nominal_mm": 1453,
+    "tube_total_to_other_arm_mm": 2316,
+    "in_reach_target": true,
+    "in_reach_other": true,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 17.1,
+     "Y": 14.7,
+     "A": 62.1,
+     "B": 68.2
+    },
+    "min_clearance_exact_mm": 14.7,
+    "near_solids": [
+     "gusset/column",
+     "ZLW body",
+     "ZLW carriage"
+    ]
+   },
+   {
+    "family": "FIXED",
+    "list": "relaxed",
+    "centre": [
+     -555.0,
+     -240.0,
+     475.0
+    ],
+    "dims_xyz": [
+     200.0,
+     100.0,
+     110.0
+    ],
+    "lo": [
+     -655.0,
+     -290.0,
+     420.0
+    ],
+    "hi": [
+     -455.0,
+     -190.0,
+     530.0
+    ],
+    "height_above_deck_mm": [
+     1061,
+     1161
+    ],
+    "leg_to_target_base_mm": 1138,
+    "tube_total_worst_mm": 2248,
+    "tube_total_nominal_mm": 1623,
+    "tube_total_to_other_arm_mm": 2446,
+    "in_reach_target": true,
+    "in_reach_other": true,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 35.2,
+     "Y": 164.7,
+     "A": 212.1,
+     "B": 212.1
+    },
+    "min_clearance_exact_mm": 35.2,
+    "near_solids": [
+     "gusset/column"
+    ]
+   },
+   {
+    "family": "FIXED",
+    "list": "relaxed",
+    "centre": [
+     -555.0,
+     -90.0,
+     615.0
+    ],
+    "dims_xyz": [
+     110.0,
+     200.0,
+     100.0
+    ],
+    "lo": [
+     -610.0,
+     -190.0,
+     565.0
+    ],
+    "hi": [
+     -500.0,
+     10.0,
+     665.0
+    ],
+    "height_above_deck_mm": [
+     1161,
+     1361
+    ],
+    "leg_to_target_base_mm": 1148,
+    "tube_total_worst_mm": 2258,
+    "tube_total_nominal_mm": 1633,
+    "tube_total_to_other_arm_mm": 2456,
+    "in_reach_target": true,
+    "in_reach_other": true,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 10.2,
+     "Y": 29.7,
+     "A": 77.1,
+     "B": 78.3
+    },
+    "min_clearance_exact_mm": 10.2,
+    "near_solids": [
+     "gusset/column",
+     "ZLW body"
+    ]
+   },
+   {
+    "family": "FIXED",
+    "list": "relaxed",
+    "centre": [
+     -530.0,
+     -390.0,
+     630.0
+    ],
+    "dims_xyz": [
+     110.0,
+     200.0,
+     100.0
+    ],
+    "lo": [
+     -585.0,
+     -490.0,
+     580.0
+    ],
+    "hi": [
+     -475.0,
+     -290.0,
+     680.0
+    ],
+    "height_above_deck_mm": [
+     861,
+     1061
+    ],
+    "leg_to_target_base_mm": 1152,
+    "tube_total_worst_mm": 2262,
+    "tube_total_nominal_mm": 1589,
+    "tube_total_to_other_arm_mm": 2462,
+    "in_reach_target": true,
+    "in_reach_other": true,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 17.1,
+     "Y": 14.7,
+     "A": 62.1,
+     "B": 68.2
+    },
+    "min_clearance_exact_mm": 14.7,
+    "near_solids": [
+     "gusset/column",
+     "ZLW body",
+     "ZLW carriage"
+    ]
+   },
+   {
+    "family": "FIXED",
+    "list": "relaxed",
+    "centre": [
+     -770.0,
+     -240.0,
+     625.0
+    ],
+    "dims_xyz": [
+     100.0,
+     200.0,
+     110.0
+    ],
+    "lo": [
+     -820.0,
+     -340.0,
+     570.0
+    ],
+    "hi": [
+     -720.0,
+     -140.0,
+     680.0
+    ],
+    "height_above_deck_mm": [
+     1011,
+     1211
+    ],
+    "leg_to_target_base_mm": 1203,
+    "tube_total_worst_mm": 2313,
+    "tube_total_nominal_mm": 1688,
+    "tube_total_to_other_arm_mm": 2113,
+    "in_reach_target": true,
+    "in_reach_other": true,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 17.9,
+     "Y": 14.7,
+     "A": 67.3,
+     "B": 62.1
+    },
+    "min_clearance_exact_mm": 14.7,
+    "near_solids": [
+     "gusset/column",
+     "ZLW body",
+     "ZLW carriage"
+    ]
+   },
+   {
+    "family": "FIXED",
+    "list": "relaxed",
+    "centre": [
+     -705.0,
+     -240.0,
+     485.0
+    ],
+    "dims_xyz": [
+     110.0,
+     200.0,
+     100.0
+    ],
+    "lo": [
+     -760.0,
+     -340.0,
+     435.0
+    ],
+    "hi": [
+     -650.0,
+     -140.0,
+     535.0
+    ],
+    "height_above_deck_mm": [
+     1011,
+     1211
+    ],
+    "leg_to_target_base_mm": 1278,
+    "tube_total_worst_mm": 2388,
+    "tube_total_nominal_mm": 1763,
+    "tube_total_to_other_arm_mm": 2286,
+    "in_reach_target": true,
+    "in_reach_other": true,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 17.6,
+     "Y": 159.7,
+     "A": 207.1,
+     "B": 207.1
+    },
+    "min_clearance_exact_mm": 17.6,
+    "near_solids": [
+     "gusset/column"
+    ]
+   },
+   {
+    "family": "FIXED",
+    "list": "relaxed",
+    "centre": [
+     -540.0,
+     -390.0,
+     480.0
+    ],
+    "dims_xyz": [
+     100.0,
+     200.0,
+     110.0
+    ],
+    "lo": [
+     -590.0,
+     -490.0,
+     425.0
+    ],
+    "hi": [
+     -490.0,
+     -290.0,
+     535.0
+    ],
+    "height_above_deck_mm": [
+     861,
+     1061
+    ],
+    "leg_to_target_base_mm": 1292,
+    "tube_total_worst_mm": 2402,
+    "tube_total_nominal_mm": 1749,
+    "tube_total_to_other_arm_mm": 2602,
+    "in_reach_target": true,
+    "in_reach_other": true,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 12.1,
+     "Y": 159.7,
+     "A": 207.1,
+     "B": 209.8
+    },
+    "min_clearance_exact_mm": 12.1,
+    "near_solids": [
+     "gusset/column"
+    ]
+   },
+   {
+    "family": "FIXED",
+    "list": "relaxed",
+    "centre": [
+     -535.0,
+     -540.0,
+     625.0
+    ],
+    "dims_xyz": [
+     100.0,
+     200.0,
+     110.0
+    ],
+    "lo": [
+     -585.0,
+     -640.0,
+     570.0
+    ],
+    "hi": [
+     -485.0,
+     -440.0,
+     680.0
+    ],
+    "height_above_deck_mm": [
+     711,
+     911
+    ],
+    "leg_to_target_base_mm": 1302,
+    "tube_total_worst_mm": 2412,
+    "tube_total_nominal_mm": 1749,
+    "tube_total_to_other_arm_mm": 2612,
+    "in_reach_target": true,
+    "in_reach_other": true,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 17.1,
+     "Y": 14.7,
+     "A": 62.1,
+     "B": 68.2
+    },
+    "min_clearance_exact_mm": 14.7,
+    "near_solids": [
+     "gusset/column",
+     "ZLW body",
+     "ZLW carriage"
+    ]
+   },
+   {
+    "family": "FIXED",
+    "list": "relaxed",
+    "centre": [
+     -700.0,
+     -115.0,
+     580.0
+    ],
+    "dims_xyz": [
+     200.0,
+     100.0,
+     110.0
+    ],
+    "lo": [
+     -800.0,
+     -165.0,
+     525.0
+    ],
+    "hi": [
+     -600.0,
+     -65.0,
+     635.0
+    ],
+    "height_above_deck_mm": [
+     1186,
+     1286
+    ],
+    "leg_to_target_base_mm": 1303,
+    "tube_total_worst_mm": 2413,
+    "tube_total_nominal_mm": 1788,
+    "tube_total_to_other_arm_mm": 2321,
+    "in_reach_target": true,
+    "in_reach_other": true,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 35.5,
+     "Y": 59.7,
+     "A": 107.1,
+     "B": 107.1
+    },
+    "min_clearance_exact_mm": 35.5,
+    "near_solids": [
+     "gusset/column",
+     "ZLW body"
+    ]
+   },
+   {
+    "family": "FIXED",
+    "list": "relaxed",
+    "centre": [
+     -465.0,
+     -120.0,
+     495.0
+    ],
+    "dims_xyz": [
+     200.0,
+     100.0,
+     110.0
+    ],
+    "lo": [
+     -565.0,
+     -170.0,
+     440.0
+    ],
+    "hi": [
+     -365.0,
+     -70.0,
+     550.0
+    ],
+    "height_above_deck_mm": [
+     1181,
+     1281
+    ],
+    "leg_to_target_base_mm": 1326,
+    "tube_total_worst_mm": 2436,
+    "tube_total_nominal_mm": 1633,
+    "tube_total_to_other_arm_mm": 2636,
+    "in_reach_target": true,
+    "in_reach_other": true,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 67.6,
+     "Y": 144.7,
+     "A": 192.1,
+     "B": 199.2
+    },
+    "min_clearance_exact_mm": 67.6,
+    "near_solids": [
+     "gusset/column"
+    ]
+   }
+  ],
+  "DECK": [
+   {
+    "family": "DECK",
+    "list": "strict",
+    "centre": [
+     -555.0,
+     -1270.0,
+     860.0
+    ],
+    "dims_xyz": [
+     200.0,
+     110.0,
+     100.0
+    ],
+    "lo": [
+     -655.0,
+     -1325.0,
+     810.0
+    ],
+    "hi": [
+     -455.0,
+     -1215.0,
+     910.0
+    ],
+    "height_above_deck_mm": [
+     26,
+     136
+    ],
+    "leg_to_target_base_mm": 1789,
+    "tube_total_worst_mm": 2899,
+    "tube_total_nominal_mm": 2274,
+    "tube_total_to_other_arm_mm": 3097,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 71.8,
+     "Y": 14.9,
+     "A": 304.0,
+     "B": 305.1
+    },
+    "min_clearance_exact_mm": 14.9,
+    "near_solids": []
+   },
+   {
+    "family": "DECK",
+    "list": "strict",
+    "centre": [
+     -415.0,
+     -1215.0,
+     855.0
+    ],
+    "dims_xyz": [
+     100.0,
+     200.0,
+     110.0
+    ],
+    "lo": [
+     -465.0,
+     -1315.0,
+     800.0
+    ],
+    "hi": [
+     -365.0,
+     -1115.0,
+     910.0
+    ],
+    "height_above_deck_mm": [
+     36,
+     236
+    ],
+    "leg_to_target_base_mm": 1867,
+    "tube_total_worst_mm": 2977,
+    "tube_total_nominal_mm": 2092,
+    "tube_total_to_other_arm_mm": 3177,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 122.7,
+     "Y": 82.1,
+     "A": 209.5,
+     "B": 218.1
+    },
+    "min_clearance_exact_mm": 82.1,
+    "near_solids": []
+   },
+   {
+    "family": "DECK",
+    "list": "strict",
+    "centre": [
+     -685.0,
+     -1215.0,
+     915.0
+    ],
+    "dims_xyz": [
+     100.0,
+     200.0,
+     110.0
+    ],
+    "lo": [
+     -735.0,
+     -1315.0,
+     860.0
+    ],
+    "hi": [
+     -635.0,
+     -1115.0,
+     970.0
+    ],
+    "height_above_deck_mm": [
+     36,
+     236
+    ],
+    "leg_to_target_base_mm": 1919,
+    "tube_total_worst_mm": 3029,
+    "tube_total_nominal_mm": 2404,
+    "tube_total_to_other_arm_mm": 2967,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 121.8,
+     "Y": 14.1,
+     "A": 193.7,
+     "B": 194.6
+    },
+    "min_clearance_exact_mm": 14.1,
+    "near_solids": []
+   },
+   {
+    "family": "DECK",
+    "list": "strict",
+    "centre": [
+     -825.0,
+     -1215.0,
+     855.0
+    ],
+    "dims_xyz": [
+     100.0,
+     200.0,
+     110.0
+    ],
+    "lo": [
+     -875.0,
+     -1315.0,
+     800.0
+    ],
+    "hi": [
+     -775.0,
+     -1115.0,
+     910.0
+    ],
+    "height_above_deck_mm": [
+     36,
+     236
+    ],
+    "leg_to_target_base_mm": 1999,
+    "tube_total_worst_mm": 3109,
+    "tube_total_nominal_mm": 2484,
+    "tube_total_to_other_arm_mm": 2909,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 74.8,
+     "Y": 17.9,
+     "A": 209.8,
+     "B": 209.8
+    },
+    "min_clearance_exact_mm": 17.9,
+    "near_solids": []
+   },
+   {
+    "family": "DECK",
+    "list": "strict",
+    "centre": [
+     -395.0,
+     -1215.0,
+     705.0
+    ],
+    "dims_xyz": [
+     100.0,
+     200.0,
+     110.0
+    ],
+    "lo": [
+     -445.0,
+     -1315.0,
+     650.0
+    ],
+    "hi": [
+     -345.0,
+     -1115.0,
+     760.0
+    ],
+    "height_above_deck_mm": [
+     36,
+     236
+    ],
+    "leg_to_target_base_mm": 2037,
+    "tube_total_worst_mm": 3147,
+    "tube_total_nominal_mm": 2262,
+    "tube_total_to_other_arm_mm": 3347,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 14.6,
+     "Y": 102.1,
+     "A": 211.6,
+     "B": 225.8
+    },
+    "min_clearance_exact_mm": 14.6,
+    "near_solids": [
+     "side plate"
+    ]
+   },
+   {
+    "family": "DECK",
+    "list": "strict",
+    "centre": [
+     -535.0,
+     -1215.0,
+     545.0
+    ],
+    "dims_xyz": [
+     110.0,
+     200.0,
+     100.0
+    ],
+    "lo": [
+     -590.0,
+     -1315.0,
+     495.0
+    ],
+    "hi": [
+     -480.0,
+     -1115.0,
+     595.0
+    ],
+    "height_above_deck_mm": [
+     36,
+     236
+    ],
+    "leg_to_target_base_mm": 2057,
+    "tube_total_worst_mm": 3167,
+    "tube_total_nominal_mm": 2504,
+    "tube_total_to_other_arm_mm": 3367,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 10.2,
+     "Y": 99.7,
+     "A": 284.4,
+     "B": 284.4
+    },
+    "min_clearance_exact_mm": 10.2,
+    "near_solids": [
+     "gusset/column",
+     "side plate"
+    ]
+   },
+   {
+    "family": "DECK",
+    "list": "strict",
+    "centre": [
+     -385.0,
+     -1215.0,
+     555.0
+    ],
+    "dims_xyz": [
+     110.0,
+     200.0,
+     100.0
+    ],
+    "lo": [
+     -440.0,
+     -1315.0,
+     505.0
+    ],
+    "hi": [
+     -330.0,
+     -1115.0,
+     605.0
+    ],
+    "height_above_deck_mm": [
+     36,
+     236
+    ],
+    "leg_to_target_base_mm": 2197,
+    "tube_total_worst_mm": 3307,
+    "tube_total_nominal_mm": 2422,
+    "tube_total_to_other_arm_mm": 3507,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 19.1,
+     "Y": 155.2,
+     "A": 277.8,
+     "B": 290.1
+    },
+    "min_clearance_exact_mm": 19.1,
+    "near_solids": [
+     "side plate"
+    ]
+   },
+   {
+    "family": "DECK",
+    "list": "strict",
+    "centre": [
+     -540.0,
+     -1215.0,
+     395.0
+    ],
+    "dims_xyz": [
+     100.0,
+     200.0,
+     110.0
+    ],
+    "lo": [
+     -590.0,
+     -1315.0,
+     340.0
+    ],
+    "hi": [
+     -490.0,
+     -1115.0,
+     450.0
+    ],
+    "height_above_deck_mm": [
+     36,
+     236
+    ],
+    "leg_to_target_base_mm": 2202,
+    "tube_total_worst_mm": 3312,
+    "tube_total_nominal_mm": 2659,
+    "tube_total_to_other_arm_mm": 3512,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 12.1,
+     "Y": 244.7,
+     "A": 396.9,
+     "B": 396.9
+    },
+    "min_clearance_exact_mm": 12.1,
+    "near_solids": [
+     "gusset/column"
+    ]
+   },
+   {
+    "family": "DECK",
+    "list": "strict",
+    "centre": [
+     -910.0,
+     -1215.0,
+     730.0
+    ],
+    "dims_xyz": [
+     100.0,
+     200.0,
+     110.0
+    ],
+    "lo": [
+     -960.0,
+     -1315.0,
+     675.0
+    ],
+    "hi": [
+     -860.0,
+     -1115.0,
+     785.0
+    ],
+    "height_above_deck_mm": [
+     36,
+     236
+    ],
+    "leg_to_target_base_mm": 2209,
+    "tube_total_worst_mm": 3319,
+    "tube_total_nominal_mm": 2694,
+    "tube_total_to_other_arm_mm": 3119,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 17.6,
+     "Y": 102.9,
+     "A": 223.2,
+     "B": 209.8
+    },
+    "min_clearance_exact_mm": 17.6,
+    "near_solids": [
+     "side plate"
+    ]
+   },
+   {
+    "family": "DECK",
+    "list": "strict",
+    "centre": [
+     -770.0,
+     -1215.0,
+     545.0
+    ],
+    "dims_xyz": [
+     110.0,
+     200.0,
+     100.0
+    ],
+    "lo": [
+     -825.0,
+     -1315.0,
+     495.0
+    ],
+    "hi": [
+     -715.0,
+     -1115.0,
+     595.0
+    ],
+    "height_above_deck_mm": [
+     36,
+     236
+    ],
+    "leg_to_target_base_mm": 2254,
+    "tube_total_worst_mm": 3364,
+    "tube_total_nominal_mm": 2739,
+    "tube_total_to_other_arm_mm": 3164,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 10.2,
+     "Y": 99.7,
+     "A": 284.4,
+     "B": 284.4
+    },
+    "min_clearance_exact_mm": 10.2,
+    "near_solids": [
+     "gusset/column",
+     "side plate"
+    ]
+   },
+   {
+    "family": "DECK",
+    "list": "relaxed",
+    "centre": [
+     -555.0,
+     -1215.0,
+     1000.0
+    ],
+    "dims_xyz": [
+     100.0,
+     200.0,
+     110.0
+    ],
+    "lo": [
+     -605.0,
+     -1315.0,
+     945.0
+    ],
+    "hi": [
+     -505.0,
+     -1115.0,
+     1055.0
+    ],
+    "height_above_deck_mm": [
+     36,
+     236
+    ],
+    "leg_to_target_base_mm": 1874,
+    "tube_total_worst_mm": 2984,
+    "tube_total_nominal_mm": 2359,
+    "tube_total_to_other_arm_mm": 3182,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 55,
+    "clearance_exact_mm": {
+     "F": 206.8,
+     "Y": 66.5,
+     "A": 191.5,
+     "B": 193.4
+    },
+    "min_clearance_exact_mm": 66.5,
+    "near_solids": []
+   },
+   {
+    "family": "DECK",
+    "list": "relaxed",
+    "centre": [
+     -265.0,
+     -1220.0,
+     855.0
+    ],
+    "dims_xyz": [
+     110.0,
+     200.0,
+     100.0
+    ],
+    "lo": [
+     -320.0,
+     -1320.0,
+     805.0
+    ],
+    "hi": [
+     -210.0,
+     -1120.0,
+     905.0
+    ],
+    "height_above_deck_mm": [
+     31,
+     231
+    ],
+    "leg_to_target_base_mm": 2022,
+    "tube_total_worst_mm": 3132,
+    "tube_total_nominal_mm": 2247,
+    "tube_total_to_other_arm_mm": 3332,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 114,
+    "clearance_exact_mm": {
+     "F": 191.2,
+     "Y": 213.3,
+     "A": 215.0,
+     "B": 296.3
+    },
+    "min_clearance_exact_mm": 191.2,
+    "near_solids": []
+   },
+   {
+    "family": "DECK",
+    "list": "relaxed",
+    "centre": [
+     -550.0,
+     -1215.0,
+     1150.0
+    ],
+    "dims_xyz": [
+     100.0,
+     200.0,
+     110.0
+    ],
+    "lo": [
+     -600.0,
+     -1315.0,
+     1095.0
+    ],
+    "hi": [
+     -500.0,
+     -1115.0,
+     1205.0
+    ],
+    "height_above_deck_mm": [
+     36,
+     236
+    ],
+    "leg_to_target_base_mm": 2027,
+    "tube_total_worst_mm": 3137,
+    "tube_total_nominal_mm": 2504,
+    "tube_total_to_other_arm_mm": 3337,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 205,
+    "clearance_exact_mm": {
+     "F": 356.8,
+     "Y": 191.1,
+     "A": 214.2,
+     "B": 218.1
+    },
+    "min_clearance_exact_mm": 191.1,
+    "near_solids": []
+   },
+   {
+    "family": "DECK",
+    "list": "relaxed",
+    "centre": [
+     -405.0,
+     -1215.0,
+     1005.0
+    ],
+    "dims_xyz": [
+     100.0,
+     200.0,
+     110.0
+    ],
+    "lo": [
+     -455.0,
+     -1315.0,
+     950.0
+    ],
+    "hi": [
+     -355.0,
+     -1115.0,
+     1060.0
+    ],
+    "height_above_deck_mm": [
+     36,
+     236
+    ],
+    "leg_to_target_base_mm": 2027,
+    "tube_total_worst_mm": 3137,
+    "tube_total_nominal_mm": 2252,
+    "tube_total_to_other_arm_mm": 3337,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 60,
+    "clearance_exact_mm": {
+     "F": 242.2,
+     "Y": 116.7,
+     "A": 191.5,
+     "B": 220.8
+    },
+    "min_clearance_exact_mm": 116.7,
+    "near_solids": []
+   }
+  ],
+  "CARRIAGE": [
+   {
+    "family": "CARRIAGE",
+    "list": "strict",
+    "centre": [
+     -480.0,
+     -345.0,
+     855.0
+    ],
+    "dims_xyz": [
+     110.0,
+     100.0,
+     200.0
+    ],
+    "lo": [
+     -535.0,
+     -395.0,
+     755.0
+    ],
+    "hi": [
+     -425.0,
+     -295.0,
+     955.0
+    ],
+    "height_above_deck_mm": [
+     956,
+     1056
+    ],
+    "leg_to_target_base_mm": 307,
+    "tube_total_worst_mm": 1417,
+    "tube_total_nominal_mm": 1269,
+    "tube_total_to_other_arm_mm": 1617,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 38.7,
+     "Y": 12.1,
+     "A": 14.8,
+     "B": 14.8
+    },
+    "min_clearance_exact_mm": 12.1,
+    "near_solids": [
+     "ZLW carriage",
+     "rail bracket",
+     "X rail",
+     "carriage A",
+     "clamp A"
+    ]
+   },
+   {
+    "family": "CARRIAGE",
+    "list": "strict",
+    "centre": [
+     -630.0,
+     -355.0,
+     860.0
+    ],
+    "dims_xyz": [
+     110.0,
+     100.0,
+     200.0
+    ],
+    "lo": [
+     -685.0,
+     -405.0,
+     760.0
+    ],
+    "hi": [
+     -575.0,
+     -305.0,
+     960.0
+    ],
+    "height_above_deck_mm": [
+     946,
+     1046
+    ],
+    "leg_to_target_base_mm": 324,
+    "tube_total_worst_mm": 1434,
+    "tube_total_nominal_mm": 1434,
+    "tube_total_to_other_arm_mm": 1482,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 21.8,
+     "Y": 12.8,
+     "A": 24.8,
+     "B": 24.8
+    },
+    "min_clearance_exact_mm": 12.8,
+    "near_solids": [
+     "ZLW body",
+     "ZLW carriage",
+     "rail bracket",
+     "X rail"
+    ]
+   },
+   {
+    "family": "CARRIAGE",
+    "list": "strict",
+    "centre": [
+     -485.0,
+     -495.0,
+     855.0
+    ],
+    "dims_xyz": [
+     100.0,
+     110.0,
+     200.0
+    ],
+    "lo": [
+     -535.0,
+     -550.0,
+     755.0
+    ],
+    "hi": [
+     -435.0,
+     -440.0,
+     955.0
+    ],
+    "height_above_deck_mm": [
+     801,
+     911
+    ],
+    "leg_to_target_base_mm": 452,
+    "tube_total_worst_mm": 1562,
+    "tube_total_nominal_mm": 1424,
+    "tube_total_to_other_arm_mm": 1762,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 60.8,
+     "Y": 12.1,
+     "A": 147.4,
+     "B": 159.8
+    },
+    "min_clearance_exact_mm": 12.1,
+    "near_solids": [
+     "ZLW carriage",
+     "rail bracket"
+    ]
+   },
+   {
+    "family": "CARRIAGE",
+    "list": "strict",
+    "centre": [
+     -635.0,
+     -505.0,
+     855.0
+    ],
+    "dims_xyz": [
+     110.0,
+     200.0,
+     100.0
+    ],
+    "lo": [
+     -690.0,
+     -605.0,
+     805.0
+    ],
+    "hi": [
+     -580.0,
+     -405.0,
+     905.0
+    ],
+    "height_above_deck_mm": [
+     746,
+     946
+    ],
+    "leg_to_target_base_mm": 474,
+    "tube_total_worst_mm": 1584,
+    "tube_total_nominal_mm": 1584,
+    "tube_total_to_other_arm_mm": 1622,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 67.1,
+     "Y": 24.9,
+     "A": 124.8,
+     "B": 124.8
+    },
+    "min_clearance_exact_mm": 24.9,
+    "near_solids": [
+     "rail bracket"
+    ]
+   },
+   {
+    "family": "CARRIAGE",
+    "list": "strict",
+    "centre": [
+     -455.0,
+     -315.0,
+     675.0
+    ],
+    "dims_xyz": [
+     110.0,
+     100.0,
+     200.0
+    ],
+    "lo": [
+     -510.0,
+     -365.0,
+     575.0
+    ],
+    "hi": [
+     -400.0,
+     -265.0,
+     775.0
+    ],
+    "height_above_deck_mm": [
+     986,
+     1086
+    ],
+    "leg_to_target_base_mm": 482,
+    "tube_total_worst_mm": 1592,
+    "tube_total_nominal_mm": 1394,
+    "tube_total_to_other_arm_mm": 1792,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 14.0,
+     "Y": 26.6,
+     "A": 11.5,
+     "B": 18.2
+    },
+    "min_clearance_exact_mm": 11.5,
+    "near_solids": [
+     "rail bracket",
+     "X rail",
+     "carriage A",
+     "upper plate A",
+     "arm A"
+    ]
+   },
+   {
+    "family": "CARRIAGE",
+    "list": "strict",
+    "centre": [
+     -820.0,
+     -350.0,
+     855.0
+    ],
+    "dims_xyz": [
+     100.0,
+     110.0,
+     200.0
+    ],
+    "lo": [
+     -870.0,
+     -405.0,
+     755.0
+    ],
+    "hi": [
+     -770.0,
+     -295.0,
+     955.0
+    ],
+    "height_above_deck_mm": [
+     946,
+     1056
+    ],
+    "leg_to_target_base_mm": 504,
+    "tube_total_worst_mm": 1614,
+    "tube_total_nominal_mm": 1614,
+    "tube_total_to_other_arm_mm": 1414,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 39.9,
+     "Y": 12.9,
+     "A": 14.8,
+     "B": 14.8
+    },
+    "min_clearance_exact_mm": 12.9,
+    "near_solids": [
+     "ZLW carriage",
+     "rail bracket",
+     "X rail",
+     "carriage B",
+     "clamp B"
+    ]
+   },
+   {
+    "family": "CARRIAGE",
+    "list": "strict",
+    "centre": [
+     -550.0,
+     -630.0,
+     870.0
+    ],
+    "dims_xyz": [
+     200.0,
+     110.0,
+     100.0
+    ],
+    "lo": [
+     -650.0,
+     -685.0,
+     820.0
+    ],
+    "hi": [
+     -450.0,
+     -575.0,
+     920.0
+    ],
+    "height_above_deck_mm": [
+     666,
+     776
+    ],
+    "leg_to_target_base_mm": 537,
+    "tube_total_worst_mm": 1647,
+    "tube_total_nominal_mm": 1639,
+    "tube_total_to_other_arm_mm": 1847,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 81.8,
+     "Y": 14.2,
+     "A": 286.9,
+     "B": 287.9
+    },
+    "min_clearance_exact_mm": 14.2,
+    "near_solids": [
+     "rail bracket"
+    ]
+   },
+   {
+    "family": "CARRIAGE",
+    "list": "strict",
+    "centre": [
+     -825.0,
+     -500.0,
+     855.0
+    ],
+    "dims_xyz": [
+     100.0,
+     110.0,
+     200.0
+    ],
+    "lo": [
+     -875.0,
+     -555.0,
+     755.0
+    ],
+    "hi": [
+     -775.0,
+     -445.0,
+     955.0
+    ],
+    "height_above_deck_mm": [
+     796,
+     906
+    ],
+    "leg_to_target_base_mm": 659,
+    "tube_total_worst_mm": 1769,
+    "tube_total_nominal_mm": 1769,
+    "tube_total_to_other_arm_mm": 1569,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 65.5,
+     "Y": 17.9,
+     "A": 164.8,
+     "B": 153.3
+    },
+    "min_clearance_exact_mm": 17.9,
+    "near_solids": [
+     "ZLW carriage",
+     "rail bracket"
+    ]
+   },
+   {
+    "family": "CARRIAGE",
+    "list": "strict",
+    "centre": [
+     -480.0,
+     -595.0,
+     740.0
+    ],
+    "dims_xyz": [
+     110.0,
+     200.0,
+     100.0
+    ],
+    "lo": [
+     -535.0,
+     -695.0,
+     690.0
+    ],
+    "hi": [
+     -425.0,
+     -495.0,
+     790.0
+    ],
+    "height_above_deck_mm": [
+     656,
+     856
+    ],
+    "leg_to_target_base_mm": 672,
+    "tube_total_worst_mm": 1782,
+    "tube_total_nominal_mm": 1634,
+    "tube_total_to_other_arm_mm": 1982,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 14.8,
+     "Y": 12.1,
+     "A": 214.8,
+     "B": 214.8
+    },
+    "min_clearance_exact_mm": 12.1,
+    "near_solids": [
+     "ZLW carriage",
+     "rail bracket"
+    ]
+   },
+   {
+    "family": "CARRIAGE",
+    "list": "strict",
+    "centre": [
+     -845.0,
+     -320.0,
+     675.0
+    ],
+    "dims_xyz": [
+     100.0,
+     110.0,
+     200.0
+    ],
+    "lo": [
+     -895.0,
+     -375.0,
+     575.0
+    ],
+    "hi": [
+     -795.0,
+     -265.0,
+     775.0
+    ],
+    "height_above_deck_mm": [
+     976,
+     1086
+    ],
+    "leg_to_target_base_mm": 679,
+    "tube_total_worst_mm": 1789,
+    "tube_total_nominal_mm": 1789,
+    "tube_total_to_other_arm_mm": 1589,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 12.8,
+     "Y": 26.6,
+     "A": 16.0,
+     "B": 11.5
+    },
+    "min_clearance_exact_mm": 11.5,
+    "near_solids": [
+     "rail bracket",
+     "X rail",
+     "carriage B",
+     "upper plate B",
+     "arm B"
+    ]
+   },
+   {
+    "family": "CARRIAGE",
+    "list": "relaxed",
+    "centre": [
+     -465.0,
+     -240.0,
+     695.0
+    ],
+    "dims_xyz": [
+     100.0,
+     200.0,
+     110.0
+    ],
+    "lo": [
+     -515.0,
+     -340.0,
+     640.0
+    ],
+    "hi": [
+     -415.0,
+     -140.0,
+     750.0
+    ],
+    "height_above_deck_mm": [
+     1011,
+     1211
+    ],
+    "leg_to_target_base_mm": 381,
+    "tube_total_worst_mm": 1491,
+    "tube_total_nominal_mm": 1313,
+    "tube_total_to_other_arm_mm": 1691,
+    "in_reach_target": true,
+    "in_reach_other": true,
+    "outside_stand_envelope_mm": 0,
+    "clearance_exact_mm": {
+     "F": 14.0,
+     "Y": 32.1,
+     "A": 13.5,
+     "B": 37.6
+    },
+    "min_clearance_exact_mm": 13.5,
+    "near_solids": [
+     "rail bracket",
+     "carriage A",
+     "upper plate A",
+     "arm A"
+    ]
+   },
+   {
+    "family": "CARRIAGE",
+    "list": "relaxed",
+    "centre": [
+     -555.0,
+     -360.0,
+     995.0
+    ],
+    "dims_xyz": [
+     200.0,
+     100.0,
+     110.0
+    ],
+    "lo": [
+     -655.0,
+     -410.0,
+     940.0
+    ],
+    "hi": [
+     -455.0,
+     -310.0,
+     1050.0
+    ],
+    "height_above_deck_mm": [
+     941,
+     1041
+    ],
+    "leg_to_target_base_mm": 389,
+    "tube_total_worst_mm": 1499,
+    "tube_total_nominal_mm": 1499,
+    "tube_total_to_other_arm_mm": 1697,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 50,
+    "clearance_exact_mm": {
+     "F": 201.8,
+     "Y": 13.0,
+     "A": 11.5,
+     "B": 13.0
+    },
+    "min_clearance_exact_mm": 11.5,
+    "near_solids": [
+     "rail bracket",
+     "X rail",
+     "carriage A",
+     "clamp A"
+    ]
+   },
+   {
+    "family": "CARRIAGE",
+    "list": "relaxed",
+    "centre": [
+     -555.0,
+     -510.0,
+     990.0
+    ],
+    "dims_xyz": [
+     110.0,
+     200.0,
+     100.0
+    ],
+    "lo": [
+     -610.0,
+     -610.0,
+     940.0
+    ],
+    "hi": [
+     -500.0,
+     -410.0,
+     1040.0
+    ],
+    "height_above_deck_mm": [
+     741,
+     941
+    ],
+    "leg_to_target_base_mm": 534,
+    "tube_total_worst_mm": 1644,
+    "tube_total_nominal_mm": 1644,
+    "tube_total_to_other_arm_mm": 1842,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 40,
+    "clearance_exact_mm": {
+     "F": 201.8,
+     "Y": 16.9,
+     "A": 111.5,
+     "B": 113.2
+    },
+    "min_clearance_exact_mm": 16.9,
+    "near_solids": [
+     "rail bracket"
+    ]
+   },
+   {
+    "family": "CARRIAGE",
+    "list": "relaxed",
+    "centre": [
+     -705.0,
+     -365.0,
+     990.0
+    ],
+    "dims_xyz": [
+     200.0,
+     110.0,
+     100.0
+    ],
+    "lo": [
+     -805.0,
+     -420.0,
+     940.0
+    ],
+    "hi": [
+     -605.0,
+     -310.0,
+     1040.0
+    ],
+    "height_above_deck_mm": [
+     931,
+     1041
+    ],
+    "leg_to_target_base_mm": 539,
+    "tube_total_worst_mm": 1649,
+    "tube_total_nominal_mm": 1649,
+    "tube_total_to_other_arm_mm": 1547,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 40,
+    "clearance_exact_mm": {
+     "F": 201.8,
+     "Y": 13.0,
+     "A": 11.5,
+     "B": 13.0
+    },
+    "min_clearance_exact_mm": 11.5,
+    "near_solids": [
+     "rail bracket",
+     "X rail",
+     "carriage B",
+     "clamp B"
+    ]
+   }
+  ],
+  "ARM_A": [
+   {
+    "family": "ARM_A",
+    "list": "relaxed",
+    "centre": [
+     -425.0,
+     -240.0,
+     1060.0
+    ],
+    "dims_xyz": [
+     110.0,
+     200.0,
+     100.0
+    ],
+    "lo": [
+     -480.0,
+     -340.0,
+     1010.0
+    ],
+    "hi": [
+     -370.0,
+     -140.0,
+     1110.0
+    ],
+    "height_above_deck_mm": [
+     1011,
+     1211
+    ],
+    "leg_to_target_base_mm": 208,
+    "tube_total_worst_mm": 1318,
+    "tube_total_nominal_mm": 1318,
+    "tube_total_to_other_arm_mm": 1776,
+    "in_reach_target": true,
+    "in_reach_other": true,
+    "outside_stand_envelope_mm": 110,
+    "clearance_exact_mm": {
+     "F": 271.8,
+     "Y": 72.0,
+     "A": 10.5,
+     "B": 65.7
+    },
+    "min_clearance_exact_mm": 10.5,
+    "near_solids": [
+     "clamp A"
+    ]
+   },
+   {
+    "family": "ARM_A",
+    "list": "relaxed",
+    "centre": [
+     -275.0,
+     -170.0,
+     855.0
+    ],
+    "dims_xyz": [
+     100.0,
+     110.0,
+     200.0
+    ],
+    "lo": [
+     -325.0,
+     -225.0,
+     755.0
+    ],
+    "hi": [
+     -225.0,
+     -115.0,
+     955.0
+    ],
+    "height_above_deck_mm": [
+     1126,
+     1236
+    ],
+    "leg_to_target_base_mm": 221,
+    "tube_total_worst_mm": 1331,
+    "tube_total_nominal_mm": 1331,
+    "tube_total_to_other_arm_mm": 1791,
+    "in_reach_target": true,
+    "in_reach_other": true,
+    "outside_stand_envelope_mm": 99,
+    "clearance_exact_mm": {
+     "F": 16.8,
+     "Y": 13.7,
+     "A": 16.0,
+     "B": 174.6
+    },
+    "min_clearance_exact_mm": 13.7,
+    "near_solids": [
+     "X rail",
+     "carrier plate A",
+     "carriage A",
+     "clamp A",
+     "upper plate A",
+     "arm A"
+    ]
+   },
+   {
+    "family": "ARM_A",
+    "list": "relaxed",
+    "centre": [
+     -425.0,
+     -375.0,
+     990.0
+    ],
+    "dims_xyz": [
+     200.0,
+     110.0,
+     100.0
+    ],
+    "lo": [
+     -525.0,
+     -430.0,
+     940.0
+    ],
+    "hi": [
+     -325.0,
+     -320.0,
+     1040.0
+    ],
+    "height_above_deck_mm": [
+     921,
+     1031
+    ],
+    "leg_to_target_base_mm": 269,
+    "tube_total_worst_mm": 1379,
+    "tube_total_nominal_mm": 1379,
+    "tube_total_to_other_arm_mm": 1837,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 40,
+    "clearance_exact_mm": {
+     "F": 202.0,
+     "Y": 13.0,
+     "A": 21.5,
+     "B": 39.8
+    },
+    "min_clearance_exact_mm": 13.0,
+    "near_solids": [
+     "rail bracket",
+     "X rail",
+     "carriage A",
+     "clamp A"
+    ]
+   },
+   {
+    "family": "ARM_A",
+    "list": "relaxed",
+    "centre": [
+     -425.0,
+     -105.0,
+     990.0
+    ],
+    "dims_xyz": [
+     110.0,
+     200.0,
+     100.0
+    ],
+    "lo": [
+     -480.0,
+     -205.0,
+     940.0
+    ],
+    "hi": [
+     -370.0,
+     -5.0,
+     1040.0
+    ],
+    "height_above_deck_mm": [
+     1146,
+     1346
+    ],
+    "leg_to_target_base_mm": 273,
+    "tube_total_worst_mm": 1383,
+    "tube_total_nominal_mm": 1383,
+    "tube_total_to_other_arm_mm": 1841,
+    "in_reach_target": true,
+    "in_reach_other": true,
+    "outside_stand_envelope_mm": 40,
+    "clearance_exact_mm": {
+     "F": 201.8,
+     "Y": 55.6,
+     "A": 16.3,
+     "B": 46.5
+    },
+    "min_clearance_exact_mm": 16.3,
+    "near_solids": [
+     "upper plate A",
+     "arm A"
+    ]
+   },
+   {
+    "family": "ARM_A",
+    "list": "relaxed",
+    "centre": [
+     -555.0,
+     -180.0,
+     1010.0
+    ],
+    "dims_xyz": [
+     200.0,
+     100.0,
+     110.0
+    ],
+    "lo": [
+     -655.0,
+     -230.0,
+     955.0
+    ],
+    "hi": [
+     -455.0,
+     -130.0,
+     1065.0
+    ],
+    "height_above_deck_mm": [
+     1121,
+     1221
+    ],
+    "leg_to_target_base_mm": 348,
+    "tube_total_worst_mm": 1458,
+    "tube_total_nominal_mm": 1458,
+    "tube_total_to_other_arm_mm": 1656,
+    "in_reach_target": true,
+    "in_reach_other": true,
+    "outside_stand_envelope_mm": 65,
+    "clearance_exact_mm": {
+     "F": 216.8,
+     "Y": 37.6,
+     "A": 11.7,
+     "B": 11.7
+    },
+    "min_clearance_exact_mm": 11.7,
+    "near_solids": [
+     "X rail",
+     "carriage A",
+     "clamp A",
+     "upper plate A",
+     "arm A"
+    ]
+   },
+   {
+    "family": "ARM_A",
+    "list": "relaxed",
+    "centre": [
+     -290.0,
+     -175.0,
+     1005.0
+    ],
+    "dims_xyz": [
+     200.0,
+     100.0,
+     110.0
+    ],
+    "lo": [
+     -390.0,
+     -225.0,
+     950.0
+    ],
+    "hi": [
+     -190.0,
+     -125.0,
+     1060.0
+    ],
+    "height_above_deck_mm": [
+     1126,
+     1226
+    ],
+    "leg_to_target_base_mm": 351,
+    "tube_total_worst_mm": 1461,
+    "tube_total_nominal_mm": 1461,
+    "tube_total_to_other_arm_mm": 1921,
+    "in_reach_target": true,
+    "in_reach_other": true,
+    "outside_stand_envelope_mm": 134,
+    "clearance_exact_mm": {
+     "F": 211.8,
+     "Y": 13.7,
+     "A": 16.7,
+     "B": 115.9
+    },
+    "min_clearance_exact_mm": 13.7,
+    "near_solids": [
+     "X rail",
+     "carrier plate A",
+     "carriage A",
+     "clamp A",
+     "upper plate A",
+     "arm A"
+    ]
+   },
+   {
+    "family": "ARM_A",
+    "list": "relaxed",
+    "centre": [
+     -275.0,
+     -350.0,
+     990.0
+    ],
+    "dims_xyz": [
+     200.0,
+     110.0,
+     100.0
+    ],
+    "lo": [
+     -375.0,
+     -405.0,
+     940.0
+    ],
+    "hi": [
+     -175.0,
+     -295.0,
+     1040.0
+    ],
+    "height_above_deck_mm": [
+     946,
+     1056
+    ],
+    "leg_to_target_base_mm": 392,
+    "tube_total_worst_mm": 1502,
+    "tube_total_nominal_mm": 1502,
+    "tube_total_to_other_arm_mm": 1962,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 149,
+    "clearance_exact_mm": {
+     "F": 201.8,
+     "Y": 13.0,
+     "A": 14.8,
+     "B": 137.1
+    },
+    "min_clearance_exact_mm": 13.0,
+    "near_solids": [
+     "X rail",
+     "carriage A",
+     "clamp A"
+    ]
+   },
+   {
+    "family": "ARM_A",
+    "list": "relaxed",
+    "centre": [
+     -575.0,
+     -365.0,
+     990.0
+    ],
+    "dims_xyz": [
+     200.0,
+     110.0,
+     100.0
+    ],
+    "lo": [
+     -675.0,
+     -420.0,
+     940.0
+    ],
+    "hi": [
+     -475.0,
+     -310.0,
+     1040.0
+    ],
+    "height_above_deck_mm": [
+     931,
+     1041
+    ],
+    "leg_to_target_base_mm": 409,
+    "tube_total_worst_mm": 1519,
+    "tube_total_nominal_mm": 1519,
+    "tube_total_to_other_arm_mm": 1677,
+    "in_reach_target": false,
+    "in_reach_other": false,
+    "outside_stand_envelope_mm": 40,
+    "clearance_exact_mm": {
+     "F": 201.8,
+     "Y": 13.0,
+     "A": 29.8,
+     "B": 13.0
+    },
+    "min_clearance_exact_mm": 13.0,
+    "near_solids": [
+     "rail bracket",
+     "X rail",
+     "carriage A",
+     "clamp A"
+    ]
+   },
+   {
+    "family": "ARM_A",
+    "list": "relaxed",
+    "centre": [
+     -225.0,
+     -175.0,
+     710.0
+    ],
+    "dims_xyz": [
+     110.0,
+     100.0,
+     200.0
+    ],
+    "lo": [
+     -280.0,
+     -225.0,
+     610.0
+    ],
+    "hi": [
+     -170.0,
+     -125.0,
+     810.0
+    ],
+    "height_above_deck_mm": [
+     1126,
+     1226
+    ],
+    "leg_to_target_base_mm": 411,
+    "tube_total_worst_mm": 1521,
+    "tube_total_nominal_mm": 1521,
+    "tube_total_to_other_arm_mm": 1981,
+    "in_reach_target": true,
+    "in_reach_other": true,
+    "outside_stand_envelope_mm": 154,
+    "clearance_exact_mm": {
+     "F": 12.1,
+     "Y": 13.7,
+     "A": 31.9,
+     "B": 221.1
+    },
+    "min_clearance_exact_mm": 12.1,
+    "near_solids": [
+     "carrier plate A",
+     "upper plate A"
+    ]
+   },
+   {
+    "family": "ARM_A",
+    "list": "relaxed",
+    "centre": [
+     -220.0,
+     -355.0,
+     740.0
+    ],
+    "dims_xyz": [
+     110.0,
+     200.0,
+     100.0
+    ],
+    "lo": [
+     -275.0,
+     -455.0,
+     690.0
+    ],
+    "hi": [
+     -165.0,
+     -255.0,
+     790.0
+    ],
+    "height_above_deck_mm": [
+     896,
+     1096
+    ],
+    "leg_to_target_base_mm": 432,
+    "tube_total_worst_mm": 1542,
+    "tube_total_nominal_mm": 1542,
+    "tube_total_to_other_arm_mm": 2002,
+    "in_reach_target": true,
+    "in_reach_other": true,
+    "outside_stand_envelope_mm": 159,
+    "clearance_exact_mm": {
+     "F": 14.8,
+     "Y": 11.6,
+     "A": 42.9,
+     "B": 227.5
+    },
+    "min_clearance_exact_mm": 11.6,
+    "near_solids": [
+     "carrier plate A",
+     "upper plate A"
+    ]
+   }
+  ]
+ },
+ "picks": [
+  {
+   "id": "P1",
+   "family": "CARRIAGE",
+   "index": 3,
+   "label": "lift carriage: bracket pocket, upright (best)",
+   "rgb": [
+    0.1,
+    0.65,
+    0.2
+   ],
+   "ghost_dy": [
+    -625,
+    625
+   ],
+   "lo": [
+    -690.0,
+    -605.0,
+    805.0
+   ],
+   "hi": [
+    -580.0,
+    -405.0,
+    905.0
+   ],
+   "metrics": {
+    "leg_to_target_base_mm": 474,
+    "tube_total_worst_mm": 1584,
+    "tube_total_nominal_mm": 1584,
+    "min_clearance_exact_mm": 24.9,
+    "near_solids": [
+     "rail bracket"
+    ],
+    "height_above_deck_mm": [
+     746,
+     946
+    ],
+    "in_reach_target": false,
+    "outside_stand_envelope_mm": 0
+   }
+  },
+  {
+   "id": "P2",
+   "family": "CARRIAGE",
+   "index": 1,
+   "label": "lift carriage: under rail shelf (shortest tube)",
+   "rgb": [
+    0.0,
+    0.6,
+    0.7
+   ],
+   "ghost_dy": [
+    -625,
+    625
+   ],
+   "lo": [
+    -685.0,
+    -405.0,
+    760.0
+   ],
+   "hi": [
+    -575.0,
+    -305.0,
+    960.0
+   ],
+   "metrics": {
+    "leg_to_target_base_mm": 324,
+    "tube_total_worst_mm": 1434,
+    "tube_total_nominal_mm": 1434,
+    "min_clearance_exact_mm": 12.8,
+    "near_solids": [
+     "ZLW body",
+     "ZLW carriage",
+     "rail bracket",
+     "X rail"
+    ],
+    "height_above_deck_mm": [
+     946,
+     1046
+    ],
+    "in_reach_target": false,
+    "outside_stand_envelope_mm": 0
+   }
+  },
+  {
+   "id": "P3",
+   "family": "ARM_A",
+   "index": 2,
+   "label": "on arm-A X-carriage, below rail",
+   "rgb": [
+    0.95,
+    0.5,
+    0.0
+   ],
+   "ghost_dy": [],
+   "lo": [
+    -525.0,
+    -430.0,
+    940.0
+   ],
+   "hi": [
+    -325.0,
+    -320.0,
+    1040.0
+   ],
+   "metrics": {
+    "leg_to_target_base_mm": 269,
+    "tube_total_worst_mm": 1379,
+    "tube_total_nominal_mm": 1379,
+    "min_clearance_exact_mm": 13.0,
+    "near_solids": [
+     "rail bracket",
+     "X rail",
+     "carriage A",
+     "clamp A"
+    ],
+    "height_above_deck_mm": [
+     921,
+     1031
+    ],
+    "in_reach_target": false,
+    "outside_stand_envelope_mm": 40
+   }
+  },
+  {
+   "id": "P4",
+   "family": "FIXED",
+   "index": 13,
+   "label": "column side (fixed), inside arm reach",
+   "rgb": [
+    0.15,
+    0.25,
+    0.9
+   ],
+   "ghost_dy": [],
+   "lo": [
+    -585.0,
+    -490.0,
+    580.0
+   ],
+   "hi": [
+    -475.0,
+    -290.0,
+    680.0
+   ],
+   "metrics": {
+    "leg_to_target_base_mm": 1152,
+    "tube_total_worst_mm": 2262,
+    "tube_total_nominal_mm": 1589,
+    "min_clearance_exact_mm": 14.7,
+    "near_solids": [
+     "gusset/column",
+     "ZLW body",
+     "ZLW carriage"
+    ],
+    "height_above_deck_mm": [
+     861,
+     1061
+    ],
+    "in_reach_target": true,
+    "outside_stand_envelope_mm": 0
+   }
+  },
+  {
+   "id": "P5",
+   "family": "FIXED",
+   "index": 0,
+   "label": "column base wing, front face (fixed)",
+   "rgb": [
+    0.55,
+    0.2,
+    0.8
+   ],
+   "ghost_dy": [],
+   "lo": [
+    -535.0,
+    -1030.0,
+    715.0
+   ],
+   "hi": [
+    -435.0,
+    -920.0,
+    915.0
+   ],
+   "metrics": {
+    "leg_to_target_base_mm": 1597,
+    "tube_total_worst_mm": 2707,
+    "tube_total_nominal_mm": 1944,
+    "min_clearance_exact_mm": 12.1,
+    "near_solids": [
+     "side plate"
+    ],
+    "height_above_deck_mm": [
+     321,
+     431
+    ],
+    "in_reach_target": false,
+    "outside_stand_envelope_mm": 0
+   }
+  },
+  {
+   "id": "P6",
+   "family": "DECK",
+   "index": 0,
+   "label": "AMR deck beside column (assumed deck)",
+   "rgb": [
+    0.85,
+    0.1,
+    0.1
+   ],
+   "ghost_dy": [],
+   "lo": [
+    -655.0,
+    -1325.0,
+    810.0
+   ],
+   "hi": [
+    -455.0,
+    -1215.0,
+    910.0
+   ],
+   "metrics": {
+    "leg_to_target_base_mm": 1789,
+    "tube_total_worst_mm": 2899,
+    "tube_total_nominal_mm": 2274,
+    "min_clearance_exact_mm": 14.9,
+    "near_solids": [],
+    "height_above_deck_mm": [
+     26,
+     136
+    ],
+    "in_reach_target": false,
+    "outside_stand_envelope_mm": 0
+   }
+  }
+ ],
+ "regions": {
+  "pocket_on_carriage": {
+   "10": [
+    {
+     "perm": [
+      100.0,
+      110.0,
+      200.0
+     ],
+     "n": 40203,
+     "cx": [
+      -695.0,
+      -605.0
+     ],
+     "cy": [
+      -575.0,
+      -350.0
+     ],
+     "cz": [
+      860.0,
+      1140.0
+     ]
+    },
+    {
+     "perm": [
+      100.0,
+      200.0,
+      110.0
+     ],
+     "n": 32907,
+     "cx": [
+      -695.0,
+      -605.0
+     ],
+     "cy": [
+      -530.0,
+      -395.0
+     ],
+     "cz": [
+      815.0,
+      1185.0
+     ]
+    },
+    {
+     "perm": [
+      110.0,
+      100.0,
+      200.0
+     ],
+     "n": 36992,
+     "cx": [
+      -690.0,
+      -610.0
+     ],
+     "cy": [
+      -580.0,
+      -345.0
+     ],
+     "cz": [
+      860.0,
+      1140.0
+     ]
+    },
+    {
+     "perm": [
+      110.0,
+      200.0,
+      100.0
+     ],
+     "n": 29937,
+     "cx": [
+      -690.0,
+      -610.0
+     ],
+     "cy": [
+      -530.0,
+      -395.0
+     ],
+     "cz": [
+      810.0,
+      1190.0
+     ]
+    }
+   ],
+   "15": [
+    {
+     "perm": [
+      100.0,
+      110.0,
+      200.0
+     ],
+     "n": 34877,
+     "cx": [
+      -695.0,
+      -605.0
+     ],
+     "cy": [
+      -575.0,
+      -350.0
+     ],
+     "cz": [
+      865.0,
+      1135.0
+     ]
+    },
+    {
+     "perm": [
+      100.0,
+      200.0,
+      110.0
+     ],
+     "n": 29268,
+     "cx": [
+      -695.0,
+      -605.0
+     ],
+     "cy": [
+      -530.0,
+      -395.0
+     ],
+     "cz": [
+      820.0,
+      1180.0
+     ]
+    },
+    {
+     "perm": [
+      110.0,
+      100.0,
+      200.0
+     ],
+     "n": 31801,
+     "cx": [
+      -690.0,
+      -610.0
+     ],
+     "cy": [
+      -580.0,
+      -345.0
+     ],
+     "cz": [
+      865.0,
+      1135.0
+     ]
+    },
+    {
+     "perm": [
+      110.0,
+      200.0,
+      100.0
+     ],
+     "n": 26510,
+     "cx": [
+      -690.0,
+      -610.0
+     ],
+     "cy": [
+      -530.0,
+      -395.0
+     ],
+     "cz": [
+      815.0,
+      1185.0
+     ]
+    }
+   ],
+   "20": [
+    {
+     "perm": [
+      100.0,
+      110.0,
+      200.0
+     ],
+     "n": 29648,
+     "cx": [
+      -695.0,
+      -605.0
+     ],
+     "cy": [
+      -575.0,
+      -350.0
+     ],
+     "cz": [
+      870.0,
+      1130.0
+     ]
+    },
+    {
+     "perm": [
+      100.0,
+      200.0,
+      110.0
+     ],
+     "n": 25778,
+     "cx": [
+      -695.0,
+      -605.0
+     ],
+     "cy": [
+      -530.0,
+      -395.0
+     ],
+     "cz": [
+      825.0,
+      1175.0
+     ]
+    },
+    {
+     "perm": [
+      110.0,
+      100.0,
+      200.0
+     ],
+     "n": 26703,
+     "cx": [
+      -690.0,
+      -610.0
+     ],
+     "cy": [
+      -580.0,
+      -345.0
+     ],
+     "cz": [
+      870.0,
+      1130.0
+     ]
+    },
+    {
+     "perm": [
+      110.0,
+      200.0,
+      100.0
+     ],
+     "n": 23232,
+     "cx": [
+      -690.0,
+      -610.0
+     ],
+     "cy": [
+      -530.0,
+      -395.0
+     ],
+     "cz": [
+      820.0,
+      1180.0
+     ]
+    }
+   ],
+   "25": [
+    {
+     "perm": [
+      100.0,
+      110.0,
+      200.0
+     ],
+     "n": 24530,
+     "cx": [
+      -695.0,
+      -605.0
+     ],
+     "cy": [
+      -575.0,
+      -350.0
+     ],
+     "cz": [
+      875.0,
+      1125.0
+     ]
+    },
+    {
+     "perm": [
+      100.0,
+      200.0,
+      110.0
+     ],
+     "n": 22443,
+     "cx": [
+      -695.0,
+      -605.0
+     ],
+     "cy": [
+      -530.0,
+      -395.0
+     ],
+     "cz": [
+      830.0,
+      1170.0
+     ]
+    },
+    {
+     "perm": [
+      110.0,
+      100.0,
+      200.0
+     ],
+     "n": 21699,
+     "cx": [
+      -690.0,
+      -610.0
+     ],
+     "cy": [
+      -580.0,
+      -345.0
+     ],
+     "cz": [
+      875.0,
+      1125.0
+     ]
+    },
+    {
+     "perm": [
+      110.0,
+      200.0,
+      100.0
+     ],
+     "n": 20109,
+     "cx": [
+      -690.0,
+      -610.0
+     ],
+     "cy": [
+      -530.0,
+      -395.0
+     ],
+     "cz": [
+      825.0,
+      1175.0
+     ]
+    }
+   ],
+   "30": [
+    {
+     "perm": [
+      100.0,
+      110.0,
+      200.0
+     ],
+     "n": 19643,
+     "cx": [
+      -695.0,
+      -605.0
+     ],
+     "cy": [
+      -575.0,
+      -385.0
+     ],
+     "cz": [
+      880.0,
+      1120.0
+     ]
+    },
+    {
+     "perm": [
+      100.0,
+      200.0,
+      110.0
+     ],
+     "n": 19256,
+     "cx": [
+      -695.0,
+      -605.0
+     ],
+     "cy": [
+      -530.0,
+      -395.0
+     ],
+     "cz": [
+      835.0,
+      1165.0
+     ]
+    },
+    {
+     "perm": [
+      110.0,
+      100.0,
+      200.0
+     ],
+     "n": 16915,
+     "cx": [
+      -690.0,
+      -610.0
+     ],
+     "cy": [
+      -580.0,
+      -380.0
+     ],
+     "cz": [
+      880.0,
+      1120.0
+     ]
+    },
+    {
+     "perm": [
+      110.0,
+      200.0,
+      100.0
+     ],
+     "n": 17134,
+     "cx": [
+      -690.0,
+      -610.0
+     ],
+     "cy": [
+      -530.0,
+      -395.0
+     ],
+     "cz": [
+      830.0,
+      1170.0
+     ]
+    }
+   ],
+   "40": [
+    {
+     "perm": [
+      100.0,
+      110.0,
+      200.0
+     ],
+     "n": 10640,
+     "cx": [
+      -695.0,
+      -605.0
+     ],
+     "cy": [
+      -575.0,
+      -395.0
+     ],
+     "cz": [
+      890.0,
+      1110.0
+     ]
+    },
+    {
+     "perm": [
+      100.0,
+      200.0,
+      110.0
+     ],
+     "n": 13360,
+     "cx": [
+      -695.0,
+      -605.0
+     ],
+     "cy": [
+      -530.0,
+      -395.0
+     ],
+     "cz": [
+      845.0,
+      1155.0
+     ]
+    },
+    {
+     "perm": [
+      110.0,
+      100.0,
+      200.0
+     ],
+     "n": 8041,
+     "cx": [
+      -690.0,
+      -610.0
+     ],
+     "cy": [
+      -580.0,
+      -390.0
+     ],
+     "cz": [
+      1005.0,
+      1110.0
+     ]
+    },
+    {
+     "perm": [
+      110.0,
+      200.0,
+      100.0
+     ],
+     "n": 11662,
+     "cx": [
+      -690.0,
+      -610.0
+     ],
+     "cy": [
+      -530.0,
+      -395.0
+     ],
+     "cz": [
+      1020.0,
+      1160.0
+     ]
+    }
+   ]
+  },
+  "deck": [
+   {
+    "perm": [
+     100.0,
+     110.0,
+     200.0
+    ],
+    "n": 50165,
+    "nearest_to_column_foot": {
+     "centre": [
+      -540.0,
+      -1285.0,
+      260.0
+     ],
+     "gap_xz_mm": 12.0
+    },
+    "x_range": [
+     -1440.0,
+     240.0
+    ],
+    "z_range": [
+     260.0,
+     1140.0
+    ]
+   },
+   {
+    "perm": [
+     100.0,
+     200.0,
+     110.0
+    ],
+    "n": 56635,
+    "nearest_to_column_foot": {
+     "centre": [
+      -540.0,
+      -1240.0,
+      225.0
+     ],
+     "gap_xz_mm": 12.0
+    },
+    "x_range": [
+     -1440.0,
+     240.0
+    ],
+    "z_range": [
+     215.0,
+     1185.0
+    ]
+   },
+   {
+    "perm": [
+     110.0,
+     100.0,
+     200.0
+    ],
+    "n": 49595,
+    "nearest_to_column_foot": {
+     "centre": [
+      -535.0,
+      -1290.0,
+      260.0
+     ],
+     "gap_xz_mm": 12.0
+    },
+    "x_range": [
+     -1435.0,
+     235.0
+    ],
+    "z_range": [
+     260.0,
+     1140.0
+    ]
+   },
+   {
+    "perm": [
+     110.0,
+     200.0,
+     100.0
+    ],
+    "n": 56803,
+    "nearest_to_column_foot": {
+     "centre": [
+      -535.0,
+      -1240.0,
+      230.0
+     ],
+     "gap_xz_mm": 12.0
+    },
+    "x_range": [
+     -1435.0,
+     235.0
+    ],
+    "z_range": [
+     210.0,
+     1190.0
+    ]
+   },
+   {
+    "perm": [
+     200.0,
+     100.0,
+     110.0
+    ],
+    "n": 50825,
+    "nearest_to_column_foot": {
+     "centre": [
+      -490.0,
+      -1290.0,
+      225.0
+     ],
+     "gap_xz_mm": 12.0
+    },
+    "x_range": [
+     -1390.0,
+     190.0
+    ],
+    "z_range": [
+     215.0,
+     1185.0
+    ]
+   },
+   {
+    "perm": [
+     200.0,
+     110.0,
+     100.0
+    ],
+    "n": 51621,
+    "nearest_to_column_foot": {
+     "centre": [
+      -490.0,
+      -1285.0,
+      230.0
+     ],
+     "gap_xz_mm": 12.0
+    },
+    "x_range": [
+     -1390.0,
+     190.0
+    ],
+    "z_range": [
+     210.0,
+     1190.0
+    ]
+   }
+  ]
+ }
+}

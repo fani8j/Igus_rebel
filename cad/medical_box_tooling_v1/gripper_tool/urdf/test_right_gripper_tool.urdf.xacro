@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<robot name="right_gripper_tool_test" xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:arg name="mesh_root" default="file:///home/farhan/orca/workspaces/igus_rebel_ros2/box-3d/cad/medical_box_tooling_v1/gripper_tool"/>
+  <xacro:include filename="right_gripper_tool.urdf.xacro"/>
+  <link name="link6"/>
+  <xacro:right_gripper_tool prefix="right_" parent="link6" mesh_root="$(arg mesh_root)"/>
+</robot>

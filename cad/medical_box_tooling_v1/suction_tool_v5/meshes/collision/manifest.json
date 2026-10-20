@@ -1,0 +1,359 @@
+{
+ "frame": "link6 (all pieces rigid in the link6 frame)",
+ "units": "metres",
+ "note": "convex pieces; the tubes (flexible) are excluded; camera = hull envelope",
+ "pieces": [
+  {
+   "file": "meshes/collision/tool_body_00.stl",
+   "source": "tool_body",
+   "volume_mm3": 3060.4617612451084,
+   "faces": 34
+  },
+  {
+   "file": "meshes/collision/tool_body_01.stl",
+   "source": "tool_body",
+   "volume_mm3": 2467.4037652524576,
+   "faces": 32
+  },
+  {
+   "file": "meshes/collision/tool_body_02.stl",
+   "source": "tool_body",
+   "volume_mm3": 6661.829520169293,
+   "faces": 26
+  },
+  {
+   "file": "meshes/collision/tool_body_03.stl",
+   "source": "tool_body",
+   "volume_mm3": 1664.1412531437459,
+   "faces": 20
+  },
+  {
+   "file": "meshes/collision/tool_body_04.stl",
+   "source": "tool_body",
+   "volume_mm3": 1530.356604263021,
+   "faces": 24
+  },
+  {
+   "file": "meshes/collision/tool_body_05.stl",
+   "source": "tool_body",
+   "volume_mm3": 1906.6033093739252,
+   "faces": 38
+  },
+  {
+   "file": "meshes/collision/tool_body_06.stl",
+   "source": "tool_body",
+   "volume_mm3": 2297.108429296123,
+   "faces": 38
+  },
+  {
+   "file": "meshes/collision/tool_body_07.stl",
+   "source": "tool_body",
+   "volume_mm3": 1325.62277516217,
+   "faces": 26
+  },
+  {
+   "file": "meshes/collision/tool_body_08.stl",
+   "source": "tool_body",
+   "volume_mm3": 23965.72179292456,
+   "faces": 754
+  },
+  {
+   "file": "meshes/collision/tool_body_09.stl",
+   "source": "tool_body",
+   "volume_mm3": 1266.8023872790184,
+   "faces": 40
+  },
+  {
+   "file": "meshes/collision/tool_body_10.stl",
+   "source": "tool_body",
+   "volume_mm3": 1924.266937992605,
+   "faces": 16
+  },
+  {
+   "file": "meshes/collision/tool_body_11.stl",
+   "source": "tool_body",
+   "volume_mm3": 4462.127737362522,
+   "faces": 66
+  },
+  {
+   "file": "meshes/collision/tool_body_12.stl",
+   "source": "tool_body",
+   "volume_mm3": 3665.7683242633602,
+   "faces": 70
+  },
+  {
+   "file": "meshes/collision/tool_body_13.stl",
+   "source": "tool_body",
+   "volume_mm3": 891.1091123303021,
+   "faces": 20
+  },
+  {
+   "file": "meshes/collision/tool_body_14.stl",
+   "source": "tool_body",
+   "volume_mm3": 891.1018929028867,
+   "faces": 22
+  },
+  {
+   "file": "meshes/collision/tool_body_15.stl",
+   "source": "tool_body",
+   "volume_mm3": 178.46826053954283,
+   "faces": 16
+  },
+  {
+   "file": "meshes/collision/tool_body_16.stl",
+   "source": "tool_body",
+   "volume_mm3": 3836.8479391994447,
+   "faces": 164
+  },
+  {
+   "file": "meshes/collision/tool_body_17.stl",
+   "source": "tool_body",
+   "volume_mm3": 2157.9369402016414,
+   "faces": 36
+  },
+  {
+   "file": "meshes/collision/tool_body_18.stl",
+   "source": "tool_body",
+   "volume_mm3": 1456.2801918190044,
+   "faces": 50
+  },
+  {
+   "file": "meshes/collision/tool_body_19.stl",
+   "source": "tool_body",
+   "volume_mm3": 4268.626921098826,
+   "faces": 54
+  },
+  {
+   "file": "meshes/collision/tool_body_20.stl",
+   "source": "tool_body",
+   "volume_mm3": 2650.0163028009974,
+   "faces": 68
+  },
+  {
+   "file": "meshes/collision/tool_body_21.stl",
+   "source": "tool_body",
+   "volume_mm3": 3706.659925735239,
+   "faces": 182
+  },
+  {
+   "file": "meshes/collision/tool_body_22.stl",
+   "source": "tool_body",
+   "volume_mm3": 3722.424153173,
+   "faces": 132
+  },
+  {
+   "file": "meshes/collision/tool_body_23.stl",
+   "source": "tool_body",
+   "volume_mm3": 3049.2630824338803,
+   "faces": 118
+  },
+  {
+   "file": "meshes/collision/pad_L_00.stl",
+   "source": "pad_L",
+   "volume_mm3": 3308.2048971725453,
+   "faces": 264
+  },
+  {
+   "file": "meshes/collision/pad_L_01.stl",
+   "source": "pad_L",
+   "volume_mm3": 324.73151906357816,
+   "faces": 346
+  },
+  {
+   "file": "meshes/collision/pad_L_02.stl",
+   "source": "pad_L",
+   "volume_mm3": 270.696294652152,
+   "faces": 252
+  },
+  {
+   "file": "meshes/collision/pad_L_03.stl",
+   "source": "pad_L",
+   "volume_mm3": 709.537946225351,
+   "faces": 356
+  },
+  {
+   "file": "meshes/collision/elbow_L_00.stl",
+   "source": "elbow_L",
+   "volume_mm3": 533.1404539951427,
+   "faces": 286
+  },
+  {
+   "file": "meshes/collision/elbow_L_01.stl",
+   "source": "elbow_L",
+   "volume_mm3": 677.7253592584856,
+   "faces": 346
+  },
+  {
+   "file": "meshes/collision/nut_front_L_00.stl",
+   "source": "nut_front_L",
+   "volume_mm3": 509.22293742525005,
+   "faces": 20
+  },
+  {
+   "file": "meshes/collision/washer_L_00.stl",
+   "source": "washer_L",
+   "volume_mm3": 312.56671980047486,
+   "faces": 140
+  },
+  {
+   "file": "meshes/collision/nut_rear_L_00.stl",
+   "source": "nut_rear_L",
+   "volume_mm3": 509.22293742525005,
+   "faces": 20
+  },
+  {
+   "file": "meshes/collision/pad_M_00.stl",
+   "source": "pad_M",
+   "volume_mm3": 3308.204897172545,
+   "faces": 264
+  },
+  {
+   "file": "meshes/collision/pad_M_01.stl",
+   "source": "pad_M",
+   "volume_mm3": 379.51161034459943,
+   "faces": 346
+  },
+  {
+   "file": "meshes/collision/pad_M_02.stl",
+   "source": "pad_M",
+   "volume_mm3": 214.80989430832383,
+   "faces": 224
+  },
+  {
+   "file": "meshes/collision/pad_M_03.stl",
+   "source": "pad_M",
+   "volume_mm3": 700.202918183001,
+   "faces": 308
+  },
+  {
+   "file": "meshes/collision/elbow_M_00.stl",
+   "source": "elbow_M",
+   "volume_mm3": 877.893175568495,
+   "faces": 204
+  },
+  {
+   "file": "meshes/collision/elbow_M_01.stl",
+   "source": "elbow_M",
+   "volume_mm3": 293.91653186336026,
+   "faces": 184
+  },
+  {
+   "file": "meshes/collision/nut_front_M_00.stl",
+   "source": "nut_front_M",
+   "volume_mm3": 509.2229374252503,
+   "faces": 20
+  },
+  {
+   "file": "meshes/collision/washer_M_00.stl",
+   "source": "washer_M",
+   "volume_mm3": 312.56671980047497,
+   "faces": 140
+  },
+  {
+   "file": "meshes/collision/nut_rear_M_00.stl",
+   "source": "nut_rear_M",
+   "volume_mm3": 509.2229374252504,
+   "faces": 20
+  },
+  {
+   "file": "meshes/collision/pad_R_00.stl",
+   "source": "pad_R",
+   "volume_mm3": 3308.204897172546,
+   "faces": 264
+  },
+  {
+   "file": "meshes/collision/pad_R_01.stl",
+   "source": "pad_R",
+   "volume_mm3": 215.1946280044843,
+   "faces": 346
+  },
+  {
+   "file": "meshes/collision/pad_R_02.stl",
+   "source": "pad_R",
+   "volume_mm3": 214.68187404518716,
+   "faces": 224
+  },
+  {
+   "file": "meshes/collision/pad_R_03.stl",
+   "source": "pad_R",
+   "volume_mm3": 858.6944929902678,
+   "faces": 316
+  },
+  {
+   "file": "meshes/collision/elbow_R_00.stl",
+   "source": "elbow_R",
+   "volume_mm3": 316.64581094869516,
+   "faces": 212
+  },
+  {
+   "file": "meshes/collision/elbow_R_01.stl",
+   "source": "elbow_R",
+   "volume_mm3": 815.1509615455639,
+   "faces": 290
+  },
+  {
+   "file": "meshes/collision/nut_front_R_00.stl",
+   "source": "nut_front_R",
+   "volume_mm3": 509.22293742525056,
+   "faces": 20
+  },
+  {
+   "file": "meshes/collision/washer_R_00.stl",
+   "source": "washer_R",
+   "volume_mm3": 312.56671980047497,
+   "faces": 140
+  },
+  {
+   "file": "meshes/collision/nut_rear_R_00.stl",
+   "source": "nut_rear_R",
+   "volume_mm3": 509.22293742525056,
+   "faces": 20
+  },
+  {
+   "file": "meshes/collision/collector_00.stl",
+   "source": "collector",
+   "volume_mm3": 3065.545593343714,
+   "faces": 168
+  },
+  {
+   "file": "meshes/collision/collector_01.stl",
+   "source": "collector",
+   "volume_mm3": 1604.26675068719,
+   "faces": 84
+  },
+  {
+   "file": "meshes/collision/collector_02.stl",
+   "source": "collector",
+   "volume_mm3": 1479.5841264107673,
+   "faces": 84
+  },
+  {
+   "file": "meshes/collision/camera_gemini305_00.stl",
+   "source": "camera_gemini305",
+   "volume_mm3": 38514.63854854308,
+   "faces": 188
+  }
+ ],
+ "hull_over_part_volume": {
+  "tool_body": 1.578,
+  "pad_L": 1.101,
+  "elbow_L": 1.108,
+  "nut_front_L": 1.861,
+  "washer_L": 1.374,
+  "nut_rear_L": 1.861,
+  "pad_M": 1.098,
+  "elbow_M": 1.072,
+  "nut_front_M": 1.861,
+  "washer_M": 1.374,
+  "nut_rear_M": 1.861,
+  "pad_R": 1.097,
+  "elbow_R": 1.036,
+  "nut_front_R": 1.861,
+  "washer_R": 1.374,
+  "nut_rear_R": 1.861,
+  "collector": 1.188,
+  "camera_gemini305": 1.0
+ },
+ "n_pieces": 55,
+ "total_hull_over_total_volume": 1.302
+}
