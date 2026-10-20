@@ -2,7 +2,8 @@
 tools/closest_attempt.py to the best-effort pose (closest to the press / grasp pose under joint limits and collision), holds 3 s, a thin translucent red box (visual only, no collision)
 marks the gap between the pad TCP and the target point.  Suction arm first (returns home), then the gripper arm.  No vacuum, no grasp.
 Run: ROS domain is taken from CLOSEST_DOMAIN (default 174).  nice -n 19 /home/farhan/isaac-sim/python.sh tests/test_closest_attempt.py --target T1 --record
-Needs data/plans/closest_<T>.json (python3 tools/closest_attempt.py --targets T1).  Footer caption only (no header)."""
+Needs data/plans/closest_<T>.json (python3 tools/closest_attempt.py --targets T1).  Footer caption only (no header).
+Watch live: add --gui (Isaac Sim window, real-time playback, waits for the window to be closed; result goes to unreachable_closest_run_<T>_gui.json)."""
 import argparse
 import json
 import os
@@ -30,17 +31,24 @@ def main():
     ap.add_argument('--record', action='store_true')
     ap.add_argument('--video-dir', default=str(VIDEO_DEFAULT))
     ap.add_argument('--hold', type=float, default=3.0)
+    ap.add_argument('--gui', action='store_true', help='show the run live in the Isaac Sim window (physics unchanged; not with --record)')
+    ap.add_argument('--gui-speed', type=float, default=1.0, help='--gui playback speed vs real time (it cannot run faster than the physics)')
+    ap.add_argument('--gui-close', action='store_true', help='--gui: exit at the end instead of waiting for the window to be closed')
     args = ap.parse_args()
-    app = start_app(extra_exts=('isaacsim.robot.surface_gripper', 'omni.kit.viewport.utility', 'omni.replicator.core'))
+    if args.gui and args.record:
+        ap.error('--gui and --record cannot be combined')
+    app = start_app(headless=not args.gui, extra_exts=('isaacsim.robot.surface_gripper', 'omni.kit.viewport.utility', 'omni.replicator.core'))
     print('### STAGE_OPEN', os.environ['ROS_DOMAIN_ID'])
     apply_d200_physics_settings()
     from pxr import Gf, UsdGeom, UsdPhysics, PhysxSchema, PhysicsSchemaTools, Usd, Vt
     from isaacsim.core.prims import Articulation
     stage, sim = open_scene(app, 'cabinet_robot_test_scene.usda', DT)
+    gui = GuiViewer(app, sim, args.gui_speed, dt=DT) if args.gui else None
     cab = Cabinet(stage)
     tn = args.target
     plan = json.load(open(PLANS / f'closest_{tn}.json'))
-    res = json.load(open(RESULTS / f'unreachable_closest_{tn}.json'))[tn]
+    rf = RESULTS / f'unreachable_closest_{tn}.json'                       # written by tools/closest_attempt.py --targets <T>
+    res = json.load(open(rf if rf.exists() else RESULTS / 'unreachable_closest.json'))[tn]     # merged T1 + T2 file
     shelf, box, which = TARGETS[tn]
     name, tpath, Mc = cab.pick(shelf, box, which)
     c = Mc[:3, 3]
@@ -170,6 +178,8 @@ def main():
             step_i[0] += 1
             if rec_on[0] and step_i[0] % 8 == 0:
                 rec_frame()
+            if gui:
+                gui.tick(step_i[0])
 
     def drive(arm, q0, qs, ts):
         pts = np.vstack([q0, np.asarray(qs)])
@@ -181,10 +191,13 @@ def main():
         tgt[arm_idx[arm]] = pts[-1]
 
     def set_side_cam(tcp, tg_):
+        if not args.record:                              # the video cameras only exist with --record
+            return
         mid = (np.array(tcp) + np.array(tg_)) / 2
         eye = mid + np.array([-0.55, -0.45, 0.20])
         set_matrix(stage.GetPrimAtPath('/World/RecCamSide'), look_at_M(eye, mid))
-    set_matrix(stage.GetPrimAtPath('/World/RecCam3Q'), look_at_M(np.array([c[0] - 1.30, -2.00, c[2] + 0.60]), np.array([c[0] + 0.05, -0.40, c[2] + 0.22])))
+    if args.record:
+        set_matrix(stage.GetPrimAtPath('/World/RecCam3Q'), look_at_M(np.array([c[0] - 1.30, -2.00, c[2] + 0.60]), np.array([c[0] + 0.05, -0.40, c[2] + 0.22])))
     set_side_cam(plan['arms']['left']['tcp_cabinet'], plan['arms']['left']['target_cabinet'])
     if args.record:
         for _ in range(8):
@@ -193,6 +206,8 @@ def main():
             procs[v] = subprocess.Popen(['/usr/bin/ffmpeg', '-y', '-loglevel', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', size, '-r', '30', '-i', '-', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
                                          '-pix_fmt', 'yuv420p', str(vdir / f'front_{tn}_closest_{v}.mp4')], stdin=subprocess.PIPE)
         rec_on[0] = True
+    if gui:
+        gui.look(np.array([c[0] - 1.30, -2.00, c[2] + 0.60]), np.array([c[0] + 0.05, -0.40, c[2] + 0.22]))      # same as the 3/4 video view
     cap[0] = f'robot at the parking pose (d {par["d_m"] * 1000:.0f} mm, lift at its lowest limit {par["lift_m"]:.3f} m), arms at home'
     step(int(1.5 / DT))
     out = dict(target=tn, arms={})
@@ -206,6 +221,8 @@ def main():
         if e['total_mm'] > 2.0:
             show_marker(pa['tcp_cabinet'], pa['target_cabinet'])
         cap[0] = ra['caption']
+        if gui:
+            gui.caption(cap[0])
         out['arms'][arm] = dict(hold_start_s=step_i[0] / 240.0)
         step(int(args.hold / DT))
         qm = np.array(art.get_joint_positions()[0], float)[arm_idx[arm]]
@@ -229,8 +246,11 @@ def main():
                     un[k] = un.get(k, 0) + n
     out['robot_cabinet_or_stock_contacts'] = un
     out['frames'] = n_frames[0]
-    json.dump(out, open(RESULTS / f'unreachable_closest_run_{tn}.json', 'w'), indent=1, default=float)
+    json.dump(out, open(RESULTS / f"unreachable_closest_run_{tn}{'_gui' if gui else ''}.json", 'w'), indent=1, default=float)
     print('RUN', json.dumps(out, default=float), flush=True)
+    if gui and not args.gui_close:
+        print('### DONE: close the Isaac Sim window to exit', flush=True)
+        gui.hold(None)
     sys.stdout.flush()
     os._exit(0)
 

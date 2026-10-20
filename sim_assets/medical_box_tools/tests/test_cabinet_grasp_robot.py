@@ -3,6 +3,7 @@ The ARM JOINTS are driven (joint position drives, USD stiffness / damping unchan
 continuity, collision checked, time-parametrised with the medicine-grasp joint limits).  Lift and sliders are fixed at the parking pose (or, for the top-down split-lift result, the lift is moved
 between the phases).  Same sequence, metrics and pass criteria as tests/test_cabinet_grasp.py (kinematic carriers) plus: max arm joint tracking error, arm joint efforts, robot-cabinet contacts.
 Run: nice -n 19 /home/farhan/isaac-sim/python.sh tests/test_cabinet_grasp_robot.py --mode front [--targets T5,T3] [--record] [--yaw180 --targets E2]
+Watch live: add --gui (Isaac Sim window, real-time playback, holds the last pose until the window is closed; results go to cabinet_grasp_robot_<mode>_gui.json)
 Plans: data/plans/<mode>_<target>.json (python3 tools/export_plan.py ...).   Results: tests/results/cabinet_grasp_robot_<mode>.json
 """
 import argparse
@@ -37,8 +38,14 @@ def main():
     ap.add_argument('--header', action='store_true', help='also draw the top info bar (mode/shelf/time/parking/lift) on the videos; default: footer caption only')
     ap.add_argument('--video-dir', default=str(VIDEO_DEFAULT))
     ap.add_argument('--out', default='')
+    ap.add_argument('--gui', action='store_true', help='show the run live in the Isaac Sim window (physics unchanged; not with --record)')
+    ap.add_argument('--gui-speed', type=float, default=1.0, help='--gui playback speed vs real time (it cannot run faster than the physics)')
+    ap.add_argument('--gui-hold', type=float, default=3.0, help='--gui: seconds to show the final pose of each target before the next one')
+    ap.add_argument('--gui-close', action='store_true', help='--gui: exit after the last target instead of waiting for the window to be closed')
     args = ap.parse_args()
-    app = start_app(extra_exts=('isaacsim.robot.surface_gripper', 'omni.kit.viewport.utility', 'omni.replicator.core'))
+    if args.gui and args.record:
+        ap.error('--gui and --record cannot be combined')
+    app = start_app(headless=not args.gui, extra_exts=('isaacsim.robot.surface_gripper', 'omni.kit.viewport.utility', 'omni.replicator.core'))
     print('### STAGE_OPEN')
     apply_d200_physics_settings()
     from pxr import Gf, Sdf, UsdGeom, UsdPhysics, PhysxSchema, PhysicsSchemaTools
@@ -47,6 +54,7 @@ def main():
     from scipy.spatial import cKDTree
     from pxr import Usd
     stage, sim = open_scene(app, 'cabinet_robot_test_scene.usda', DT)
+    gui = GuiViewer(app, sim, args.gui_speed, dt=DT) if args.gui else None
     cab = Cabinet(stage)
     iface = tool_api.suction_interface()
     wf = stage.GetPrimAtPath('/World/D200/joints/world_fix')
@@ -240,6 +248,8 @@ def main():
 
         def say(txt):
             cap[0] = txt
+            if gui:
+                gui.caption(f'{tname}: {txt}')
 
         def look_at_M(eye, tgp):
             f = tgp - eye
@@ -300,6 +310,8 @@ def main():
                     sample()
                 if rec['on'] and step_i[0] % 8 == 0:
                     rec_frame()
+                if gui:
+                    gui.tick(step_i[0])
         trk['seg'] = 'start'
 
         def run_traj(arm, seg):
@@ -362,6 +374,9 @@ def main():
                                                     '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p', str(out_mp4)], stdin=subprocess.PIPE)
             rec['on'] = True
             M['videos'] = vids
+        if gui:
+            gui.look(np.array([c[0] - 1.45, -1.95, c[2] + 0.75]), np.array([c[0] + 0.05, -0.30, c[2] - 0.15]))      # same as the 3/4 video view
+            gui.reset()
         say('settle (cartons drop 1 mm onto the shelf, arms hold home)')
         trk['phase'] = '0_settle'
         step(int(1.5 / DT))
@@ -535,7 +550,11 @@ def main():
             rec['on'] = False
             M['video_frames'] = rec['n']
         mon.detach()
-        sim.stop()
+        if gui:
+            gui.caption(f"{tname}: RESULT {'SUCCESS' if M['success'] else 'FAIL'}")
+            gui.hold(args.gui_hold)
+        if not (gui and tname == names[-1]):                 # --gui keeps the last target's final pose on screen
+            sim.stop()
         print('RESULT', json.dumps({k: (round(v, 3) if isinstance(v, float) else v) for k, v in M.items() if k in ('target', 'mode', 'variant', 'success', 'arm_joint_tracking_error_max_rad', 'arm_effort_ratio_max', 'unexpected_contacts')}), flush=True)
         for k, v in S.items():
             print('   ', k, 'OK' if v.get('ok', True) else 'FAIL', json.dumps({a: (round(b, 3) if isinstance(b, float) else b) for a, b in v.items() if a != 'ok'}), flush=True)
@@ -553,7 +572,10 @@ def main():
             import traceback
             traceback.print_exc()
             results['runs'].append(dict(target=tn, error=str(ex)))
-        json.dump(results, open(RESULTS / (args.out or f'cabinet_grasp_robot_{args.mode}.json'), 'w'), indent=1, default=float)
+        json.dump(results, open(RESULTS / (args.out or f"cabinet_grasp_robot_{args.mode}{'_gui' if gui else ''}.json"), 'w'), indent=1, default=float)
+    if gui and not args.gui_close:
+        print('### DONE: close the Isaac Sim window to exit', flush=True)
+        gui.hold(None)
     sys.stdout.flush()
     os._exit(0)
 

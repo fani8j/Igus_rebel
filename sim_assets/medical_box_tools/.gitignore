@@ -1,0 +1,2 @@
+# results of --gui viewing runs (same physics as the headless results; not kept)
+tests/results/*_gui.json

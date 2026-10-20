@@ -319,6 +319,12 @@ Limitations: free-space transits are checked as joint interpolation / grouped or
 Run: `python3 tools/parking_study.py --modes front --workers 3 --out amr_parking_front.json; python3 tools/export_plan.py --parking tests/results/amr_parking_front.json --mode front; nice -n 19 /home/farhan/isaac-sim/python.sh tests/test_cabinet_grasp_robot.py --mode front --targets T3,T4,T5,T6,T7,T8,E1 --record; python3 tests/summarize_robot.py; python3 tests/make_highlight_reel_robot.py`.
 Results: `tests/results/cabinet_grasp_robot_front.json`, `cabinet_grasp_robot_summary.md`. Videos on the external drive (`tests/results/videos/README.md`). Physics is bit-identical with and without recording (T5 compared).
 
+**Watching a run live** (`--gui`, also on `tests/test_closest_attempt.py`): `nice -n 19 /home/farhan/isaac-sim/python.sh tests/test_cabinet_grasp_robot.py --mode front --targets T5 --gui`
+opens the Isaac Sim window at the 3/4 video view and plays the run at real time (`--gui-speed 0.5` = half speed; it cannot be faster than the physics), with the step captions in the terminal.
+Each target's final pose is shown for `--gui-hold` s (default 3); the last one stays until the window is closed (`--gui-close` exits instead). Orbit with Alt + left mouse; do not press Stop/Play.
+Physics is unchanged: the window is redrawn with `SimulationContext.render()` between `sim.step(render=False)` calls (`GuiViewer` in `tests/isaac_common.py`); T5 front and T1 closest
+gave results identical to the headless runs (2026-10-20). Results go to `*_gui.json` so the headless files are not overwritten. Not combinable with `--record`. Details: `REPRODUCE.md`.
+
 ## Legacy: stand-only rig `usd/dual_arm_rig_medical.usda` (superseded by the D200 rig)
 References the operator's `dual_arm_rig_v2.usda` (`/media/farhan/My Passport/igus_nvidia/scratch_usd/dual_arm_stand_20261006/dual_arm_stand_isaac_usd/`, copy of `rebel_dual_arm_stand_description/isaac/`, **read only**; override with env `DUAL_ARM_RIG_USD` and rebuild)
 and overrides it (15 KB layer in the repo, the 13 MB stays on the drive; the reference path is absolute, so the file only opens where that path exists):

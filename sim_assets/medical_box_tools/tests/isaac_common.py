@@ -30,6 +30,46 @@ def start_app(headless=True, extra_exts=('isaacsim.robot.surface_gripper',)):
     return app
 
 
+class GuiViewer:
+    """--gui: shows a test live in the Isaac Sim window.  Physics is still advanced only by sim.step(render=False); tick() just redraws with
+    sim.render() (no physics step) every `every` steps and sleeps so playback runs at `speed` x real time (it cannot run faster than the physics)."""
+
+    def __init__(self, app, sim, speed=1.0, every=8, dt=1 / 240.0):
+        self.app, self.sim, self.speed, self.every, self.dt = app, sim, max(speed, 1e-3), every, dt
+        self.reset()
+
+    def reset(self):
+        self.t0, self.n0 = None, 0
+
+    def tick(self, step_i):
+        if step_i % self.every:
+            return
+        if not self.app.is_running():                      # window closed mid-run: stop here (results of the unfinished target are not written)
+            print('[gui] window closed, exiting', flush=True)
+            os._exit(0)
+        if self.t0 is None:
+            self.t0, self.n0 = time.monotonic(), step_i
+        ahead = (step_i - self.n0) * self.dt / self.speed - (time.monotonic() - self.t0)
+        if ahead > 0:
+            time.sleep(ahead)
+        self.sim.render()
+
+    def caption(self, txt):
+        print('[gui]', txt)
+
+    def look(self, eye, target):
+        from isaacsim.core.utils.viewports import set_camera_view
+        set_camera_view(eye=[float(v) for v in eye], target=[float(v) for v in target])
+        self.sim.render()
+
+    def hold(self, seconds=None):
+        """keep drawing the current pose (no physics) for `seconds`, or until the window is closed when None"""
+        t_end = None if seconds is None else time.monotonic() + seconds
+        while self.app.is_running() and (t_end is None or time.monotonic() < t_end):
+            self.sim.render()
+            time.sleep(1 / 60)
+
+
 class Checks:
     """Collects PASS/FAIL lines with numbers; exit code 1 if any FAIL."""
 
