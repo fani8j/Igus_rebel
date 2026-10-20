@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import rclpy
+from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
@@ -38,7 +39,7 @@ from compal_box_msgs.action import DetectBox
 
 from ..live import capture_staging
 from . import markers as markers_mod
-from .capture import CaptureAborted, SceneCapture
+from .capture import CaptureAborted, SceneCapture, parse_raw_depth_intrinsics
 
 DEFAULT_SNAPSHOT = "/home/farhan/Igus_rebel/outputs/seam_3d_base_link.json"
 DEFAULT_OUTPUT_ROOT = "/home/farhan/Igus_rebel/outputs/rgbd_captures"
@@ -107,12 +108,12 @@ class DetectNode(Node):
         p("depth_topic", "/camera/depth/image_raw")
         p("camera_info_topic", "/camera/color/camera_info")
         p("sync_slop_s", 0.04)
-        # node-side depth -> colour registration (fallback when the driver's software alignment is not delivering);
-        # opt-in until it has been tested on the live camera
-        p("node_depth_registration", False)
+        # node-side depth -> colour registration (fallback when the driver's software alignment is not delivering)
+        p("node_depth_registration", True)
         p("raw_depth_topic", "/camera/depth/image_unaligned")
         p("depth_info_topic", "/camera/depth/camera_info")
-        p("raw_sync_slop_s", 0.07)
+        p("raw_sync_slop_s", 0.03)
+        p("raw_depth_intrinsics", [], ParameterDescriptor(dynamic_typing=True))   # [w, h, fx, fy, cx, cy]; [] = none
         p("sync_queue_size", 10)
         p("capture_margin_s", 0.0)
         p("capture_timeout_s", 10.0)
@@ -141,8 +142,11 @@ class DetectNode(Node):
         for name in ("sync_slop_s", "capture_timeout_s", "status_period_s"):
             if float(gp(name)) <= 0:
                 raise ValueError(f"parameter {name} must be > 0")
-        if not 0.0 < float(gp("raw_sync_slop_s")) <= 0.2:
-            raise ValueError("parameter raw_sync_slop_s must be in (0, 0.2]")
+        # <= 0.05: the base_link conversion rejects image/pointcloud stamps more than 50 ms apart
+        if not 0.0 < float(gp("raw_sync_slop_s")) <= 0.05:
+            raise ValueError("parameter raw_sync_slop_s must be in (0, 0.05]")
+        raw_intrinsics = gp("raw_depth_intrinsics")
+        parse_raw_depth_intrinsics(raw_intrinsics)      # ValueError: refuse to start with a malformed fallback
         if int(gp("sync_queue_size")) < 1:
             raise ValueError("parameter sync_queue_size must be >= 1")
         if float(gp("capture_margin_s")) < 0:
@@ -172,7 +176,7 @@ class DetectNode(Node):
                 use_tf=bool(gp("use_tf")), extrinsic_required=bool(gp("extrinsic_required")),
                 node_depth_registration=bool(gp("node_depth_registration")),
                 raw_depth_topic=str(gp("raw_depth_topic")), depth_info_topic=str(gp("depth_info_topic")),
-                raw_sync_slop_s=float(gp("raw_sync_slop_s")),
+                raw_sync_slop_s=float(gp("raw_sync_slop_s")), raw_depth_intrinsics=raw_intrinsics,
                 files_cls=self._files_cls(), callback_group=self.sub_group)
 
         self.status_pub = self.create_publisher(String, "~/status", LATCHED)

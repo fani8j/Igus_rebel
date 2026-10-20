@@ -334,7 +334,7 @@ def test_parameter_validation(tmp_path):
             rclpy.parameter.Parameter("warm_daemon", value=False)])
 
 
-@pytest.mark.parametrize("slop", [0.0, -0.01, 0.25])
+@pytest.mark.parametrize("slop", [0.0, -0.01, 0.06, 0.25])
 def test_raw_sync_slop_validation(slop):
     with pytest.raises(ValueError, match="raw_sync_slop_s"):
         DetectNode(orchestrator=make_fake_orchestrator(), parameter_overrides=[
@@ -342,14 +342,49 @@ def test_raw_sync_slop_validation(slop):
             rclpy.parameter.Parameter("warm_daemon", value=False)])
 
 
+@pytest.mark.parametrize("bad", [
+    [1280.0, 800.0, 624.6, 624.6, 633.5],
+    [1280.0, 800.0, float("nan"), 624.6, 633.5, 399.0],
+    [1280.5, 800.0, 624.6, 624.6, 633.5, 399.0],
+    [1280.0, 800.0, 624.6, 0.0, 633.5, 399.0],
+    [1280.0, 800.0, 624.6, 624.6, 1280.0, 399.0],
+    [1280.0, 800.0, 624.6, 624.6, 633.5, 800.0],
+])
+def test_raw_depth_intrinsics_validation(bad):
+    with pytest.raises(ValueError, match="raw_depth_intrinsics"):
+        DetectNode(orchestrator=make_fake_orchestrator(), parameter_overrides=[
+            rclpy.parameter.Parameter("raw_depth_intrinsics", value=bad),
+            rclpy.parameter.Parameter("warm_daemon", value=False)])
+
+
+def test_raw_depth_intrinsics_reach_scene_capture_and_status(tmp_path, spinner):
+    h0 = Harness(tmp_path / "default", spinner, camera=False)
+    assert h0.node.capture.raw_intrinsics is None                  # empty default = no fallback
+    fb = [1280.0, 800.0, 624.600830078125, 624.600830078125, 633.5, 399.0]
+    h = Harness(tmp_path, spinner, camera=False, node_depth_registration=True, raw_depth_intrinsics=fb)
+    assert h.node.capture.raw_intrinsics == (1280, 800, fb[2], fb[3], fb[4], fb[5])
+    assert _wait_for(lambda: h.status and h.status[-1]["camera"]["node_registration"]["fallback_intrinsics"])
+    nr = h.status[-1]["camera"]["node_registration"]
+    assert nr["fallback_size"] == "1280x800" and nr["last_intrinsics_source"] == ""
+
+
+def test_shipped_config_declares_a_valid_raw_depth_intrinsics_fallback():
+    import yaml
+    from box_seam_detection.ros.capture import parse_raw_depth_intrinsics
+    cfg = Path(__file__).resolve().parents[2] / "config" / "box_seam_detection.yaml"
+    params = yaml.safe_load(cfg.read_text())["box_seam_detector"]["ros__parameters"]
+    assert parse_raw_depth_intrinsics(params["raw_depth_intrinsics"]) == (
+        1280, 800, 624.600830078125, 624.600830078125, 633.5, 399.0)
+
+
 def test_node_registration_parameters_reach_scene_capture(tmp_path, spinner):
     h0 = Harness(tmp_path / "default", spinner, camera=False)
-    assert not h0.node.capture.node_registration   # opt-in until live-tested
-    h = Harness(tmp_path, spinner, camera=False, node_depth_registration=True, raw_sync_slop_s=0.1,
+    assert h0.node.capture.node_registration
+    h = Harness(tmp_path, spinner, camera=False, node_depth_registration=True, raw_sync_slop_s=0.04,
                 raw_depth_topic="/cam2/depth/raw",
                 depth_info_topic="/cam2/depth/info")
     cap = h.node.capture
-    assert cap.node_registration and cap.raw_sync_slop_s == 0.1
+    assert cap.node_registration and cap.raw_sync_slop_s == 0.04
     assert cap.raw_depth_topic == "/cam2/depth/raw" and cap.depth_info_topic == "/cam2/depth/info"
     assert _wait_for(lambda: h.status and h.status[-1]["camera"]["node_registration"]["enabled"])
     h2 = Harness(tmp_path / "b", spinner, camera=False, node_depth_registration=False)

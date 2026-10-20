@@ -26,9 +26,11 @@ def make_images(w=W, h=H, seed=1):
 class SyntheticCamera(Node):
     def __init__(self, prefix="/camera", rate=20.0, stamp_offset_s=0.0, frame="camera_color_optical_frame",
                  encoding="rgb8", depth_encoding="16UC1", depth_size=None, info_size=None, auto=True,
-                 aligned_every=None, raw_size=None, raw_stamp_offset_s=0.0, raw_every=1, raw_frame=RAW_FRAME):
+                 aligned_every=None, raw_size=None, raw_stamp_offset_s=0.0, raw_every=1, raw_frame=RAW_FRAME,
+                 raw_info=True):
         """raw_size=(w, h): also publish /depth/image_unaligned (16UC1 plane at RAW_MM, own frame) and /depth/camera_info
-        (the raw-size info plus the colour-size 'aligned' info, both labelled with the colour frame like the driver)."""
+        (the raw-size info plus the colour-size 'aligned' info, both labelled with the colour frame like the driver).
+        raw_info=False: only the aligned-size info (what the driver publishes while its alignment works)."""
         super().__init__("synthetic_camera")
         self.offset = stamp_offset_s
         self.frame = frame
@@ -44,6 +46,7 @@ class SyntheticCamera(Node):
         self.dpub = self.create_publisher(Image, prefix + "/depth/image_raw", qos_profile_sensor_data)
         self.ipub = self.create_publisher(CameraInfo, prefix + "/color/camera_info", qos_profile_sensor_data)
         self.raw_size, self.raw_offset, self.raw_every, self.raw_frame = raw_size, raw_stamp_offset_s, raw_every, raw_frame
+        self.raw_info = raw_info
         if raw_size:
             self.rpub = self.create_publisher(Image, prefix + "/depth/image_unaligned", qos_profile_sensor_data)
             self.dipub = self.create_publisher(CameraInfo, prefix + "/depth/camera_info", qos_profile_sensor_data)
@@ -86,7 +89,8 @@ class SyntheticCamera(Node):
                 m.header.stamp, m.header.frame_id = r.header.stamp, self.frame    # the driver mislabels the raw info
             self.rpub.publish(r)
             self.dipub.publish(ai)
-            self.dipub.publish(ri)
+            if self.raw_info:
+                self.dipub.publish(ri)
 
 
 def rclpy_duration(seconds):

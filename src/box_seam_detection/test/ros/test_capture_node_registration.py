@@ -1,6 +1,7 @@
 """SceneCapture node-side depth registration path (second synchroniser: colour + raw depth)."""
 import json
 import time
+import types
 
 import numpy as np
 import pytest
@@ -63,7 +64,7 @@ def test_node_registration_when_driver_never_aligns(tmp_path, spinner):
     assert man["topics"]["depth"] == "/camera/depth/image_unaligned"
     reg = man["depth_registration"]
     assert reg["source"] == "node" and reg["raw_depth_topic"] == "/camera/depth/image_unaligned"
-    assert reg["depth_info_topic"] == "/camera/depth/camera_info" and reg["raw_sync_slop_s"] == 0.07
+    assert reg["depth_info_topic"] == "/camera/depth/camera_info" and reg["raw_sync_slop_s"] == 0.03
     assert reg["depth_k"] == K_RAW and abs(reg["color_depth_dt_ms"]) < 5.0
     assert reg["t_color_depth"]["parent_frame"] == COLOR_FRAME and reg["t_color_depth"]["child_frame"] == RAW_FRAME
     assert reg["t_color_depth"]["translation"] == pytest.approx([BASELINE_X, 0, 0])
@@ -93,7 +94,7 @@ def test_capture_helper_end_to_end_and_used_once(tmp_path, spinner):
 
 
 def test_raw_depth_without_colour_inside_the_slop_is_not_used(tmp_path, spinner):
-    # raw depth stamps are 3 s in the future: no colour frame within 0.07 s (and the queue is far too short to wait)
+    # raw depth stamps are 3 s in the future: no colour frame within the sync slop (and the queue is far too short to wait)
     cam = SyntheticCamera(depth_size=(W * 2, H * 2), raw_size=(RW, RH), raw_stamp_offset_s=3.0)
     node, cap = _cap(tmp_path, "nr2")
     spinner(cam, node)
@@ -172,9 +173,9 @@ def test_stale_raw_sets_rejected_then_accepted_for_an_old_request(tmp_path, spin
 
 
 def test_freshness_requires_the_raw_depth_stamp_too(tmp_path, spinner):
-    # raw depth is stamped 50 ms before its colour partner (inside the 70 ms slop); with a 30 ms margin a set is only
-    # fresh when the RAW stamp exceeds the threshold, i.e. the colour stamp must exceed it by > 50 ms
-    cam = SyntheticCamera(depth_size=(W * 2, H * 2), raw_size=(RW, RH), raw_stamp_offset_s=-0.05)
+    # raw depth is stamped 25 ms before its colour partner (inside the 30 ms slop); with a 30 ms margin a set is only
+    # fresh when the RAW stamp exceeds the threshold, i.e. the colour stamp must exceed it by > 25 ms
+    cam = SyntheticCamera(depth_size=(W * 2, H * 2), raw_size=(RW, RH), raw_stamp_offset_s=-0.025)
     node, cap = _cap(tmp_path, "nr6", margin_s=0.03)
     spinner(cam, node)
     for _ in range(6):
@@ -182,7 +183,7 @@ def test_freshness_requires_the_raw_depth_stamp_too(tmp_path, spinner):
         fs, _ = cap.grab(thr, timeout_s=5.0)
         assert fs.source == "node"
         assert fs.depth_stamp_ns > thr + int(0.03e9)
-        assert fs.color_stamp_ns - fs.depth_stamp_ns == pytest.approx(0.05e9, abs=10e6)
+        assert fs.color_stamp_ns - fs.depth_stamp_ns == pytest.approx(0.025e9, abs=5e6)
         time.sleep(0.05)
 
 
@@ -275,3 +276,123 @@ def test_unknown_colour_distortion_model_fails_closed(tmp_path, spinner):
     info.header = fs.color.header
     with pytest.raises(cloud.CaptureError, match="distortion_model"):
         cap.write_capture(fs, info)
+
+
+FALLBACK = [float(RW), float(RH), K_RAW[0], K_RAW[4], K_RAW[2], K_RAW[5]]      # [w, h, fx, fy, cx, cy] of the raw camera
+
+
+def test_config_fallback_used_when_no_raw_size_camera_info_arrives(tmp_path, spinner):
+    # like the live driver while its alignment works: depth/camera_info only at the aligned (colour) size
+    cam = SyntheticCamera(depth_size=(W * 2, H * 2), raw_size=(RW, RH), raw_info=False)
+    node, cap = _cap(tmp_path, "fb1", raw_depth_intrinsics=FALLBACK)
+    spinner(cam, node)
+    fs, info = cap.grab(cap.now_ns(), timeout_s=5.0)
+    assert fs.source == "node" and fs.depth_info_source == "config_fallback"
+    assert (fs.depth_info.width, fs.depth_info.height) == (RW, RH) and list(fs.depth_info.k) == K_RAW
+    assert fs.depth_info.header.frame_id == RAW_FRAME
+    files = cap.write_capture(fs, info)
+    man = json.loads(files.manifest_path.read_text())
+    reg = man["depth_registration"]
+    assert reg["source"] == "node" and reg["intrinsics_source"] == "config_fallback"
+    assert reg["depth_k"] == K_RAW and reg["depth_d"] == [0.0] * 5
+    assert man["pointcloud"]["point_count"] == int((_expected_registration() > 0).sum())     # same cloud as live info
+    d = cap.diagnostics()
+    assert d["node_registration"]["depth_info_sizes"] == [f"{W}x{H}"]       # no live raw-size info was ever seen
+    assert d["node_registration"]["fallback_intrinsics"] is True
+    assert d["node_registration"]["fallback_size"] == f"{RW}x{RH}"
+    assert d["node_registration"]["last_intrinsics_source"] == "config_fallback"
+
+
+def test_live_raw_size_camera_info_wins_over_the_fallback(tmp_path, spinner):
+    other = [float(RW), float(RH), 55.0, 56.0, 18.0, 13.0]          # differs from the live K_RAW
+    cam = SyntheticCamera(depth_size=(W * 2, H * 2), raw_size=(RW, RH))
+    node, cap = _cap(tmp_path, "fb2", raw_depth_intrinsics=other)
+    spinner(cam, node)
+    deadline = time.monotonic() + 5.0
+    while (RW, RH) not in cap._depth_infos and time.monotonic() < deadline:
+        time.sleep(0.02)
+    fs, info = cap.grab(cap.now_ns(), timeout_s=5.0)
+    assert fs.depth_info_source == "camera_info" and list(fs.depth_info.k) == K_RAW
+    reg = json.loads(cap.write_capture(fs, info).manifest_path.read_text())["depth_registration"]
+    assert reg["intrinsics_source"] == "camera_info" and reg["depth_k"] == K_RAW
+    nr = cap.diagnostics()["node_registration"]
+    assert nr["fallback_intrinsics"] is True and nr["last_intrinsics_source"] == "camera_info"
+
+
+def test_fallback_of_another_size_is_not_used_and_the_reason_is_reported(tmp_path, spinner):
+    cam = SyntheticCamera(depth_size=(W * 2, H * 2), raw_size=(RW, RH), raw_info=False)
+    node, cap = _cap(tmp_path, "fb3", raw_depth_intrinsics=[RW * 2.0, RH * 2.0, 80.0, 80.0, 39.0, 29.0])
+    spinner(cam, node)
+    with pytest.raises(CaptureTimeout) as ei:
+        cap.capture(after_ns=cap.now_ns(), timeout_s=1.5)
+    msg = str(ei.value)
+    assert f"no depth camera_info of the raw depth size {RW}x{RH}" in msg
+    assert f"raw_depth_intrinsics fallback is for {RW * 2}x{RH * 2}" in msg and "fallback size mismatch" in msg
+    d = cap.diagnostics()
+    assert d["counts"]["captures_node"] == 0 and d["node_registration"]["last_intrinsics_source"] == ""
+    assert not list((tmp_path / "captures").glob("*"))
+
+
+def test_no_fallback_fails_closed_as_before(tmp_path, spinner):
+    cam = SyntheticCamera(depth_size=(W * 2, H * 2), raw_size=(RW, RH), raw_info=False)
+    node, cap = _cap(tmp_path, "fb4")
+    spinner(cam, node)
+    with pytest.raises(CaptureTimeout) as ei:
+        cap.capture(after_ns=cap.now_ns(), timeout_s=1.0)
+    assert "fallback" not in str(ei.value).replace("config_fallback", "")
+    nr = cap.diagnostics()["node_registration"]
+    assert nr["fallback_intrinsics"] is False and nr["fallback_size"] == ""
+
+
+@pytest.mark.parametrize("bad", [
+    [1280.0, 800.0, 624.6, 624.6, 633.5],                       # 5 numbers
+    [1280.0, 800.0, 624.6, 624.6, 633.5, 399.0, 1.0],           # 7 numbers
+    [1280.0, 800.0, 624.6, 624.6, float("nan"), 399.0],
+    [1280.0, 800.0, float("inf"), 624.6, 633.5, 399.0],
+    [1280.5, 800.0, 624.6, 624.6, 633.5, 399.0],                # fractional width
+    [0.0, 800.0, 624.6, 624.6, 633.5, 399.0],
+    [1280.0, 800.0, 0.0, 624.6, 633.5, 399.0],                  # fx <= 0
+    [1280.0, 800.0, 624.6, -1.0, 633.5, 399.0],                 # fy <= 0
+    [1280.0, 800.0, 624.6, 624.6, 1280.0, 399.0],               # cx outside (0, width)
+    [1280.0, 800.0, 624.6, 624.6, 633.5, 0.0],                  # cy outside (0, height)
+])
+def test_invalid_raw_depth_intrinsics_are_refused(tmp_path, bad):
+    node = Node("fb5")
+    with pytest.raises(ValueError, match="raw_depth_intrinsics"):
+        SceneCapture(node, output_root=tmp_path, use_tf=False, raw_depth_intrinsics=bad)
+    node.destroy_node()
+
+
+def test_live_info_differing_from_the_fallback_warns_once(tmp_path, spinner):
+    warnings = []
+    cam = SyntheticCamera(depth_size=(W * 2, H * 2), raw_size=(RW, RH))
+    node, cap = _cap(tmp_path, "fb6", raw_depth_intrinsics=[float(RW), float(RH), 44.0, 40.0, 19.5, 14.5])  # fx +10 %
+    real = node.get_logger()
+    node.get_logger = lambda: types.SimpleNamespace(warn=lambda m: warnings.append(m), info=real.info,
+                                                    error=real.error, debug=real.debug)
+    spinner(cam, node)
+    deadline = time.monotonic() + 5.0
+    while cap.diagnostics()["counts"]["depth_info"] < 6 and time.monotonic() < deadline:
+        time.sleep(0.02)
+    mism = [w for w in warnings if "raw_depth_intrinsics" in w]
+    assert len(mism) == 1 and "differs" in mism[0] and "live camera_info is used" in mism[0]
+    fs, _ = cap.grab(cap.now_ns(), timeout_s=5.0)
+    assert fs.depth_info_source == "camera_info"                  # the live one is used regardless
+
+
+@pytest.mark.parametrize("fb, warns", [
+    ([40.15, 40.15, 19.5, 14.5], False),        # 0.4 % in fx/fy: within tolerance
+    ([40.0, 40.0, 21.4, 14.5], False),          # 1.9 px in cx
+    ([40.0, 40.0, 19.5, 16.6], True),           # 2.1 px in cy
+    ([40.0, 40.3, 19.5, 14.5], True),           # 0.75 % in fy
+])
+def test_fallback_mismatch_tolerances(tmp_path, fb, warns):
+    node, cap = _cap(tmp_path, "fb7", raw_depth_intrinsics=[float(RW), float(RH), *fb])
+    from sensor_msgs.msg import CameraInfo
+    got = []
+    cap._log_once = lambda key, text: got.append(key)
+    cap._on_depth_info(CameraInfo(width=RW, height=RH, k=K_RAW))
+    assert (got == ["fallback_mismatch"]) is warns
+    cap._on_depth_info(CameraInfo(width=W, height=H, k=K))        # another size never compares
+    assert len(got) == int(warns)
+    node.destroy_node()

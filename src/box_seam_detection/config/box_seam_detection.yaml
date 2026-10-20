@@ -19,11 +19,18 @@ box_seam_detector:
     # Driver-aligned sets stay a candidate; the first fresh set of either kind wins (manifest: depth_registration).
     # Needs tf colour optical frame <- raw depth optical frame and a depth camera_info of the raw depth size
     # (distortion all zero); fails closed otherwise (reason in the capture timeout message).
-    # Off until the live camera test is done (offline-tested only, 2026-10-21); true enables it.
-    node_depth_registration: false
+    # Live-tested 2026-10-21 (node-only: 12/12 accepted; base_link corners within 2 mm of driver-aligned captures).
+    node_depth_registration: true
     raw_depth_topic: /camera/depth/image_unaligned   # 16UC1/32FC1 in its OWN optical frame (not the colour size!)
     depth_info_topic: /camera/depth/camera_info      # also carries the aligned info; the one with the raw size is used
-    raw_sync_slop_s: 0.07           # (0, 0.2]; one 15 fps frame period (the unaligned depth stamps share the colour grid)
+    raw_sync_slop_s: 0.03           # (0, 0.05]; the unaligned depth stamps share the colour 15 fps grid, so pairs are
+                                    # 0 or 66.7 ms apart; only same-frame pairs may match (base_link rejects > 50 ms)
+    # Fallback depth intrinsics [width, height, fx, fy, cx, cy] (zero distortion; floats only; [] = none). The driver
+    # publishes /camera/depth/camera_info only at the aligned size while its alignment works, so there is then no
+    # raw-size info. Gemini 336 CP96563000LY, recorded from the driver on 2026-10-20. A live camera_info of the raw
+    # size always takes precedence; the fallback applies only if width/height equal the raw depth image size.
+    # Update it if the camera or the depth resolution changes (manifest: depth_registration.intrinsics_source).
+    raw_depth_intrinsics: [1280.0, 800.0, 624.600830078125, 624.600830078125, 633.5, 399.0]
     # NOTE use_sim_time: freshness compares camera stamps with the NODE clock; leave use_sim_time false with a
     # real/host-stamped camera (all of sync_slop_s, capture_timeout_s, status_period_s must be > 0).
     capture_margin_s: 0.0           # a frame must be stamped later than request time + this (host clock)

@@ -12,7 +12,8 @@ Two kinds of frame sets feed ``grab``:
   software alignment finds no colour frame in the frameset, e.g. when the colour rate drops); ``write_capture``
   still validates the registration of the set that is returned.
 * node-registered (``source: node``, ``node_depth_registration``): [colour, raw depth] synchronised with a second
-  ApproximateTimeSynchronizer (``raw_sync_slop_s``, one frame period). The raw depth (``raw_depth_topic``,
+  ApproximateTimeSynchronizer (``raw_sync_slop_s``, below one frame period: the stamps share the colour grid, so
+  only same-frame pairs match; the base_link step rejects pairs > 50 ms apart). The raw depth (``raw_depth_topic``,
   e.g. /camera/depth/image_unaligned: own optical frame, undistorted) is re-projected into the raw colour pixel grid
   in ``write_capture`` (outside the lock) with ``cloud.register_depth_to_color``, using the depth intrinsics from
   ``depth_info_topic`` (the latest CameraInfo whose size equals the raw depth size; the driver also publishes the
@@ -22,6 +23,10 @@ Two kinds of frame sets feed ``grab``:
   ids are equal, or the raw depth has the colour size (then aligned and raw CameraInfo are indistinguishable, the
   node path refuses such sets and logs once). Everything after the registration (backprojection, PNG, PCD,
   manifest) is shared with the driver path; the manifest records the path in ``depth_registration``.
+  ``raw_depth_intrinsics`` ([w, h, fx, fy, cx, cy], zero distortion) is a configured fallback for the depth
+  intrinsics: the driver publishes /camera/depth/camera_info only at the aligned size while its alignment works, so
+  there is then no raw-size info. A live CameraInfo of the raw depth size always wins; the fallback is used only when
+  its size equals the raw depth image size (``intrinsics_source`` in the manifest: camera_info / config_fallback).
 
 Freshness: ``grab(after_ns, timeout_s)`` returns the first fresh set of either kind (smallest colour stamp, driver
 first on a tie) whose BOTH image stamps are > after_ns + margin (stamps are host-clock, same clock as ``now_ns()``);
@@ -52,6 +57,27 @@ class CaptureAborted(cloud.CaptureError):
     pass
 
 
+def parse_raw_depth_intrinsics(values) -> tuple[int, int, float, float, float, float] | None:
+    """[width, height, fx, fy, cx, cy] -> (w, h, fx, fy, cx, cy); empty/None -> None. Raises ValueError if invalid."""
+    try:
+        v = [float(x) for x in values] if values is not None else []
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"raw_depth_intrinsics must be numbers [width, height, fx, fy, cx, cy]: {exc}") from exc
+    if not v:
+        return None
+    if len(v) != 6 or not all(np.isfinite(v)):
+        raise ValueError(f"raw_depth_intrinsics must be exactly 6 finite numbers [width, height, fx, fy, cx, cy], "
+                         f"got {list(values)}")
+    w, h, fx, fy, cx, cy = v
+    if w < 1 or h < 1 or w != int(w) or h != int(h):
+        raise ValueError(f"raw_depth_intrinsics width/height must be positive integers, got {w:g}x{h:g}")
+    if fx <= 0 or fy <= 0:
+        raise ValueError(f"raw_depth_intrinsics fx/fy must be > 0, got {fx:g}/{fy:g}")
+    if not (0 < cx < w and 0 < cy < h):
+        raise ValueError(f"raw_depth_intrinsics principal point ({cx:g}, {cy:g}) must lie inside the {w:g}x{h:g} image")
+    return int(w), int(h), fx, fy, cx, cy
+
+
 @dataclasses.dataclass
 class FrameSet:
     color: Any
@@ -60,6 +86,7 @@ class FrameSet:
     source: str = "driver"          # "driver": depth already registered to colour; "node": raw depth, to be registered
     depth_info: Any = None          # node sets: the depth CameraInfo (size == raw depth size) at grab time
     extrinsic: dict | None = None   # node sets: T_color_depth {"matrix", "translation", "quaternion_xyzw", ...}
+    depth_info_source: str = ""     # node sets: "camera_info" (live, raw size) or "config_fallback"
 
     @property
     def color_stamp_ns(self) -> int:
@@ -95,7 +122,8 @@ class SceneCapture:
                  files_cls: Callable[..., Any] | None = None, callback_group=None, tf_buffer=None,
                  staged: bool = False, node_depth_registration: bool = True,
                  raw_depth_topic: str = "/camera/depth/image_unaligned",
-                 depth_info_topic: str = "/camera/depth/camera_info", raw_sync_slop_s: float = 0.07):
+                 depth_info_topic: str = "/camera/depth/camera_info", raw_sync_slop_s: float = 0.03,
+                 raw_depth_intrinsics=None):
         import message_filters
         from rclpy.qos import qos_profile_sensor_data
         from sensor_msgs.msg import CameraInfo, Image
@@ -105,6 +133,7 @@ class SceneCapture:
         self.node_registration = bool(node_depth_registration)
         self.raw_depth_topic, self.depth_info_topic = raw_depth_topic, depth_info_topic
         self.sync_slop_s, self.raw_sync_slop_s = float(sync_slop_s), float(raw_sync_slop_s)
+        self.raw_intrinsics = parse_raw_depth_intrinsics(raw_depth_intrinsics)     # configured fallback or None
         self.margin_ns = int(max(margin_s, 0.0) * 1e9)
         self.prefix = prefix
         self.driver_parent_frame = driver_parent_frame
@@ -128,6 +157,7 @@ class SceneCapture:
         self._depth_infos: dict[tuple[int, int], Any] = {}      # (width, height) -> latest depth CameraInfo
         self._extrinsics: dict[tuple[str, str], dict] = {}      # (colour frame, depth frame) -> T_color_depth
         self._raw_blocker = ""                                  # why the newest fresh raw set was not usable
+        self._last_intrinsics_source = ""                       # of the last node capture written
         self._logged: set[str] = set()
 
         self._color_sub = message_filters.Subscriber(
@@ -183,6 +213,34 @@ class SceneCapture:
         with self._cond:
             self._depth_infos[(int(msg.width), int(msg.height))] = msg
             self._counts["depth_info"] += 1
+        diff = self._fallback_difference(msg)
+        if diff:
+            self._log_once("fallback_mismatch", (
+                f"live depth camera_info {msg.width}x{msg.height} on {self.depth_info_topic} differs from the "
+                f"configured raw_depth_intrinsics ({diff}); the live camera_info is used - update the parameter if "
+                "the camera or depth resolution changed"))
+
+    def _fallback_difference(self, msg) -> str:
+        """'' if the configured fallback is absent / of another size / equal to the live info within tolerance."""
+        fb = self.raw_intrinsics
+        if fb is None or (int(msg.width), int(msg.height)) != fb[:2] or len(msg.k) < 6:
+            return ""
+        fx, fy, cx, cy = fb[2:]
+        lfx, lfy, lcx, lcy = (float(msg.k[i]) for i in (0, 4, 2, 5))
+        bad = (abs(lfx - fx) > 0.005 * fx or abs(lfy - fy) > 0.005 * fy
+               or abs(lcx - cx) > 2.0 or abs(lcy - cy) > 2.0)
+        return (f"live fx/fy/cx/cy {lfx:g}/{lfy:g}/{lcx:g}/{lcy:g} vs configured {fx:g}/{fy:g}/{cx:g}/{cy:g}"
+                if bad else "")
+
+    def _fallback_info(self, frame_id: str):
+        """The configured raw_depth_intrinsics as a CameraInfo (plumb_bob, zero distortion)."""
+        from sensor_msgs.msg import CameraInfo
+        w, h, fx, fy, cx, cy = self.raw_intrinsics
+        info = CameraInfo(width=w, height=h, distortion_model="plumb_bob", d=[0.0] * 5,
+                          k=[fx, 0.0, cx, 0.0, fy, cy, 0.0, 0.0, 1.0],
+                          p=[fx, 0.0, cx, 0.0, 0.0, fy, cy, 0.0, 0.0, 0.0, 1.0, 0.0])
+        info.header.frame_id = frame_id
+        return info
 
     def _log_once(self, key: str, text: str):
         with self._cond:
@@ -231,6 +289,9 @@ class SceneCapture:
                     "enabled": self.node_registration,
                     "have_extrinsic": bool(self._extrinsics),
                     "depth_info_sizes": sorted(f"{w}x{h}" for w, h in self._depth_infos),
+                    "fallback_intrinsics": self.raw_intrinsics is not None,
+                    "fallback_size": f"{self.raw_intrinsics[0]}x{self.raw_intrinsics[1]}" if self.raw_intrinsics else "",
+                    "last_intrinsics_source": self._last_intrinsics_source,
                     "blocker": self._raw_blocker}}
 
     def diagnostics(self) -> dict:
@@ -268,17 +329,22 @@ class SceneCapture:
             self._raw_blocker = "no colour camera_info yet"
             return None
         size = (int(fs.depth.width), int(fs.depth.height))
-        di = self._depth_infos.get(size)
+        di, source = self._depth_infos.get(size), "camera_info"
+        if di is None and self.raw_intrinsics is not None and self.raw_intrinsics[:2] == size:
+            di, source = self._fallback_info(fs.depth.header.frame_id), "config_fallback"
         if di is None:
             have = ", ".join(f"{w}x{h}" for w, h in sorted(self._depth_infos)) or "none"
+            fb = self.raw_intrinsics
+            fallback = (f"; configured raw_depth_intrinsics fallback is for {fb[0]}x{fb[1]}, not the raw depth size "
+                        f"(fallback size mismatch)" if fb is not None else "")
             self._raw_blocker = (f"no depth camera_info of the raw depth size {size[0]}x{size[1]} on "
-                                 f"{self.depth_info_topic} (have: {have})")
+                                 f"{self.depth_info_topic} (have: {have}){fallback}")
             return None
         ext = self._node_extrinsic(fs.color.header.frame_id, fs.depth.header.frame_id)
         if ext is None:
             return None
         self._raw_blocker = ""
-        return dataclasses.replace(fs, depth_info=di, extrinsic=ext)
+        return dataclasses.replace(fs, depth_info=di, extrinsic=ext, depth_info_source=source)
 
     def grab(self, after_ns: int, timeout_s: float, abort: Callable[[], bool] | None = None) -> tuple[FrameSet, Any]:
         """First fresh set (colour AND depth stamp > after_ns + margin) of either kind, plus the latest CameraInfo."""
@@ -409,6 +475,7 @@ class SceneCapture:
         header = {"frame_id": color.header.frame_id, "stamp_ns": fs.depth_stamp_ns}
         block = {
             "source": "node", "raw_depth_topic": self.raw_depth_topic, "depth_info_topic": self.depth_info_topic,
+            "intrinsics_source": fs.depth_info_source,
             "raw_depth_header": cloud.header_metadata(raw.header),
             "raw_depth": {"width": raw.width, "height": raw.height, "encoding": raw.encoding},
             "color_depth_dt_ms": (fs.color_stamp_ns - fs.depth_stamp_ns) / 1e6,
@@ -463,6 +530,8 @@ class SceneCapture:
             raise
         with self._cond:
             self._counts[f"captures_{fs.source}"] += 1
+            if fs.source == "node":
+                self._last_intrinsics_source = fs.depth_info_source
         return self.files_cls(capture_id=cid, image_path=Path(image_path), pcd_path=Path(pcd_path),
                               manifest_path=Path(mpath), stamp_ns=fs.color_stamp_ns)
 
