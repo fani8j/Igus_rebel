@@ -335,6 +335,9 @@ V2_DEFAULTS: dict = {
         "mode": "off",
         "min_contain": 0.90,
         "generic_rect_tol_mm": 20.0,
+        # depth-grown candidates: the hull 4-gon, then (fallback) / before (first) it
+        # the rectangle anchored on the quad's supported edges; off = hull only
+        "anchored_rect": "fallback",
     },
 }
 

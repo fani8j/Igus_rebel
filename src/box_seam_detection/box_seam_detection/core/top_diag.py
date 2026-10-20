@@ -96,15 +96,25 @@ GROW_MIN_SEED_FRAC = 0.30 # the chosen component must cover this share of the se
 def grow_coplanar_region(quad_px: np.ndarray, plane_nd: tuple, rms_mm: float | None,
                          xyz: np.ndarray, proj: tuple, cam: dict, image_wh: tuple,
                          band_mm: float | None = None) -> tuple:
+    """:func:`grow_coplanar_region_ex` without the region mask: ``(hull_mask, info)``."""
+    hull, _region, info = grow_coplanar_region_ex(quad_px, plane_nd, rms_mm, xyz, proj,
+                                                  cam, image_wh, band_mm=band_mm)
+    return hull, info
+
+
+def grow_coplanar_region_ex(quad_px: np.ndarray, plane_nd: tuple, rms_mm: float | None,
+                            xyz: np.ndarray, proj: tuple, cam: dict, image_wh: tuple,
+                            band_mm: float | None = None) -> tuple:
     """The connected coplanar region of the top plane that the quad (a seed)
     lies in: pixels within ``band`` of the plane (``band`` = max(``BAND_MIN_MM``,
     ``BAND_NOISE_K`` rms, ``band_mm``) the depth cross-check's own band), closed
     over the flap gap / dropouts (``CLOSE_MM``), 8-connected, the component under the
     seed, cleaned by an opening and holes filled.
 
-    Returns ``(hull_mask, info)``: ``hull_mask`` = full-image uint8 convex hull of
-    the cleaned region (None when there is none), ``info`` = JSON-able details
-    (``reason`` when None). Never raises."""
+    Returns ``(hull_mask, region_mask, info)``: ``hull_mask`` = full-image uint8
+    convex hull of the cleaned region (None when there is none), ``region_mask`` =
+    the cleaned region itself (full-image uint8, not convexified; None with the
+    hull), ``info`` = JSON-able details (``reason`` when None). Never raises."""
     info: dict = {}
     try:
         quad = np.asarray(quad_px, dtype=np.float64).reshape(4, 2)
@@ -129,13 +139,13 @@ def grow_coplanar_region(quad_px: np.ndarray, plane_nd: tuple, rms_mm: float | N
         sel = sel[sel > 0]
         if sel.size == 0:
             info["reason"] = "no_component_under_seed"
-            return None, info
+            return None, None, info
         lab = int(np.bincount(sel).argmax())
         seed_frac = float(sel[sel == lab].size) / float(max(1, int(seed.sum())))
         info["seed_coverage"] = round(seed_frac, 3)
         if seed_frac < GROW_MIN_SEED_FRAC:
             info["reason"] = f"seed_coverage_low({seed_frac:.2f})"
-            return None, info
+            return None, None, info
         comp = (labels == lab).astype(np.uint8)
         cnts, _ = cv2.findContours(comp, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         filled = np.zeros_like(comp)
@@ -146,7 +156,7 @@ def grow_coplanar_region(quad_px: np.ndarray, plane_nd: tuple, rms_mm: float | N
         n_cc, lab2, st, _c = cv2.connectedComponentsWithStats(filled, 8)
         if n_cc < 2:
             info["reason"] = "no_component_after_open"
-            return None, info
+            return None, None, info
         # the component with the most seed overlap (not simply the largest)
         ov = [int(((lab2 == k) & (seed > 0)).sum()) for k in range(1, n_cc)]
         best = 1 + int(np.argmax(ov))
@@ -154,12 +164,194 @@ def grow_coplanar_region(quad_px: np.ndarray, plane_nd: tuple, rms_mm: float | N
                                    cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if not cnts:
             info["reason"] = "no_contour"
-            return None, info
+            return None, None, info
         hull = cv2.convexHull(max(cnts, key=cv2.contourArea)) + np.array([[roi[0], roi[1]]])
         mask = np.zeros((h, w), np.uint8)
         cv2.fillConvexPoly(mask, hull.reshape(-1, 2).astype(np.int32), 1)
         info["hull_area_px"] = int(mask.sum())
-        return mask, info
+        region = np.zeros((h, w), np.uint8)
+        region[roi[1]:roi[3], roi[0]:roi[2]] = (lab2 == best).astype(np.uint8)
+        return mask, region, info
+    except Exception as exc:  # noqa: BLE001
+        info["reason"] = f"error({type(exc).__name__}: {exc})"
+        return None, None, info
+
+
+#: anchored rectangle (truncation recovery)
+ANCHOR_STRIP_MARGIN = 0.15      # the extent of a truncated edge is read from the middle
+                                # 70 % of the span (the corners of the grown region are chopped)
+ANCHOR_EXTENT_PCT = 99.9        # outward extent percentile of the region points in that strip
+                                # (the in-band region ends ~5-10 mm short of the lid edge at the
+                                # 99.5th, at the lid edge within a few mm at the 99.9th)
+ANCHOR_MIN_EXTENSION_MM = 15.0  # a truncated edge must move out by at least this much
+ANCHOR_MAX_TILT_DEG = 8.0       # supported edges must be this close to parallel / perpendicular
+ANCHOR_MIN_COVERAGE = 0.60      # the grown region must fill this share of the fitted rectangle
+ANCHOR_MIN_INSIDE = 0.90        # ... and this share of the region must lie inside it
+
+
+def anchored_rect_quad(quad_px: np.ndarray, truncated: list, plane_nd: tuple,
+                       region_mask: np.ndarray, cam: dict, image_wh: tuple) -> tuple:
+    """Rectangle in the top plane for a truncated top: keep what the quad measured
+    reliably, move only the truncated edge(s) out to where the grown coplanar
+    region ends.
+
+    ``quad_px`` = the ring-ordered truncated quad, ``truncated`` = its truncated
+    ring edges (edge ``i`` joins ring corners ``i`` and ``i + 1``, as
+    :func:`edge_check`), ``region_mask`` = the cleaned grown region
+    (:func:`grow_coplanar_region_ex`). The plane axes come from the LONGEST
+    supported (not truncated) edge, the anchor: the other supported edges are
+    snapped square to it. A supported edge sits at the mean of its two corners
+    (a half-top's short side edges are only ~140 mm long: their own direction is
+    off by several degrees, the position of their middle is not), a truncated
+    edge at the ``ANCHOR_EXTENT_PCT`` outward extent of the region in the middle
+    of the span. Unconstrained fits to the region's hull skew when a corner of
+    the region is chopped (a lifted flap corner leaves the band); this one
+    cannot.
+
+    Fail-closed: ``(None, info)`` with ``info["reason"]`` unless the quad is one
+    (or two adjacent) truncated edge(s), the supported edges are square to the
+    anchor within ``ANCHOR_MAX_TILT_DEG``, every truncated edge moves out by at
+    least ``ANCHOR_MIN_EXTENSION_MM`` and the region fills the rectangle
+    (``ANCHOR_MIN_COVERAGE``) without spilling out of it (``ANCHOR_MIN_INSIDE``).
+    Returns ``(quad (4,2) px in the input ring order | None, info)``; never raises.
+    The quad is only a coarse candidate: edge refine and every normal gate still
+    run on it."""
+    info: dict = {}
+    try:
+        quad = np.asarray(quad_px, dtype=np.float64).reshape(4, 2)
+        n = np.asarray(plane_nd[0], dtype=np.float64)
+        d = float(plane_nd[1])
+        w, h = image_wh
+        tr = sorted({int(i) % 4 for i in truncated})
+        info["truncated_edges"] = tr
+        if not tr or len(tr) > 2 or (len(tr) == 2 and (tr[1] - tr[0]) % 2 == 0):
+            info["reason"] = "truncation_pattern_unsupported"
+            return None, info
+        if region_mask is None or int(np.count_nonzero(region_mask)) < 1000:
+            info["reason"] = "no_region"
+            return None, info
+        P = np.asarray(backproject_quad(quad, n, d, cam), dtype=np.float64)
+        if not np.all(np.isfinite(P)):
+            info["reason"] = "corners_not_on_plane"
+            return None, info
+        length = [float(np.linalg.norm(P[(i + 1) % 4] - P[i])) for i in range(4)]
+        anchor = max((i for i in range(4) if i not in tr), key=lambda i: length[i])
+        a = P[(anchor + 1) % 4] - P[anchor]
+        a = a - (a @ n) * n
+        a = a / np.linalg.norm(a)
+        b = np.cross(n, a)
+        o = P[anchor]
+
+        def uv(Q):
+            R = (np.asarray(Q, dtype=np.float64) - o) * 1000.0
+            return np.stack([R @ a, R @ b], axis=1)
+
+        c4 = uv(P)                                   # corner (u, v) in mm
+        # edges parallel to the anchor: anchor, anchor + 2 (position = v);
+        # perpendicular: anchor + 1, anchor + 3 (position = u)
+        pos: dict = {}
+        tilt_deg: dict = {}
+        for i in range(4):
+            e0, e1 = c4[i], c4[(i + 1) % 4]
+            par = (i - anchor) % 2 == 0
+            if i in tr:
+                continue
+            along = abs(e1[0] - e0[0]) if par else abs(e1[1] - e0[1])
+            across = abs(e1[1] - e0[1]) if par else abs(e1[0] - e0[0])
+            tilt_deg[i] = float(np.degrees(np.arctan2(across, max(along, 1e-6))))
+            pos[i] = float(0.5 * (e0[1] + e1[1])) if par else float(0.5 * (e0[0] + e1[0]))
+        info["anchor_edge"] = anchor
+        info["supported_tilt_deg"] = {str(k): round(v, 2) for k, v in tilt_deg.items()}
+        if max(tilt_deg.values()) > ANCHOR_MAX_TILT_DEG:
+            info["reason"] = f"supported_edge_not_square({max(tilt_deg.values()):.1f}deg)"
+            return None, info
+        # region pixels -> (u, v) mm on the plane
+        ys, xs = np.nonzero(region_mask)
+        r = np.stack([(xs - float(cam["cx"])) / float(cam["fx"]),
+                      (ys - float(cam["cy"])) / float(cam["fy"]),
+                      np.ones(xs.size)], axis=1)
+        den = r @ n
+        okp = np.abs(den) > 1e-6
+        t = np.zeros(xs.size)
+        t[okp] = -d / den[okp]
+        okp &= t > 0
+        S = uv(r[okp] * t[okp, None])
+        if S.shape[0] < 1000:
+            info["reason"] = "no_region"
+            return None, info
+        # side / end positions of the rectangle: bounds[axis] = [lo, hi]
+        # (axis 0 = u: the perpendicular edges, axis 1 = v: the parallel edges)
+        bound = {0: [None, None], 1: [None, None]}
+        cu = c4.mean(axis=0)
+        side_of: dict = {}
+        for i in range(4):
+            par = (i - anchor) % 2 == 0
+            ax = 1 if par else 0
+            hi = (0.5 * (c4[i][ax] + c4[(i + 1) % 4][ax])) > cu[ax]
+            side_of[i] = (ax, 1 if hi else 0)
+            if i in pos:
+                bound[ax][1 if hi else 0] = pos[i]
+        for i in tr:                                 # provisional: the quad's own edge
+            ax, sd = side_of[i]
+            bound[ax][sd] = float(0.5 * (c4[i][ax] + c4[(i + 1) % 4][ax]))
+        ext: dict = {}
+        orig_bound = {k: list(v) for k, v in bound.items()}
+        for i in tr:
+            ax, sd = side_of[i]
+            other = 1 - ax
+            lo_o, hi_o = bound[other]
+            wspan = hi_o - lo_o
+            m = ANCHOR_STRIP_MARGIN * wspan
+            strip = S[(S[:, other] > lo_o + m) & (S[:, other] < hi_o - m)][:, ax]
+            if strip.size < 500:
+                info["reason"] = "region_strip_too_small"
+                return None, info
+            e = float(np.percentile(strip, ANCHOR_EXTENT_PCT if sd == 1
+                                    else 100.0 - ANCHOR_EXTENT_PCT))
+            moved = (e - orig_bound[ax][sd]) if sd == 1 else (orig_bound[ax][sd] - e)
+            ext[i] = round(float(moved), 1)
+            if moved < ANCHOR_MIN_EXTENSION_MM:
+                info["reason"] = f"region_does_not_extend_{i}({moved:.1f}mm)"
+                info["extension_mm"] = {str(k): v for k, v in ext.items()}
+                return None, info
+            bound[ax][sd] = e
+        info["extension_mm"] = {str(k): v for k, v in ext.items()}
+        (u_lo, u_hi), (v_lo, v_hi) = bound[0], bound[1]
+        if not (u_hi > u_lo and v_hi > v_lo):
+            info["reason"] = "degenerate_rectangle"
+            return None, info
+        inside = ((S[:, 0] >= u_lo) & (S[:, 0] <= u_hi) & (S[:, 1] >= v_lo) & (S[:, 1] <= v_hi))
+        inside_frac = float(inside.mean())
+        # coverage = region area inside the rectangle / rectangle area (pixel footprints on
+        # the plane are near-uniform over the top: count the 5 mm cells hit instead)
+        cell = 5.0
+        cells = np.unique(np.floor((S[inside] - [u_lo, v_lo]) / cell).astype(np.int64), axis=0)
+        cover = float(cells.shape[0]) * cell * cell / ((u_hi - u_lo) * (v_hi - v_lo))
+        info["rect_mm"] = [round(u_hi - u_lo, 1), round(v_hi - v_lo, 1)]
+        info["region_inside_frac"] = round(inside_frac, 3)
+        info["region_coverage"] = round(min(cover, 1.0), 3)
+        if inside_frac < ANCHOR_MIN_INSIDE:
+            info["reason"] = f"region_spills_out_of_rectangle({inside_frac:.2f})"
+            return None, info
+        if cover < ANCHOR_MIN_COVERAGE:
+            info["reason"] = f"region_does_not_fill_rectangle({cover:.2f})"
+            return None, info
+        # corners in the input ring order: each takes its (u, v) side from the original corner
+        out = np.zeros((4, 2))
+        for k in range(4):
+            uk = u_hi if c4[k][0] > cu[0] else u_lo
+            vk = v_hi if c4[k][1] > cu[1] else v_lo
+            Pk = o + (uk / 1000.0) * a + (vk / 1000.0) * b
+            if Pk[2] <= 0:
+                info["reason"] = "corner_behind_camera"
+                return None, info
+            out[k] = [float(cam["fx"]) * Pk[0] / Pk[2] + float(cam["cx"]),
+                      float(cam["fy"]) * Pk[1] / Pk[2] + float(cam["cy"])]
+        if (not np.all(np.isfinite(out)) or out[:, 0].min() < 0 or out[:, 1].min() < 0
+                or out[:, 0].max() > w - 1 or out[:, 1].max() > h - 1):
+            info["reason"] = "rectangle_outside_image"
+            return None, info
+        return out, info
     except Exception as exc:  # noqa: BLE001
         info["reason"] = f"error({type(exc).__name__}: {exc})"
         return None, info

@@ -2548,7 +2548,18 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
 # depth check) and the downstream stages, and replaces the detection only when
 # nothing is truncated any more and the seam stage confirms.
 
-TRUNC_DEFAULTS = {"mode": "off", "min_contain": 0.90, "generic_rect_tol_mm": 20.0}
+# (b) has two coarse quads for the grown region: the 4-gon of its convex hull
+# ("depth_grown") and, when that candidate fails, the rectangle anchored on the
+# quad's supported edges ("depth_grown_anchored", top_diag.anchored_rect_quad):
+# the hull 4-gon skews when a corner of the grown region is chopped (a lifted
+# flap corner leaves the depth band), which left the refined back edge tilted
+# (2026-10-21: still_truncated / generic_profile_fails_rectangle_gate on ~30 %
+# of the dual-arm captures). ``anchored_rect``: ``fallback`` (default; only after
+# the hull candidate failed, so everything the hull candidate recovers is
+# unchanged), ``first`` or ``off``.
+
+TRUNC_DEFAULTS = {"mode": "off", "min_contain": 0.90, "generic_rect_tol_mm": 20.0,
+                  "anchored_rect": "fallback"}
 
 
 def _truncation_mode(cfg: dict) -> str:
@@ -2721,35 +2732,79 @@ def _truncation_recovery(win0: dict, cands: list, mode: str, cfg: dict,
     # (b) depth-grown coplanar region seeded by the quad
     if result is None:
         gate = cross0.get("plane_gate") or {}
-        mask, ginfo = _td.grow_coplanar_region(
+        mask, region, ginfo = _td.grow_coplanar_region_ex(
             win0["quad"], (n0, d0), cross0.get("plane_rms_mm"), xyz, (idx, uv),
             depth_ctx["cam"], (W, H),
             band_mm=gate.get("band_mm", float(cfg["guided_plane"]["ransac_threshold_m"]) * 1000.0))
-        rec_g: dict = {"method": "depth_grown", **ginfo}
-        coarse = None
-        if mask is not None:
-            q4, iou, qmethod = _w._mask_to_quad_ex(mask, H, W)
-            if q4 is None:
-                rec_g["result"] = "no_4gon"
-            else:
-                coarse = np.asarray(_w._to_named(q4), dtype=np.float64).reshape(4, 2)
-                rec_g["coarse_px"] = _quad_json(coarse)
-                rec_g["hull_quad_iou"] = round(float(iou), 3)
-        else:
-            rec_g["result"] = ginfo.get("reason", "no_region")
-        if coarse is None:
-            block["tried"].append(rec_g)
-        else:
-            src = win0["cand"]
+        anchored_mode = str(tcfg.get("anchored_rect", "fallback")).strip().lower()
+        if anchored_mode not in ("fallback", "first", "off"):
+            anchored_mode = "fallback"
+        src = win0["cand"]
+
+        def _grown_cand(coarse: np.ndarray, label: str, rec_info: dict) -> dict:
             prov = dict(src.get("prov") or {})
-            prov["truncation_grown"] = {k: v for k, v in rec_g.items() if k != "method"}
-            gcand = {**{k: v for k, v in src.items()
-                        if not k.startswith("_") and k != "skipped"},
-                     "coarse": coarse, "prov": prov}
-            res = _try("depth_grown", gcand, {k: v for k, v in rec_g.items()
-                                              if k != "method"})
+            prov[label] = rec_info
+            return {**{k: v for k, v in src.items()
+                       if not k.startswith("_") and k != "skipped"},
+                    "coarse": coarse, "prov": prov}
+
+        def _hull_candidate():
+            """The convex-hull 4-gon of the grown region."""
+            rec_g: dict = {"method": "depth_grown", **ginfo}
+            coarse = None
+            if mask is not None:
+                q4, iou, qmethod = _w._mask_to_quad_ex(mask, H, W)
+                if q4 is None:
+                    rec_g["result"] = "no_4gon"
+                else:
+                    coarse = np.asarray(_w._to_named(q4), dtype=np.float64).reshape(4, 2)
+                    rec_g["coarse_px"] = _quad_json(coarse)
+                    rec_g["hull_quad_iou"] = round(float(iou), 3)
+            else:
+                rec_g["result"] = ginfo.get("reason", "no_region")
+            if coarse is None:
+                block["tried"].append(rec_g)
+                return None
+            return _try("depth_grown",
+                        _grown_cand(coarse, "truncation_grown",
+                                    {k: v for k, v in rec_g.items() if k != "method"}),
+                        {k: v for k, v in rec_g.items() if k != "method"})
+
+        def _anchored_candidate():
+            """The rectangle anchored on the supported edges of the quad."""
+            if region is None:
+                return None
+            from . import edge_support as _es
+            tr_idx = [_es.EDGE_NAMES.index(nm) for nm in bad0 if nm in _es.EDGE_NAMES]
+            q_a, ainfo = _td.anchored_rect_quad(
+                win0["quad"], tr_idx, (n0, d0), region, depth_ctx["cam"], (W, H))
+            rec_a: dict = {"method": "depth_grown_anchored",
+                           "seed_coverage": ginfo.get("seed_coverage"), **ainfo}
+            if q_a is None:
+                rec_a["result"] = f"anchored_rect_{ainfo.get('reason', 'failed')}"
+                block["tried"].append(rec_a)
+                return None
+            rec_a["coarse_px"] = _quad_json(q_a)
+            return _try("depth_grown_anchored",
+                        _grown_cand(np.asarray(q_a, dtype=np.float64),
+                                    "truncation_anchored_rect",
+                                    {k: v for k, v in rec_a.items() if k != "method"}),
+                        {k: v for k, v in rec_a.items() if k != "method"})
+
+        order = ([("depth_grown_anchored", _anchored_candidate),
+                  ("depth_grown", _hull_candidate)] if anchored_mode == "first"
+                 else [("depth_grown", _hull_candidate)]
+                 + ([("depth_grown_anchored", _anchored_candidate)]
+                    if anchored_mode == "fallback" else []))
+        for name, fn in order:
+            n_a, n_r = len(attempts), len(reasons)
+            res = fn()
             if res is not None:
-                found, result = "depth_grown", res
+                found, result = name, res
+                break
+            # a failed candidate leaves only its ``tried`` entry, not its evaluation notes
+            del attempts[n_a:]
+            del reasons[n_r:]
     if result is None:
         # nothing recovered: the old behaviour; the extra attempts / reasons are
         # summarised in the block instead of the (unchanged) record lists

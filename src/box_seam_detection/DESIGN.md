@@ -332,3 +332,16 @@ rectangle gate `generic_rect_tol_mm`), and the downstream stages (re-run through
 (observed gap for `top_from_gap` profiles) with a clean D1 on the final quad. Provenance: `record.truncation_recovery`
 (trigger edge / extent / continue share, before and after quads + dims, per-method `tried` results, `applied`).
 `table_cell_v1` = `off` (the code path never runs: records are bit-identical); `AUTOLABEL_V2_TRUNC_RECOVERY=on|shadow|off` overrides.
+
+(b2) Anchored rectangle (2026-10-21; `truncation_recovery.anchored_rect: fallback | first | off`, default `fallback`). A lifted
+flap corner leaves the depth band, so the hull 4-gon of the grown region is skewed (back-left corner ~35 px low on the live
+captures): the refined back edge came out tilted and ~30 % of the dual-arm detections ended in `still_truncated(back)` or
+`generic_profile_fails_rectangle_gate` -> `top_size_out_of_range` and a retry. When the hull candidate fails, `top_diag.anchored_rect_quad`
+builds a second coarse candidate (`tried[].method = depth_grown_anchored`): plane axes from the longest supported edge of the truncated quad,
+supported edges snapped square to it at the mean of their two corners (a half-top's ~140 mm side edges are several degrees off, their
+middle is not), and only the truncated edge(s) moved out to the 99.9th-percentile extent of the grown region in the middle 70 % of the
+span. Fail-closed (no candidate): not one / two adjacent truncated edges, a supported edge > 8 deg off square, an extension < 15 mm,
+the region filling < 60 % of the rectangle or > 10 % of it spilling outside. The candidate is only coarse: refine, the depth check, the
+contains-original check, D1, the rectangle / profile / seam / top-size gates all run on it unchanged. `fallback` leaves every
+detection the hull candidate recovers bit-identical; `first` tries the anchored rectangle first (measured: same accuracy, worse
+front-left corner on 2 of 6 captures); `off` = the previous behaviour.

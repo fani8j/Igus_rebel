@@ -173,9 +173,10 @@ def test_stale_raw_sets_rejected_then_accepted_for_an_old_request(tmp_path, spin
 
 
 def test_freshness_requires_the_raw_depth_stamp_too(tmp_path, spinner):
-    # raw depth is stamped 25 ms before its colour partner (inside the 30 ms slop); with a 30 ms margin a set is only
-    # fresh when the RAW stamp exceeds the threshold, i.e. the colour stamp must exceed it by > 25 ms
-    cam = SyntheticCamera(depth_size=(W * 2, H * 2), raw_size=(RW, RH), raw_stamp_offset_s=-0.025)
+    # raw depth is stamped 15 ms before its colour partner (inside the 30 ms slop; the next raw frame is 35 ms away at
+    # 20 Hz, so the pairing is unambiguous); with a 30 ms margin a set is only fresh when the RAW stamp exceeds the
+    # threshold, i.e. the colour stamp must exceed it by > 15 ms
+    cam = SyntheticCamera(depth_size=(W * 2, H * 2), raw_size=(RW, RH), raw_stamp_offset_s=-0.015)
     node, cap = _cap(tmp_path, "nr6", margin_s=0.03)
     spinner(cam, node)
     for _ in range(6):
@@ -183,7 +184,7 @@ def test_freshness_requires_the_raw_depth_stamp_too(tmp_path, spinner):
         fs, _ = cap.grab(thr, timeout_s=5.0)
         assert fs.source == "node"
         assert fs.depth_stamp_ns > thr + int(0.03e9)
-        assert fs.color_stamp_ns - fs.depth_stamp_ns == pytest.approx(0.025e9, abs=5e6)
+        assert fs.color_stamp_ns - fs.depth_stamp_ns == pytest.approx(0.015e9, abs=3e6)
         time.sleep(0.05)
 
 
