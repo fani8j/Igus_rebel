@@ -107,6 +107,12 @@ class DetectNode(Node):
         p("depth_topic", "/camera/depth/image_raw")
         p("camera_info_topic", "/camera/color/camera_info")
         p("sync_slop_s", 0.04)
+        # node-side depth -> colour registration (fallback when the driver's software alignment is not delivering);
+        # opt-in until it has been tested on the live camera
+        p("node_depth_registration", False)
+        p("raw_depth_topic", "/camera/depth/image_unaligned")
+        p("depth_info_topic", "/camera/depth/camera_info")
+        p("raw_sync_slop_s", 0.07)
         p("sync_queue_size", 10)
         p("capture_margin_s", 0.0)
         p("capture_timeout_s", 10.0)
@@ -135,6 +141,8 @@ class DetectNode(Node):
         for name in ("sync_slop_s", "capture_timeout_s", "status_period_s"):
             if float(gp(name)) <= 0:
                 raise ValueError(f"parameter {name} must be > 0")
+        if not 0.0 < float(gp("raw_sync_slop_s")) <= 0.2:
+            raise ValueError("parameter raw_sync_slop_s must be in (0, 0.2]")
         if int(gp("sync_queue_size")) < 1:
             raise ValueError("parameter sync_queue_size must be >= 1")
         if float(gp("capture_margin_s")) < 0:
@@ -162,6 +170,9 @@ class DetectNode(Node):
                 sync_slop_s=float(gp("sync_slop_s")), queue_size=int(gp("sync_queue_size")),
                 margin_s=float(gp("capture_margin_s")), driver_parent_frame=gp("driver_parent_frame"),
                 use_tf=bool(gp("use_tf")), extrinsic_required=bool(gp("extrinsic_required")),
+                node_depth_registration=bool(gp("node_depth_registration")),
+                raw_depth_topic=str(gp("raw_depth_topic")), depth_info_topic=str(gp("depth_info_topic")),
+                raw_sync_slop_s=float(gp("raw_sync_slop_s")),
                 files_cls=self._files_cls(), callback_group=self.sub_group)
 
         self.status_pub = self.create_publisher(String, "~/status", LATCHED)

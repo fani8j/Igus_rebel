@@ -13,6 +13,17 @@ box_seam_detector:
     camera_info_topic: /camera/color/camera_info
     sync_slop_s: 0.04               # ApproximateTime slop colour<->depth (15 fps = 66 ms apart)
     sync_queue_size: 10
+    # Node-side depth->colour registration: a second synchroniser [colour, raw depth]; the raw depth is re-projected
+    # into the raw colour pixel grid in the node (colour distortion, z-buffer), so a capture no longer depends on the
+    # driver's software alignment finding a colour partner (it rarely does when colour drops below ~10 fps).
+    # Driver-aligned sets stay a candidate; the first fresh set of either kind wins (manifest: depth_registration).
+    # Needs tf colour optical frame <- raw depth optical frame and a depth camera_info of the raw depth size
+    # (distortion all zero); fails closed otherwise (reason in the capture timeout message).
+    # Off until the live camera test is done (offline-tested only, 2026-10-21); true enables it.
+    node_depth_registration: false
+    raw_depth_topic: /camera/depth/image_unaligned   # 16UC1/32FC1 in its OWN optical frame (not the colour size!)
+    depth_info_topic: /camera/depth/camera_info      # also carries the aligned info; the one with the raw size is used
+    raw_sync_slop_s: 0.07           # (0, 0.2]; one 15 fps frame period (the unaligned depth stamps share the colour grid)
     # NOTE use_sim_time: freshness compares camera stamps with the NODE clock; leave use_sim_time false with a
     # real/host-stamped camera (all of sync_slop_s, capture_timeout_s, status_period_s must be > 0).
     capture_margin_s: 0.0           # a frame must be stamped later than request time + this (host clock)

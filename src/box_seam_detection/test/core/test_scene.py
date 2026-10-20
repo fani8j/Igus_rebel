@@ -43,7 +43,7 @@ def test_dual_arm_scene_values():
     assert s.seam_prior_deg is None
     assert s.driver_block("reference") is None
     assert s.driver_block("fallback") is not None and s.driver_verified is False
-    assert s.calib_file.endswith("dualcal_20261009_left_single.calib")
+    assert s.calib_file.endswith("dualcal_20261012_left_hovercorr.calib")
     assert cfg["scene"]["name"] == "dual_arm_v1"
 
 

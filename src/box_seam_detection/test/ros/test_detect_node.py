@@ -334,6 +334,28 @@ def test_parameter_validation(tmp_path):
             rclpy.parameter.Parameter("warm_daemon", value=False)])
 
 
+@pytest.mark.parametrize("slop", [0.0, -0.01, 0.25])
+def test_raw_sync_slop_validation(slop):
+    with pytest.raises(ValueError, match="raw_sync_slop_s"):
+        DetectNode(orchestrator=make_fake_orchestrator(), parameter_overrides=[
+            rclpy.parameter.Parameter("raw_sync_slop_s", value=slop),
+            rclpy.parameter.Parameter("warm_daemon", value=False)])
+
+
+def test_node_registration_parameters_reach_scene_capture(tmp_path, spinner):
+    h0 = Harness(tmp_path / "default", spinner, camera=False)
+    assert not h0.node.capture.node_registration   # opt-in until live-tested
+    h = Harness(tmp_path, spinner, camera=False, node_depth_registration=True, raw_sync_slop_s=0.1,
+                raw_depth_topic="/cam2/depth/raw",
+                depth_info_topic="/cam2/depth/info")
+    cap = h.node.capture
+    assert cap.node_registration and cap.raw_sync_slop_s == 0.1
+    assert cap.raw_depth_topic == "/cam2/depth/raw" and cap.depth_info_topic == "/cam2/depth/info"
+    assert _wait_for(lambda: h.status and h.status[-1]["camera"]["node_registration"]["enabled"])
+    h2 = Harness(tmp_path / "b", spinner, camera=False, node_depth_registration=False)
+    assert not h2.node.capture.node_registration
+
+
 def _wait_for(predicate, timeout=10.0):
     t0 = time.monotonic()
     while not predicate():
