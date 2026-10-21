@@ -2588,8 +2588,41 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
 # the hull candidate failed, so everything the hull candidate recovers is
 # unchanged), ``first`` or ``off``.
 
+# (c) two-flap (2026-10-22; ``two_flap: on | off``, default on): SAM3 outlined ONE flap and the
+# other flap is not coplanar (lifted a few mm), so the coplanar growth stops at the seam. Runs ONLY
+# after (a) and (b) failed (every detection accepted without it is unchanged). The planner cuts 3 mm
+# below ONE published plane, so the second flap is accepted only when it is close to it
+# (core/two_flap.py: plane-pair pre-filter step <= 5 mm / angle <= 3 deg, then per-flap vertex
+# deviation from the PUBLISHED plane <= 3 mm). The thresholds are constants; ``two_flap_max_*``
+# scene keys can only tighten them. The key is not in config.V2_DEFAULTS (records stay bit-identical).
+
 TRUNC_DEFAULTS = {"mode": "off", "min_contain": 0.90, "generic_rect_tol_mm": 20.0,
-                  "anchored_rect": "fallback"}
+                  "anchored_rect": "fallback", "two_flap": "on"}
+
+
+def _two_flap_enabled(tcfg: dict) -> bool:
+    v = tcfg.get("two_flap", "on")
+    if v is True:           # unquoted YAML `on`
+        v = "on"
+    elif v is False:        # unquoted YAML `off`
+        v = "off"
+    return str(v).strip().lower() == "on"
+
+
+def _two_flap_limits(tcfg: dict) -> tuple:
+    """(max step mm, max angle deg, max depth deviation mm): the module constants, tightened
+    (never loosened) by ``two_flap_max_step_mm`` / ``_angle_deg`` / ``_depth_dev_mm``."""
+    from . import two_flap as _tfl
+
+    def lim(key: str, cap: float) -> float:
+        try:
+            v = float(tcfg.get(key, cap))
+        except (TypeError, ValueError):
+            return cap
+        return min(v, cap) if v > 0 else cap
+    return (lim("two_flap_max_step_mm", _tfl.MAX_STEP_MM),
+            lim("two_flap_max_angle_deg", _tfl.MAX_ANGLE_DEG),
+            lim("two_flap_max_depth_dev_mm", _tfl.MAX_DEPTH_DEV_MM))
 
 
 def _truncation_mode(cfg: dict) -> str:
@@ -2679,8 +2712,9 @@ def _truncation_recovery(win0: dict, cands: list, mode: str, cfg: dict,
     n_att, n_rea = len(attempts), len(reasons)
     min_contain = float(tcfg["min_contain"])
 
-    def _try(method: str, cand: dict, extra: dict):
-        """evaluate + verify one candidate -> (record, debug) | None."""
+    def _try(method: str, cand: dict, extra: dict, post=None):
+        """evaluate + verify one candidate -> (record, debug) | None. ``post(win, res,
+        rec_t)`` (two-flap) is an extra last gate: a reason string rejects the candidate."""
         rec_t: dict = {"method": method, **extra}
         block["tried"].append(rec_t)
         entry: dict = {"source": "sam3_live", "truncation_recovery": method}
@@ -2734,6 +2768,11 @@ def _truncation_recovery(win0: dict, cands: list, mode: str, cfg: dict,
         if ds.get("unsupported") is None or ds.get("unsupported"):
             rec_t["result"] = "final_quad_edge_support_not_clean"
             return None
+        if post is not None:
+            why = post(win, res, rec_t)
+            if why:
+                rec_t["result"] = why
+                return None
         rec_t["result"] = "verified"
         return res
 
@@ -2835,6 +2874,18 @@ def _truncation_recovery(win0: dict, cands: list, mode: str, cfg: dict,
             # a failed candidate leaves only its ``tried`` entry, not its evaluation notes
             del attempts[n_a:]
             del reasons[n_r:]
+        # (c) the other flap is not coplanar: only a small step (see core/two_flap.py)
+        if result is None and _two_flap_enabled(tcfg):
+            n_a, n_r = len(attempts), len(reasons)
+            res = _two_flap_candidate(
+                win0=win0, cross0=cross0, bad0=bad0, n0=n0, d0=d0, xyz=xyz, proj=(idx, uv),
+                cam=depth_ctx["cam"], cfg=cfg, tcfg=tcfg, block=block, W=W, H=H,
+                grown_cand=_grown_cand, run_try=_try)
+            if res is not None:
+                found, result = "two_flap", res
+            else:
+                del attempts[n_a:]
+                del reasons[n_r:]
     if result is None:
         # nothing recovered: the old behaviour; the extra attempts / reasons are
         # summarised in the block instead of the (unchanged) record lists
@@ -2852,7 +2903,124 @@ def _truncation_recovery(win0: dict, cands: list, mode: str, cfg: dict,
     rs = (rec2.get("checks") or {}).get("reasons")
     if isinstance(rs, list):
         rs.append(f"truncation_recovered({found};trigger={','.join(bad0)})")
+        if found == "two_flap" and (block.get("two_flap") or {}).get("tag"):
+            rs.append(block["two_flap"]["tag"])
+    if found == "two_flap":
+        block["two_flap"]["applied"] = True
     return (rec2, dbg2), block
+
+
+def _two_flap_candidate(*, win0, cross0, bad0, n0, d0, xyz, proj, cam, cfg, tcfg, block,
+                        W, H, grown_cand, run_try):
+    """Two-flap recovery candidate (core/two_flap.py): fit the second flap's plane in a strip
+    beyond the single truncated edge, gate the plane pair, grow the union of both bands, anchor
+    the rectangle on it and run the normal verification (``run_try``) plus the final per-flap
+    cut-depth gate against the PUBLISHED plane. Fills ``block["two_flap"]``; returns
+    ``(record, debug)`` or None. Never raises (an error is recorded, nothing recovered)."""
+    from . import edge_support as _es
+    from . import top_diag as _td
+    from . import two_flap as _tfl
+
+    fe = _fold_mod()
+    tf: dict = {"applied": False}
+    block["two_flap"] = tf
+    limits = _two_flap_limits(tcfg)
+    tf["limits"] = {"max_step_mm": limits[0], "max_angle_deg": limits[1],
+                    "max_depth_dev_mm": limits[2]}
+    rms0 = cross0.get("plane_rms_mm")
+    rms_floor = float(rms0) if rms0 is not None and np.isfinite(rms0) else 0.0
+    rec_pre: dict = {"method": "two_flap"}
+
+    def _fail(why: str):
+        rec_pre["result"] = why
+        tf["result"] = why
+        block["tried"].append(rec_pre)
+        return None
+
+    try:
+        if len(bad0) != 1 or bad0[0] not in _es.EDGE_NAMES:
+            return _fail(f"two_flap_needs_single_truncated_edge({','.join(bad0)})")
+        edge = _es.EDGE_NAMES.index(bad0[0])
+        st = _tfl.strip_beyond_edge(win0["quad"], edge, (n0, d0), cam)
+        if st is None:
+            return _fail("two_flap_strip_unavailable")
+        pts = _tfl.points_in_polygon(st["poly_px"], xyz, proj, (W, H))
+        if pts.shape[0]:
+            pts = pts[np.abs(pts @ n0 + d0) * 1000.0 <= _tfl.STRIP_MAX_ABOVE_MM]
+        fit_b, why = _tfl.fit_flap_plane(pts, rms_floor)
+        tf["strip"] = {"edge": bad0[0], "extent_mm": round(st["extent_mm"], 1),
+                       "points": int(pts.shape[0])}
+        if why is not None or fit_b is None:
+            return _fail(f"flap_b_plane({why})")
+        plane_b = (fit_b["n"], fit_b["d"])
+        met = _tfl.plane_pair_metrics((n0, d0), plane_b, cam, st["edge_mid_px"])
+        tf["prefilter"] = {"plane_a": {"normal": [round(float(v), 5) for v in n0],
+                                       "offset_m": round(float(d0), 5)},
+                           "plane_b": _tfl.plane_json(fit_b),
+                           "step_mm": _tfl._r(met["step_mm"]),
+                           "angle_deg": _tfl._r(met["angle_deg"])}
+        bad = _tfl.gate_pair(met["step_mm"], met["angle_deg"], limits[0], limits[1])
+        if bad:
+            tf["hint"] = _tfl.hint_for(met["step_mm"], met["angle_deg"], None, limits[0],
+                                       limits[1], limits[2])
+            return _fail("+".join(bad))
+        gate = cross0.get("plane_gate") or {}
+        _mask, region, ginfo = _td.grow_coplanar_region_ex(
+            win0["quad"], (n0, d0), rms0, xyz, proj, cam, (W, H),
+            band_mm=gate.get("band_mm", float(cfg["guided_plane"]["ransac_threshold_m"]) * 1000.0),
+            extra_plane_nd=plane_b)
+        rec_pre.update({k: v for k, v in ginfo.items() if k != "reason"})
+        if region is None:
+            return _fail(f"two_flap_{ginfo.get('reason', 'no_region')}")
+        q_a, ainfo = _td.anchored_rect_quad(win0["quad"], [edge], (n0, d0), region, cam, (W, H))
+        rec_pre.update(ainfo)
+        if q_a is None:
+            return _fail(f"two_flap_anchored_rect_{ainfo.get('reason', 'failed')}")
+        rec_pre["coarse_px"] = _quad_json(q_a)
+        pre = {k: v for k, v in rec_pre.items() if k != "method"}
+        pre["step_mm"], pre["angle_deg"] = tf["prefilter"]["step_mm"], tf["prefilter"]["angle_deg"]
+
+        def _post(win, res, rec_t):
+            rec2 = res[0]
+            seam = rec2.get("seam") or {}
+            ep = seam.get("endpoints_px") or {}
+            # a two-flap top shows a real seam: status ok AND observed (not the prior line)
+            if seam.get("source") in (None, "prior") or not ep.get("seam_left"):
+                return f"two_flap_seam_not_observed({seam.get('source')})"
+            top = rec2.get("top_face") or {}
+            pn, pd_ = fe._plane_nd(top.get("plane"))
+            corners = top.get("corners_px") or {}
+            if pn is None or any(k not in corners for k in CORNER_ORDER):
+                return "two_flap_no_published_plane"
+            final_quad = np.asarray([corners[k] for k in CORNER_ORDER], dtype=np.float64)
+            ev = _tfl.evaluate_final(final_quad, (ep["seam_left"], ep["seam_right"]),
+                                     win0["quad"], (pn, pd_), cam, xyz, proj, (W, H),
+                                     rms_floor, limits)
+            ev["published_plane"] = {"normal": [round(float(v), 4) for v in pn],
+                                     "offset_m": round(float(pd_), 5)}
+            ev["prefilter"] = tf["prefilter"]
+            tf["final"] = ev
+            rec_t["two_flap"] = {k: ev.get(k) for k in ("step_mm", "angle_deg", "dev_mm")}
+            if not ev["ok"]:
+                tf["hint"] = _tfl.hint_for(
+                    ev.get("step_mm"), ev.get("angle_deg"), ev.get("dev_mm"),
+                    limits[0], limits[1], limits[2])
+                return "+".join(ev["reasons"])
+            dev = max(ev["dev_mm"]["A"], ev["dev_mm"]["B"])
+            tf["step_mm"], tf["angle_deg"] = ev["step_mm"], ev["angle_deg"]
+            tf["dev_mm"] = ev["dev_mm"]
+            tf["plane_a"], tf["plane_b"] = ev["plane_A"], ev["plane_B"]
+            tf["published_plane"] = ev["published_plane"]
+            tf["tag"] = f"two_flap(step={ev['step_mm']:.1f}mm,dev={dev:.1f}mm)"
+            return None
+
+        cand = grown_cand(np.asarray(q_a, dtype=np.float64), "truncation_two_flap", pre)
+        res = run_try("two_flap", cand, pre, post=_post)
+        tf["result"] = (block["tried"][-1].get("result") if block["tried"] else None)
+        return res
+    except Exception as exc:  # noqa: BLE001 — never breaks the old path
+        tf["result"] = f"error({type(exc).__name__}: {exc})"
+        return None
 
 
 def _top_diag_off() -> bool:

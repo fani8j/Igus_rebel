@@ -338,6 +338,7 @@ V2_DEFAULTS: dict = {
         # depth-grown candidates: the hull 4-gon, then (fallback) / before (first) it
         # the rectangle anchored on the quad's supported edges; off = hull only
         "anchored_rect": "fallback",
+        # also read (default "on", pipeline.TRUNC_DEFAULTS): two_flap on | off, see DESIGN.md (c)
     },
 }
 

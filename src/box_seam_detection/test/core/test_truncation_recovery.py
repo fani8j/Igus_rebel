@@ -120,6 +120,7 @@ def _call(win0, depth_ctx, evaluate, rerun, mode="on", cands=(), attempts=None, 
     attempts = [] if attempts is None else attempts
     reasons = [] if reasons is None else reasons
     cfg = default_config()
+    cfg["truncation_recovery"]["two_flap"] = "off"      # these tests cover (a) / (b); see test_two_flap.py
     if anchored is not None:
         cfg["truncation_recovery"]["anchored_rect"] = anchored
     res = P._truncation_recovery(win0, list(cands) or [win0["cand"]], mode,

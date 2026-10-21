@@ -1800,6 +1800,17 @@ def _final_top_dims_dev_mm(record: dict, profile):
     return max(abs(lo - pl), abs(sh - ps))
 
 
+def raised_flap_hint(record) -> str | None:
+    """``raised_flap(step=11.2mm): press the flap flat`` when the pipeline's two-flap truncation
+    recovery measured the second flap too far from the first (``truncation_recovery.two_flap.hint``)
+    on a detection that was NOT recovered; else None."""
+    trunc = record.get("truncation_recovery") if isinstance(record, dict) else None
+    if not isinstance(trunc, dict) or trunc.get("applied"):
+        return None
+    hint = (trunc.get("two_flap") or {}).get("hint") if isinstance(trunc.get("two_flap"), dict) else None
+    return hint if isinstance(hint, str) and hint else None
+
+
 def evaluate_cut_permission(record: dict, seam: dict, seam_direction: dict = None,
                             seam_geometry: dict = None, profile=None,
                             image_size=None, border_px: float = CUT_BORDER_PX,
@@ -1932,6 +1943,11 @@ def evaluate_cut_permission(record: dict, seam: dict, seam_direction: dict = Non
             reasons.append(_cp_reason("multiple_tape_candidates", False,
                                       f"{len(qualified)} qualified tape candidates "
                                       f"(axes {axes})"))
+    trunc = record.get("truncation_recovery")
+    two_flap = trunc.get("two_flap") if isinstance(trunc, dict) and trunc.get("applied") else None
+    if isinstance(two_flap, dict) and two_flap.get("tag"):
+        # the top was recovered over two flaps at slightly different heights (within the cut-depth gate)
+        flags.append(str(two_flap["tag"]))
     out = {"status": "blocked" if reasons else "allowed", "reasons": reasons}
     if flags:
         out["flags"] = flags
@@ -2901,6 +2917,7 @@ def run_request(args, sam3) -> dict:
         _say(f"prerequisite failure: --sam3-timeout must be positive, got {args.sam3_timeout!r}")
         return result
     capture_id = None
+    record = None
     depth_edge = None
     operator_hint = None
     seam_direction = None
@@ -3226,6 +3243,11 @@ def run_request(args, sam3) -> dict:
         _remove_partial_output(out_path)
         return result
     except Reject as error:
+        flap_hint = raised_flap_hint(record)
+        if flap_hint and flap_hint not in error.reasons:
+            # the two-flap recovery found the flaps at different heights (core/two_flap.py):
+            # tell the operator why the capture was truncated; changes no accept / reject decision
+            error.reasons = [*error.reasons, flap_hint]
         diagnostic = {"status": "rejected", "capture_id": capture_id,
                       "method": METHOD, "stage": error.stage, "reasons": error.reasons,
                       "retryable": error.retryable}

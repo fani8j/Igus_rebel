@@ -104,12 +104,15 @@ def grow_coplanar_region(quad_px: np.ndarray, plane_nd: tuple, rms_mm: float | N
 
 def grow_coplanar_region_ex(quad_px: np.ndarray, plane_nd: tuple, rms_mm: float | None,
                             xyz: np.ndarray, proj: tuple, cam: dict, image_wh: tuple,
-                            band_mm: float | None = None) -> tuple:
+                            band_mm: float | None = None,
+                            extra_plane_nd: tuple | None = None) -> tuple:
     """The connected coplanar region of the top plane that the quad (a seed)
     lies in: pixels within ``band`` of the plane (``band`` = max(``BAND_MIN_MM``,
     ``BAND_NOISE_K`` rms, ``band_mm``) the depth cross-check's own band), closed
     over the flap gap / dropouts (``CLOSE_MM``), 8-connected, the component under the
-    seed, cleaned by an opening and holes filled.
+    seed, cleaned by an opening and holes filled. ``extra_plane_nd`` (two-flap
+    recovery): a pixel also counts when it lies within the same band of this second
+    plane (the union of the two bands); None = the single-plane growth, unchanged.
 
     Returns ``(hull_mask, region_mask, info)``: ``hull_mask`` = full-image uint8
     convex hull of the cleaned region (None when there is none), ``region_mask`` =
@@ -125,7 +128,19 @@ def grow_coplanar_region_ex(quad_px: np.ndarray, plane_nd: tuple, rms_mm: float 
                    float(band_mm) if band_mm is not None else 0.0)
         info["band_mm"] = round(band, 1)
         roi = _quad_roi(quad, image_wh)
-        grid = _depth.height_grid(xyz, proj, n, d, roi)
+        if extra_plane_nd is None:
+            grid = _depth.height_grid(xyz, proj, n, d, roi)
+        else:
+            grid, rows = _depth.height_grid(xyz, proj, n, d, roi, return_index=True)
+            n2, d2 = extra_plane_nd
+            h2 = np.full(grid.shape, np.nan, dtype=np.float32)
+            have = rows >= 0
+            h2[have] = ((np.asarray(xyz, dtype=np.float64)[rows[have]]
+                         @ np.asarray(n2, dtype=np.float64) + float(d2)) * 1000.0)
+            in_a = np.isfinite(grid) & (np.abs(grid) <= band)
+            in_b = np.isfinite(h2) & (np.abs(h2) <= band)
+            grid = np.where(in_a, grid, np.where(in_b, h2, np.nan)).astype(np.float32)
+            info["two_plane"] = True
         quad_area = _quad_area_mm2(np.asarray(backproject_quad(quad, n, d, cam)), n)
         pxa0 = _px_area_mm2(cam, n, d, quad.mean(axis=0)) or 1.0
         close_px = int(max(3, round(CLOSE_MM / np.sqrt(pxa0)))) | 1

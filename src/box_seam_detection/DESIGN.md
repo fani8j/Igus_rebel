@@ -345,3 +345,21 @@ the region filling < 60 % of the rectangle or > 10 % of it spilling outside. The
 contains-original check, D1, the rectangle / profile / seam / top-size gates all run on it unchanged. `fallback` leaves every
 detection the hull candidate recovers bit-identical; `first` tries the anchored rectangle first (measured: same accuracy, worse
 front-left corner on 2 of 6 captures); `off` = the previous behaviour.
+
+(c) Two-flap (2026-10-22; `truncation_recovery.two_flap: on | off`, default `on` in `pipeline.TRUNC_DEFAULTS`, not in `config.V2_DEFAULTS`
+so records stay bit-identical). SAM3 outlined ONE flap and the other flap is not coplanar (lifted a few mm): the coplanar growth stops at
+the seam. Runs ONLY after (a) and (b) failed. The H-cut planner cuts 3 mm below ONE published plane (`top_face.plane`, the guided RANSAC plane
+of the final quad that the corners' 3-D points lie on), so the second flap is accepted only when it is close to that plane (`core/two_flap.py`):
+1. single truncated edge; plane B = RANSAC in the strip 10 mm .. 0.9 x extent beyond it (middle 70 %, >= 1500 points, >= 60 % inliers);
+   pre-filter: angle(nA, nB) <= 3.0 deg and step (plane A to plane B at the truncated edge midpoint) <= 5.0 mm, else
+   `flap_step_too_large(..mm)` / `flap_angle_too_large(..deg)` and a hint;
+2. the union of the band regions of A and B is grown (`grow_coplanar_region_ex(extra_plane_nd=B)`), `anchored_rect_quad` makes the coarse quad,
+   and `_try` runs unchanged (refine + depth check + still-truncated + size + rectangle + seam status ok AND observed + final edge support);
+3. cut-depth gate on the result: both flap planes are REFITTED from the cloud inside their own polygon (final quad split by the observed seam,
+   eroded 10 mm), step/angle re-checked, and for each flap max over its polygon vertices of |own plane height - PUBLISHED plane height| <= 3.0 mm
+   (planes along pixel rays: the maximum over a convex polygon is at a vertex), else `flap_depth_dev_too_large(A=..,B=..mm)`.
+The published plane is NOT changed (no least-squares refit over both flaps): the guided plane is what every other stage already uses; if it lands on one
+flap the gate rejects anything but a small step. Real lids bulge, so the vertex deviation (not the step) is usually the binding gate.
+Provenance: `truncation_recovery.two_flap` (planes, step, angle, per-flap deviation, `tag`, `hint`); success adds the reason and cut_permission flag
+`two_flap(step=2.1mm,dev=1.0mm)`. A capture that stays rejected with a too-large step / angle / deviation gets `raised_flap(step=11.2mm): press the flap flat`
+appended to the reject reasons by the detector (no accept / reject decision changes). Scene keys `two_flap_max_step_mm` / `_angle_deg` / `_depth_dev_mm` may only tighten.
