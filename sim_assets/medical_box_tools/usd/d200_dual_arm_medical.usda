@@ -8,10 +8,10 @@
 
 def Xform "D200" (
     customData = {
-        string d200_usd = "/media/farhan/My Passport/igus_nvidia/sim_assets_ext/d200/d200_with_dual_arm.usd"
+        string d200_usd = "./d200/d200_with_dual_arm.usd"
     }
     doc = "MAIN rig: dual-arm stand on the D200 AMR (operator zip d200_with_dual_arm_20261015, referenced) with the medical tools: suction tool v5 on arm_left/link6, LEHF20K2-48 gripper on arm_right/link6, XEG-32 tooling removed. Home: lift -0.2, sliders -+0.005973, arms upright. The AMR is a STATIC placeholder (base welded to the world, wheels locked). No ground / PhysicsScene (see d200_rig_test_scene.usda)."
-    prepend references = @/media/farhan/My Passport/igus_nvidia/sim_assets_ext/d200/d200_with_dual_arm.usd@
+    prepend references = @./d200/d200_with_dual_arm.usd@
 )
 {
     over "UpperAssembly"

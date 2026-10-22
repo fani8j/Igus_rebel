@@ -1,0 +1,358 @@
+{
+  "articulated": {
+    "bodies": {
+      "base_link": {
+        "position": [
+          0.0,
+          0.0,
+          0.07619999977894944
+        ],
+        "mass": 72.0
+      },
+      "left_wheel": {
+        "position": [
+          0.0,
+          0.2930000126361847,
+          0.07619999977894944
+        ],
+        "mass": 2.0
+      },
+      "right_wheel": {
+        "position": [
+          0.0,
+          -0.2930000126361847,
+          0.07619999977894944
+        ],
+        "mass": 2.0
+      },
+      "front_left_fork": {
+        "position": [
+          0.3499999940395355,
+          0.2199999988079071,
+          0.07500000298023224
+        ],
+        "mass": 0.5
+      },
+      "front_left_wheel_1": {
+        "position": [
+          0.33500000834465027,
+          0.2370000034570694,
+          0.03809999990652342
+        ],
+        "mass": 0.25
+      },
+      "front_left_wheel_2": {
+        "position": [
+          0.33500000834465027,
+          0.2029999941587448,
+          0.03809999990652342
+        ],
+        "mass": 0.25
+      },
+      "front_right_fork": {
+        "position": [
+          0.3499999940395355,
+          -0.2199999988079071,
+          0.07500000298023224
+        ],
+        "mass": 0.5
+      },
+      "front_right_wheel_1": {
+        "position": [
+          0.33500000834465027,
+          -0.2029999941587448,
+          0.03809999990652342
+        ],
+        "mass": 0.25
+      },
+      "front_right_wheel_2": {
+        "position": [
+          0.33500000834465027,
+          -0.2370000034570694,
+          0.03809999990652342
+        ],
+        "mass": 0.25
+      },
+      "rear_left_fork": {
+        "position": [
+          -0.3499999940395355,
+          0.2199999988079071,
+          0.07500000298023224
+        ],
+        "mass": 0.5
+      },
+      "rear_left_wheel_1": {
+        "position": [
+          -0.36500000953674316,
+          0.2370000034570694,
+          0.03809999990652342
+        ],
+        "mass": 0.25
+      },
+      "rear_left_wheel_2": {
+        "position": [
+          -0.36500000953674316,
+          0.2029999941587448,
+          0.03809999990652342
+        ],
+        "mass": 0.25
+      },
+      "rear_right_fork": {
+        "position": [
+          -0.3499999940395355,
+          -0.2199999988079071,
+          0.07500000298023224
+        ],
+        "mass": 0.5
+      },
+      "rear_right_wheel_1": {
+        "position": [
+          -0.36500000953674316,
+          -0.2029999941587448,
+          0.03809999990652342
+        ],
+        "mass": 0.25
+      },
+      "rear_right_wheel_2": {
+        "position": [
+          -0.36500000953674316,
+          -0.2370000034570694,
+          0.03809999990652342
+        ],
+        "mass": 0.25
+      }
+    },
+    "joints": [
+      {
+        "name": "left_wheel_joint",
+        "body0": "base_link",
+        "body1": "left_wheel",
+        "axis": "Y",
+        "local_pos0": [
+          0.0,
+          0.2930000126361847,
+          0.0
+        ],
+        "actuated": true
+      },
+      {
+        "name": "right_wheel_joint",
+        "body0": "base_link",
+        "body1": "right_wheel",
+        "axis": "Y",
+        "local_pos0": [
+          0.0,
+          -0.2930000126361847,
+          0.0
+        ],
+        "actuated": true
+      },
+      {
+        "name": "front_left_swivel_joint",
+        "body0": "base_link",
+        "body1": "front_left_fork",
+        "axis": "Z",
+        "local_pos0": [
+          0.3499999940395355,
+          0.2199999988079071,
+          -0.0011999967987171983
+        ],
+        "actuated": false
+      },
+      {
+        "name": "front_left_wheel_1_joint",
+        "body0": "front_left_fork",
+        "body1": "front_left_wheel_1",
+        "axis": "Y",
+        "local_pos0": [
+          -0.014999985694885254,
+          0.017000004649162292,
+          -0.03690000307370882
+        ],
+        "actuated": false
+      },
+      {
+        "name": "front_left_wheel_2_joint",
+        "body0": "front_left_fork",
+        "body1": "front_left_wheel_2",
+        "axis": "Y",
+        "local_pos0": [
+          -0.014999985694885254,
+          -0.017000004649162292,
+          -0.03690000307370882
+        ],
+        "actuated": false
+      },
+      {
+        "name": "front_right_swivel_joint",
+        "body0": "base_link",
+        "body1": "front_right_fork",
+        "axis": "Z",
+        "local_pos0": [
+          0.3499999940395355,
+          -0.2199999988079071,
+          -0.0011999967987171983
+        ],
+        "actuated": false
+      },
+      {
+        "name": "front_right_wheel_1_joint",
+        "body0": "front_right_fork",
+        "body1": "front_right_wheel_1",
+        "axis": "Y",
+        "local_pos0": [
+          -0.014999985694885254,
+          0.017000004649162292,
+          -0.03690000307370882
+        ],
+        "actuated": false
+      },
+      {
+        "name": "front_right_wheel_2_joint",
+        "body0": "front_right_fork",
+        "body1": "front_right_wheel_2",
+        "axis": "Y",
+        "local_pos0": [
+          -0.014999985694885254,
+          -0.017000004649162292,
+          -0.03690000307370882
+        ],
+        "actuated": false
+      },
+      {
+        "name": "rear_left_swivel_joint",
+        "body0": "base_link",
+        "body1": "rear_left_fork",
+        "axis": "Z",
+        "local_pos0": [
+          -0.3499999940395355,
+          0.2199999988079071,
+          -0.0011999967987171983
+        ],
+        "actuated": false
+      },
+      {
+        "name": "rear_left_wheel_1_joint",
+        "body0": "rear_left_fork",
+        "body1": "rear_left_wheel_1",
+        "axis": "Y",
+        "local_pos0": [
+          -0.015000015497207642,
+          0.017000004649162292,
+          -0.03690000307370882
+        ],
+        "actuated": false
+      },
+      {
+        "name": "rear_left_wheel_2_joint",
+        "body0": "rear_left_fork",
+        "body1": "rear_left_wheel_2",
+        "axis": "Y",
+        "local_pos0": [
+          -0.015000015497207642,
+          -0.017000004649162292,
+          -0.03690000307370882
+        ],
+        "actuated": false
+      },
+      {
+        "name": "rear_right_swivel_joint",
+        "body0": "base_link",
+        "body1": "rear_right_fork",
+        "axis": "Z",
+        "local_pos0": [
+          -0.3499999940395355,
+          -0.2199999988079071,
+          -0.0011999967987171983
+        ],
+        "actuated": false
+      },
+      {
+        "name": "rear_right_wheel_1_joint",
+        "body0": "rear_right_fork",
+        "body1": "rear_right_wheel_1",
+        "axis": "Y",
+        "local_pos0": [
+          -0.015000015497207642,
+          0.017000004649162292,
+          -0.03690000307370882
+        ],
+        "actuated": false
+      },
+      {
+        "name": "rear_right_wheel_2_joint",
+        "body0": "rear_right_fork",
+        "body1": "rear_right_wheel_2",
+        "axis": "Y",
+        "local_pos0": [
+          -0.015000015497207642,
+          -0.017000004649162292,
+          -0.03690000307370882
+        ],
+        "actuated": false
+      }
+    ],
+    "rigid_body_count": 15,
+    "joint_count": 14,
+    "actuated_joint_count": 2,
+    "total_mass_kg": 80.0
+  },
+  "navigation": {
+    "bodies": {
+      "base_link": {
+        "position": [
+          0.0,
+          0.0,
+          0.07619999977894944
+        ],
+        "mass": 76.0
+      },
+      "left_wheel": {
+        "position": [
+          0.0,
+          0.2930000126361847,
+          0.07619999977894944
+        ],
+        "mass": 2.0
+      },
+      "right_wheel": {
+        "position": [
+          0.0,
+          -0.2930000126361847,
+          0.07619999977894944
+        ],
+        "mass": 2.0
+      }
+    },
+    "joints": [
+      {
+        "name": "left_wheel_joint",
+        "body0": "base_link",
+        "body1": "left_wheel",
+        "axis": "Y",
+        "local_pos0": [
+          0.0,
+          0.2930000126361847,
+          0.0
+        ],
+        "actuated": true
+      },
+      {
+        "name": "right_wheel_joint",
+        "body0": "base_link",
+        "body1": "right_wheel",
+        "axis": "Y",
+        "local_pos0": [
+          0.0,
+          -0.2930000126361847,
+          0.0
+        ],
+        "actuated": true
+      }
+    ],
+    "rigid_body_count": 3,
+    "joint_count": 2,
+    "actuated_joint_count": 2,
+    "total_mass_kg": 80.0
+  }
+}

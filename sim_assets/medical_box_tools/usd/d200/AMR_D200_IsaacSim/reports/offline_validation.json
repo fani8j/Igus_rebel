@@ -1,0 +1,119 @@
+{
+  "results": [
+    {
+      "file": "AMR_D200.usd",
+      "status": "PASS_OFFLINE_SUBSET_CHECK",
+      "errors": [],
+      "usd_prims": 149,
+      "rigid_bodies": 15,
+      "joints": 14,
+      "drive_joints": 2,
+      "colliders": 19,
+      "source_visual_types": {
+        "Mesh": 5,
+        "Cylinder": 44,
+        "Cube": 10
+      },
+      "total_mass_kg": 80.0,
+      "max_joint_anchor_error_m": 2.828129068443783e-13,
+      "max_primitive_center_error_m": 7.954580620613542e-09,
+      "max_preserved_visual_mesh_coordinate_error_m": 4.970468481246826e-13,
+      "wheel_collision_bottom_world_z_range_m": [
+        -8.480999999505023e-10,
+        5.442000045041695e-10
+      ],
+      "self_contained": true,
+      "external_asset_references": 0,
+      "validation_scope": "Read back with package-specific Lark USDA grammar and independent numeric/topology checks; NOT OpenUSD or Isaac Sim validation.",
+      "openusd_readback_tested": false,
+      "isaac_sim_runtime_tested": false
+    },
+    {
+      "file": "AMR_D200_drive_demo.usd",
+      "status": "PASS_OFFLINE_SUBSET_CHECK",
+      "errors": [],
+      "usd_prims": 155,
+      "rigid_bodies": 15,
+      "joints": 14,
+      "drive_joints": 2,
+      "colliders": 20,
+      "source_visual_types": {
+        "Mesh": 5,
+        "Cylinder": 44,
+        "Cube": 10
+      },
+      "total_mass_kg": 80.0,
+      "max_joint_anchor_error_m": 2.828129068443783e-13,
+      "max_primitive_center_error_m": 7.954580620613542e-09,
+      "max_preserved_visual_mesh_coordinate_error_m": 4.970468481246826e-13,
+      "wheel_collision_bottom_world_z_range_m": [
+        0.0029999991519000027,
+        0.003000000544200007
+      ],
+      "self_contained": true,
+      "external_asset_references": 0,
+      "validation_scope": "Read back with package-specific Lark USDA grammar and independent numeric/topology checks; NOT OpenUSD or Isaac Sim validation.",
+      "openusd_readback_tested": false,
+      "isaac_sim_runtime_tested": false
+    },
+    {
+      "file": "AMR_D200_navigation.usd",
+      "status": "PASS_OFFLINE_SUBSET_CHECK",
+      "errors": [],
+      "usd_prims": 105,
+      "rigid_bodies": 3,
+      "joints": 2,
+      "drive_joints": 2,
+      "colliders": 11,
+      "source_visual_types": {
+        "Mesh": 5,
+        "Cylinder": 44,
+        "Cube": 10
+      },
+      "total_mass_kg": 80.0,
+      "max_joint_anchor_error_m": 0.0,
+      "max_primitive_center_error_m": 7.954580620613542e-09,
+      "max_preserved_visual_mesh_coordinate_error_m": 4.970468481246826e-13,
+      "wheel_collision_bottom_world_z_range_m": [
+        5.442000045041695e-10,
+        5.442000045041695e-10
+      ],
+      "self_contained": true,
+      "external_asset_references": 0,
+      "validation_scope": "Read back with package-specific Lark USDA grammar and independent numeric/topology checks; NOT OpenUSD or Isaac Sim validation.",
+      "openusd_readback_tested": false,
+      "isaac_sim_runtime_tested": false
+    },
+    {
+      "file": "AMR_D200_navigation_demo.usd",
+      "status": "PASS_OFFLINE_SUBSET_CHECK",
+      "errors": [],
+      "usd_prims": 111,
+      "rigid_bodies": 3,
+      "joints": 2,
+      "drive_joints": 2,
+      "colliders": 12,
+      "source_visual_types": {
+        "Mesh": 5,
+        "Cylinder": 44,
+        "Cube": 10
+      },
+      "total_mass_kg": 80.0,
+      "max_joint_anchor_error_m": 0.0,
+      "max_primitive_center_error_m": 7.954580620613542e-09,
+      "max_preserved_visual_mesh_coordinate_error_m": 4.970468481246826e-13,
+      "wheel_collision_bottom_world_z_range_m": [
+        0.003000000544200007,
+        0.003000000544200007
+      ],
+      "self_contained": true,
+      "external_asset_references": 0,
+      "validation_scope": "Read back with package-specific Lark USDA grammar and independent numeric/topology checks; NOT OpenUSD or Isaac Sim validation.",
+      "openusd_readback_tested": false,
+      "isaac_sim_runtime_tested": false
+    }
+  ],
+  "all_offline_checks_pass": true,
+  "isaac_sim_runtime_tested": false,
+  "openusd_readback_tested": false
+}

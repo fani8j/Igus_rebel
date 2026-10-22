@@ -1,0 +1,41 @@
+{
+  "source_sha256": "97a47a1bba1b82c1a015f4f7b5fbfc33e73e9e6398dd7e3ddd63da16af01d765",
+  "source_faces": 8260,
+  "source_vertices_after_welding": 4248,
+  "connected_components": 59,
+  "watertight_components": 59,
+  "winding_consistent_components": 59,
+  "input_bounds": [
+    [
+      -0.3269999921321869,
+      -0.48399999737739563,
+      0.0
+    ],
+    [
+      0.3269999921321869,
+      0.48399999737739563,
+      0.2514999806880951
+    ]
+  ],
+  "output_axis_convention": "+X forward (source +Y); +Y left (source -X); +Z up",
+  "stl_units": "STL is unitless. Meters inferred from nominal body dimensions.",
+  "drive_radius_m": 0.07619999923468859,
+  "drive_track_m": 0.5860000252723694,
+  "caster_radius_m": 0.03810000075455004,
+  "screenshot_drive_diameter_m": 0.2032,
+  "stl_drive_diameter_m": 0.15239999846937718,
+  "screenshot_vs_stl_discrepancy": "8-inch / 101.6-mm clearance in image versus 6-inch / 55-mm lower-body bottom in STL. STL dimensions retained.",
+  "native_cylinder_visuals": 44,
+  "native_cube_visuals": 10,
+  "preserved_mesh_visuals": 5,
+  "cylinder_max_vertex_residual_m": 1.4104160936390109e-08,
+  "cylinder_max_source_chord_sagitta_m": 0.00036692382389341043,
+  "isaac_sim_runtime_tested": false,
+  "openusd_runtime_parse_tested": false,
+  "warnings": [
+    "Mass, inertia, friction and motor torque are simulation assumptions, not measured hardware values.",
+    "LiDAR geometry and attachment frame only; no working LiDAR sensor, ROS 2 bridge, SLAM or Nav2 configured.",
+    "Source geometry contains overlaps. Articulation self-collisions disabled.",
+    "Cylinder visuals reconstructed from 32-sided rings; true curves differ from source chords."
+  ]
+}

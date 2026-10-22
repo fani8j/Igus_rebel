@@ -946,7 +946,7 @@ def build_rig_medical():
 
 
 # ------------------------------------------------------------------ MAIN rig: dual-arm stand on the D200 AMR
-D200_DIR = Path(os.environ.get('D200_ASSET_DIR', '/media/farhan/My Passport/igus_nvidia/sim_assets_ext/d200'))       # copy of the operator's d200_with_dual_arm_20261015 zip
+D200_DIR = Path(os.environ.get('D200_ASSET_DIR', OUT / 'usd' / 'd200'))       # copy of the operator's d200_with_dual_arm_20261015 zip (in the repo)
 D200_USD = D200_DIR / 'd200_with_dual_arm.usd'
 D200_ROBOT_Z = 0.003            # README of the AMR: robot root 3 mm above the floor to avoid initial penetration
 HOME = {'lift_joint': ('linear', -0.2), 'slider_left_joint': ('linear', -0.005973), 'slider_right_joint': ('linear', 0.005973)}
@@ -966,11 +966,13 @@ def build_d200_medical():
     UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
     UsdPhysics.SetStageKilogramsPerUnit(stage, 1.0)
     root = stage.DefinePrim('/D200', 'Xform')
-    root.GetReferences().AddReference(str(D200_USD))
+    d200_ref = os.path.relpath(D200_USD, path.parent)                         # relative, so the scene works from any checkout
+    d200_ref = d200_ref if d200_ref.startswith('.') else './' + d200_ref
+    root.GetReferences().AddReference(d200_ref)
     stage.SetDefaultPrim(root)
     root.SetDocumentation('MAIN rig: dual-arm stand on the D200 AMR (operator zip d200_with_dual_arm_20261015, referenced) with the medical tools: suction tool v5 on arm_left/link6, LEHF20K2-48 gripper on '
                           'arm_right/link6, XEG-32 tooling removed. Home: lift -0.2, sliders -+0.005973, arms upright. The AMR is a STATIC placeholder (base welded to the world, wheels locked). No ground / PhysicsScene (see d200_rig_test_scene.usda).')
-    root.SetCustomDataByKey('d200_usd', str(D200_USD))
+    root.SetCustomDataByKey('d200_usd', d200_ref)
     J = U + '/Joints/'
     for side, tool in (('left', 'left_suction_tool'), ('right', 'right_gripper_tool')):
         for n in ('xeg32_base_link', 'xeg32_left_carriage_link', 'xeg32_right_carriage_link', 'xeg32_camera_mount_link'):

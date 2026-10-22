@@ -1,0 +1,14 @@
+{
+  "parameter_status": "SIMULATION ASSUMPTIONS, not measured D200 hardware specifications. Geometry is taken from STL.",
+  "base_mass_kg": 72.0,
+  "drive_wheel_mass_kg": 2.0,
+  "caster_fork_mass_kg": 0.5,
+  "caster_wheel_mass_kg": 0.25,
+  "base_com_height_m": 0.14,
+  "tire_static_friction": 0.9,
+  "tire_dynamic_friction": 0.8,
+  "motor": {"damping": 20.0, "max_torque_nm": 15.0},
+  "chassis_collider_outline_tolerance_m": 0.00015,
+  "command_limits": {"linear_m_s": 0.5, "angular_rad_s": 1.0, "linear_accel_m_s2": 0.35, "angular_accel_rad_s2": 1.2},
+  "note": "Edit these values then run scripts/build_asset.py to regenerate. Direct JSON edits alone do not change existing USD. Do not change wheel radius without reconstructing wheel and chassis geometry."
+}

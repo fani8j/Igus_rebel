@@ -11,7 +11,7 @@ Stop jobs by their own PID / process group, never with `pkill -f` or `killall`.
 | Item | Where | Used by |
 |---|---|---|
 | Isaac Sim 5.1.0 | `/home/farhan/isaac-sim/` (`python.sh`, `isaac-sim.sh`) | all `tests/*.py` |
-| D200 + dual-arm USD | `/media/farhan/My Passport/igus_nvidia/sim_assets_ext/d200/` (external drive must be mounted) | `usd/d200_dual_arm_medical.usda` |
+| D200 + dual-arm USD | `usd/d200/` (in this repo, 15 MB; the operator's `d200_with_dual_arm` zip, unchanged) | `usd/d200_dual_arm_medical.usda` |
 | Stocked cabinet USD | `sim_assets/medical_boxes/usd/medicine_cabinet_filled.usda` (in this repo) | both cabinet scenes |
 | Robot description + MoveIt config | main repo `/home/farhan/igus_rebel_ros2/src/rebel_medicine_grasp_{description,moveit_config}` (commit `1e6dd4b`) | URDF for kinematics, MoveIt check |
 | System Python 3.10 with PyKDL, urdf_parser_py, trimesh, scipy, numpy | `/usr/bin/python3` (ROS Humble) | `tools/*.py` |

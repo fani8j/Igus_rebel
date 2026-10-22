@@ -1,0 +1,796 @@
+[
+  {
+    "component": 0,
+    "usd_type": "Mesh",
+    "body": "base_link",
+    "source_faces": 620
+  },
+  {
+    "component": 1,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "Z",
+    "center": [
+      -0.24999999949597843,
+      0.18000000715255737,
+      0.25049998611211777
+    ],
+    "radius": 0.004000002362106332,
+    "height": 0.001999989151954651,
+    "max_vertex_radial_residual_m": 9.661057410667584e-09,
+    "source_chord_sagitta_m": 1.9261104685399903e-05
+  },
+  {
+    "component": 2,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "Z",
+    "center": [
+      0.24999999949597843,
+      0.18000000715255737,
+      0.25049998611211777
+    ],
+    "radius": 0.004000002362106331,
+    "height": 0.001999989151954651,
+    "max_vertex_radial_residual_m": 9.661057409800222e-09,
+    "source_chord_sagitta_m": 1.9261104685399896e-05
+  },
+  {
+    "component": 3,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "Z",
+    "center": [
+      -0.24999999949597843,
+      -0.18000000715255737,
+      0.25049998611211777
+    ],
+    "radius": 0.004000002362106332,
+    "height": 0.001999989151954651,
+    "max_vertex_radial_residual_m": 9.661057410667584e-09,
+    "source_chord_sagitta_m": 1.9261104685399903e-05
+  },
+  {
+    "component": 4,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "Z",
+    "center": [
+      0.24999999949597843,
+      -0.18000000715255737,
+      0.25049998611211777
+    ],
+    "radius": 0.004000002362106331,
+    "height": 0.001999989151954651,
+    "max_vertex_radial_residual_m": 9.661057409800222e-09,
+    "source_chord_sagitta_m": 1.9261104685399896e-05
+  },
+  {
+    "component": 5,
+    "usd_type": "Mesh",
+    "body": "base_link",
+    "source_faces": 828
+  },
+  {
+    "component": 6,
+    "usd_type": "Mesh",
+    "body": "base_link",
+    "source_faces": 828
+  },
+  {
+    "component": 7,
+    "usd_type": "Mesh",
+    "body": "base_link",
+    "source_faces": 204
+  },
+  {
+    "component": 8,
+    "usd_type": "Mesh",
+    "body": "base_link",
+    "source_faces": 204
+  },
+  {
+    "component": 9,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "X",
+    "center": [
+      0.47200000286102295,
+      0.0,
+      0.23399999737739563
+    ],
+    "radius": 0.016000000394676125,
+    "height": 0.003000020980834961,
+    "max_vertex_radial_residual_m": 3.90145294543176e-09,
+    "source_chord_sagitta_m": 7.704437514532256e-05
+  },
+  {
+    "component": 10,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "X",
+    "center": [
+      0.4779999852180481,
+      0.0,
+      0.23399999737739563
+    ],
+    "radius": 0.013000001513281588,
+    "height": 0.012000024318695068,
+    "max_vertex_radial_residual_m": 4.970350984956351e-09,
+    "source_chord_sagitta_m": 6.25985605483044e-05
+  },
+  {
+    "component": 11,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "X",
+    "center": [
+      -0.47200000286102295,
+      0.0,
+      0.23399999737739563
+    ],
+    "radius": 0.016000000394676125,
+    "height": 0.003000020980834961,
+    "max_vertex_radial_residual_m": 3.90145294543176e-09,
+    "source_chord_sagitta_m": 7.704437514532256e-05
+  },
+  {
+    "component": 12,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "X",
+    "center": [
+      -0.4779999852180481,
+      0.0,
+      0.23399999737739563
+    ],
+    "radius": 0.013000001513281588,
+    "height": 0.012000024318695068,
+    "max_vertex_radial_residual_m": 4.970350984956351e-09,
+    "source_chord_sagitta_m": 6.25985605483044e-05
+  },
+  {
+    "component": 13,
+    "usd_type": "Cube",
+    "body": "base_link",
+    "source_faces": 12
+  },
+  {
+    "component": 14,
+    "usd_type": "Cube",
+    "body": "base_link",
+    "source_faces": 12
+  },
+  {
+    "component": 15,
+    "usd_type": "Cube",
+    "body": "base_link",
+    "source_faces": 12
+  },
+  {
+    "component": 16,
+    "usd_type": "Cube",
+    "body": "base_link",
+    "source_faces": 12
+  },
+  {
+    "component": 17,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "X",
+    "center": [
+      0.47600001096725464,
+      0.02199999983963168,
+      0.14499999582767487
+    ],
+    "radius": 0.008000000767167588,
+    "height": 0.0040000081062316895,
+    "max_vertex_radial_residual_m": 3.747002035037195e-09,
+    "source_chord_sagitta_m": 3.8522190316546195e-05
+  },
+  {
+    "component": 18,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "X",
+    "center": [
+      0.47600001096725464,
+      -0.021999999839631683,
+      0.14499999582767487
+    ],
+    "radius": 0.008000000767167588,
+    "height": 0.0040000081062316895,
+    "max_vertex_radial_residual_m": 3.747002031567748e-09,
+    "source_chord_sagitta_m": 3.8522190316546195e-05
+  },
+  {
+    "component": 19,
+    "usd_type": "Cube",
+    "body": "base_link",
+    "source_faces": 12
+  },
+  {
+    "component": 20,
+    "usd_type": "Cube",
+    "body": "base_link",
+    "source_faces": 12
+  },
+  {
+    "component": 21,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "X",
+    "center": [
+      0.47699999809265137,
+      0.0,
+      0.10499999672174454
+    ],
+    "radius": 0.004000000444731739,
+    "height": 0.0040000081062316895,
+    "max_vertex_radial_residual_m": 1.7952418388672564e-09,
+    "source_chord_sagitta_m": 1.9261095452717166e-05
+  },
+  {
+    "component": 22,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "X",
+    "center": [
+      0.47600001096725464,
+      0.1599999964237213,
+      0.17000000178813934
+    ],
+    "radius": 0.0035000001140531745,
+    "height": 0.001999974250793457,
+    "max_vertex_radial_residual_m": 4.706264977553942e-09,
+    "source_chord_sagitta_m": 1.685345719650796e-05
+  },
+  {
+    "component": 23,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "X",
+    "center": [
+      0.47600001096725464,
+      -0.1599999964237213,
+      0.17000000178813934
+    ],
+    "radius": 0.0035000001140531745,
+    "height": 0.001999974250793457,
+    "max_vertex_radial_residual_m": 4.706264977553942e-09,
+    "source_chord_sagitta_m": 1.685345719650796e-05
+  },
+  {
+    "component": 24,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "X",
+    "center": [
+      0.47600001096725464,
+      0.1599999964237213,
+      0.07500000298023224
+    ],
+    "radius": 0.003500000888419196,
+    "height": 0.001999974250793457,
+    "max_vertex_radial_residual_m": 5.480630998946218e-09,
+    "source_chord_sagitta_m": 1.6853460925292006e-05
+  },
+  {
+    "component": 25,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "X",
+    "center": [
+      0.47600001096725464,
+      -0.1599999964237213,
+      0.07500000298023224
+    ],
+    "radius": 0.003500000888419196,
+    "height": 0.001999974250793457,
+    "max_vertex_radial_residual_m": 5.480630998946218e-09,
+    "source_chord_sagitta_m": 1.6853460925292006e-05
+  },
+  {
+    "component": 26,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "Y",
+    "center": [
+      -0.009999999832474868,
+      0.32600000500679016,
+      0.17000000178813934
+    ],
+    "radius": 0.003500000078352457,
+    "height": 0.001999974250793457,
+    "max_vertex_radial_residual_m": 5.219088028505375e-09,
+    "source_chord_sagitta_m": 1.6853457024599246e-05
+  },
+  {
+    "component": 27,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "Y",
+    "center": [
+      -0.009999999832474868,
+      -0.32600000500679016,
+      0.17000000178813934
+    ],
+    "radius": 0.003500000078352457,
+    "height": 0.001999974250793457,
+    "max_vertex_radial_residual_m": 5.219088028505375e-09,
+    "source_chord_sagitta_m": 1.6853457024599246e-05
+  },
+  {
+    "component": 28,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "Y",
+    "center": [
+      0.009999999832474868,
+      0.32600000500679016,
+      0.17000000178813934
+    ],
+    "radius": 0.003500000078352457,
+    "height": 0.001999974250793457,
+    "max_vertex_radial_residual_m": 5.219088028505375e-09,
+    "source_chord_sagitta_m": 1.6853457024599246e-05
+  },
+  {
+    "component": 29,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "Y",
+    "center": [
+      0.009999999832474868,
+      -0.32600000500679016,
+      0.17000000178813934
+    ],
+    "radius": 0.003500000078352457,
+    "height": 0.001999974250793457,
+    "max_vertex_radial_residual_m": 5.219088028505375e-09,
+    "source_chord_sagitta_m": 1.6853457024599246e-05
+  },
+  {
+    "component": 30,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "Y",
+    "center": [
+      -0.009999999832474848,
+      0.32600000500679016,
+      0.07500000298023224
+    ],
+    "radius": 0.003500000852718593,
+    "height": 0.001999974250793457,
+    "max_vertex_radial_residual_m": 2.2465418501177448e-09,
+    "source_chord_sagitta_m": 1.6853460753383847e-05
+  },
+  {
+    "component": 31,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "Y",
+    "center": [
+      -0.009999999832474848,
+      -0.32600000500679016,
+      0.07500000298023224
+    ],
+    "radius": 0.003500000852718593,
+    "height": 0.001999974250793457,
+    "max_vertex_radial_residual_m": 2.2465418501177448e-09,
+    "source_chord_sagitta_m": 1.6853460753383847e-05
+  },
+  {
+    "component": 32,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "Y",
+    "center": [
+      0.009999999832474848,
+      0.32600000500679016,
+      0.07500000298023224
+    ],
+    "radius": 0.003500000852718593,
+    "height": 0.001999974250793457,
+    "max_vertex_radial_residual_m": 2.2465418501177448e-09,
+    "source_chord_sagitta_m": 1.6853460753383847e-05
+  },
+  {
+    "component": 33,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "Y",
+    "center": [
+      0.009999999832474848,
+      -0.32600000500679016,
+      0.07500000298023224
+    ],
+    "radius": 0.003500000852718593,
+    "height": 0.001999974250793457,
+    "max_vertex_radial_residual_m": 2.2465418501177448e-09,
+    "source_chord_sagitta_m": 1.6853460753383847e-05
+  },
+  {
+    "component": 34,
+    "usd_type": "Cylinder",
+    "body": "left_wheel",
+    "source_faces": 124,
+    "axis": "Y",
+    "center": [
+      0.0,
+      0.2930000126361847,
+      0.07619999977894944
+    ],
+    "radius": 0.07619999923468859,
+    "height": 0.0480000376701355,
+    "max_vertex_radial_residual_m": 8.482186869551711e-09,
+    "source_chord_sagitta_m": 0.00036692382389341043
+  },
+  {
+    "component": 35,
+    "usd_type": "Cylinder",
+    "body": "left_wheel",
+    "source_faces": 124,
+    "axis": "Y",
+    "center": [
+      1.397358387223361e-18,
+      0.2930000126361847,
+      0.07619999995261843
+    ],
+    "radius": 0.054863999713120934,
+    "height": 0.050000011920928955,
+    "max_vertex_radial_residual_m": 3.865893612176041e-09,
+    "source_chord_sagitta_m": 0.0002641851544751866
+  },
+  {
+    "component": 36,
+    "usd_type": "Cylinder",
+    "body": "left_wheel",
+    "source_faces": 124,
+    "axis": "Y",
+    "center": [
+      -2.177973636562853e-19,
+      0.2930000126361847,
+      0.07620000125690218
+    ],
+    "radius": 0.02199999981392735,
+    "height": 0.0559999942779541,
+    "max_vertex_radial_residual_m": 5.152953633236201e-09,
+    "source_chord_sagitta_m": 0.00010593601231567689
+  },
+  {
+    "component": 37,
+    "usd_type": "Cylinder",
+    "body": "right_wheel",
+    "source_faces": 124,
+    "axis": "Y",
+    "center": [
+      0.0,
+      -0.2930000126361847,
+      0.07619999977894944
+    ],
+    "radius": 0.07619999923468859,
+    "height": 0.0480000376701355,
+    "max_vertex_radial_residual_m": 8.482186869551711e-09,
+    "source_chord_sagitta_m": 0.00036692382389341043
+  },
+  {
+    "component": 38,
+    "usd_type": "Cylinder",
+    "body": "right_wheel",
+    "source_faces": 124,
+    "axis": "Y",
+    "center": [
+      1.397358387223361e-18,
+      -0.2930000126361847,
+      0.07619999995261843
+    ],
+    "radius": 0.054863999713120934,
+    "height": 0.050000011920928955,
+    "max_vertex_radial_residual_m": 3.865893612176041e-09,
+    "source_chord_sagitta_m": 0.0002641851544751866
+  },
+  {
+    "component": 39,
+    "usd_type": "Cylinder",
+    "body": "right_wheel",
+    "source_faces": 124,
+    "axis": "Y",
+    "center": [
+      -2.177973636562853e-19,
+      -0.2930000126361847,
+      0.07620000125690218
+    ],
+    "radius": 0.02199999981392735,
+    "height": 0.0559999942779541,
+    "max_vertex_radial_residual_m": 5.152953633236201e-09,
+    "source_chord_sagitta_m": 0.00010593601231567689
+  },
+  {
+    "component": 40,
+    "usd_type": "Cylinder",
+    "body": "front_left_fork",
+    "source_faces": 124,
+    "axis": "Z",
+    "center": [
+      0.3499999940395355,
+      0.2199999988079071,
+      0.07500000298023224
+    ],
+    "radius": 0.0280000006162498,
+    "height": 0.013999998569488525,
+    "max_vertex_radial_residual_m": 1.2763037869623073e-08,
+    "source_chord_sagitta_m": 0.0001348276561458972
+  },
+  {
+    "component": 41,
+    "usd_type": "Cube",
+    "body": "front_left_fork",
+    "source_faces": 12
+  },
+  {
+    "component": 42,
+    "usd_type": "Cylinder",
+    "body": "front_left_wheel_1",
+    "source_faces": 124,
+    "axis": "Y",
+    "center": [
+      0.33500000834465027,
+      0.2370000034570694,
+      0.03809999990652342
+    ],
+    "radius": 0.03810000075455004,
+    "height": 0.013000011444091797,
+    "max_vertex_radial_residual_m": 9.847778537075413e-09,
+    "source_chord_sagitta_m": 0.0001834619174226617
+  },
+  {
+    "component": 43,
+    "usd_type": "Cylinder",
+    "body": "front_left_wheel_2",
+    "source_faces": 124,
+    "axis": "Y",
+    "center": [
+      0.33500000834465027,
+      0.2029999941587448,
+      0.03809999990652342
+    ],
+    "radius": 0.03810000075455004,
+    "height": 0.013000011444091797,
+    "max_vertex_radial_residual_m": 9.847778537075413e-09,
+    "source_chord_sagitta_m": 0.0001834619174226617
+  },
+  {
+    "component": 44,
+    "usd_type": "Cylinder",
+    "body": "front_right_fork",
+    "source_faces": 124,
+    "axis": "Z",
+    "center": [
+      0.3499999940395355,
+      -0.2199999988079071,
+      0.07500000298023224
+    ],
+    "radius": 0.0280000006162498,
+    "height": 0.013999998569488525,
+    "max_vertex_radial_residual_m": 1.2763037869623073e-08,
+    "source_chord_sagitta_m": 0.0001348276561458972
+  },
+  {
+    "component": 45,
+    "usd_type": "Cube",
+    "body": "front_right_fork",
+    "source_faces": 12
+  },
+  {
+    "component": 46,
+    "usd_type": "Cylinder",
+    "body": "front_right_wheel_1",
+    "source_faces": 124,
+    "axis": "Y",
+    "center": [
+      0.33500000834465027,
+      -0.2029999941587448,
+      0.03809999990652342
+    ],
+    "radius": 0.03810000075455004,
+    "height": 0.013000011444091797,
+    "max_vertex_radial_residual_m": 9.847778537075413e-09,
+    "source_chord_sagitta_m": 0.0001834619174226617
+  },
+  {
+    "component": 47,
+    "usd_type": "Cylinder",
+    "body": "front_right_wheel_2",
+    "source_faces": 124,
+    "axis": "Y",
+    "center": [
+      0.33500000834465027,
+      -0.2370000034570694,
+      0.03809999990652342
+    ],
+    "radius": 0.03810000075455004,
+    "height": 0.013000011444091797,
+    "max_vertex_radial_residual_m": 9.847778537075413e-09,
+    "source_chord_sagitta_m": 0.0001834619174226617
+  },
+  {
+    "component": 48,
+    "usd_type": "Cylinder",
+    "body": "rear_left_fork",
+    "source_faces": 124,
+    "axis": "Z",
+    "center": [
+      -0.3499999940395355,
+      0.2199999988079071,
+      0.07500000298023224
+    ],
+    "radius": 0.0280000006162498,
+    "height": 0.013999998569488525,
+    "max_vertex_radial_residual_m": 1.2763037869623073e-08,
+    "source_chord_sagitta_m": 0.0001348276561458972
+  },
+  {
+    "component": 49,
+    "usd_type": "Cube",
+    "body": "rear_left_fork",
+    "source_faces": 12
+  },
+  {
+    "component": 50,
+    "usd_type": "Cylinder",
+    "body": "rear_left_wheel_1",
+    "source_faces": 124,
+    "axis": "Y",
+    "center": [
+      -0.36500000953674316,
+      0.2370000034570694,
+      0.03809999990652342
+    ],
+    "radius": 0.03810000075455004,
+    "height": 0.013000011444091797,
+    "max_vertex_radial_residual_m": 9.847778537075413e-09,
+    "source_chord_sagitta_m": 0.0001834619174226617
+  },
+  {
+    "component": 51,
+    "usd_type": "Cylinder",
+    "body": "rear_left_wheel_2",
+    "source_faces": 124,
+    "axis": "Y",
+    "center": [
+      -0.36500000953674316,
+      0.2029999941587448,
+      0.03809999990652342
+    ],
+    "radius": 0.03810000075455004,
+    "height": 0.013000011444091797,
+    "max_vertex_radial_residual_m": 9.847778537075413e-09,
+    "source_chord_sagitta_m": 0.0001834619174226617
+  },
+  {
+    "component": 52,
+    "usd_type": "Cylinder",
+    "body": "rear_right_fork",
+    "source_faces": 124,
+    "axis": "Z",
+    "center": [
+      -0.3499999940395355,
+      -0.2199999988079071,
+      0.07500000298023224
+    ],
+    "radius": 0.0280000006162498,
+    "height": 0.013999998569488525,
+    "max_vertex_radial_residual_m": 1.2763037869623073e-08,
+    "source_chord_sagitta_m": 0.0001348276561458972
+  },
+  {
+    "component": 53,
+    "usd_type": "Cube",
+    "body": "rear_right_fork",
+    "source_faces": 12
+  },
+  {
+    "component": 54,
+    "usd_type": "Cylinder",
+    "body": "rear_right_wheel_1",
+    "source_faces": 124,
+    "axis": "Y",
+    "center": [
+      -0.36500000953674316,
+      -0.2029999941587448,
+      0.03809999990652342
+    ],
+    "radius": 0.03810000075455004,
+    "height": 0.013000011444091797,
+    "max_vertex_radial_residual_m": 9.847778537075413e-09,
+    "source_chord_sagitta_m": 0.0001834619174226617
+  },
+  {
+    "component": 55,
+    "usd_type": "Cylinder",
+    "body": "rear_right_wheel_2",
+    "source_faces": 124,
+    "axis": "Y",
+    "center": [
+      -0.36500000953674316,
+      -0.2370000034570694,
+      0.03809999990652342
+    ],
+    "radius": 0.03810000075455004,
+    "height": 0.013000011444091797,
+    "max_vertex_radial_residual_m": 9.847778537075413e-09,
+    "source_chord_sagitta_m": 0.0001834619174226617
+  },
+  {
+    "component": 56,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "Z",
+    "center": [
+      0.3799999952316284,
+      -5.043728575159312e-19,
+      0.20900000631809235
+    ],
+    "radius": 0.03800000170639482,
+    "height": 0.018000006675720215,
+    "max_vertex_radial_residual_m": 1.4104160936390109e-08,
+    "source_chord_sagitta_m": 0.0001829803946732742
+  },
+  {
+    "component": 57,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "Z",
+    "center": [
+      0.3799999952316284,
+      0.0,
+      0.2240000069141388
+    ],
+    "radius": 0.03400000590476167,
+    "height": 0.01199999451637268,
+    "max_vertex_radial_residual_m": 1.018503219957223e-08,
+    "source_chord_sagitta_m": 0.0001637193215783458
+  },
+  {
+    "component": 58,
+    "usd_type": "Cylinder",
+    "body": "base_link",
+    "source_faces": 124,
+    "axis": "Z",
+    "center": [
+      0.3799999952316284,
+      -5.043728575159312e-19,
+      0.23350000381469727
+    ],
+    "radius": 0.03800000170639482,
+    "height": 0.006999999284744263,
+    "max_vertex_radial_residual_m": 1.4104160936390109e-08,
+    "source_chord_sagitta_m": 0.0001829803946732742
+  }
+]

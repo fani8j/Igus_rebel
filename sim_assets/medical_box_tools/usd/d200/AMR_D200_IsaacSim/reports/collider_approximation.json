@@ -1,0 +1,37 @@
+[
+  {
+    "component": 0,
+    "vertices": 104,
+    "triangles": 204,
+    "outline_hausdorff_m": 0.0,
+    "visual_geometry_changed": false
+  },
+  {
+    "component": 5,
+    "vertices": 104,
+    "triangles": 204,
+    "outline_hausdorff_m": 0.0,
+    "visual_geometry_changed": false
+  },
+  {
+    "component": 6,
+    "vertices": 104,
+    "triangles": 204,
+    "outline_hausdorff_m": 0.0,
+    "visual_geometry_changed": false
+  },
+  {
+    "component": 7,
+    "vertices": 104,
+    "triangles": 204,
+    "outline_hausdorff_m": 0.0,
+    "visual_geometry_changed": false
+  },
+  {
+    "component": 8,
+    "vertices": 104,
+    "triangles": 204,
+    "outline_hausdorff_m": 0.0,
+    "visual_geometry_changed": false
+  }
+]

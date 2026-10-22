@@ -1,0 +1,8 @@
+# Authoring / independent offline verification only; NOT required to open the USD.
+# Versions used in the delivery environment (Python 3.13).
+# Install in a separate build environment, not over Isaac Sim's bundled libraries.
+numpy==2.3.5
+scipy==1.17.0
+trimesh==4.11.1
+shapely==2.1.2
+lark==1.3.1

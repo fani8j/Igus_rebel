@@ -1,2 +1,5 @@
 # results of --gui viewing runs (same physics as the headless results; not kept)
 tests/results/*_gui.json
+
+# the D200 + dual-arm robot USD bundle is kept in the repo (the root .gitignore ignores *.usd)
+!usd/d200/**/*.usd
