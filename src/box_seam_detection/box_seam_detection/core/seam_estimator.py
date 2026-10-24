@@ -1700,6 +1700,28 @@ def _estimate_seam_core(bgr: np.ndarray, corners,
             result, est_block, _prof, M, axis, mmpp, prior_block,
             observed, score, info, obs, dark_eps, dark_score, dark_info, dark,
             agreement, dark_rect, target_rect, max_ang)
+    # publish_confirmed "observed" (generic / later profiles only; small/big
+    # keep their validated view-shift model): once the observed gap valley
+    # CONFIRMS the prior with the unchanged gates, publish the gap line
+    # instead of the prior. Accept/reject is identical to "prior".
+    _pc = ((est_cfg or {}).get("publish_confirmed", "prior")
+           if isinstance(est_cfg, dict) else "prior")
+    _pc = str(_pc).lower() if _pc is not None else "prior"
+    if _pc not in ("prior", "observed"):
+        raise ValueError("publish_confirmed must be 'prior' or 'observed'")
+    pub_confirmed_obs = bool(_pc == "observed" and _prof is not None
+                             and _prof.own_constants)
+
+    def _publish_confirmed(line, src):
+        full = {"seam_left": [float(line[0][0]), float(line[0][1])],
+                "seam_right": [float(line[1][0]), float(line[1][1])]}
+        est_block["estimate_endpoints_px"] = {
+            k: [round(v[0], 1), round(v[1], 1)] for k, v in full.items()}
+        est_block["published_line"] = src
+        result["estimate"] = dict(est_block)
+        result["refined_endpoints_px"] = full
+        result.update({"source": src, "status": "ok"})
+        return result
     if mode == "refine":
         if _mode_none:
             result.update({"refined_endpoints_px": None,
@@ -1828,6 +1850,10 @@ def _estimate_seam_core(bgr: np.ndarray, corners,
                    and dark_agreement.get("max_offset_mm") is not None
                    and dark_agreement["max_offset_mm"] <= max_off
                    and dark_agreement["angle_deg"] <= max_ang)
+        if gap_ok and pub_confirmed_obs:
+            # gap valley only: a darkline-only confirmation keeps the prior
+            # (its fit tilted off the gap on 22 Oct captures 028-031)
+            return _publish_confirmed(observed, "observed_gap_confirmed")
         if gap_ok or dark_ok:
             result.update({"source": (
                 "prior_confirmed_by_gap" if gap_ok
@@ -1899,6 +1925,8 @@ def _estimate_seam_core(bgr: np.ndarray, corners,
         result["refine_score"] = 0.0
         result.update({"source": "prior", "status": "estimated"})
         return result
+    if pub_confirmed_obs:
+        return _publish_confirmed(observed, "observed_gap_confirmed")
     result.update({"source": "prior_confirmed_by_gap", "status": "ok"})
     return result
 

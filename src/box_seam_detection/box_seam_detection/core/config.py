@@ -71,6 +71,10 @@ V2_DEFAULTS: dict = {
         "axis_min_evidence": 8.0,
         "axis_min_margin_ratio": 0.25,
         "seam_mode": "either_confirm",
+        # "prior" = publish the confirmed midline; "observed" = publish the
+        # confirming gap-valley line (generic / later profiles only; scene
+        # dual_arm_v1 sets it). Accept/reject is the same either way.
+        "publish_confirmed": "prior",
         # R10: when the tape evidence cannot choose the axis, take it from
         # the small-box top-face geometry (seam joins the midpoints of the
         # two LONG sides). Published as estimated, never ok.

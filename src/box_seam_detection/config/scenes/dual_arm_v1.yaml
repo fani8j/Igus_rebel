@@ -57,6 +57,9 @@ seam_estimator:
   min_coverage: 0.30
   confirm_min_coverage: 0.30
   darkline_min_coverage: 0.30
+  # generic boxes: publish the confirmed seam on the observed gap centre, not the box midline (the midline sat
+  # 1.5-4 mm toward the camera, on the front flap's lip, on the 22 Oct captures; DESIGN.md "Seam on the observed gap")
+  publish_confirmed: observed
 
 live:
   seam_direction_prior_deg: null     # 83 deg is the old cell's base_link seam direction: disabled here

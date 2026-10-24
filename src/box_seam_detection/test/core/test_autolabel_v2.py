@@ -622,6 +622,55 @@ def test_compute_seam_stage_ok_estimate_wins():
         assert seam["endpoints_px"] is None
 
 
+def _seam_pub(profile, publish):
+    from box_seam_detection.core.pipeline import compute_seam_stage
+    cfg = default_config()
+    cfg["seam_estimator"] = dict(cfg["seam_estimator"],
+                                 publish_confirmed=publish)
+    bgr, quad = _tape_face(None)
+    xyz = {n: [float(i) * 0.112, 0.0, 0.5] for i, n in enumerate(
+        ("back_left", "back_right", "front_right", "front_left"))}
+    return compute_seam_stage(bgr, quad, cfg, corners_xyz=xyz,
+                              profile=profile)
+
+
+def test_publish_confirmed_observed_generic_publishes_gap_line():
+    """publish_confirmed=observed (generic): same status as prior mode,
+    the confirmed seam is published on the observed gap line."""
+    prior, _ = _seam_pub("generic", "prior")
+    obs, stage = _seam_pub("generic", "observed")
+    assert prior["status"] == obs["status"] == "ok", stage
+    assert prior["source"] == "prior_confirmed_by_gap"
+    assert obs["source"] == "observed_gap_confirmed"
+    for k in ("seam_left", "seam_right"):
+        for a, b in zip(obs["endpoints_px"][k],
+                        obs["estimate"]["observed_line"][k]):
+            assert a == pytest.approx(b, abs=0.06)
+        for a, b in zip(prior["endpoints_px"][k],
+                        prior["estimate"]["prior_endpoints_px"][k]):
+            assert a == pytest.approx(b, abs=0.06)
+    assert obs["estimate"]["estimate"]["published_line"] == \
+        "observed_gap_confirmed"
+
+
+def test_publish_confirmed_observed_ignored_for_legacy_profiles():
+    """small/big (validated view-shift model) and no profile keep the prior."""
+    for prof in (None, "small"):
+        a, _ = _seam_pub(prof, "prior")
+        b, _ = _seam_pub(prof, "observed")
+        assert a["status"] == b["status"]
+        assert a["source"] == b["source"]
+        assert a["endpoints_px"] == b["endpoints_px"]
+
+
+def test_publish_confirmed_unknown_value_fails_closed():
+    """A bad value never publishes a seam (estimator error -> ambiguous)."""
+    seam, stage = _seam_pub("generic", "middle")
+    assert seam["status"] == "ambiguous"
+    assert seam["endpoints_px"] is None
+    assert any("publish_confirmed" in r for r in stage["reasons"])
+
+
 def test_compute_seam_stage_refine_mode_publishes_gap():
     """Refine mode (comparison): ok publishes the observed gap line."""
     from box_seam_detection.core.pipeline import compute_seam_stage
@@ -883,3 +932,15 @@ def test_reseam_skips_fold_for_already_folded_source(tmp_path, monkeypatch):
     assert rec["provenance"]["reseam"]["corner_fold"].startswith(
         "skipped_already_folded")
     assert "hidden_mode=keep" in rec["provenance"]["reseam"]["corner_fold"]
+
+
+def test_dual_arm_scene_publishes_confirmed_seam_on_observed_gap():
+    """The dual-arm scene opts in; the built-in default stays on the prior."""
+    from pathlib import Path
+
+    from box_seam_detection.core.scene import scene_config
+    scene_path = (Path(__file__).resolve().parents[2] / "config" / "scenes"
+                  / "dual_arm_v1.yaml")
+    _, cfg = scene_config(str(scene_path))
+    assert cfg["seam_estimator"]["publish_confirmed"] == "observed"
+    assert default_config()["seam_estimator"]["publish_confirmed"] == "prior"

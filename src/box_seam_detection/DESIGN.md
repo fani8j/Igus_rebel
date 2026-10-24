@@ -316,6 +316,17 @@ Profile flags (`core/box_profiles.py`, only `large_392` has them on; small/big s
   rectangle gate and the profile size check evaluate the MEASURED (RGB) quad of a K1 record, so K1 can never launder a
   quad those gates would reject. `AUTOLABEL_V2_TOP_FROM_GAP=shadow|off` computes-and-records / disables it.
 
+## Seam on the observed gap for generic boxes (2026-10-24; `seam_estimator.publish_confirmed: prior | observed`, default `prior`)
+
+`prior` (default in `core/config.py`; scene `dual_arm_v1` sets `observed`): a confirmed seam is published on the projective
+midline of the quad (`prior_confirmed_by_gap` / `_by_darkline`). `observed`: when the observed gap VALLEY confirms the midline
+with the unchanged confirm gates, the gap line itself is published (source `observed_gap_confirmed`,
+`seam.estimate.estimate.published_line`). Only for profiles with `own_constants` (generic and later); small/big keep their
+validated view-shift model; a darkline-only confirmation keeps the midline (its fit tilted off the gap on 22 Oct captures
+028-031). Accept/reject never changes. Offline replay of the 22 Oct 393x274 carton (40 captures, `bsd_tools/seam_publish_replay.py`):
+identical statuses; the 16 gap-confirmed seams move 0.6-4.4 mm away from the camera onto the 2-3 mm gap centre (midline sat on
+the front flap's lip); an unknown value fails closed (estimator error -> ambiguous).
+
 ## Truncation recovery (2026-10-13; scene key `truncation_recovery.mode: off | shadow | on`)
 
 Failure: SAM3 outlines only ONE FLAP of the lid (back edge -> flap gap, ~399 x 162 mm). The half-top is coplanar, so the
