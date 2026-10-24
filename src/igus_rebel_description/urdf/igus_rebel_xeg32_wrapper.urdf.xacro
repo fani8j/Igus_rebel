@@ -6,6 +6,8 @@
   <xacro:arg name="hardware_protocol" default="rebel"/>
   <!-- CRI controller address: 192.168.3.11 = wired LAN (default), 192.168.50.133 = Wi-Fi. -->
   <xacro:arg name="robot_ip" default="192.168.3.11"/>
+  <!-- CRI MoveJoint velocity cap [%] (driver default 25, hard cap 100); raise only for supervised tests. -->
+  <xacro:arg name="move_joint_max_velocity_percent" default="25"/>
   <xacro:arg name="include_ros2_control" default="true"/>
   <xacro:arg name="attach_xeg32" default="true"/>
 
@@ -21,7 +23,8 @@
     <xacro:igus_rebel_control
       arm_id="rebel_arm"
       hardware_protocol="$(arg hardware_protocol)"
-      robot_ip="$(arg robot_ip)"/>
+      robot_ip="$(arg robot_ip)"
+      move_joint_max_velocity_percent="$(arg move_joint_max_velocity_percent)"/>
   </xacro:if>
 
   <!-- Same world attachment used by igus_rebel_robot2.urdf.xacro. -->

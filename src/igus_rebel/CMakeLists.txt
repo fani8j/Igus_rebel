@@ -45,6 +45,7 @@ add_library(${PROJECT_NAME} SHARED
 target_link_libraries(${PROJECT_NAME} ${PROJECT_NAME}_cri)
 ament_target_dependencies(${PROJECT_NAME}
   rclcpp rclcpp_action rclcpp_lifecycle pluginlib hardware_interface igus_rebel_msgs std_srvs
+  sensor_msgs
 )
 
 # Mock of the robot-side joint move for hardware_protocol:=mock_hardware (see rebel.launch.py,
@@ -101,6 +102,7 @@ if(BUILD_TESTING)
   target_link_libraries(test_rebel_driver ${PROJECT_NAME})
   ament_target_dependencies(test_rebel_driver
     rclcpp rclcpp_action rclcpp_lifecycle hardware_interface igus_rebel_msgs std_srvs
+    sensor_msgs
   )
 
   find_package(ament_lint_auto REQUIRED)

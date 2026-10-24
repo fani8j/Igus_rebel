@@ -22,6 +22,12 @@ def generate_launch_description():
         choices=["mock_hardware", "gazebo", "isaac_topic", "rebel"],
         description="Which hardware protocol or mock hardware should be used",
     )
+    move_joint_vel_arg = DeclareLaunchArgument(
+        "move_joint_max_velocity_percent",
+        default_value="25",
+        description="CRI MoveJoint velocity cap in percent (driver default 25, hard cap 100); raise only "
+                    "for supervised real-arm tests",
+    )
     robot_ip_arg = DeclareLaunchArgument(
         "robot_ip",
         default_value="192.168.3.11",
@@ -78,6 +84,8 @@ def generate_launch_description():
                 LaunchConfiguration("robot_ip"),
                 " tool_variant:=",
                 LaunchConfiguration("tool_variant"),
+                " move_joint_max_velocity_percent:=",
+                LaunchConfiguration("move_joint_max_velocity_percent"),
             ]
         ),
         value_type=str,
@@ -168,6 +176,7 @@ def generate_launch_description():
     return LaunchDescription([
         hardware_protocol_arg,
         robot_ip_arg,
+        move_joint_vel_arg,
         tool_variant_arg,
         mock_move_joint_arg,
         ros2_control_node,

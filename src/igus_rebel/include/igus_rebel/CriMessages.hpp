@@ -38,8 +38,10 @@ enum class MessageType
   CYCLESTAT,
   MOVETOEXECACK,
   MOVETOEXECEND,
+  MOVETOEXECERROR,
   EXECACK,
   EXECEND,
+  EXECERROR,
   UNKNOWN = 1000
 };
 
@@ -199,10 +201,13 @@ public:
   float workload;   // as sent by the controller (iRC V15: fraction, e.g. 0.2 = 20 %)
 };
 
-// MOVETOEXECACK / MOVETOEXECEND / EXECACK / EXECEND: "<counter> <TYPE> <code> <sub> <program>
-// [<reason>]". `reason` is empty for ACK messages. Measured on the real robot: ACK is
-// "0 0 MoveTo", a finished move "-1 0 MoveTo PLAN", a move stopped by CMD Move Stop
-// "0 0 MoveTo USER". These messages carry no command counter.
+// MOVETOEXECACK / MOVETOEXECEND / MOVETOEXECERROR / EXECACK / EXECEND / EXECERROR:
+// "<counter> <TYPE> <code> <sub> <program> [<reason...>]". `reason` is the WHOLE remainder after
+// the program token, joined with single spaces (empty for ACK messages). Measured on the real
+// robot: ACK is "0 0 MoveTo", a finished move "-1 0 MoveTo PLAN", a move stopped by CMD Move Stop
+// "0 0 MoveTo USER", an e-stop "605 MOVETOEXECERROR 0 0 MoveTo Hardware error _ESTOP" (reason
+// "Hardware error _ESTOP"; the code 0 of an ERROR does not mean success). These messages carry no
+// command counter.
 class ExecEvent : public CriMessage
 {
 public:

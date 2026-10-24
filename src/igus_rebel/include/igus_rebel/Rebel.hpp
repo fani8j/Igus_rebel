@@ -19,6 +19,8 @@
 #include "rclcpp_lifecycle/state.hpp"
 #include "igus_rebel_msgs/action/move_joint.hpp"
 #include "igus_rebel_msgs/msg/digital_output.hpp"
+#include "igus_rebel_msgs/msg/hardware_state.hpp"
+#include "sensor_msgs/msg/joint_state.hpp"
 #include "igus_rebel_msgs/srv/set_digital_output.hpp"
 #include "std_srvs/srv/trigger.hpp"
 #include <hardware_interface/system_interface.hpp>
@@ -49,6 +51,9 @@ private:
   {
     std::array<double, 6> positionRad{};
     Safety::SteadyClock::time_point stamp{};
+    // Wall-clock (system_clock) time of the same instant, ns since the Unix epoch: the header
+    // stamp of ~/robot_joint_states (the acquisition time of the sample, never "now").
+    std::int64_t systemStampNs = 0;
     std::uint64_t sequence = 0;  // 0 = no valid STATUS yet
     float overridePercent = 0.0f;
     // Cumulative count of CRI message counter values skipped (any message type) up to this
@@ -84,7 +89,21 @@ private:
   // and never cleared automatically. Only on_activate() clears it, and only after confirming a
   // fresh STATUS. The component name (from the URDF ros2_control tag) is used in the log/recovery
   // text so the operator has the exact commands to run.
+  //
+  // WHILE LATCHED /joint_states IS FROZEN AND MUST NOT BE TRUSTED: read() returns ERROR, so
+  // ros2_control moves the component to UNCONFIGURED and stops calling read(); the state
+  // interfaces keep their last values and joint_state_broadcaster keeps publishing them with
+  // fresh stamps (measured: the arm coasted on while /joint_states stayed put). The driver does
+  // not touch the state interfaces from any other thread (data race) and does not write NaN into
+  // them. Use the node's own telemetry instead, which keeps running while latched, UNCONFIGURED
+  // or INACTIVE: ~/robot_joint_states (latest STATUS, stamped with its receive time) and
+  // ~/hardware_state (latched, latch_reason, status age, ...), see PublishTelemetry().
   std::atomic<bool> hardwareErrorLatched_{false};
+  // First cause of the current latch (set right after the latch flag by LatchHardwareError /
+  // OnPeerFault, cleared when the latch clears). latchVersion_ changes on every set/clear.
+  mutable std::mutex latchReasonLock_;
+  std::string latchReason_;
+  std::atomic<std::uint64_t> latchVersion_{0};
   std::string componentName_;
   // Optional hardware parameters (see on_init); the defaults reproduce the single-arm names.
   // Two Igus/Rebel instances in one controller_manager need distinct node_name values (and
@@ -191,6 +210,12 @@ private:
     bool endSeen = false;     // MOVETOEXECEND
     int endCode = 0;
     std::string endReason;
+    // MOVETOEXECERROR (or an EXECERROR while the move is active): the robot failed the move,
+    // e.g. "605 MOVETOEXECERROR 0 0 MoveTo Hardware error _ESTOP". The numeric code 0 does NOT
+    // mean success. The first error of the goal is kept. It never confirms a pending Move Stop.
+    bool errorSeen = false;
+    std::string errorType;    // "MOVETOEXECERROR" or "EXECERROR"
+    std::string errorReason;  // everything after the program token
   };
 
   std::atomic<int> moveState_{kMoveIdle};
@@ -203,7 +228,9 @@ private:
   // ONLY when the robot is known to have stopped: (a) MOVETOEXECEND of the move, (b) standstill
   // on fresh STATUS after motion was seen, or (c) all six drives disabled on fresh STATUS (the
   // robot cannot move) -- or when a fresh start-up sequence / on_init resets the driver, or the
-  // move that owned it ended without a stop. Standstill without ever seeing motion does NOT
+  // move that owned it ended without a stop. A MOVETOEXECERROR / EXECERROR (the robot reporting
+  // that it failed, e.g. an e-stop) is NOT a confirmation: it faults the move and requests the
+  // stop, which then needs one of (a)-(c). Standstill without ever seeing motion does NOT
   // confirm (the robot may not have started yet). Recovery of a never-confirmed stop: e-stop
   // (or switch the drives off) -> "Pending CMD Move Stop confirmed" is logged -> inactive ->
   // active (set_hardware_component_state) -> cycle the controllers.
@@ -254,6 +281,28 @@ private:
   rclcpp::CallbackGroup::SharedPtr moveGroup_;
   rclcpp_action::Server<MoveJointAction>::SharedPtr moveServer_;
 
+  // ---- Telemetry that survives a latch (see hardwareErrorLatched_) ----
+  // ~/robot_joint_states: published by the message thread once per NEW valid STATUS. The
+  // velocity estimate state below is message-thread only.
+  rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr robotJointStatePub_;
+  std::array<double, 6> pubLastPos_{};
+  std::int64_t pubLastStampNs_ = 0;  // steady ns of the sample pubLastPos_ belongs to; 0 = none
+  std::array<double, 6> pubVel_{};
+  bool pubVelValid_ = false;
+  // ~/hardware_state: a timer (own callback group, so reset_and_enable cannot stall it) polls
+  // every kTelemetryPollPeriod and publishes at 10 Hz and immediately when a flag changed.
+  rclcpp::Publisher<igus_rebel_msgs::msg::HardwareState>::SharedPtr hardwareStatePub_;
+  rclcpp::CallbackGroup::SharedPtr telemetryGroup_;
+  rclcpp::TimerBase::SharedPtr hardwareStateTimer_;
+  // Timer callback only.
+  std::uint64_t hwPubLastKey_ = 0;
+  std::int64_t hwPubLastNs_ = 0;
+  std::uint64_t hwPubLastVersion_ = 0;
+  void PublishRobotJointStates(const JointSnapshot & sample);
+  void PublishHardwareState();
+  void SetLatchReason(const std::string & reason);
+  void ClearLatchReason();
+
   void RequestMoveStop();
   bool SendMoveStopNow();
   void ConsumeMoveStopRequest();
@@ -268,7 +317,7 @@ private:
   std::uint8_t CheckMoveAcceptable(
     const MoveJointAction::Goal & goal, Move::Joints & measured, Move::Joints & start,
     Move::Joints & target, std::string & reason);
-  void RecordMoveEvent(const CriMessages::ExecEvent & event, bool isEnd);
+  void RecordMoveEvent(const CriMessages::ExecEvent & event, CriMessages::MessageType type);
 
   // Thread functions
   void AliveThreadFunction();

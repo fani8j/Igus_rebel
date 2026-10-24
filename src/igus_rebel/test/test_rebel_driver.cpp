@@ -31,6 +31,8 @@
 
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "igus_rebel_msgs/action/move_joint.hpp"
+#include "igus_rebel_msgs/msg/hardware_state.hpp"
+#include "sensor_msgs/msg/joint_state.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "std_srvs/srv/trigger.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -144,6 +146,13 @@ public:
   void SetMoveAbortAfterS(double seconds) {moveAbortAfterS_ = seconds;}
   // The robot reports PLAN but joint 1 stops this many degrees short of the target.
   void SetMoveEndShortDeg(double deg) {moveEndShortDeg_ = deg;}
+  // Sends "<counter> <body>" to the connected client on the next loop iteration (about 2 ms),
+  // e.g. "MOVETOEXECERROR 0 0 MoveTo Hardware error _ESTOP". Messages go out in call order.
+  void InjectMessage(const std::string & body)
+  {
+    std::lock_guard<std::mutex> lock(injectMutex_);
+    injected_.push_back(body);
+  }
   // Shifts the standing arm (a settle of a few mrad) without any move.
   void NudgeJointDeg(int joint, float deg)
   {
@@ -438,6 +447,16 @@ private:
           }
         }
         {
+          std::vector<std::string> injected;
+          {
+            std::lock_guard<std::mutex> lock(injectMutex_);
+            injected.swap(injected_);
+          }
+          for (const auto & body : injected) {
+            SendAll(client, "CRISTART " + std::to_string(counter++) + " " + body + " CRIEND\n");
+          }
+        }
+        {
           std::string end;
           {
             std::lock_guard<std::mutex> lock(moveMutex_);
@@ -486,6 +505,9 @@ private:
   std::mutex mutex_;
   std::vector<ReceivedFrame> frames_;
   std::vector<MoveCommand> moveCommands_;  // guarded by mutex_
+
+  std::mutex injectMutex_;
+  std::vector<std::string> injected_;  // guarded by injectMutex_
 
   std::mutex moveMutex_;
   std::array<float, 6> currentDeg_{};  // set from baseJointsDeg when the server starts
@@ -557,6 +579,126 @@ hardware_interface::HardwareInfo MakeInfo(
 
 const std::vector<std::string> kStartupSequence = {
   "Move Stop", "SetActive true", "Reset", "Enable", "MotionTypeJoint", "Override 100.0"};
+
+std::int64_t SystemNowNs()
+{
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+// Subscribes to the driver's own telemetry (~/robot_joint_states, ~/hardware_state) from a
+// separate node spun on its own thread, and keeps every message with its arrival time.
+class TelemetryListener
+{
+public:
+  using JointState = sensor_msgs::msg::JointState;
+  using HardwareState = igus_rebel_msgs::msg::HardwareState;
+  struct JointSample
+  {
+    JointState msg;
+    Clock::time_point received{};
+    std::int64_t receivedSystemNs = 0;
+  };
+  struct StateSample
+  {
+    HardwareState msg;
+    Clock::time_point received{};
+  };
+
+  explicit TelemetryListener(const std::string & driverNode = "igus_rebel")
+  {
+    node_ = std::make_shared<rclcpp::Node>("telemetry_listener_" + std::to_string(counter_++));
+    jointSub_ = node_->create_subscription<JointState>(
+      "/" + driverNode + "/robot_joint_states", rclcpp::SensorDataQoS().keep_last(10),
+      [this](JointState::ConstSharedPtr msg) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        joints_.push_back({*msg, Clock::now(), SystemNowNs()});
+      });
+    stateSub_ = node_->create_subscription<HardwareState>(
+      "/" + driverNode + "/hardware_state", rclcpp::QoS(rclcpp::KeepLast(10)).reliable(),
+      [this](HardwareState::ConstSharedPtr msg) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        states_.push_back({*msg, Clock::now()});
+      });
+    executor_.add_node(node_);
+    thread_ = std::thread([this]() {executor_.spin(); finished_ = true;});
+  }
+  ~TelemetryListener()
+  {
+    while (!finished_) {
+      executor_.cancel();
+      std::this_thread::sleep_for(2ms);
+    }
+    if (thread_.joinable()) {
+      thread_.join();
+    }
+  }
+
+  std::size_t JointCount()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return joints_.size();
+  }
+  std::size_t StateCount()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return states_.size();
+  }
+  std::vector<JointSample> Joints()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return joints_;
+  }
+  std::vector<StateSample> States()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return states_;
+  }
+  JointSample LastJoint()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return joints_.empty() ? JointSample() : joints_.back();
+  }
+  HardwareState LastState()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return states_.empty() ? HardwareState() : states_.back().msg;
+  }
+  // Waits until the newest hardware_state satisfies `predicate`.
+  template<class Predicate>
+  bool WaitState(Predicate predicate, std::chrono::milliseconds timeout)
+  {
+    return WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return !states_.empty() && predicate(states_.back().msg);
+      }, timeout);
+  }
+  // Waits until the newest robot_joint_states satisfies `predicate`.
+  template<class Predicate>
+  bool WaitJoint(Predicate predicate, std::chrono::milliseconds timeout)
+  {
+    return WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return !joints_.empty() && predicate(joints_.back());
+      }, timeout);
+  }
+
+private:
+  static inline std::atomic<int> counter_{0};
+  std::atomic<bool> finished_{false};
+  rclcpp::Node::SharedPtr node_;
+  rclcpp::Subscription<JointState>::SharedPtr jointSub_;
+  rclcpp::Subscription<HardwareState>::SharedPtr stateSub_;
+  rclcpp::executors::SingleThreadedExecutor executor_;
+  std::thread thread_;
+  std::mutex mutex_;
+  std::vector<JointSample> joints_;
+  std::vector<StateSample> states_;
+};
+
+constexpr double kDegToRad = Igus::Safety::kDegToRad;
 
 class RebelDriverTest : public ::testing::Test
 {
@@ -1107,6 +1249,196 @@ TEST_F(RebelDriverTest, LongStatusGapLatches)
   EXPECT_EQ(rebel->read(now, period), return_type::OK);
 }
 
+// ---- Telemetry that survives a latch: ~/robot_joint_states and ~/hardware_state ----
+// These tests drive the plugin directly (no controller_manager), as the tests above do: a
+// ControllerLoop emulates read()/write(), and on_error()/on_configure()/on_activate() are called
+// the way ros2_control calls them. They therefore verify what the driver publishes, not what
+// joint_state_broadcaster does with the frozen state interfaces.
+
+TEST_F(RebelDriverTest, TelemetryFlowsWhileInactiveAndAtTenHertz)
+{
+  FakeCriServer server;
+  StartDriver(server);
+  TelemetryListener telemetry;
+  // Never activated: the component is INACTIVE, read() is not called, telemetry still flows.
+  ASSERT_TRUE(WaitFor([&]() {return telemetry.JointCount() >= 5 && telemetry.StateCount() >= 3;}, 4000ms));
+
+  const auto joint = telemetry.LastJoint();
+  ASSERT_EQ(joint.msg.name.size(), 6u);
+  ASSERT_EQ(joint.msg.position.size(), 6u);
+  for (std::size_t i = 0; i < 6; ++i) {
+    EXPECT_EQ(joint.msg.name[i], rebel->JointNames()[i]);
+    EXPECT_NEAR(joint.msg.position[i], server.baseJointsDeg[i] * kDegToRad, 1e-5);
+  }
+  // Stamp = acquisition time of the sample: shortly before it arrived, never after.
+  const std::int64_t stampNs = rclcpp::Time(joint.msg.header.stamp).nanoseconds();
+  EXPECT_LE(stampNs, joint.receivedSystemNs);
+  EXPECT_LT(joint.receivedSystemNs - stampNs, 100'000'000);
+
+  const auto hw = telemetry.LastState();
+  EXPECT_EQ(hw.component, "rebel_arm_controller");
+  EXPECT_TRUE(hw.connected);
+  EXPECT_GE(hw.connection_count, 1u);
+  EXPECT_GT(hw.status_sequence, 0u);
+  EXPECT_TRUE(hw.status_fresh);
+  EXPECT_GE(hw.status_age_s, 0.0);
+  EXPECT_LT(hw.status_age_s, 0.2);
+  EXPECT_FALSE(hw.latched);
+  EXPECT_TRUE(hw.latch_reason.empty());
+  EXPECT_FALSE(hw.activated);
+  EXPECT_FALSE(hw.move_active);
+  EXPECT_FALSE(hw.move_stop_pending);
+  EXPECT_EQ(hw.drives_disabled_mask, 0u);
+  EXPECT_EQ(hw.kinstate, 0);
+  EXPECT_GT(rclcpp::Time(hw.status_stamp).nanoseconds(), 0);
+
+  // hardware_state at 10 Hz while nothing changes; robot_joint_states once per STATUS (20 ms).
+  const std::size_t states0 = telemetry.StateCount();
+  const std::size_t joints0 = telemetry.JointCount();
+  std::this_thread::sleep_for(1000ms);
+  const std::size_t states = telemetry.StateCount() - states0;
+  const std::size_t joints = telemetry.JointCount() - joints0;
+  EXPECT_GE(states, 8u);
+  EXPECT_LE(states, 13u);
+  EXPECT_GE(joints, 35u);
+  EXPECT_LE(joints, 55u);
+
+  // Activation shows up (immediately, not only at the next 10 Hz tick).
+  ASSERT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_TRUE(telemetry.WaitState([](const auto & msg) {return msg.activated;}, 60ms));
+}
+
+TEST_F(RebelDriverTest, RobotJointStatesTrackTheRobotWhileLatchedAndInterfacesStayFrozen)
+{
+  FakeCriServer server;
+  StartDriver(server);
+  ASSERT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  TelemetryListener telemetry;
+  ControllerLoop loop(*rebel, commands, 0.0);
+  ASSERT_TRUE(WaitFor([&]() {return telemetry.JointCount() >= 5 && telemetry.StateCount() >= 2;}, 4000ms));
+  EXPECT_TRUE(telemetry.WaitState([](const auto & msg) {return msg.activated;}, 500ms));
+  EXPECT_FALSE(telemetry.LastState().latched);
+
+  // Latch through a connection drop: read() returns ERROR, the loop stops (as ros2_control
+  // stops calling read()) and on_error() follows.
+  server.DropClient();
+  ASSERT_TRUE(WaitFor([&]() {return loop.errors.load() > 0;}, 4000ms));
+  ASSERT_TRUE(rebel->HardwareErrorLatched());
+  const auto latchedAt = Clock::now();
+  EXPECT_EQ(rebel->on_error(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+
+  // hardware_state reports the latch immediately (poll period 10 ms), with the reason.
+  ASSERT_TRUE(telemetry.WaitState([](const auto & msg) {return msg.latched;}, 200ms));
+  const auto hw = telemetry.LastState();
+  EXPECT_TRUE(hw.latched);
+  EXPECT_NE(hw.latch_reason.find("re-established"), std::string::npos) << hw.latch_reason;
+  EXPECT_TRUE(hw.connected);
+  EXPECT_LT(Clock::now() - latchedAt, 400ms);
+  // on_error() deactivates the component: also reported at once.
+  EXPECT_TRUE(telemetry.WaitState([](const auto & msg) {return !msg.activated;}, 100ms));
+
+  // The state interfaces are frozen at their last values ...
+  const double frozen = Position(0);
+  EXPECT_NEAR(frozen, server.baseJointsDeg[0] * kDegToRad, 1e-5);
+  // ... while the robot moves on (the fake server keeps sending STATUS): robot_joint_states
+  // tracks it, stamped with the samples' receive time.
+  for (const float delta : {5.0f, 3.0f}) {
+    server.NudgeJointDeg(0, delta);
+    const double expected = (server.CurrentDeg()[0]) * kDegToRad;
+    ASSERT_TRUE(
+      telemetry.WaitJoint(
+        [&](const auto & sample) {
+          return std::fabs(sample.msg.position[0] - expected) < 1e-4;
+        }, 500ms)) << "robot_joint_states did not follow the robot while latched";
+    const auto sample = telemetry.LastJoint();
+    const std::int64_t stampNs = rclcpp::Time(sample.msg.header.stamp).nanoseconds();
+    EXPECT_LE(stampNs, sample.receivedSystemNs);
+    EXPECT_LT(sample.receivedSystemNs - stampNs, 100'000'000);
+  }
+  EXPECT_EQ(Position(0), frozen);  // nothing wrote the state interfaces from another thread
+  EXPECT_NEAR((server.CurrentDeg()[0] - server.baseJointsDeg[0]) * kDegToRad, 8.0 * kDegToRad, 1e-5);
+
+  // Samples keep coming at the STATUS rate with strictly increasing stamps, and every one
+  // carries a velocity estimate once a baseline exists.
+  const std::size_t from = telemetry.JointCount();
+  std::this_thread::sleep_for(500ms);
+  const auto joints = telemetry.Joints();
+  ASSERT_GT(joints.size(), from + 10);
+  for (std::size_t i = from + 1; i < joints.size(); ++i) {
+    EXPECT_GT(
+      rclcpp::Time(joints[i].msg.header.stamp).nanoseconds(),
+      rclcpp::Time(joints[i - 1].msg.header.stamp).nanoseconds());
+    EXPECT_EQ(joints[i].msg.velocity.size(), 6u);
+  }
+  EXPECT_TRUE(telemetry.LastState().latched);
+}
+
+TEST_F(RebelDriverTest, DeadLinkShowsAsAgeingStampsAndRecoveryClearsTheLatchReport)
+{
+  FakeCriServer server;
+  StartDriver(server);
+  ASSERT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  TelemetryListener telemetry;
+  ControllerLoop loop(*rebel, commands, 0.0);
+  ASSERT_TRUE(WaitFor([&]() {return telemetry.JointCount() >= 5 && telemetry.StateCount() >= 2;}, 4000ms));
+
+  // STATUS stops: read() goes through hold and latches after about 1 s.
+  server.SetSendStatus(false);
+  const auto silentAt = Clock::now();
+  bool sawStale = false;
+  ASSERT_TRUE(
+    WaitFor(
+      [&]() {
+        sawStale = sawStale || !telemetry.LastState().status_fresh;
+        return rebel->HardwareErrorLatched();
+      }, 2500ms));
+  EXPECT_TRUE(sawStale) << "status_fresh never went false before the latch";
+  EXPECT_EQ(rebel->on_error(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  ASSERT_TRUE(telemetry.WaitState([](const auto & msg) {return msg.latched;}, 200ms));
+  EXPECT_NE(telemetry.LastState().latch_reason.find("no valid STATUS"), std::string::npos)
+    << telemetry.LastState().latch_reason;
+
+  // No stale republish: robot_joint_states stops (at most the in-flight sample), its last stamp
+  // ages, and hardware_state keeps reporting a growing status age.
+  std::this_thread::sleep_for(100ms);
+  const std::size_t joints0 = telemetry.JointCount();
+  const auto lastJoint = telemetry.LastJoint();
+  const std::int64_t lastStampNs = rclcpp::Time(lastJoint.msg.header.stamp).nanoseconds();
+  const std::size_t states0 = telemetry.StateCount();
+  const double age0 = telemetry.LastState().status_age_s;
+  std::this_thread::sleep_for(600ms);
+  EXPECT_EQ(telemetry.JointCount(), joints0) << "an old sample was republished";
+  EXPECT_EQ(rclcpp::Time(telemetry.LastJoint().msg.header.stamp).nanoseconds(), lastStampNs);
+  EXPECT_GE(SystemNowNs() - lastStampNs, 600'000'000);
+  EXPECT_GE(telemetry.StateCount() - states0, 4u);
+  const auto hw = telemetry.LastState();
+  EXPECT_GE(hw.status_age_s - age0, 0.5);
+  EXPECT_GE(hw.status_age_s, 1.0);  // the latch itself needs > 1 s without STATUS
+  EXPECT_GE(Clock::now() - silentAt, 1600ms);
+  EXPECT_FALSE(hw.status_fresh);
+  EXPECT_TRUE(hw.latched);
+  EXPECT_GT(hw.status_sequence, 0u);
+  // status_stamp is the receive time of the latest STATUS: that of the last published sample
+  // (a best-effort sample may have been dropped, never a newer one).
+  EXPECT_GE(rclcpp::Time(hw.status_stamp).nanoseconds(), lastStampNs);
+  EXPECT_LT(rclcpp::Time(hw.status_stamp).nanoseconds() - lastStampNs, 100'000'000);
+
+  // Recovery: STATUS back, inactive -> active. The latch report clears, samples resume.
+  server.SetSendStatus(true);
+  ASSERT_TRUE(telemetry.WaitJoint([&](const auto & sample) {
+        return sample.received > Clock::now() - 100ms;
+      }, 1000ms));
+  EXPECT_EQ(rebel->on_configure(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_TRUE(telemetry.LastState().latched);  // still latched until on_activate()
+  EXPECT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  ASSERT_TRUE(telemetry.WaitState([](const auto & msg) {return !msg.latched;}, 100ms));
+  const auto recovered = telemetry.LastState();
+  EXPECT_TRUE(recovered.latch_reason.empty());
+  EXPECT_TRUE(recovered.activated);
+  EXPECT_TRUE(recovered.status_fresh);
+  EXPECT_LT(recovered.status_age_s, 0.2);
+}
+
 TEST_F(RebelDriverTest, ResetAndEnableRefusesWhenStatusStale)
 {
   FakeCriServer server;
@@ -1464,6 +1796,52 @@ TEST_F(RebelDualArmTest, ServiceAndNodeNamesFollowParameters)
   const auto names = probe->get_service_names_and_types();
   EXPECT_EQ(names.count("/igus_rebel/reset_and_enable"), 0u);
   EXPECT_EQ(names.count("/set_digital_output"), 0u);
+  left.rebel->Stop();
+  right.rebel->Stop();
+}
+
+// Each arm publishes its own telemetry in its own namespace, with its prefixed joint names; one
+// arm's latch is not reported by the other.
+TEST_F(RebelDualArmTest, TelemetryIsPerArmWithPrefixedJointNames)
+{
+  Arm left;
+  Arm right;
+  StartArm(left, "left");
+  ASSERT_NE(left.rebel, nullptr);
+  StartArm(right, "right");
+  ASSERT_NE(right.rebel, nullptr);
+  right.server->NudgeJointDeg(0, 7.0f);  // distinguishable from the left arm
+  TelemetryListener leftTelemetry("igus_rebel_left");
+  TelemetryListener rightTelemetry("igus_rebel_right");
+  ASSERT_TRUE(
+    WaitFor(
+      [&]() {
+        return leftTelemetry.JointCount() >= 3 && rightTelemetry.JointCount() >= 3 &&
+        leftTelemetry.StateCount() >= 1 && rightTelemetry.StateCount() >= 1;
+      }, 4000ms));
+  const auto leftJoint = leftTelemetry.LastJoint();
+  const auto rightJoint = rightTelemetry.LastJoint();
+  ASSERT_EQ(leftJoint.msg.name.size(), 6u);
+  ASSERT_EQ(rightJoint.msg.name.size(), 6u);
+  for (std::size_t i = 0; i < 6; ++i) {
+    EXPECT_EQ(leftJoint.msg.name[i], "arm_left_joint" + std::to_string(i + 1));
+    EXPECT_EQ(rightJoint.msg.name[i], "arm_right_joint" + std::to_string(i + 1));
+  }
+  EXPECT_NEAR(leftJoint.msg.position[0], left.server->baseJointsDeg[0] * kDegToRad, 1e-5);
+  EXPECT_TRUE(
+    rightTelemetry.WaitJoint(
+      [&](const auto & sample) {
+        return std::fabs(
+          sample.msg.position[0] - (right.server->baseJointsDeg[0] + 7.0f) * kDegToRad) < 1e-4;
+      }, 500ms));
+  EXPECT_EQ(leftTelemetry.LastState().component, "arm_left_controller");
+  EXPECT_EQ(rightTelemetry.LastState().component, "arm_right_controller");
+
+  // Latch only the left arm (no fault group here): only its report changes.
+  left.rebel->on_error(rclcpp_lifecycle::State());
+  ASSERT_TRUE(leftTelemetry.WaitState([](const auto & msg) {return msg.latched;}, 200ms));
+  std::this_thread::sleep_for(150ms);
+  EXPECT_FALSE(rightTelemetry.LastState().latched);
   left.rebel->Stop();
   right.rebel->Stop();
 }
@@ -2646,11 +3024,11 @@ TEST_F(RebelMoveTest, AcceptsCmdAckBeforeMoveAck)
 
 TEST_F(RebelMoveTest, ParametersLowerTheCapsAndTheHardCapsCannotBeExceeded)
 {
-  Begin({{"move_joint_max_velocity_percent", "80"}, {"move_joint_max_acceleration_percent", "10"}});
+  Begin({{"move_joint_max_velocity_percent", "150"}, {"move_joint_max_acceleration_percent", "10"}});
   server.SetMoveSpeedDegS(80.0);
   StartLoop();
-  // 80 % is clamped to the 50 % hard cap: 51 is refused (never clamped), 50 is fine.
-  auto handle = SendAccepted(Goal({4.0, 0, 0, 0, 0, 0}, 51.0, 10.0));
+  // 150 % is clamped to the 100 % hard cap: 101 is refused (never clamped), 100 is fine.
+  auto handle = SendAccepted(Goal({4.0, 0, 0, 0, 0, 0}, 101.0, 10.0));
   ASSERT_NE(handle, nullptr);
   EXPECT_EQ(client->Result(handle).result->error_code, MoveResult::REJECTED);
   // Acceleration cap lowered to 10 %.
@@ -2658,11 +3036,11 @@ TEST_F(RebelMoveTest, ParametersLowerTheCapsAndTheHardCapsCannotBeExceeded)
   ASSERT_NE(handle, nullptr);
   EXPECT_EQ(client->Result(handle).result->error_code, MoveResult::REJECTED);
   ExpectNoMoveJointSent();
-  handle = SendAccepted(Goal({4.0, 0, 0, 0, 0, 0}, 50.0, 10.0));
+  handle = SendAccepted(Goal({4.0, 0, 0, 0, 0, 0}, 100.0, 10.0));
   ASSERT_NE(handle, nullptr);
   EXPECT_EQ(client->Result(handle).result->error_code, MoveResult::SUCCESS);
   ASSERT_EQ(server.MoveCommands().size(), 1u);
-  EXPECT_EQ(server.MoveCommands()[0].velocity, 50.0);
+  EXPECT_EQ(server.MoveCommands()[0].velocity, 100.0);
 }
 
 TEST_F(RebelMoveTest, DefaultCapsRejectAboveTwentyFivePercentVelocity)
@@ -3771,6 +4149,321 @@ TEST_F(RebelMoveTest, ReconnectOfAnIdleDriverStillSendsMoveStopFirst)
   EXPECT_EQ(server.Commands(2), kStartupSequence);
 }
 
+// ---- MOVETOEXECERROR / EXECERROR (e-stop during CMD Move Joint, real robot 2026-10-24) ----
+
+constexpr const char * kEstopError = "MOVETOEXECERROR 0 0 MoveTo Hardware error _ESTOP";
+
+namespace
+{
+bool HasText(const std::string & text, const std::string & part)
+{
+  return text.find(part) != std::string::npos;
+}
+}  // namespace
+
+// The robot reports the error while the drives are still enabled and the (ignored) Move Stop does
+// not end the motion: the error faults the goal at once and sends Move Stop, but does NOT confirm
+// it. Variant: confirmed by standstill after the motion was seen.
+TEST_F(RebelMoveTest, RobotErrorFaultsSendsMoveStopAndStopIsConfirmedByStandstill)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  server.SetIgnoreMoveStop(true);  // the robot's motion goes on; no END
+  TelemetryListener telemetry;
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  ASSERT_TRUE(telemetry.WaitState([](const auto & msg) {return msg.move_active;}, 500ms));
+
+  const auto errorAt = Clock::now();
+  server.InjectMessage(kEstopError);
+  ASSERT_TRUE(WaitFor([&]() {return MoveStopCount(server, errorAt) >= 1;}, 500ms));
+  const auto stopAt = server.FirstCommandAfter("Move Stop", errorAt);
+  const auto stopDelay = stopAt - errorAt;
+  std::printf(
+    "[   INFO   ] MOVETOEXECERROR -> CMD Move Stop at the server: %lld ms\n",
+    static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(stopDelay).count()));
+  EXPECT_LT(stopDelay, 100ms);
+  EXPECT_TRUE(WaitFor([&]() {return rebel->HardwareErrorLatched();}, 100ms));
+  EXPECT_TRUE(
+    telemetry.WaitState(
+      [](const auto & msg) {
+        return msg.latched && HasText(msg.latch_reason, "Hardware error _ESTOP") &&
+        msg.move_stop_pending && msg.move_active;
+      }, 300ms));
+
+  // The error alone is no confirmation: 300 ms later the robot still moves and the stop is pending.
+  std::this_thread::sleep_for(300ms);
+  EXPECT_EQ(rebel->MoveStateValue(), 3);
+  EXPECT_TRUE(server.MoveActive());
+  EXPECT_TRUE(telemetry.LastState().move_stop_pending);
+
+  server.SetMoveStall(true);  // the arm comes to rest: standstill after motion
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.code, rclcpp_action::ResultCode::ABORTED);
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  EXPECT_TRUE(HasText(result.result->message, "MOVETOEXECERROR")) << result.result->message;
+  EXPECT_TRUE(HasText(result.result->message, "Hardware error _ESTOP")) << result.result->message;
+  EXPECT_EQ(result.result->end_reason, "ERROR");
+  EXPECT_TRUE(result.result->stop_sent);
+  EXPECT_TRUE(result.result->stop_confirmed) << result.result->message;
+  EXPECT_FALSE(HasText(result.result->message, "NOT confirmed"));
+  EXPECT_LT(Clock::now() - errorAt, 1500ms);
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+  EXPECT_EQ(rebel->MoveStateValue(), 0);
+  EXPECT_TRUE(
+    telemetry.WaitState(
+      [](const auto & msg) {return msg.latched && !msg.move_active && !msg.move_stop_pending;},
+      300ms));
+  EXPECT_TRUE(HasText(telemetry.LastState().latch_reason, "Hardware error _ESTOP"));
+}
+
+// Variant: confirmed by all six drives disabled (the e-stop itself), not by the error.
+TEST_F(RebelMoveTest, RobotErrorStopIsConfirmedByDrivesDisabled)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  server.SetIgnoreMoveStop(true);
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+
+  const auto errorAt = Clock::now();
+  server.InjectMessage(kEstopError);
+  ASSERT_TRUE(WaitFor([&]() {return rebel->HardwareErrorLatched();}, 300ms));
+  std::this_thread::sleep_for(300ms);
+  EXPECT_EQ(rebel->MoveStateValue(), 3);  // still stopping: the error did not confirm
+  server.SetIgnoreEnable(true);
+  server.SetDisabledMask(0x3F);  // e-stop: all six drives report 'Motor not enabled'
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  EXPECT_TRUE(HasText(result.result->message, "Hardware error _ESTOP")) << result.result->message;
+  EXPECT_EQ(result.result->end_reason, "ERROR");
+  EXPECT_TRUE(result.result->stop_confirmed) << result.result->message;
+  EXPECT_LT(Clock::now() - errorAt, 1500ms);
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+}
+
+// Nothing confirms the stop: the goal ends after the 1 s limit, NOT confirmed, stop stays pending.
+TEST_F(RebelMoveTest, RobotErrorAloneNeverConfirmsTheStop)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  server.SetIgnoreMoveStop(true);
+  TelemetryListener telemetry;
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  const auto errorAt = Clock::now();
+  server.InjectMessage(kEstopError);
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  EXPECT_FALSE(result.result->stop_confirmed);
+  EXPECT_TRUE(HasText(result.result->message, "NOT confirmed")) << result.result->message;
+  EXPECT_TRUE(HasText(result.result->message, "Hardware error _ESTOP")) << result.result->message;
+  EXPECT_GE(Clock::now() - errorAt, 950ms);
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+  // Still pending after the goal: Move Stop keeps being re-sent.
+  const auto afterGoal = Clock::now();
+  std::this_thread::sleep_for(400ms);
+  EXPECT_GE(MoveStopCount(server, afterGoal), 2u);
+  EXPECT_TRUE(
+    telemetry.WaitState([](const auto & msg) {return msg.latched && msg.move_stop_pending;}, 200ms));
+}
+
+// A robot that stops by itself and ends the move right after the error (the normal e-stop
+// sequence on a real robot) confirms through the END, and the error still decides the result.
+TEST_F(RebelMoveTest, RobotErrorFollowedByEndIsAFaultNotASuccess)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  server.InjectMessage(kEstopError);
+  server.InjectMessage("MOVETOEXECEND -1 0 MoveTo PLAN");
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  EXPECT_NE(result.result->error_code, MoveResult::SUCCESS);
+  EXPECT_NE(result.result->error_code, MoveResult::ROBOT_ENDED);
+  EXPECT_EQ(result.result->end_reason, "ERROR");
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+}
+
+// The robot stands still at (what looks like) the goal when it reports END PLAN after an error:
+// without the error taking precedence this would be a SUCCESS.
+TEST_F(RebelMoveTest, RobotErrorOverridesEndPlanOfAStandingRobot)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  server.SetMoveStall(true);  // never moves: standstill from the start
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitFor([&]() {return rebel->MoveStateValue() == 2;}, 2000ms));
+  std::this_thread::sleep_for(300ms);  // STATUS has shown no motion for the still window
+  server.InjectMessage(kEstopError);
+  server.InjectMessage("MOVETOEXECEND -1 0 MoveTo PLAN");
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+}
+
+TEST_F(RebelMoveTest, RobotErrorBeforeTheAckAbortsTheMove)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  server.SetSuppressMoveAck(true);
+  StartLoop();
+  const auto sent = Clock::now();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitFor([&]() {return server.MoveCommands().size() == 1;}, 2000ms));
+  server.InjectMessage(kEstopError);
+  const auto result = client->Result(handle);
+  // Not an ACK timeout (that needs 500 ms of silence): the error decided.
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  EXPECT_TRUE(HasText(result.result->message, "Hardware error _ESTOP")) << result.result->message;
+  EXPECT_TRUE(result.result->stop_sent);
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+  const auto stopAt = server.FirstCommandAfter("Move Stop", sent);
+  ASSERT_NE(stopAt, Clock::time_point{});
+  EXPECT_LT(stopAt - sent, 450ms);
+}
+
+// The error of a finished goal is not carried into the next one: after the lifecycle recovery a
+// new goal runs to SUCCESS.
+TEST_F(RebelMoveTest, RobotErrorOfAnEarlierGoalDoesNotLeakIntoTheNextGoal)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  server.InjectMessage(kEstopError);
+  const auto result = client->Result(handle);
+  ASSERT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  ASSERT_TRUE(result.result->stop_confirmed) << result.result->message;
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+
+  loop.reset();
+  EXPECT_EQ(rebel->on_error(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_EQ(rebel->on_configure(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  ASSERT_FALSE(rebel->HardwareErrorLatched());
+  std::this_thread::sleep_for(300ms);  // the start-up sequence and its override STATUS
+  server.SetMoveSpeedDegS(60.0);
+  StartLoop();
+  const auto second = SendAccepted(Goal({6.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(second, nullptr);
+  const auto secondResult = client->Result(second);
+  EXPECT_EQ(secondResult.result->error_code, MoveResult::SUCCESS) << secondResult.result->message;
+  EXPECT_EQ(secondResult.result->end_reason, "PLAN");
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+}
+
+// An EXECERROR (program, not MoveTo) while a joint move is active is handled like a
+// MOVETOEXECERROR.
+TEST_F(RebelMoveTest, ExecErrorWhileAMoveIsActiveFaultsTheGoal)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  server.InjectMessage("EXECERROR 0 0 Prog Program aborted by error");
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  EXPECT_TRUE(HasText(result.result->message, "EXECERROR")) << result.result->message;
+  EXPECT_TRUE(HasText(result.result->message, "Program aborted by error"));
+  EXPECT_EQ(result.result->end_reason, "ERROR");
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+}
+
+// An unsolicited error with no move of ours only logs: no latch, no Move Stop, and it does not
+// leak into the next goal.
+TEST_F(RebelMoveTest, RobotErrorWhileIdleOnlyLogsAndDoesNotAffectTheNextGoal)
+{
+  Begin();
+  server.SetMoveSpeedDegS(60.0);
+  TelemetryListener telemetry;
+  StartLoop();
+  const auto before = Clock::now();
+  server.InjectMessage(kEstopError);
+  server.InjectMessage("EXECERROR 0 0 Prog Program aborted by error");
+  std::this_thread::sleep_for(300ms);
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  EXPECT_EQ(MoveStopCount(server, before), 0u);
+  EXPECT_TRUE(telemetry.WaitState([](const auto & msg) {return msg.activated;}, 300ms));
+  EXPECT_FALSE(telemetry.LastState().latched);
+  EXPECT_FALSE(telemetry.LastState().move_stop_pending);
+
+  const auto handle = SendAccepted(Goal({6.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::SUCCESS) << result.result->message;
+  EXPECT_EQ(result.result->end_reason, "PLAN");
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+}
+
+// An error that arrives while a stop is already in progress latches (the cancel alone does not)
+// but does not restart the stop deadline.
+TEST_F(RebelMoveTest, RobotErrorWhileStoppingLatchesWithoutRestartingTheStopDeadline)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  server.SetIgnoreMoveStop(true);
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  const auto cancelAt = Clock::now();
+  client->Cancel(handle);
+  ASSERT_TRUE(WaitFor([&]() {return rebel->MoveStateValue() == 3;}, 500ms));
+  std::this_thread::sleep_for(300ms);
+  EXPECT_FALSE(rebel->HardwareErrorLatched());  // a cancel in progress is not a fault
+  server.InjectMessage(kEstopError);
+  EXPECT_TRUE(WaitFor([&]() {return rebel->HardwareErrorLatched();}, 300ms));
+  const auto result = client->Result(handle);
+  // The 1 s limit still counts from the start of the stop (a restart would end it at ~1.3 s).
+  EXPECT_LT(Clock::now() - cancelAt, 1250ms);
+  EXPECT_FALSE(result.result->stop_confirmed);
+  EXPECT_TRUE(HasText(result.result->message, "Hardware error _ESTOP")) << result.result->message;
+  EXPECT_TRUE(HasText(result.result->message, "NOT confirmed")) << result.result->message;
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+}
+
+// The move-abort latch is visible in hardware_state while /joint_states would be frozen, and
+// robot_joint_states follows the arm that coasts on.
+TEST_F(RebelMoveTest, TelemetryTracksTheCoastingArmAfterAMoveAbortLatch)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  server.SetIgnoreMoveStop(true);  // the arm keeps moving after the abort
+  TelemetryListener telemetry;
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  server.InjectMessage(kEstopError);
+  ASSERT_TRUE(
+    telemetry.WaitState([](const auto & msg) {return msg.latched && msg.move_stop_pending;}, 500ms));
+  const double atLatch = telemetry.LastJoint().msg.position[0];
+  // While latched and stopping, the arm keeps moving: the published position keeps changing.
+  std::this_thread::sleep_for(250ms);
+  const double later = telemetry.LastJoint().msg.position[0];
+  EXPECT_GT(later - atLatch, 0.5 * kDegToRad);
+  EXPECT_NEAR(later, server.CurrentDeg()[0] * kDegToRad, 0.5 * kDegToRad);
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+}
+
 TEST_F(RebelMoveTest, ServerStaysIdleAndUnusedByDefault)
 {
   // Behaviour without any goal is the old behaviour (apart from the Move Stop at connect).
@@ -3848,7 +4541,10 @@ TEST_F(RebelFaultGroupTest, SupervisorPathDeviationStopsTheOtherArm)
 class RebelPostSendAbortTest : public RebelFaultGroupTest
 {
 protected:
-  enum class Abort { kAckTimeout, kCmdError, kKinematics, kDrivesDisabled, kSendFailure };
+  enum class Abort
+  {
+    kAckTimeout, kCmdError, kKinematics, kDrivesDisabled, kSendFailure, kRobotError
+  };
 
   void RunAbort(Abort abort, std::uint8_t expectedCode)
   {
@@ -3889,6 +4585,10 @@ protected:
         left.server->SetIgnoreEnable(true);
       }
     }
+    if (abort == Abort::kRobotError) {
+      ASSERT_TRUE(WaitFor([&]() {return left.server->MoveActive();}, 2000ms));
+      left.server->InjectMessage("MOVETOEXECERROR 0 0 MoveTo Hardware error _ESTOP");
+    }
     const auto result = client.Result(handle);
     EXPECT_EQ(result.result->error_code, expectedCode) << result.result->message;
     EXPECT_TRUE(result.result->stop_sent);
@@ -3912,6 +4612,11 @@ TEST_F(RebelPostSendAbortTest, CmdErrorStopsTheOtherArm)
 TEST_F(RebelPostSendAbortTest, MoveJointSendFailureStopsTheOtherArm)
 {
   RunAbort(Abort::kSendFailure, MoveResult::CMD_ERROR);
+}
+
+TEST_F(RebelPostSendAbortTest, RobotReportedErrorStopsTheOtherArm)
+{
+  RunAbort(Abort::kRobotError, MoveResult::FAULT);
 }
 
 TEST_F(RebelPostSendAbortTest, KinematicsErrorBeforeTheMonitorIsArmedStopsTheOtherArm)

@@ -103,6 +103,30 @@ What the real-robot driver (`Igus::Rebel`) does:
 - `read()` returns ERROR (and the jog is forced to zero) if no valid STATUS arrived for
   more than 200 ms, or after any reconnect. ros2_control then stops the component, so
   the driver must be restarted after checking the robot; motion never resumes on its own.
+- **While the driver is latched, `/joint_states` is frozen and must not be trusted.** After
+  `read()` returns ERROR, ros2_control moves the component to UNCONFIGURED and stops calling
+  `read()`; the state interfaces keep their last values and `joint_state_broadcaster` keeps
+  publishing them with fresh stamps (measured: after an e-stop latch the arm coasted on while
+  `/joint_states` stayed put). The driver's own node keeps publishing the real state while
+  latched, UNCONFIGURED or INACTIVE (`<node>` is the hardware parameter `node_name`, default
+  `igus_rebel`, e.g. `igus_rebel_left`):
+  - `/<node>/robot_joint_states` (`sensor_msgs/JointState`, best-effort: subscribe with
+    `rclcpp::SensorDataQoS()`): joint names of this component, position [rad] and velocity
+    (finite difference of consecutive STATUS samples, empty until a baseline exists) of the
+    latest STATUS. `header.stamp` is the PC receive time of that sample, never "now", and a
+    sample is published once; a dead link therefore shows as an ageing stamp, not as a
+    repeated old value.
+  - `/<node>/hardware_state` (`igus_rebel_msgs/HardwareState`, reliable): 10 Hz plus at once
+    when a flag changes: `latched` + `latch_reason`, `activated`, `connected`, STATUS age /
+    `status_fresh`, `move_active`, `move_stop_pending`, drive and kinematics state.
+  Use `hardware_state.latched == false && activated && status_fresh` before trusting
+  `/joint_states`.
+- A `MOVETOEXECERROR` / `EXECERROR` from the robot during a `move_joint` goal (for example
+  `605 MOVETOEXECERROR 0 0 MoveTo Hardware error _ESTOP` on an e-stop) fails the goal with
+  `FAULT`, sends `CMD Move Stop`, latches the driver and puts the robot's text in the result
+  message; `end_reason` is `ERROR`. The error does not confirm the stop: that still needs the
+  move's `MOVETOEXECEND`, standstill after motion, or all six drives disabled. Outside a goal
+  such an error is only logged.
 
 Launch the MoveIt motion planner. `igus_rebel_motion_planner.launch.py` forwards to
 `move_group.launch.py` with these defaults: `use_gui:=false`,

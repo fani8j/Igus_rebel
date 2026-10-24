@@ -19,7 +19,10 @@ using Joints = std::array<double, 6>;
 // but never exceed the hard caps.
 constexpr double kDefaultMaxVelocityPercent = 25.0;
 constexpr double kDefaultMaxAccelerationPercent = 40.0;
-constexpr double kHardMaxVelocityPercent = 50.0;
+// Raised from 50 to 100 after a supervised real-arm j1 ladder up to 100 % passed (2026-10-24,
+// scan_results/cri_single_arm_20261022/run_real_3; operator decision). The default stays 25 %; a launch must
+// set move_joint_max_velocity_percent explicitly to go higher.
+constexpr double kHardMaxVelocityPercent = 100.0;
 constexpr double kHardMaxAccelerationPercent = 40.0;
 
 // Sanity caps on the caller-chosen tolerances [rad]; a larger value would defeat the check.

@@ -30,7 +30,8 @@ uint8 ROBOT_ENDED=12
 uint8 GOAL_DEVIATION=13
 uint8 error_code
 string message
-string end_reason               # last MOVETOEXECEND reason (PLAN, USER, ...) or empty
+string end_reason               # last MOVETOEXECEND reason (PLAN, USER, ...), "ERROR" if the robot sent a
+                                # MOVETOEXECERROR (the reason text is in message), or empty
 float64[] final_positions       # rad
 bool stop_sent                  # CMD Move Stop was sent during this goal
 bool stop_confirmed             # robot reported the stop (END USER) or standstill was observed

@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <sstream>
@@ -21,6 +22,10 @@ namespace
 {
 constexpr std::size_t kMaxUnacknowledgedCommands = 100;
 constexpr std::chrono::milliseconds kMessageWaitTimeout{100};
+// ~/hardware_state: the timer polls for flag changes this often and publishes at least every
+// kHardwareStatePeriod (10 Hz).
+constexpr std::chrono::milliseconds kTelemetryPollPeriod{10};
+constexpr std::chrono::milliseconds kHardwareStatePeriod{100};
 
 std::int64_t ToNs(Safety::SteadyClock::time_point time)
 {
@@ -74,6 +79,9 @@ void Rebel::LatchHardwareError(const std::string & reason)
 {
   // Latch first, then zero: write() re-checks the latch after storing a command.
   const bool wasLatched = hardwareErrorLatched_.exchange(true);
+  if (!wasLatched) {
+    SetLatchReason(reason);  // telemetry only (~/hardware_state); the first cause is kept
+  }
   ZeroJog();
   // Zero jog does not stop a robot-side joint move; only CMD Move Stop does.
   RequestMoveStop();
@@ -99,6 +107,10 @@ void Rebel::OnPeerFault(const std::string & originName, const std::string & reas
   // that reports a fault, including the message thread of the peer.
   peerFaulted_ = true;
   const bool wasLatched = hardwareErrorLatched_.exchange(true);
+  if (!wasLatched) {
+    // Leaf lock held only for a string copy by the telemetry timer: cannot deadlock the caller.
+    SetLatchReason("fault-group member '" + originName + "' faulted: " + reason);
+  }
   ZeroJog();
   lastWriteNs = 0;
   RequestMoveStop();
@@ -114,6 +126,24 @@ void Rebel::OnPeerFault(const std::string & originName, const std::string & reas
     "the controllers ('%s').",
     componentName_.c_str(), originName.c_str(), reason.c_str(), originName.c_str(),
     originName.c_str(), trajectoryControllerName_.c_str());
+}
+
+void Rebel::SetLatchReason(const std::string & reason)
+{
+  {
+    std::lock_guard<std::mutex> lock(latchReasonLock_);
+    latchReason_ = reason;
+  }
+  latchVersion_.fetch_add(1);
+}
+
+void Rebel::ClearLatchReason()
+{
+  {
+    std::lock_guard<std::mutex> lock(latchReasonLock_);
+    latchReason_.clear();
+  }
+  latchVersion_.fetch_add(1);
 }
 
 std::string Rebel::FaultGroupRecoveryHint() const
@@ -357,15 +387,22 @@ void Rebel::HandleMessage(const std::string & msg)
             "Ignoring CRI status message with non-finite joint positions");
           break;
         }
+        JointSnapshot published;
         {
           std::lock_guard<std::mutex> lock(snapshotLock);
           snapshot.positionRad = positionRad;
           snapshot.stamp = Safety::SteadyClock::now();
+          snapshot.systemStampNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
           snapshot.overridePercent = status.overrideValue;
           snapshot.counterSkipped = counterSkipped_;
           ++snapshot.sequence;
+          published = snapshot;
         }
         snapshotCondition.notify_all();
+        // Once per NEW sample, stamped with its receive time; independent of read() and of the
+        // latch (see hardwareErrorLatched_).
+        PublishRobotJointStates(published);
         ProcessStatus(status);
         break;
       }
@@ -430,9 +467,11 @@ void Rebel::HandleMessage(const std::string & msg)
 
     case CriMessages::MessageType::MOVETOEXECACK:
     case CriMessages::MessageType::MOVETOEXECEND:
+    case CriMessages::MessageType::MOVETOEXECERROR:
+    case CriMessages::MessageType::EXECERROR:
       {
         const auto & event = std::get<CriMessages::ExecEvent>(parsed.payload);
-        RecordMoveEvent(event, parsed.type == CriMessages::MessageType::MOVETOEXECEND);
+        RecordMoveEvent(event, parsed.type);
         break;
       }
 
@@ -894,6 +933,7 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
   stopping = false;
   stopped = false;
   hardwareErrorLatched_ = false;
+  ClearLatchReason();
 
   // The member exists before the message thread starts; it joins the group at the end of a
   // successful on_init (before that no peer can see or call it).
@@ -956,6 +996,17 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
       std::bind(&Rebel::dio_callback, this, std::placeholders::_1, std::placeholders::_2));
     // Own callback group: a cancel or goal request is never blocked by reset_and_enable.
     moveGroup_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    // Telemetry that keeps running while the component is latched/UNCONFIGURED/INACTIVE (read()
+    // is not called then). robot_joint_states: sensor-data QoS (best effort) -- subscribe with
+    // rclcpp::SensorDataQoS(); hardware_state: reliable.
+    robotJointStatePub_ = node_->create_publisher<sensor_msgs::msg::JointState>(
+      "~/robot_joint_states", rclcpp::SensorDataQoS().keep_last(10));
+    hardwareStatePub_ = node_->create_publisher<igus_rebel_msgs::msg::HardwareState>(
+      "~/hardware_state", rclcpp::QoS(rclcpp::KeepLast(10)).reliable());
+    // Own callback group: a 3 s reset_and_enable never stalls the hardware_state timer.
+    telemetryGroup_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    hardwareStateTimer_ = node_->create_wall_timer(
+      kTelemetryPollPeriod, [this]() {PublishHardwareState();}, telemetryGroup_);
     moveServer_ = rclcpp_action::create_server<MoveJointAction>(
       node_, "~/move_joint",
       [this](const rclcpp_action::GoalUUID & uuid,
@@ -971,6 +1022,10 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
       digitalOutputService_.c_str(), error.what());
     moveServer_.reset();
     moveGroup_.reset();
+    hardwareStateTimer_.reset();
+    telemetryGroup_.reset();
+    hardwareStatePub_.reset();
+    robotJointStatePub_.reset();
     digital_output_srv_.reset();
     reset_enable_srv_.reset();
     node_.reset();
@@ -982,8 +1037,10 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
   rebelSocket->SetConnectedCallback([this](bool reconnect) {OnConnected(reconnect);});
 
   // Service/action callbacks run on their own executor threads instead of inside write().
+  // Three threads: reset_and_enable (up to 3 s) occupies one, the move_joint callbacks and the
+  // hardware_state timer (separate callback groups) always find a free one.
   executor_ = std::make_shared<rclcpp::executors::MultiThreadedExecutor>(
-    rclcpp::ExecutorOptions(), 2);
+    rclcpp::ExecutorOptions(), 3);
   executor_->add_node(node_);
   executorThread = std::thread([this]() {executor_->spin();});
 
@@ -1131,6 +1188,7 @@ CallbackReturn Rebel::on_activate(const rclcpp_lifecycle::State &)
     OnConnected(true);
     peerFaulted_ = false;
     hardwareErrorLatched_ = false;
+    ClearLatchReason();
     RCLCPP_WARN(
       logger_,
       "Hardware component '%s' recovered from a latched error: re-sent SetActive, Reset, "
@@ -1710,12 +1768,39 @@ void Rebel::ConsumeMoveStopRequest()
     token, ToNs(now + (sent ? Safety::kMoveStopResendPeriod : std::chrono::milliseconds(5))));
 }
 
-void Rebel::RecordMoveEvent(const CriMessages::ExecEvent & event, bool isEnd)
+void Rebel::RecordMoveEvent(const CriMessages::ExecEvent & event, CriMessages::MessageType type)
 {
+  const bool isError = type == CriMessages::MessageType::MOVETOEXECERROR ||
+    type == CriMessages::MessageType::EXECERROR;
+  const bool isEnd = type == CriMessages::MessageType::MOVETOEXECEND;
+  const char * name = isError ?
+    (type == CriMessages::MessageType::MOVETOEXECERROR ? "MOVETOEXECERROR" : "EXECERROR") :
+    (isEnd ? "MOVETOEXECEND" : "MOVETOEXECACK");
+  if (isError) {
+    // Always logged at ERROR. The numeric code of an ERROR (0 for an e-stop) is not "success".
+    RCLCPP_ERROR(
+      logger_, "Robot reported %s: code %d sub %d program '%s' reason '%s'", name, event.code,
+      event.sub, event.program.c_str(), event.reason.c_str());
+    if (moveState_.load() == kMoveIdle) {
+      // An unsolicited error with no joint move of ours: log only. It must never latch and
+      // never leak into a later goal (nothing is recorded while idle).
+      RCLCPP_WARN(logger_, "%s ignored: no joint move active", name);
+      return;
+    }
+    // Recorded in ANY non-idle state (Sending/Moving/Stopping), without the "END before ACK"
+    // gate: an error always concerns the move in flight (or a robot fault that makes it unsafe).
+    std::lock_guard<std::mutex> lock(moveEventLock_);
+    if (!moveEvents_.errorSeen) {
+      moveEvents_.errorSeen = true;
+      moveEvents_.errorType = name;
+      moveEvents_.errorReason = event.reason;
+    }
+    return;
+  }
   if (moveState_.load() == kMoveIdle) {
     RCLCPP_INFO(
-      logger_, "Ignoring %s %d %d %s %s (no joint move active)", isEnd ? "MOVETOEXECEND" :
-      "MOVETOEXECACK", event.code, event.sub, event.program.c_str(), event.reason.c_str());
+      logger_, "Ignoring %s %d %d %s %s (no joint move active)", name, event.code, event.sub,
+      event.program.c_str(), event.reason.c_str());
     return;
   }
   std::lock_guard<std::mutex> lock(moveEventLock_);
@@ -1733,6 +1818,127 @@ void Rebel::RecordMoveEvent(const CriMessages::ExecEvent & event, bool isEnd)
       logger_, "Robot move ended: code %d reason '%s'", event.code, event.reason.c_str());
   } else {
     moveEvents_.moveAck = true;
+  }
+}
+
+void Rebel::PublishRobotJointStates(const JointSnapshot & sample)
+{
+  if (!robotJointStatePub_) {
+    return;
+  }
+  sensor_msgs::msg::JointState msg;
+  // The acquisition time of THIS STATUS sample, never "now": a dead link shows as an ageing stamp.
+  msg.header.stamp = rclcpp::Time(sample.systemStampNs, RCL_SYSTEM_TIME);
+  msg.name.assign(jointNames_.begin(), jointNames_.end());
+  msg.position.assign(sample.positionRad.begin(), sample.positionRad.end());
+
+  // Velocity: finite difference of consecutive samples, as read() does. A gap longer than the
+  // stale tier is not a velocity (the baseline restarts): such a sample carries no velocity.
+  const std::int64_t stampNs = ToNs(sample.stamp);
+  if (pubLastStampNs_ != 0) {
+    if (sample.stamp - FromNs(pubLastStampNs_) > Safety::kStatusStaleTimeout) {
+      pubVelValid_ = false;
+      pubLastPos_ = sample.positionRad;
+      pubLastStampNs_ = stampNs;
+    } else {
+      std::array<double, 6> velocity{};
+      if (
+        Safety::EstimateVelocity(
+          pubLastPos_, FromNs(pubLastStampNs_), sample.positionRad, sample.stamp,
+          Safety::kMinVelocityInterval, velocity))
+      {
+        pubVel_ = velocity;
+        pubVelValid_ = true;
+        pubLastPos_ = sample.positionRad;
+        pubLastStampNs_ = stampNs;
+      }
+      // Too close to the previous sample: keep the previous estimate and baseline.
+    }
+  } else {
+    pubLastPos_ = sample.positionRad;
+    pubLastStampNs_ = stampNs;
+    pubVelValid_ = false;
+  }
+  if (pubVelValid_) {
+    msg.velocity.assign(pubVel_.begin(), pubVel_.end());
+  }
+  try {
+    robotJointStatePub_->publish(msg);
+  } catch (const std::exception & error) {
+    RCLCPP_WARN_THROTTLE(
+      logger_, throttleClock_, 5000, "Could not publish robot_joint_states: %s", error.what());
+  }
+}
+
+void Rebel::PublishHardwareState()
+{
+  if (!hardwareStatePub_ || !rebelSocket) {
+    return;
+  }
+  const bool latched = hardwareErrorLatched_.load();
+  const bool stopPending = moveStopRequested_.load();
+  const bool moveActive = moveState_.load() != kMoveIdle;
+  const bool activated = activated_.load();
+  const bool connected = rebelSocket->IsConnected();
+  const std::uint64_t connectionCount = rebelSocket->ConnectionCount();
+  const unsigned disabledMask = drivesDisabledMask_.load();
+  const int kinstate = kinstateValue_.load();
+  JointSnapshot latest;
+  {
+    std::lock_guard<std::mutex> lock(snapshotLock);
+    latest = snapshot;
+  }
+  const auto steadyNow = Safety::SteadyClock::now();
+  const bool haveStatus = latest.sequence != 0;
+  const double ageS = haveStatus ? std::chrono::duration<double>(steadyNow - latest.stamp).count() :
+    -1.0;
+  const bool fresh = haveStatus && (steadyNow - latest.stamp) <= Safety::kStatusStaleTimeout;
+  const std::uint64_t version = latchVersion_.load();
+
+  // Everything that must be published immediately when it changes (not the continuous age).
+  const std::uint64_t key = (latched ? 1u : 0u) | (stopPending ? 2u : 0u) | (moveActive ? 4u : 0u) |
+    (activated ? 8u : 0u) | (connected ? 16u : 0u) | (fresh ? 32u : 0u) |
+    (static_cast<std::uint64_t>(disabledMask & 0x3Fu) << 8) |
+    (static_cast<std::uint64_t>(static_cast<std::uint32_t>(kinstate) & 0xFFFFu) << 16) |
+    (connectionCount << 32);
+  const std::int64_t nowNs = ToNs(steadyNow);
+  const bool changed = key != hwPubLastKey_ || version != hwPubLastVersion_;
+  if (!changed &&
+    nowNs - hwPubLastNs_ <
+    std::chrono::duration_cast<std::chrono::nanoseconds>(kHardwareStatePeriod).count())
+  {
+    return;
+  }
+  hwPubLastKey_ = key;
+  hwPubLastVersion_ = version;
+  hwPubLastNs_ = nowNs;
+
+  igus_rebel_msgs::msg::HardwareState msg;
+  msg.header.stamp = node_->now();
+  msg.component = componentName_.empty() ? nodeName_ : componentName_;
+  msg.connected = connected;
+  msg.connection_count = static_cast<std::uint32_t>(connectionCount);
+  msg.status_sequence = latest.sequence;
+  if (haveStatus) {
+    msg.status_stamp = rclcpp::Time(latest.systemStampNs, RCL_SYSTEM_TIME);
+  }
+  msg.status_age_s = ageS;
+  msg.status_fresh = fresh;
+  msg.latched = latched;
+  if (latched) {
+    std::lock_guard<std::mutex> lock(latchReasonLock_);
+    msg.latch_reason = latchReason_;
+  }
+  msg.move_stop_pending = stopPending;
+  msg.move_active = moveActive;
+  msg.drives_disabled_mask = static_cast<std::uint8_t>(disabledMask & 0x3Fu);
+  msg.kinstate = kinstate;
+  msg.activated = activated;
+  try {
+    hardwareStatePub_->publish(msg);
+  } catch (const std::exception & error) {
+    RCLCPP_WARN_THROTTLE(
+      logger_, throttleClock_, 5000, "Could not publish hardware_state: %s", error.what());
   }
 }
 
@@ -2062,6 +2268,13 @@ void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
       claimDuringMove_ = false;
       moveMotionSeen_ = false;
       stopSeqAtStart = moveStopSeq_.load();
+      {
+        // Nothing of an earlier goal (an old ACK/END, above all an old MOVETOEXECERROR) may
+        // survive into this one. While idle RecordMoveEvent records nothing, so from here on
+        // everything in moveEvents_ arrived after this point.
+        std::lock_guard<std::mutex> eventLock(moveEventLock_);
+        moveEvents_ = MoveEvents{};
+      }
       moveState_ = kMoveSending;
     }
   }
@@ -2093,8 +2306,17 @@ void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
   const std::string commandText = Safety::MoveJointCommandText(
     targetDeg, goal->velocity_percent, goal->acceleration_percent);
   {
+    // Fresh events for this send (a stale ACK/END that arrived since the state left Idle must
+    // not count) -- but a MOVETOEXECERROR recorded in that window is KEPT: it is never a stale
+    // ACK/END, and dropping it would lose the robot's report (fail closed: the goal faults).
     std::lock_guard<std::mutex> lock(moveEventLock_);
+    const MoveEvents previous = moveEvents_;
     moveEvents_ = MoveEvents{};
+    if (previous.errorSeen) {
+      moveEvents_.errorSeen = true;
+      moveEvents_.errorType = previous.errorType;
+      moveEvents_.errorReason = previous.errorReason;
+    }
   }
   const int counter = Ccnt();
   moveCommandCounter_ = counter;
@@ -2174,6 +2396,8 @@ void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
   auto stillSince = sentAt;
   auto lastFeedbackAt = sentAt - std::chrono::seconds(1);
 
+  // A robot-reported error was handled (latched, reported) by this goal.
+  bool errorNoted = false;
   const auto beginStop = [&](std::uint8_t abortWith, const std::string & message) {
       stopPhase = true;
       abortCode = abortWith;
@@ -2195,7 +2419,9 @@ void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
       std::lock_guard<std::mutex> lock(moveEventLock_);
       events = moveEvents_;
     }
-    if (events.endSeen) {
+    if (events.errorSeen) {
+      endReason = "ERROR";  // the robot failed the move; takes precedence over any END reason
+    } else if (events.endSeen) {
       endReason = events.endReason;
     }
     const auto age = now - latest.stamp;
@@ -2248,8 +2474,14 @@ void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
         moveState_ = kMoveMoving;
       }
 
-      // Aborts, in priority order.
-      if (stopping) {
+      // Aborts, in priority order. A robot-reported error comes first: it must be reported (and
+      // latched) with the robot's own reason whatever else is going on, and it overrides END.
+      if (events.errorSeen) {
+        errorNoted = true;
+        const std::string text = "robot reported " + events.errorType + ": " + events.errorReason;
+        beginStop(Result::FAULT, text);
+        LatchHardwareError(text);
+      } else if (stopping) {
         beginStop(Result::FAULT, "driver is shutting down");
       } else if (moveCancelRequested_) {
         beginStop(Result::CANCELED, "canceled by the client");
@@ -2331,10 +2563,22 @@ void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
     }
 
     // Stopping.
+    // A robot-reported error that arrives while the stop is already in progress: latch (if not
+    // yet) and say so in the result, but do NOT restart the stop deadline. It is NOT a stop
+    // confirmation (see below).
+    if (events.errorSeen && !errorNoted) {
+      errorNoted = true;
+      const std::string text = "robot reported " + events.errorType + ": " + events.errorReason;
+      abortMessage += " [" + text + "]";
+      if (!hardwareErrorLatched_.load()) {
+        LatchHardwareError(text);
+      }
+    }
     // Confirmed by (a) the robot's MOVETOEXECEND of this move, or (b) standstill AFTER motion
     // was seen. Not by standstill alone (the robot may not have started yet, or never received
     // the stop and start later), and not by a CMDACK of the Move Stop: the controller
-    // acknowledges commands it did not act on. A stop that is not confirmed within the limit
+    // acknowledges commands it did not act on, and not by a MOVETOEXECERROR (the robot reports
+    // that it failed, not that it stands still). A stop that is not confirmed within the limit
     // below latches the driver and stays pending.
     bool confirmed = events.endSeen;
     if (!confirmed && motionSeen && statusFresh && (now - stillSince) >= kStopStillWindow &&

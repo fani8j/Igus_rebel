@@ -300,6 +300,62 @@ TEST(CriParse, MalformedInputNeverEscapesParseMessage)
   EXPECT_TRUE(ParseMessage("1 MESSAGE").ok);
 }
 
+TEST(CriParse, ParsesMoveToExecErrorAndKeepsTheWholeReason)
+{
+  using Igus::CriMessages::ExecEvent;
+  using Igus::CriMessages::ParseMessage;
+
+  // Exact body recorded on the real ReBeL on an e-stop during CMD Move Joint, 2026-10-24.
+  auto parsed = ParseMessage("605 MOVETOEXECERROR 0 0 MoveTo Hardware error _ESTOP");
+  ASSERT_TRUE(parsed.ok) << parsed.error;
+  EXPECT_EQ(parsed.type, MessageType::MOVETOEXECERROR);
+  auto event = std::get<ExecEvent>(parsed.payload);
+  EXPECT_EQ(event.code, 0);  // 0 does NOT mean success for an ERROR
+  EXPECT_EQ(event.sub, 0);
+  EXPECT_EQ(event.program, "MoveTo");
+  EXPECT_EQ(event.reason, "Hardware error _ESTOP");
+
+  // Runs of whitespace collapse to single spaces; framing spaces are dropped.
+  parsed = ParseMessage(" 606 MOVETOEXECERROR  -5 2 MoveTo  Axis   1 limit  ");
+  ASSERT_TRUE(parsed.ok) << parsed.error;
+  event = std::get<ExecEvent>(parsed.payload);
+  EXPECT_EQ(event.code, -5);
+  EXPECT_EQ(event.sub, 2);
+  EXPECT_EQ(event.reason, "Axis 1 limit");
+
+  // EXECERROR (a program, not MoveTo) has the same shape.
+  parsed = ParseMessage("7 EXECERROR 0 0 Prog Program stopped by error");
+  ASSERT_TRUE(parsed.ok) << parsed.error;
+  EXPECT_EQ(parsed.type, MessageType::EXECERROR);
+  event = std::get<ExecEvent>(parsed.payload);
+  EXPECT_EQ(event.program, "Prog");
+  EXPECT_EQ(event.reason, "Program stopped by error");
+
+  // An error without text still parses (empty reason); malformed ones never throw and are not
+  // "unknown message type".
+  parsed = ParseMessage("8 MOVETOEXECERROR 0 0 MoveTo");
+  ASSERT_TRUE(parsed.ok) << parsed.error;
+  EXPECT_EQ(std::get<ExecEvent>(parsed.payload).reason, "");
+  for (const char * bad : {"1 MOVETOEXECERROR", "1 MOVETOEXECERROR x y MoveTo ESTOP", "1 EXECERROR 0"}) {
+    parsed = ParseMessage(bad);
+    EXPECT_FALSE(parsed.ok) << bad;
+    EXPECT_NE(parsed.type, MessageType::UNKNOWN) << bad;
+  }
+}
+
+TEST(CriParse, MultiWordEndReasonIsKeptWhole)
+{
+  using Igus::CriMessages::ExecEvent;
+  using Igus::CriMessages::ParseMessage;
+
+  auto parsed = ParseMessage("9 MOVETOEXECEND 0 0 MoveTo Stopped by emergency stop");
+  ASSERT_TRUE(parsed.ok) << parsed.error;
+  EXPECT_EQ(std::get<ExecEvent>(parsed.payload).reason, "Stopped by emergency stop");
+  parsed = ParseMessage("10 EXECEND -1 0 Prog PLAN");
+  ASSERT_TRUE(parsed.ok) << parsed.error;
+  EXPECT_EQ(std::get<ExecEvent>(parsed.payload).reason, "PLAN");
+}
+
 TEST(CriParse, ParsesMoveToExecMessagesFromTheRealRobot)
 {
   using Igus::CriMessages::ExecEvent;

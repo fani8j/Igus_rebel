@@ -27,10 +27,15 @@ const std::string TYPE_CYCLESTAT = "CYCLESTAT";
 // Robot-side program execution (CMD Move Joint): "MOVETOEXECACK <code> <sub> <program>" when a
 // move starts, "MOVETOEXECEND <code> <sub> <program> <reason>" when it ends (PLAN = reached its
 // goal, USER = stopped by CMD Move Stop). EXECACK/EXECEND are the same for programs.
+// "MOVETOEXECERROR <code> <sub> <program> <free text>" is sent when the move fails, e.g. on an
+// e-stop: "605 MOVETOEXECERROR 0 0 MoveTo Hardware error _ESTOP". The numeric code 0 does NOT mean
+// success for an ERROR. EXECERROR is the same for programs.
 const std::string TYPE_MOVETOEXECACK = "MOVETOEXECACK";
 const std::string TYPE_MOVETOEXECEND = "MOVETOEXECEND";
+const std::string TYPE_MOVETOEXECERROR = "MOVETOEXECERROR";
 const std::string TYPE_EXECACK = "EXECACK";
 const std::string TYPE_EXECEND = "EXECEND";
+const std::string TYPE_EXECERROR = "EXECERROR";
 
 const std::string STATUS_MODE = "MODE";
 const std::string STATUS_POSJOINTSETPOINT = "POSJOINTSETPOINT";

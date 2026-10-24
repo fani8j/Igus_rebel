@@ -144,8 +144,10 @@ MessageType CriMessage::GetMessageType(const std::string & msg)
     {&CriKeywords::TYPE_CYCLESTAT, MessageType::CYCLESTAT},
     {&CriKeywords::TYPE_MOVETOEXECACK, MessageType::MOVETOEXECACK},
     {&CriKeywords::TYPE_MOVETOEXECEND, MessageType::MOVETOEXECEND},
+    {&CriKeywords::TYPE_MOVETOEXECERROR, MessageType::MOVETOEXECERROR},
     {&CriKeywords::TYPE_EXECACK, MessageType::EXECACK},
     {&CriKeywords::TYPE_EXECEND, MessageType::EXECEND},
+    {&CriKeywords::TYPE_EXECERROR, MessageType::EXECERROR},
   };
 
   for (const auto & entry : kTypes) {
@@ -464,15 +466,20 @@ Cyclestat::Cyclestat(const std::string & messageString)
 
 ExecEvent::ExecEvent(const std::string & messageString, const std::string & typeKeyword)
 {
-  // "<counter> <TYPE> <code> <sub> <program> [<reason>]"
+  // "<counter> <TYPE> <code> <sub> <program> [<reason...>]"
   const std::string payload = PayloadAfterType(messageString, typeKeyword);
   const auto tokens = Tokenize(payload);
   if (tokens.size() < 3 || !ParseInt(tokens[0].first, code) || !ParseInt(tokens[1].first, sub)) {
     throw std::invalid_argument(typeKeyword + " without code, sub and program");
   }
   program = tokens[2].first;
-  if (tokens.size() >= 4) {
-    reason = tokens[3].first;
+  // The reason is everything after the program token ("Hardware error _ESTOP"), words joined
+  // with single spaces.
+  for (std::size_t i = 3; i < tokens.size(); ++i) {
+    if (!reason.empty()) {
+      reason += ' ';
+    }
+    reason += tokens[i].first;
   }
 }
 
@@ -519,11 +526,17 @@ ParsedMessage ParseMessage(const std::string & msg) noexcept
       case MessageType::MOVETOEXECEND:
         result.payload = ExecEvent(msg, CriKeywords::TYPE_MOVETOEXECEND);
         break;
+      case MessageType::MOVETOEXECERROR:
+        result.payload = ExecEvent(msg, CriKeywords::TYPE_MOVETOEXECERROR);
+        break;
       case MessageType::EXECACK:
         result.payload = ExecEvent(msg, CriKeywords::TYPE_EXECACK);
         break;
       case MessageType::EXECEND:
         result.payload = ExecEvent(msg, CriKeywords::TYPE_EXECEND);
+        break;
+      case MessageType::EXECERROR:
+        result.payload = ExecEvent(msg, CriKeywords::TYPE_EXECERROR);
         break;
       case MessageType::UNKNOWN:
         result.error = "unknown message type";

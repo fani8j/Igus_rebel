@@ -116,9 +116,9 @@ TEST(MoveValidate, VelocityAndAccelerationAboveTheCapAreRejectedNotClamped)
   Caps caps;
   caps.maxVelocityPercent = kHardMaxVelocityPercent;
   request = ValidRequest();
-  request.velocityPercent = 50.0;
+  request.velocityPercent = kHardMaxVelocityPercent;
   EXPECT_TRUE(Validate(request, reason, caps)) << reason;
-  request.velocityPercent = 50.1;
+  request.velocityPercent = kHardMaxVelocityPercent + 0.1;
   EXPECT_FALSE(Validate(request, reason, caps));
 }
 
