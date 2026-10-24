@@ -1244,6 +1244,28 @@ def top_size_signature(reject):
         return None
 
 
+RETRY_SAME_FLAP_STEP_MM = 3.0   # two raised-flap rejects this close in step = the same lid, not noise
+
+
+def raised_flap_signature(reject):
+    """{"step_mm"} of a reject carrying the detector's ``raised_flap(step=..mm...)`` hint, else None.
+    A raised flap is physical: a fresh capture of the same lid measures the same step."""
+    if not isinstance(reject, dict):
+        return None
+    for reason in reject.get("reasons") or []:
+        m = re.match(r"raised_flap\(step=([0-9.]+)mm", str(reason))
+        if m:
+            return {"step_mm": float(m.group(1))}
+    return None
+
+
+def same_raised_flap_failure(first, second, tol_mm=RETRY_SAME_FLAP_STEP_MM):
+    """True when two raised-flap signatures describe the same lid (step within ``tol_mm``)."""
+    if not first or not second:
+        return False
+    return abs(first["step_mm"] - second["step_mm"]) <= tol_mm
+
+
 def same_top_size_failure(first, second, tol_mm=RETRY_SAME_TOP_SIZE_MM):
     """True when two top-size signatures describe the same (deterministic) wrong-size top."""
     if not first or not second:
@@ -1611,6 +1633,7 @@ def _run_detection(next_capture, cfg, progress, ctx, abort_check=None):
     failure_sigs = {}   # attempt number -> rectangle failure signature
     cut_sigs = {}       # attempt number -> sorted cut_permission reason codes
     size_sigs = {}      # attempt number -> top_size_out_of_range signature
+    flap_sigs = {}      # attempt number -> raised_flap signature (physical: a re-capture measures the same)
     last_evidence = {"reject": None, "top": None, "size": None, "consistent": False}
 
     def _stop_all_rejected(early=False):
@@ -1736,6 +1759,11 @@ def _run_detection(next_capture, cfg, progress, ctx, abort_check=None):
             size_sigs[attempt] = size_sig
             entry["failure_signature"] = {"top_size_mm": size_sig}
             same_as_prev = same_as_prev or same_top_size_failure(size_sigs.get(attempt - 1), size_sig)
+        flap_sig = raised_flap_signature(reject)
+        if flap_sig is not None:
+            flap_sigs[attempt] = flap_sig
+            entry["failure_signature"] = {**(entry.get("failure_signature") or {}), "raised_flap": flap_sig}
+            same_as_prev = same_as_prev or same_raised_flap_failure(flap_sigs.get(attempt - 1), flap_sig)
         image_size = None
         try:
             image_size = (int(manifest["image"]["width"]), int(manifest["image"]["height"]))

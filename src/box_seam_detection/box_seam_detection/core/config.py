@@ -343,6 +343,12 @@ V2_DEFAULTS: dict = {
         # the rectangle anchored on the quad's supported edges; off = hull only
         "anchored_rect": "fallback",
         # also read (default "on", pipeline.TRUNC_DEFAULTS): two_flap on | off, see DESIGN.md (c)
+        # superset_first on | off: try a live SAM3 candidate that contains the first one (one
+        # flap / panel of it) first; order only, every gate still applies
+        "superset_first": "off",
+        # flap_check off | shadow | on: step / angle between the two flaps of every final
+        # detection with an observed seam (pipeline.main_flap_check); on = reject over the limits
+        "flap_check": "off",
     },
 }
 

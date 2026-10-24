@@ -92,6 +92,8 @@ class DetectNode(Node):
         "driver_extrinsic": "recorded", "target_frame": "base_link", "side_seed": True,
         "output_root": DEFAULT_OUTPUT_ROOT, "snapshot_path": DEFAULT_SNAPSHOT,
         "scene_config": "",     # "" = table_cell_v1 (today's values); path or shipped name e.g. dual_arm_v1
+        "pipeline_root": "",    # "" = <output_root>/pipeline/... (today); a fast local dir saves ~0.3 s per
+                                # request when output_root is the NTFS-3G USB drive (replay 2026-10-24)
     }
 
     def __init__(self, *, orchestrator=None, node_name: str = "box_seam_detector", **kwargs):
@@ -238,6 +240,8 @@ class DetectNode(Node):
             from ..core import scene as _scene  # noqa: PLC0415
             vals["calib_file"] = _scene.load_scene(scene).calib_file
         vals["output_root"] = self.output_root
+        root = str(vals.get("pipeline_root") or "").strip()
+        vals["pipeline_root"] = Path(os.path.expanduser(root)).resolve() if root else None
         if self._staging is not None:
             vals["capture_staging_dir"] = self._staging.root   # pipeline dirs stay under output_root
         vals["snapshot_path"] = self.snapshot_path  # None = no publish

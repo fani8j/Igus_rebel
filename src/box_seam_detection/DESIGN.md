@@ -374,3 +374,41 @@ flap the gate rejects anything but a small step. Real lids bulge, so the vertex 
 Provenance: `truncation_recovery.two_flap` (planes, step, angle, per-flap deviation, `tag`, `hint`); success adds the reason and cut_permission flag
 `two_flap(step=2.1mm,dev=1.0mm)`. A capture that stays rejected with a too-large step / angle / deviation gets `raised_flap(step=11.2mm): press the flap flat`
 appended to the reject reasons by the detector (no accept / reject decision changes). Scene keys `two_flap_max_step_mm` / `_angle_deg` / `_depth_dev_mm` may only tighten.
+
+(d) Superset first (2026-10-24; `truncation_recovery.superset_first: on | off`, default `off`, `dual_arm_v1` on). SAM3 often
+scores one flap (or a tape-strip panel) above the whole top; the pipeline then evaluated the flap, rejected it or recovered
+the top from it. `pipeline.promote_superset_candidate`: when another live candidate contains >= `min_contain` (0.90) of the
+first live candidate's image area and is 1.4-3.5x larger, it is evaluated FIRST (highest score among such). Order only:
+every candidate runs the same evaluation and gates, and when the superset fails the old order continues. Reason
+`superset_first(rank=..,contain=..,area_ratio=..)`. A promoted superset that WINS skipped the truncation recovery, whose
+`_try` verification it would otherwise have had to pass, so `_superset_unverified` applies the same checks to it (generic
+rectangle gate, seam ok / observed gap for top_from_gap profiles, clean final edge support); on a failure the capture is
+re-run with `superset_first` off (SAM3's order, exactly the old result) and the reason
+`superset_first_unverified(<why>):original_order` is added (advisor review 2026-10-24). Replay (258 archived dual-arm
+captures, 2026-10-24): promoted on 42, 5 of them fell back; 258/258 outcomes identical to the old detector, the 201 accepts
+within 2 mm; detection-server time median 1.79 -> 1.69 s (accepted 1.88 -> 1.70 s, the 37 verified promotions 2.10 -> 1.66
+s; the 5 fallbacks 2.3 -> 3.5 s median, max 8.2 s).
+
+## Flap check (2026-10-24; `truncation_recovery.flap_check: off | shadow | on`, default `off`, `dual_arm_v1` shadow)
+
+The two-flap recovery checks its own result, but a top that SAM3 outlined whole never went through it. `pipeline.main_flap_check`
+splits EVERY final quad with an ok seam at the seam, fits each flap's plane (`two_flap.evaluate_final`, flap A = back) and
+records `record.flap_check` {mode, measured, ok, step_mm, angle_deg, dev_mm, area_frac, limits, reasons, hint, skipped}.
+Gated: the STEP at the seam midpoint only (two-flap limit 5 mm, tightened by `two_flap_max_step_mm`); `on` makes the detector
+reject (stage `flap_check`, retryable, reason + `raised_flap(step=..mm): press the flap flat`; the orchestrator's smart retry
+stops after two captures with the same step +- 3 mm). Unmeasurable flaps are recorded (`measured` false) and never fail.
+The angle is recorded, not gated: a whole lid bows up to the seam, so on the replay's accepted flat lids the angle was
+2.1 deg median / 4.2 deg p95 (a 3 deg gate would reject 32 of 186), the step 1.1 mm median / 2.9 mm p95. Three accepted
+captures of 2026-10-21 21:42-21:57 measured 5.1 / 5.4 / 6.7 mm (front flap 5.9-7.8 mm off the published plane at its far
+corners): `on` would reject them, so the mode stays shadow until the operator confirms those lids were raised.
+
+## Per-stage timing (2026-10-24)
+
+`pipeline.stage_clock_start/stop` + `_mark(name)`: the detector records `timing.stages` (seconds per stage, `<stage>_n`
+calls, `truncation_recovery_incl` = the whole recovery including its re-run): coarse_candidates (SAM3 + work-area filter),
+depth_join, candidate_eval, candidate_select, truncation_recovery, quad_finalize, seam, depth_diag. Diagnostic only.
+Speed notes: `driver_extrinsic: recorded` (the node's default) converts to base_link in-process; `tf` re-looks the transform
+up in a separate python process (+1.3 s per request). `extrinsic_required: true` (shipped node config since 2026-10-24)
+refuses a capture whose live TF lookup failed (2 s `tf_timeout_s`; the request ends with status error) instead of assuming
+the recorded constant; it needs `use_tf: true`. Node parameter `pipeline_root` ("" = under `output_root`): the replay
+measured +0.3 s per request (median) for the pipeline records on the NTFS-3G USB drive vs the internal SSD (~2.4 MB each).
