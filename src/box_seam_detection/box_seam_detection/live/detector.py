@@ -3058,8 +3058,17 @@ def run_request(args, sam3) -> dict:
             paths = {"image": str(image_path), "pcd": str(pcd_pipeline),
                      "manifest": str(manifest_pipeline)}
             t1 = time.monotonic()
-            record, debug = pipeline.process_capture(
-                capture_id, paths, cfg, source="sam3_live", session=session)
+            clock_start = getattr(pipeline, "stage_clock_start", None)   # absent in test fakes
+            clock_stop = getattr(pipeline, "stage_clock_stop", None)
+            if clock_start is not None:
+                clock_start()
+            try:
+                record, debug = pipeline.process_capture(
+                    capture_id, paths, cfg, source="sam3_live", session=session)
+            finally:
+                stages = clock_stop() if clock_stop is not None else None
+            if stages:
+                timing["stages"] = stages
             timing["pipeline_total"] = round(time.monotonic() - t1, 2)
             timing["sam3_inference"] = round(sum(query_times), 2)
             timing["post_sam3"] = round(timing["pipeline_total"] - timing["sam3_inference"], 2)
@@ -3139,6 +3148,16 @@ def run_request(args, sam3) -> dict:
             crop=(work_area_state or {}).get("crop"),
             candidates_dropped=work_area_dropped_candidates(record) if work_area_cfg else None)
         record["work_area_check"] = work_area_result
+        # Flap-height gate (scene truncation_recovery.flap_check: on; pipeline.main_flap_check): a
+        # MEASURED step / angle between the two flaps over the two-flap limits rejects. Retryable,
+        # but the hint makes two captures of the same lid stop early (orchestrator smart retry).
+        # shadow = recorded in record.flap_check only.
+        flap_check = record.get("flap_check") if isinstance(record, dict) else None
+        if (isinstance(flap_check, dict) and flap_check.get("mode") == "on"
+                and flap_check.get("measured") and flap_check.get("ok") is False):
+            raise Reject("flap_check", [*(flap_check.get("reasons") or []),
+                                        *([flap_check["hint"]] if flap_check.get("hint") else [])],
+                         retryable=True, details={"flap_check": flap_check})
         if seam_reject is not None:
             if ("r10" in rules_off() or not seam_reject.reasons
                     or not str(seam_reject.reasons[0]).startswith("seam_status_ambiguous")

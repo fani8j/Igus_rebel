@@ -126,3 +126,5 @@ live:
 truncation_recovery:
   mode: "on"                  # SAM3 sometimes outlines only one flap (back edge -> flap gap): recover the full
                               # top from a containing alternate or the depth-grown coplanar region (DESIGN.md)
+  superset_first: "on"        # when a SAM3 candidate contains the first one (a flap), evaluate it first
+  flap_check: "shadow"        # measure the step between the two flaps of every detection (record only)

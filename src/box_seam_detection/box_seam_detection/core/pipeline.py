@@ -30,6 +30,7 @@ import copy
 import os
 import subprocess
 import threading
+import time as _time
 from pathlib import Path
 
 import cv2
@@ -1701,6 +1702,45 @@ def _clone_depth_work(res: dict) -> dict:
             "err": res["err"], "extra": extra}
 
 
+# ---- per-request stage clock (diagnostic only; never changes a result) --------------------
+# The detector starts it per request; each _mark() attributes the time since the previous mark
+# to ``name``. ``_stage_total`` records an inclusive duration (e.g. the whole truncation
+# recovery, whose re-run also marks its own stages). None = off (tests, offline tools).
+_STAGE_CLOCK: dict | None = None
+
+
+def stage_clock_start() -> None:
+    global _STAGE_CLOCK
+    _STAGE_CLOCK = {"last": _time.perf_counter(), "sum": {}, "n": {}, "total": {}}
+
+
+def _mark(name: str) -> None:
+    clk = _STAGE_CLOCK
+    if clk is None:
+        return
+    now = _time.perf_counter()
+    clk["sum"][name] = clk["sum"].get(name, 0.0) + (now - clk["last"])
+    clk["n"][name] = clk["n"].get(name, 0) + 1
+    clk["last"] = now
+
+
+def _stage_total(name: str, seconds: float) -> None:
+    if _STAGE_CLOCK is not None:
+        _STAGE_CLOCK["total"][name] = round(float(seconds), 3)
+
+
+def stage_clock_stop() -> dict | None:
+    """{"<stage>": seconds (summed), "<stage>_n": calls (when > 1), "<total>_incl": ...}; stops."""
+    global _STAGE_CLOCK
+    clk, _STAGE_CLOCK = _STAGE_CLOCK, None
+    if clk is None:
+        return None
+    out = {k: round(v, 3) for k, v in clk["sum"].items()}
+    out.update({f"{k}_n": n for k, n in clk["n"].items() if n > 1})
+    out.update({f"{k}_incl": v for k, v in clk["total"].items()})
+    return out
+
+
 def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
                     source: str = "auto", archive_dir=None,
                     session=None, _forced: dict | None = None
@@ -1818,10 +1858,12 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
                 cand_filter=cand_filter)
         else:
             cands = []
+        _mark("coarse_candidates")
     finally:
         if thread is not None:
             thread.join()
     depth_est, depth_err = _depth_join()
+    _mark("depth_join")
     xyz = box["res"]["xyz"]
     # Pristine copy for the truncation re-run (taken before any consumer runs).
     depth_snapshot = None
@@ -1835,6 +1877,14 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
     if depth_ctx is not None:
         depth_ctx.update(box["res"]["extra"])
         _apply_scene_limits(depth_ctx)
+    first_cand = cands[0] if cands else {}     # SAM3's own first pick (fail-record provenance)
+    if _forced is None and _truncation_mode(cfg) != "off":
+        _tc = {**TRUNC_DEFAULTS, **(cfg.get("truncation_recovery") or {})}
+        if _flag_on(_tc.get("superset_first")):
+            moved = promote_superset_candidate(cands, float(_tc.get("min_contain", 0.90)))
+            if moved is not None:
+                reasons.append("superset_first(rank={promoted_alternate_rank},contain={contain},"
+                               "area_ratio={area_ratio})".format(**moved))
     winner = None
     if _forced is not None:
         winner = _forced["winner"]
@@ -1947,6 +1997,12 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
         return tcand, info
 
     def _evaluate(cand: dict, entry: dict):
+        try:
+            return _evaluate_impl(cand, entry)
+        finally:
+            _mark("candidate_eval")
+
+    def _evaluate_impl(cand: dict, entry: dict):
         """R2/R3 pre-refine rewrite, then :func:`_evaluate_core`.
 
         A rewritten quad (top-plane rectangle / trim) is only used when it is
@@ -2183,7 +2239,7 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
                 winner = better
     if winner is None:
         reasons.append("no_coarse_quad")
-        first = cands[0] if cands else {}
+        first = first_cand
         return _fail_record(
             capture_id, paths, cfg, "no_coarse_quad", reasons,
             str(first.get("source", source)), image_size=[W, H],
@@ -2193,9 +2249,11 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
             model_revision=(first.get("prov") or {}).get("model_revision"),
             attempts=attempts), debug
 
+    _mark("candidate_select")
     # ---- truncation recovery (scene flag; off = this block never runs) ------
     trunc_block = None
     trunc_mode = _truncation_mode(cfg)
+    _t_trunc = _time.perf_counter()
     if (_forced is None and trunc_mode != "off" and depth_ctx is not None
             and winner["cand"]["source"] == "sam3_live"
             and winner["cross"].get("plane") is not None):
@@ -2214,8 +2272,10 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
             recovered = None
             trunc_block = {"mode": trunc_mode, "triggered": True, "recovered": False,
                            "error": f"{type(exc).__name__}: {exc}"}
+        _stage_total("truncation_recovery", _time.perf_counter() - _t_trunc)
         if recovered is not None:
             return recovered
+        _mark("truncation_recovery")
 
     cand = winner["cand"]
     mask_source = cand["source"]
@@ -2377,6 +2437,7 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
                 f"top_plane_hull_iou={r5_info['iou']})")
             conf_iou = r5_info["iou"]  # independent evidence (confidence only)
             r5_info["cleared_needs_review"] = True
+    _mark("quad_finalize")
     seam_dict, seam_stage = compute_seam_stage(
         bgr, quad, cfg, corners_xyz=corners_xyz,
         profile=(box_prof.name if box_prof is not None else None))
@@ -2397,6 +2458,7 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
     debug["seam_info"] = seam_info
     debug["estimate"] = estimate
 
+    _mark("seam")
     # ---- depth diagnostics of the RGB quad + gap-anchored top (K1) --------
     # Recorded for every profile (shadow); K1 only changes what is published
     # for a profile with top_from_gap (large_392).
@@ -2463,6 +2525,20 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
         else:
             reasons.append(f"top_from_gap_declined({tfg.get('reason')})")
 
+    _tc = {**TRUNC_DEFAULTS, **(cfg.get("truncation_recovery") or {})}
+    flap_check = main_flap_check(quad, seam_dict, plane, plane_rms_mm, depth_ctx, W, H, _tc)
+    if _forced is None and winner["cand"].get("superset_promoted"):
+        # A promoted superset reached the top without the truncation recovery, whose verification
+        # it would otherwise have had to pass: apply the same checks, else re-run in SAM3's order.
+        why = _superset_unverified(winner, seam_dict, depth_diag, box_prof, _tc)
+        if why:
+            cfg2 = copy.deepcopy(cfg)
+            cfg2.setdefault("truncation_recovery", {})["superset_first"] = "off"
+            rec2, dbg2 = process_capture(capture_id, paths, cfg2, source, archive_dir, session)
+            rec2.setdefault("checks", {}).setdefault("reasons", []).append(
+                f"superset_first_unverified({why}):original_order")
+            return rec2, dbg2
+    _mark("depth_diag")
     # ---- record ----------------------------------------------------------
     named = {name: [round(float(quad[i][0]), 1), round(float(quad[i][1]), 1)]
              for i, name in enumerate(CORNER_ORDER)}
@@ -2559,7 +2635,107 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
     record = apply_corner_names(record, manifest, cfg, debug)
     if trunc_block is not None:
         record["truncation_recovery"] = trunc_block
+    if flap_check is not None:
+        record["flap_check"] = flap_check
     return record, debug
+
+
+def _superset_unverified(winner: dict, seam_dict: dict, depth_diag, box_prof, tcfg: dict) -> str | None:
+    """The truncation recovery's verification (``_try``) for a promoted superset that won the
+    candidate loop: generic rectangle gate, seam ok (observed gap for top_from_gap profiles), clean
+    final edge support. Returns the first failure, else None."""
+    name = getattr(box_prof, "name", None)
+    generic = name in (None, "generic")
+    if generic:
+        dd = _rect_diffs_mm((winner.get("cross") or {}).get("corners_xyz"))
+        if dd is None or max(dd) > float(tcfg.get("generic_rect_tol_mm", 20.0)):
+            return "generic_profile_fails_rectangle_gate"
+    if (seam_dict or {}).get("status") != "ok":
+        return f"seam_not_ok({(seam_dict or {}).get('status')})"
+    if (not generic and getattr(box_prof, "top_from_gap", False)
+            and (seam_dict or {}).get("source") != "observed_gap"):
+        return f"seam_not_observed_gap({(seam_dict or {}).get('source')})"
+    ds = ((depth_diag or {}).get("edge_support") or {}) if isinstance(depth_diag, dict) else {}
+    if ds.get("unsupported") is None or ds.get("unsupported"):
+        return "final_quad_edge_support_not_clean"
+    return None
+
+
+def _flap_check_mode(tcfg: dict) -> str:
+    v = tcfg.get("flap_check", "off")
+    if v is True:
+        return "on"
+    if v is False or v is None:
+        return "off"
+    v = str(v).strip().lower()
+    return v if v in ("off", "shadow", "on") else "off"
+
+
+def main_flap_check(quad, seam_dict, plane, plane_rms_mm, depth_ctx, W: int, H: int,
+                    tcfg: dict) -> dict | None:
+    """Flap heights of EVERY final detection with an observed seam (``flap_check``: off | shadow |
+    on). The two-flap recovery checks its own result (core/two_flap.py); a quad that SAM3 outlined
+    whole never went through it, yet one top plane across two flaps at different heights cuts too
+    deep on the high flap and misses the low one. Splits the final quad at the seam, fits each
+    flap's plane and measures the step at the seam midpoint (gated: the two-flap step limit,
+    tightened by ``two_flap_max_step_mm``) and the angle (recorded only). ``ok`` False only when
+    the MEASURED step is over the limit; an unmeasurable flap (too few points) is recorded with ``measured`` False and never
+    fails. The per-flap deviation from the published plane is recorded, not gated (lid bulge).
+    Never raises; None when off or there is nothing to measure."""
+    mode = _flap_check_mode(tcfg)
+    if mode == "off":
+        return None
+    out = {"mode": mode, "measured": False, "ok": True}
+    try:
+        from . import fold_edge as fe
+        from . import two_flap as _tfl
+
+        ep = (seam_dict or {}).get("endpoints_px") or {}
+        if (seam_dict or {}).get("status") != "ok" or not ep.get("seam_left") or not ep.get("seam_right"):
+            out["skipped"] = "no_observed_seam"
+            return out
+        if depth_ctx is None or depth_ctx.get("xyz") is None or depth_ctx.get("cam") is None:
+            out["skipped"] = "no_cloud"
+            return out
+        pn, pd_ = fe._plane_nd(plane)
+        if pn is None:
+            out["skipped"] = "no_plane"
+            return out
+        q = np.asarray(quad, dtype=np.float64).reshape(4, 2)
+        back_mid = 0.5 * (q[0] + q[1])          # flap A = the back flap (ring order BL, BR, FR, FL)
+        max_step, _, _ = _two_flap_limits(tcfg)
+        rms = float(plane_rms_mm) if plane_rms_mm is not None and np.isfinite(plane_rms_mm) else 0.0
+        idx, uv = _depth_projection(depth_ctx)
+        if idx is None:
+            out["skipped"] = "no_projection"
+            return out
+        # only the points projecting into the quad's bounding box can fall in a flap polygon: one
+        # cheap bbox pass instead of two full-cloud scans (identical selection, ~10x fewer points)
+        x0, y0 = q.min(axis=0) - 2.0
+        x1, y1 = q.max(axis=0) + 2.0
+        inb = (uv[:, 0] >= x0) & (uv[:, 0] <= x1) & (uv[:, 1] >= y0) & (uv[:, 1] <= y1)
+        ev = _tfl.evaluate_final(q, (ep["seam_left"], ep["seam_right"]), np.tile(back_mid, (4, 1)),
+                                 (pn, pd_), depth_ctx["cam"], np.asarray(depth_ctx["xyz"]),
+                                 (np.asarray(idx)[inb], uv[inb]), (W, H), rms,
+                                 (max_step, float("inf"), float("inf")))
+        out.update({k: ev.get(k) for k in ("step_mm", "angle_deg", "dev_mm", "area_frac")})
+        out["limits"] = {"step_mm": max_step}
+        if ev.get("step_mm") is None:
+            out["skipped"] = "+".join(ev.get("reasons") or ["unmeasurable"])
+            return out
+        out["measured"] = True
+        # STEP only: a whole lid bows up to the seam, so the angle between the two flap planes of
+        # accepted, flat-lidded boxes is 2.1 deg median / 4.2 deg p95 (replay 2026-10-24, n=186);
+        # the angle is recorded, not gated. The step at the seam was 1.1 mm median / 2.9 mm p95.
+        bad = _tfl.gate_pair(ev["step_mm"], 0.0, max_step, float("inf"))
+        if bad:
+            out["ok"] = False
+            out["reasons"] = bad
+            out["hint"] = _tfl.hint_for(ev["step_mm"], None, None, max_step)
+        return out
+    except Exception as exc:  # noqa: BLE001 — a diagnostic never breaks the detection
+        out["skipped"] = f"error({type(exc).__name__}: {exc})"
+        return out
 
 
 # ----------------------------------------------------------------------
@@ -2597,7 +2773,63 @@ def process_capture(capture_id: str, paths: dict, cfg: dict | None = None,
 # scene keys can only tighten them. The key is not in config.V2_DEFAULTS (records stay bit-identical).
 
 TRUNC_DEFAULTS = {"mode": "off", "min_contain": 0.90, "generic_rect_tol_mm": 20.0,
-                  "anchored_rect": "fallback", "two_flap": "on"}
+                  "anchored_rect": "fallback", "two_flap": "on", "superset_first": "off",
+                  "flap_check": "off"}
+SUPERSET_AREA_RATIO = (1.4, 3.5)   # superset_first: S/P image-area ratio of "P is one part of S"
+
+
+def _flag_on(value) -> bool:
+    if value is True:
+        return True
+    if value is False or value is None:
+        return False
+    return str(value).strip().lower() == "on"
+
+
+def _quad_area_inter(a, b) -> tuple[float, float, float]:
+    """(area a, area b, intersection) of two convex image quads (px^2); zeros when degenerate."""
+    qa = np.asarray(a, dtype=np.float32).reshape(4, 2)
+    qb = np.asarray(b, dtype=np.float32).reshape(4, 2)
+    try:
+        aa = abs(float(cv2.contourArea(qa)))
+        ab = abs(float(cv2.contourArea(qb)))
+        inter, _ = cv2.intersectConvexConvex(cv2.convexHull(qa), cv2.convexHull(qb))
+    except cv2.error:
+        return 0.0, 0.0, 0.0
+    return aa, ab, max(float(inter), 0.0)
+
+
+def promote_superset_candidate(cands: list, min_contain: float = 0.90,
+                               ratio=SUPERSET_AREA_RATIO) -> dict | None:
+    """superset_first: when SAM3's first live candidate P lies (>= ``min_contain`` of its area)
+    inside another live candidate S that is ``ratio`` times larger, S is very likely the whole top
+    and P one flap / panel of it: move S to the front (the highest-scoring such S). ORDER ONLY:
+    every candidate still runs the same evaluation and gates, and when S fails the original order
+    continues. Returns the decision (recorded) or None when nothing moved. In place."""
+    live = [i for i, c in enumerate(cands)
+            if c.get("source") == "sam3_live" and c.get("coarse") is not None and not c.get("skipped")]
+    if len(live) < 2:
+        return None
+    p = live[0]
+    best = None
+    for i in live[1:]:
+        ap, as_, inter = _quad_area_inter(cands[p]["coarse"], cands[i]["coarse"])
+        if ap <= 0 or as_ <= 0:
+            continue
+        contain, area_ratio = inter / ap, as_ / ap
+        if contain < min_contain or not (ratio[0] <= area_ratio <= ratio[1]):
+            continue
+        score = cands[i].get("concept_score")
+        key = float(score) if score is not None else -1.0
+        if best is None or key > best[0]:
+            best = (key, i, contain, area_ratio)
+    if best is None:
+        return None
+    _, i, contain, area_ratio = best
+    cands.insert(p, cands.pop(i))
+    cands[p]["superset_promoted"] = True     # survives the R2/R3 rewrites (they copy non-_ keys)
+    return {"promoted_alternate_rank": cands[p].get("alternate_rank"),
+            "contain": round(contain, 3), "area_ratio": round(area_ratio, 3)}
 
 
 def _two_flap_enabled(tcfg: dict) -> bool:

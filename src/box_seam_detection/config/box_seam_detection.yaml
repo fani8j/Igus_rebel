@@ -37,8 +37,11 @@ box_seam_detector:
     capture_timeout_s: 10.0         # wait for a fresh synced frame per attempt
     driver_parent_frame: camera_link   # driver extrinsic camera_link -> colour optical frame (tf2) written to the manifest
     use_tf: true
-    extrinsic_required: false       # true = refuse the capture when the tf lookup fails
+    extrinsic_required: true        # refuse the capture when the tf lookup fails (never fall back to the
+                                    # assumed recorded constant; both advisors 2026-10-24)
     output_root: /home/farhan/Igus_rebel/outputs/rgbd_captures   # rgb/ pointcloud/ captures/ + pipeline/ outputs
+    pipeline_root: ""               # "" = pipeline/<id>/<run>/ records under output_root (today). output_root is the
+                                    # NTFS-3G USB drive: a local SSD dir here saves ~0.3 s per request (~2.4 MB each)
     # RAM-first capture staging: captures are written here first and archived to output_root after the result is
     # known (accepted capture -> rgb/pointcloud/captures, every other one -> output_root/failed_recent, last 3).
     # "off" = write straight into output_root; env BOX_SEAM_CAPTURE_STAGING is the fallback of this default;
@@ -56,7 +59,8 @@ box_seam_detector:
     downstream_inprocess: true
     calib_file: ~/.ros2/easy_handeye2/calibrations/rebel_handeye_h_v2.calib
     scene_config: ""                # "" = table_cell_v1 (today); dual_arm_v1 = dual-arm cell (its calib file is the default)
-    driver_extrinsic: recorded      # base_link = calib o driver extrinsic (recorded constant or the manifest value)
+    driver_extrinsic: recorded      # base_link = calib o driver extrinsic (the manifest value the node recorded from
+                                    # live TF at capture time); keep it: `tf` re-looks it up in a subprocess (+1.3 s)
     target_frame: base_link
     side_seed: true
     # snapshot_path: "" = never publish a snapshot file (detect and report only)

@@ -52,6 +52,7 @@ def make_fake_orchestrator():
         output_root: Path = Path(".")
         snapshot_path: Path = Path("snap.json")
         capture_staging_dir: Path | None = None
+        pipeline_root: Path | None = None
 
     @dataclasses.dataclass
     class DetectResult:
@@ -236,6 +237,16 @@ def test_goal_flags_and_param_overrides(tmp_path, spinner):
     h.run(allow_needs_review=True, max_attempts=7)
     c = h.orch.calls[1]
     assert (c.max_attempts, c.allow_needs_review) == (7, True)
+
+
+def test_pipeline_root_param(tmp_path, spinner):
+    """"" keeps the pipeline records under output_root (None); a path reaches DetectConfig resolved."""
+    h = Harness(tmp_path, spinner)
+    h.run()
+    assert h.orch.calls[0].pipeline_root is None
+    h2 = Harness(tmp_path, spinner, pipeline_root=str(tmp_path / "fast"))
+    h2.run()
+    assert h2.orch.calls[0].pipeline_root == (tmp_path / "fast").resolve()
 
 
 def test_recorder_source_without_live_recorder_reports_error(tmp_path, spinner):
