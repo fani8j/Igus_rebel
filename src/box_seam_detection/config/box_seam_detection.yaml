@@ -1,0 +1,67 @@
+# box_seam_detection: DetectBox action server (node `box_seam_detector`).
+# Launch: ros2 launch box_seam_detection box_seam_detection.launch.py
+# Call:   ros2 action send_goal /box_seam_detector/detect_box compal_box_msgs/action/DetectBox "{}" --feedback
+# The node never commands the robot; the snapshot file it writes (via live.orchestrator) is read by the H-cut executor.
+box_seam_detector:
+  ros__parameters:
+    # ---- capture ---------------------------------------------------------------------------------------------
+    capture_source: node            # node = capture from the topics below; recorder = today's rgbd_recorder path
+                                    #   (needs live.recorder.capture_once(output_root, attempt, timeout_s))
+    color_topic: /camera/color/image_raw        # rgb8 or bgr8
+    depth_topic: /camera/depth/image_raw        # 16UC1 (mm) or 32FC1 (m), REGISTERED to colour (same size + frame:
+                                                #   scene_camera.yaml depth_registration: true, align_target_stream: COLOR)
+    camera_info_topic: /camera/color/camera_info
+    sync_slop_s: 0.04               # ApproximateTime slop colour<->depth (15 fps = 66 ms apart)
+    sync_queue_size: 10
+    # Node-side depth->colour registration: a second synchroniser [colour, raw depth]; the raw depth is re-projected
+    # into the raw colour pixel grid in the node (colour distortion, z-buffer), so a capture no longer depends on the
+    # driver's software alignment finding a colour partner (it rarely does when colour drops below ~10 fps).
+    # Driver-aligned sets stay a candidate; the first fresh set of either kind wins (manifest: depth_registration).
+    # Needs tf colour optical frame <- raw depth optical frame and a depth camera_info of the raw depth size
+    # (distortion all zero); fails closed otherwise (reason in the capture timeout message).
+    # Live-tested 2026-10-21 (node-only: 12/12 accepted; base_link corners within 2 mm of driver-aligned captures).
+    node_depth_registration: true
+    raw_depth_topic: /camera/depth/image_unaligned   # 16UC1/32FC1 in its OWN optical frame (not the colour size!)
+    depth_info_topic: /camera/depth/camera_info      # also carries the aligned info; the one with the raw size is used
+    raw_sync_slop_s: 0.03           # (0, 0.05]; the unaligned depth stamps share the colour 15 fps grid, so pairs are
+                                    # 0 or 66.7 ms apart; only same-frame pairs may match (base_link rejects > 50 ms)
+    # Fallback depth intrinsics [width, height, fx, fy, cx, cy] (zero distortion; floats only; [] = none). The driver
+    # publishes /camera/depth/camera_info only at the aligned size while its alignment works, so there is then no
+    # raw-size info. Gemini 336 CP96563000LY, recorded from the driver on 2026-10-20. A live camera_info of the raw
+    # size always takes precedence; the fallback applies only if width/height equal the raw depth image size.
+    # Update it if the camera or the depth resolution changes (manifest: depth_registration.intrinsics_source).
+    raw_depth_intrinsics: [1280.0, 800.0, 624.600830078125, 624.600830078125, 633.5, 399.0]
+    # NOTE use_sim_time: freshness compares camera stamps with the NODE clock; leave use_sim_time false with a
+    # real/host-stamped camera (all of sync_slop_s, capture_timeout_s, status_period_s must be > 0).
+    capture_margin_s: 0.0           # a frame must be stamped later than request time + this (host clock)
+    capture_timeout_s: 10.0         # wait for a fresh synced frame per attempt
+    driver_parent_frame: camera_link   # driver extrinsic camera_link -> colour optical frame (tf2) written to the manifest
+    use_tf: true
+    extrinsic_required: false       # true = refuse the capture when the tf lookup fails
+    output_root: /home/farhan/Igus_rebel/outputs/rgbd_captures   # rgb/ pointcloud/ captures/ + pipeline/ outputs
+    # RAM-first capture staging: captures are written here first and archived to output_root after the result is
+    # known (accepted capture -> rgb/pointcloud/captures, every other one -> output_root/failed_recent, last 3).
+    # "off" = write straight into output_root; env BOX_SEAM_CAPTURE_STAGING is the fallback of this default;
+    # falls back to direct writes (with a warning) if unusable or < 512 MB free.
+    capture_staging_dir: /dev/shm/box_seam_detection/staging
+    # ---- DetectConfig (live.orchestrator) -------------------------------------------------------------------
+    max_attempts: 4                 # goal.max_attempts > 0 overrides
+    retry_policy: smart
+    allow_needs_review: false       # goal flag is OR-ed with this
+    allow_cut_blocked: false        # override: write the snapshot although cut_permission is blocked (recorded)
+    dry_run: false                  # detect and report, never write/remove the snapshot file
+    rect_tol_mm: -1.0               # < 0 = detector default
+    sam3_python: /home/farhan/miniconda3/envs/book_grasping/bin/python   # env BOX_SEAM_SAM3_PYTHON overrides the default
+    sam3_daemon: auto               # auto | off | ... (shared machine-wide singleton, never stopped by the node)
+    downstream_inprocess: true
+    calib_file: ~/.ros2/easy_handeye2/calibrations/rebel_handeye_h_v2.calib
+    scene_config: ""                # "" = table_cell_v1 (today); dual_arm_v1 = dual-arm cell (its calib file is the default)
+    driver_extrinsic: recorded      # base_link = calib o driver extrinsic (recorded constant or the manifest value)
+    target_frame: base_link
+    side_seed: true
+    # snapshot_path: "" = never publish a snapshot file (detect and report only)
+    snapshot_path: /home/farhan/Igus_rebel/outputs/seam_3d_base_link.json    # box_h_cut_snapshot/v1 for the executor
+    # ---- node ------------------------------------------------------------------------------------------------
+    warm_daemon: true               # ensure the SAM3 daemon at start (readiness in ~/status)
+    overlay_glob: "autolabel_v2_overlays/*_autolabel_v2.png"   # fallback when the result has no overlay_path; newest match under the pipeline dir
+    status_period_s: 2.0            # ~/status refresh (also published on every state change)
