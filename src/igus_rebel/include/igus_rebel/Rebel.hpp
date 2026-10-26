@@ -263,11 +263,21 @@ private:
   // perform_command_mode_switch, which cannot refuse the switch: Humble still activates the
   // controllers). The move thread aborts and latches on it; cleared when a move starts.
   std::atomic<bool> claimDuringMove_{false};
-  // Serializes the actual CMD Move Stop send (ALIVEJOG thread) with the CMD Move Joint send.
+  // Serializes the actual CMD Move Stop send (ALIVEJOG thread, Stop()) with the CMD Move Joint
+  // send, and makes "may this move still go out?" atomic with the send.
+  // Lock order (outer -> inner), never the reverse:
+  //   claimLock_ -> moveEventLock_
+  //   moveSendLock_ -> moveEventLock_ (short, never held across a send)
+  //   moveSendLock_ -> startupLock_ (try_lock only) / commandsLock / the socket write lock
+  // moveEventLock_ is a leaf for everything else. LatchHardwareError()/RequestMoveStop() take no
+  // lock that is held while moveSendLock_ or moveEventLock_ is taken (atomics, a leaf string lock
+  // and the fault group), and are never called with moveSendLock_ or moveEventLock_ held.
   std::mutex moveSendLock_;
   std::atomic<bool> failNextMoveSend_{false};
   std::shared_ptr<std::function<void()>> beforeStopSendHook_;
   std::shared_ptr<std::function<void()>> beforeMoveSendHook_;
+  std::shared_ptr<std::function<void()>> beforeHandleMessageHook_;
+  std::shared_ptr<std::function<void()>> beforeMoveFinishHook_;
   // STATUS showed joint motion since the current/last CMD Move Joint was sent (see
   // ExecuteMoveGoal): standstill only confirms a Move Stop for a robot that was moving.
   std::atomic<bool> moveMotionSeen_{false};
@@ -338,7 +348,10 @@ private:
   void CheckFaultGroupStatus(
     CriMessages::Kinstate kinstate, const std::array<int, 16> & errorJoints);
   std::string FaultGroupRecoveryHint() const;
-  void HandleMessage(const std::string &);
+  // `receivedAt`/`receivedSystemNs`: when the socket read the bytes (not when this thread gets
+  // to them); stamps the STATUS snapshot.
+  void HandleMessage(
+    const std::string &, Safety::SteadyClock::time_point receivedAt, std::int64_t receivedSystemNs);
 
   // on_init helper: exactly six joints in CRI order with the interfaces this driver exports.
   bool ValidateJoints(const HardwareInfo & hardware_info);
@@ -397,6 +410,24 @@ public:
   {
     std::atomic_store(
       &beforeMoveSendHook_,
+      hook ? std::make_shared<std::function<void()>>(std::move(hook)) :
+      std::shared_ptr<std::function<void()>>());
+  }
+  // Runs on the message thread after a message was dequeued and before it is handled: a test can
+  // delay the processing (a slow consumer) to check receive-time stamps and dropped messages.
+  void SetBeforeHandleMessageHookForTest(std::function<void()> hook)
+  {
+    std::atomic_store(
+      &beforeHandleMessageHook_,
+      hook ? std::make_shared<std::function<void()>>(std::move(hook)) :
+      std::shared_ptr<std::function<void()>>());
+  }
+  // Runs in the move thread at the start of ending a goal that started a move, before the last
+  // look at the robot's events (a test can make a late MOVETOEXECERROR deterministic).
+  void SetBeforeMoveFinishHookForTest(std::function<void()> hook)
+  {
+    std::atomic_store(
+      &beforeMoveFinishHook_,
       hook ? std::make_shared<std::function<void()>>(std::move(hook)) :
       std::shared_ptr<std::function<void()>>());
   }

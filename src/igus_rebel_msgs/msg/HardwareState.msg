@@ -26,3 +26,5 @@ bool move_active                         # a move_joint goal is in progress (sen
 uint8 drives_disabled_mask               # bit i (0..5) set = STATUS reports 'Motor not enabled' for joint i+1
 int32 kinstate                           # kinematics state of the latest STATUS (0 = no error)
 bool activated                           # component is ACTIVE (read()/write() are being called)
+float64 move_joint_max_velocity_percent      # configured cap on a move_joint goal's velocity_percent, in % (after the 100 % hard-cap clamp); constant
+float64 move_joint_max_acceleration_percent  # configured cap on a move_joint goal's acceleration_percent, in % (after the hard-cap clamp); constant

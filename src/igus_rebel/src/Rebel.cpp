@@ -325,13 +325,17 @@ void Rebel::MessageThreadFunction()
   RCLCPP_INFO(logger_, "Starting to process robot messages");
 
   while (continueMessage) {
-    std::string msg;
-    if (!rebelSocket->WaitForMessage(msg, kMessageWaitTimeout)) {
+    RebelSocket::ReceivedMessage received;
+    if (!rebelSocket->WaitForMessage(received, kMessageWaitTimeout)) {
       continue;
     }
+    const std::string & msg = received.text;
 
     try {
-      HandleMessage(msg);
+      if (const auto hook = std::atomic_load(&beforeHandleMessageHook_)) {
+        (*hook)();  // tests only: a slow message thread
+      }
+      HandleMessage(msg, received.received, received.systemNs);
     } catch (const std::exception & e) {
       RCLCPP_ERROR_THROTTLE(
         logger_, throttleClock_, 5000, "Failed to process robot message '%s': %s",
@@ -346,7 +350,9 @@ void Rebel::MessageThreadFunction()
   RCLCPP_WARN(logger_, "Stopped to process robot messages");
 }
 
-void Rebel::HandleMessage(const std::string & msg)
+void Rebel::HandleMessage(
+  const std::string & msg, Safety::SteadyClock::time_point receivedAt,
+  std::int64_t receivedSystemNs)
 {
   {
     // Track skipped CRI counter values (every message type shares the robot's counter).
@@ -391,9 +397,10 @@ void Rebel::HandleMessage(const std::string & msg)
         {
           std::lock_guard<std::mutex> lock(snapshotLock);
           snapshot.positionRad = positionRad;
-          snapshot.stamp = Safety::SteadyClock::now();
-          snapshot.systemStampNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count();
+          // The time the bytes were read from the socket, not "now": a message thread that fell
+          // behind must not make old data look fresh (age tiers, velocity, robot_joint_states).
+          snapshot.stamp = receivedAt;
+          snapshot.systemStampNs = receivedSystemNs;
           snapshot.overridePercent = status.overrideValue;
           snapshot.counterSkipped = counterSkipped_;
           ++snapshot.sequence;
@@ -1776,48 +1783,62 @@ void Rebel::RecordMoveEvent(const CriMessages::ExecEvent & event, CriMessages::M
   const char * name = isError ?
     (type == CriMessages::MessageType::MOVETOEXECERROR ? "MOVETOEXECERROR" : "EXECERROR") :
     (isEnd ? "MOVETOEXECEND" : "MOVETOEXECACK");
+  // The idle check and the recording are one step under moveEventLock_, and ExecuteMoveGoal's
+  // finish() re-reads the events and goes idle under the same lock: an event is either recorded
+  // for the goal in flight (and seen by finish) or logged as "no joint move active", never lost
+  // in between.
   if (isError) {
     // Always logged at ERROR. The numeric code of an ERROR (0 for an e-stop) is not "success".
     RCLCPP_ERROR(
       logger_, "Robot reported %s: code %d sub %d program '%s' reason '%s'", name, event.code,
       event.sub, event.program.c_str(), event.reason.c_str());
-    if (moveState_.load() == kMoveIdle) {
+    bool recorded = true;
+    {
+      std::lock_guard<std::mutex> lock(moveEventLock_);
+      if (moveState_.load() == kMoveIdle) {
+        recorded = false;
+      } else if (!moveEvents_.errorSeen) {
+        // Recorded in ANY non-idle state (Sending/Moving/Stopping), without the "END before ACK"
+        // gate: an error always concerns the move in flight (or a robot fault that makes it
+        // unsafe).
+        moveEvents_.errorSeen = true;
+        moveEvents_.errorType = name;
+        moveEvents_.errorReason = event.reason;
+      }
+    }
+    if (!recorded) {
       // An unsolicited error with no joint move of ours: log only. It must never latch and
       // never leak into a later goal (nothing is recorded while idle).
       RCLCPP_WARN(logger_, "%s ignored: no joint move active", name);
-      return;
-    }
-    // Recorded in ANY non-idle state (Sending/Moving/Stopping), without the "END before ACK"
-    // gate: an error always concerns the move in flight (or a robot fault that makes it unsafe).
-    std::lock_guard<std::mutex> lock(moveEventLock_);
-    if (!moveEvents_.errorSeen) {
-      moveEvents_.errorSeen = true;
-      moveEvents_.errorType = name;
-      moveEvents_.errorReason = event.reason;
     }
     return;
   }
-  if (moveState_.load() == kMoveIdle) {
+  bool idle = false;
+  {
+    std::lock_guard<std::mutex> lock(moveEventLock_);
+    idle = moveState_.load() == kMoveIdle;
+    if (!idle) {
+      if (isEnd) {
+        if (!moveEvents_.moveAck) {
+          // The ACK always precedes the END of the same move on the stream: this END belongs to
+          // an earlier move.
+          RCLCPP_WARN(logger_, "Ignoring MOVETOEXECEND before MOVETOEXECACK of the current move");
+          return;
+        }
+        moveEvents_.endSeen = true;
+        moveEvents_.endCode = event.code;
+        moveEvents_.endReason = event.reason;
+        RCLCPP_INFO(
+          logger_, "Robot move ended: code %d reason '%s'", event.code, event.reason.c_str());
+      } else {
+        moveEvents_.moveAck = true;
+      }
+    }
+  }
+  if (idle) {
     RCLCPP_INFO(
       logger_, "Ignoring %s %d %d %s %s (no joint move active)", name, event.code, event.sub,
       event.program.c_str(), event.reason.c_str());
-    return;
-  }
-  std::lock_guard<std::mutex> lock(moveEventLock_);
-  if (isEnd) {
-    if (!moveEvents_.moveAck) {
-      // The ACK always precedes the END of the same move on the stream: this END belongs to an
-      // earlier move.
-      RCLCPP_WARN(logger_, "Ignoring MOVETOEXECEND before MOVETOEXECACK of the current move");
-      return;
-    }
-    moveEvents_.endSeen = true;
-    moveEvents_.endCode = event.code;
-    moveEvents_.endReason = event.reason;
-    RCLCPP_INFO(
-      logger_, "Robot move ended: code %d reason '%s'", event.code, event.reason.c_str());
-  } else {
-    moveEvents_.moveAck = true;
   }
 }
 
@@ -1934,6 +1955,8 @@ void Rebel::PublishHardwareState()
   msg.drives_disabled_mask = static_cast<std::uint8_t>(disabledMask & 0x3Fu);
   msg.kinstate = kinstate;
   msg.activated = activated;
+  msg.move_joint_max_velocity_percent = moveMaxVelocityPercent_;
+  msg.move_joint_max_acceleration_percent = moveMaxAccelerationPercent_;
   try {
     hardwareStatePub_->publish(msg);
   } catch (const std::exception & error) {
@@ -2195,19 +2218,23 @@ void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
       return snapshot;
     };
 
+  // Drop counter when this goal was accepted: messages discarded since then may have included
+  // the robot's MOVETOEXECERROR (set in the claim block below).
+  std::uint64_t dropsAtStart = 0;
+  const std::string dropText =
+    "robot messages were dropped during a joint move (a robot error may have been lost)";
+
   // Ends the goal. State goes back to Idle BEFORE the client sees the result, so a controller
   // can be activated as soon as it has it.
-  const auto finish = [&](std::uint8_t code, const std::string & message) {
-      result->error_code = code;
-      result->message = message;
-      result->end_reason = endReason;
-      result->stop_sent = stopSent;
-      result->stop_confirmed = stopConfirmed;
-      const JointSnapshot last = latestSnapshot();
-      result->final_positions.assign(last.positionRad.begin(), last.positionRad.end());
+  const auto finish = [&](std::uint8_t code, const std::string & initialMessage) {
+      std::string message = initialMessage;
+      std::string lateLatchText;
       if (moveState_.load() != kMoveIdle) {
         // A move was started by this goal (a goal refused up front must not touch a stop that an
         // earlier, unconfirmed move left pending).
+        if (const auto hook = std::atomic_load(&beforeMoveFinishHook_)) {
+          (*hook)();  // tests only: events that arrive between the decision and the result
+        }
         if (velocityClaimMask_.load() != 0 || claimDuringMove_.load()) {
           // A controller took the joints while the move ran (the mask was 0 when it was
           // accepted), also during the stopping phase where the abort checks do not run: it
@@ -2215,15 +2242,49 @@ void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
           // below (the latch itself requests a stop while the state is not idle).
           LatchHardwareError("a controller claimed the joints during a joint move");
         }
-        if (!stopSent || stopConfirmed) {
-          moveStopRequested_ = false;  // nothing to stop, or the robot is known to stand still
-        } else {
-          // Unconfirmed: keep asking. The ALIVEJOG thread re-sends CMD Move Stop every
-          // kMoveStopResendPeriod until STATUS shows standstill (ConsumeMoveStopRequest).
-          RequestMoveStop();
+        {
+          // The last look at the robot's events and the transition to Idle are one step under
+          // moveEventLock_ (RecordMoveEvent records only while not idle, under the same lock): a
+          // MOVETOEXECERROR that arrived after the supervision loop copied the events is not lost
+          // and a later one cannot leak into the next goal. RequestMoveStop() is lock-free; the
+          // latch (which may take other locks) is called after the lock is released.
+          std::lock_guard<std::mutex> eventLock(moveEventLock_);
+          if (moveEvents_.errorSeen) {
+            const std::string text =
+              "robot reported " + moveEvents_.errorType + ": " + moveEvents_.errorReason;
+            endReason = "ERROR";
+            if (code != Result::FAULT || message.find(text) == std::string::npos) {
+              message += (message.empty() ? "" : " ") + std::string("[") + text + "]";
+            }
+            code = Result::FAULT;  // never SUCCESS/CANCELED/LATCHED when the robot failed
+            lateLatchText = text;
+          } else if (rebelSocket && rebelSocket->DroppedMessageCount() != dropsAtStart) {
+            if (message.find(dropText) == std::string::npos) {
+              message += " [" + dropText + "]";
+            }
+            code = Result::FAULT;
+            lateLatchText = dropText;
+          }
+          if (!stopSent || stopConfirmed) {
+            moveStopRequested_ = false;  // nothing to stop, or the robot is known to stand still
+          } else {
+            // Unconfirmed: keep asking. The ALIVEJOG thread re-sends CMD Move Stop every
+            // kMoveStopResendPeriod until STATUS shows standstill (ConsumeMoveStopRequest).
+            RequestMoveStop();
+          }
+          moveState_ = kMoveIdle;
+        }
+        if (!lateLatchText.empty() && !hardwareErrorLatched_.load()) {
+          LatchHardwareError(lateLatchText);
         }
       }
-      moveState_ = kMoveIdle;
+      result->error_code = code;
+      result->message = message;
+      result->end_reason = endReason;
+      result->stop_sent = stopSent;
+      result->stop_confirmed = stopConfirmed;
+      const JointSnapshot last = latestSnapshot();
+      result->final_positions.assign(last.positionRad.begin(), last.positionRad.end());
       // Also free BEFORE the result: a client may send its next goal the moment it has the
       // result (OnMoveAccepted joins this thread before starting the next one).
       moveGoalBusy_ = false;
@@ -2268,14 +2329,16 @@ void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
       claimDuringMove_ = false;
       moveMotionSeen_ = false;
       stopSeqAtStart = moveStopSeq_.load();
+      dropsAtStart = rebelSocket->DroppedMessageCount();
       {
         // Nothing of an earlier goal (an old ACK/END, above all an old MOVETOEXECERROR) may
         // survive into this one. While idle RecordMoveEvent records nothing, so from here on
-        // everything in moveEvents_ arrived after this point.
+        // everything in moveEvents_ arrived after this point (the state leaves Idle under the
+        // same lock, so no event falls between the reset and the first recording).
         std::lock_guard<std::mutex> eventLock(moveEventLock_);
         moveEvents_ = MoveEvents{};
+        moveState_ = kMoveSending;
       }
-      moveState_ = kMoveSending;
     }
   }
   if (code != Result::SUCCESS) {
@@ -2283,13 +2346,50 @@ void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
     return;
   }
 
-  // A latch/fault/cancel that raced the checks above (their stop request was ignored while idle).
-  if (stopping || !activated_ || hardwareErrorLatched_ || moveCancelRequested_ ||
-    statusHold_ || statusCoast_)
-  {
-    finish(
-      moveCancelRequested_ ? Result::CANCELED : Result::LATCHED,
-      "aborted before sending: driver stopped, latched, deactivated or canceled");
+  // A latch/fault/cancel/robot error/dropped message that raced the checks above (their stop
+  // request was ignored while idle). Evaluated here and again, atomically with the send, under
+  // moveSendLock_ (see below).
+  const auto robotErrorSeen = [this]() {
+      std::lock_guard<std::mutex> lock(moveEventLock_);
+      return moveEvents_.errorSeen;
+    };
+  const auto mustNotSend = [&]() {
+      return stopping || !activated_ || hardwareErrorLatched_ || moveCancelRequested_ ||
+             statusHold_ || statusCoast_ || robotErrorSeen() ||
+             rebelSocket->DroppedMessageCount() != dropsAtStart;
+    };
+  // Ends the goal without anything having been sent: no Move Stop is "sent" for a move the robot
+  // never received (stopSent stays false).
+  const auto finishBeforeSend = [&]() {
+      MoveEvents early;
+      {
+        // A robot-reported error that arrived since the goal was accepted (recorded in any
+        // non-idle state) makes this a FAULT, never a benign CANCELED/LATCHED.
+        std::lock_guard<std::mutex> lock(moveEventLock_);
+        early = moveEvents_;
+      }
+      if (early.errorSeen) {
+        const std::string text = "robot reported " + early.errorType + ": " + early.errorReason;
+        endReason = "ERROR";
+        if (!hardwareErrorLatched_.load()) {
+          LatchHardwareError(text);
+        }
+        finish(Result::FAULT, "aborted before sending: " + text);
+        return;
+      }
+      if (rebelSocket->DroppedMessageCount() != dropsAtStart) {
+        if (!hardwareErrorLatched_.load()) {
+          LatchHardwareError(dropText);
+        }
+        finish(Result::FAULT, "aborted before sending: " + dropText);
+        return;
+      }
+      finish(
+        moveCancelRequested_ ? Result::CANCELED : Result::LATCHED,
+        "aborted before sending: driver stopped, latched, deactivated or canceled");
+    };
+  if (mustNotSend()) {
+    finishBeforeSend();
     return;
   }
 
@@ -2336,16 +2436,34 @@ void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
     finish(Result::CMD_ERROR, "could not format CMD Move Joint");
     return;
   }
-  bool sendOk;
+  bool sendOk = false;
+  bool blocked = false;
   {
-    // Serialized with the ALIVEJOG thread's CMD Move Stop send (see ConsumeMoveStopRequest): an
-    // old stop request that passed its check earlier can never land behind this Move Joint.
+    // Serialized with the ALIVEJOG thread's CMD Move Stop send (see ConsumeMoveStopRequest) and
+    // Stop()'s: an old stop request that passed its check earlier can never land behind this Move
+    // Joint, and the final authorization below is atomic with the send. A latch/cancel/error
+    // that arrives after it is caught by the supervision loop, and its Move Stop needs this lock,
+    // so it goes out after the Move Joint. Lock order: see moveSendLock_ in Rebel.hpp.
     std::lock_guard<std::mutex> sendGuard(moveSendLock_);
     if (const auto hook = std::atomic_load(&beforeMoveSendHook_)) {
       (*hook)();  // tests only: a slow send / a wait behind the stop send
     }
-    sendOk = !failNextMoveSend_.exchange(false) &&
-      rebelSocket->SendMessage(Safety::FormatCommand(counter, commandText));
+    if (mustNotSend()) {
+      blocked = true;
+    } else {
+      sendOk = !failNextMoveSend_.exchange(false) &&
+        rebelSocket->SendMessage(Safety::FormatCommand(counter, commandText));
+    }
+  }
+  if (blocked) {
+    // Nothing was sent: forget the command and finish like the early abort above.
+    {
+      std::lock_guard<std::mutex> lock(commandsLock);
+      unacknowledgedCommands.erase(counter);
+    }
+    moveCommandCounter_ = -1;
+    finishBeforeSend();
+    return;
   }
   if (!sendOk) {
     // A failed send can follow a partial transmission, so the robot may have received (and may
@@ -2398,6 +2516,8 @@ void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
 
   // A robot-reported error was handled (latched, reported) by this goal.
   bool errorNoted = false;
+  // Dropped robot messages were handled (latched, reported) by this goal.
+  bool dropNoted = false;
   const auto beginStop = [&](std::uint8_t abortWith, const std::string & message) {
       stopPhase = true;
       abortCode = abortWith;
@@ -2481,6 +2601,12 @@ void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
         const std::string text = "robot reported " + events.errorType + ": " + events.errorReason;
         beginStop(Result::FAULT, text);
         LatchHardwareError(text);
+      } else if (rebelSocket->DroppedMessageCount() != dropsAtStart) {
+        // The consumer fell behind and the socket discarded messages: the robot's
+        // MOVETOEXECERROR (or END) may have been among them.
+        dropNoted = true;
+        beginStop(Result::FAULT, dropText);
+        LatchHardwareError(dropText);
       } else if (stopping) {
         beginStop(Result::FAULT, "driver is shutting down");
       } else if (moveCancelRequested_) {
@@ -2569,9 +2695,21 @@ void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
     if (events.errorSeen && !errorNoted) {
       errorNoted = true;
       const std::string text = "robot reported " + events.errorType + ": " + events.errorReason;
+      // A robot-reported error always makes the goal a FAULT, whichever abort started the stop
+      // (a client must not read a cancel that ended in an e-stop as a benign CANCELED).
+      abortCode = Result::FAULT;
       abortMessage += " [" + text + "]";
       if (!hardwareErrorLatched_.load()) {
         LatchHardwareError(text);
+      }
+    }
+    if (!dropNoted && rebelSocket->DroppedMessageCount() != dropsAtStart) {
+      // Same for a lost message while stopping (it may have been the error): a FAULT, latched.
+      dropNoted = true;
+      abortCode = Result::FAULT;
+      abortMessage += " [" + dropText + "]";
+      if (!hardwareErrorLatched_.load()) {
+        LatchHardwareError(dropText);
       }
     }
     // Confirmed by (a) the robot's MOVETOEXECEND of this move, or (b) standstill AFTER motion
@@ -2602,8 +2740,10 @@ void Rebel::ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle)
     if (now - stopFirstAt >= (stopping ? kStopLimitShutdown : kStopLimit)) {
       LatchHardwareError("CMD Move Stop was not confirmed during a joint move");
       stopConfirmed = false;
+      // A cancel whose stop is not confirmed is a FAULT, not a benign CANCELED: the robot may
+      // still be moving. Every other abort code is already a failure and keeps its meaning.
       finish(
-        abortCode, abortMessage + " [CMD Move Stop NOT confirmed within 1 s: hardware latched, "
+        abortCode == Result::CANCELED ? Result::FAULT : abortCode, abortMessage + " [CMD Move Stop NOT confirmed within 1 s: hardware latched, "
         "the stop stays pending and jog is held at zero. E-stop the robot if it may still move. "
         "Recovery: e-stop (or switch the drives off) so STATUS reports all drives disabled, wait "
         "for 'Pending CMD Move Stop confirmed', then 'ros2 control set_hardware_component_state " +
@@ -2644,6 +2784,9 @@ void Rebel::Stop()
   // Robot-side joint move first: zero jog / Disable do not stop it, only Move Stop does.
   RequestMoveStop();
   if (moveState_.load() != kMoveIdle && rebelSocket && rebelSocket->IsConnected()) {
+    // Under the send lock like every other Move Stop send: a CMD Move Joint that passed its
+    // final check (which looks at `stopping`, set above) is on the wire before this stop.
+    std::lock_guard<std::mutex> sendGuard(moveSendLock_);
     SendMoveStopNow();
   }
 

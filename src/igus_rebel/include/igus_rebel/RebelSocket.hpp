@@ -30,6 +30,16 @@ class RebelSocket
 public:
   using ConnectedCallback = std::function<void (bool reconnect)>;
 
+  // A complete message body with the time its bytes were read from the socket (the receive thread
+  // stamps it, not the thread that later processes the queue: a backlog must not make old data
+  // look fresh). All messages framed from one recv() share the stamp.
+  struct ReceivedMessage
+  {
+    std::string text;
+    std::chrono::steady_clock::time_point received{};
+    std::int64_t systemNs = 0;  // system_clock ns since the Unix epoch at the same instant
+  };
+
   // Socket timeouts: connect() and send() are bounded by kSendTimeout (Linux applies
   // SO_SNDTIMEO to connect), recv() wakes up every kReceiveTimeout to check for Stop().
   static constexpr std::chrono::milliseconds kSendTimeout{1000};
@@ -63,6 +73,10 @@ public:
   std::string GetMessage();
   // Waits up to timeout for a message. Returns false on timeout or after Stop().
   bool WaitForMessage(std::string & message, std::chrono::milliseconds timeout);
+  bool WaitForMessage(ReceivedMessage & message, std::chrono::milliseconds timeout);
+  // Number of queued messages discarded (oldest first) because the consumer fell behind
+  // (kMaxUnprocessedMessages). A robot message (above all a MOVETOEXECERROR) may be among them.
+  std::uint64_t DroppedMessageCount() const {return droppedMessages.load();}
 
   // Returns false if not connected or the send failed (the connection is then shut down
   // and the receive thread reconnects).
@@ -87,7 +101,8 @@ private:
 
   std::mutex messageLock;
   std::condition_variable messageCondition;
-  std::deque<std::string> unprocessedMessages;
+  std::deque<ReceivedMessage> unprocessedMessages;
+  std::atomic<std::uint64_t> droppedMessages{0};
   bool stopRequested = false;  // guarded by messageLock
 
   CriFrameParser framer;  // receive thread only
@@ -97,7 +112,7 @@ private:
 
   bool TryConnect();
   void CloseSocket();
-  void PushMessages(std::vector<std::string> && messages);
+  void PushMessages(std::vector<std::string> && messages);  // stamps the receive time
   void ReceiveThreadFunction();
   void InterruptibleSleep(std::chrono::milliseconds duration);
 };
