@@ -155,7 +155,9 @@ def main():
     ap.add_argument('--joint', default='joint1')
     ap.add_argument('--percents', type=float, nargs='+', default=[10, 20, 30, 40])
     ap.add_argument('--driver', default='igus_rebel')
-    ap.add_argument('--real', action='store_true', help='robot_ip must be 192.168.3.11')
+    ap.add_argument('--real', action='store_true', help='robot_ip must equal --robot-ip')
+    ap.add_argument('--robot-ip', default='192.168.3.11', choices=('192.168.3.11', '192.168.3.12'),
+                    help='--real: expected robot_ip (left .11, right .12)')
     ap.add_argument('--fake', action='store_true', help='robot_ip must be 127.0.0.1')
     ap.add_argument('--approved', action='store_true', help='operator approved this motion in chat')
     ap.add_argument('--out', required=True)
@@ -180,7 +182,7 @@ def main():
     if any(not 0 < p <= MAX_PERCENT for p in a.percents):
         sys.exit('REFUSED: percents must be in (0, %g]' % MAX_PERCENT)
     ip, scale_s, maxpct_s = robot_description_info()
-    want_ip = '192.168.3.11' if a.real else '127.0.0.1'
+    want_ip = a.robot_ip if a.real else '127.0.0.1'
     if ip != want_ip:
         sys.exit('REFUSED: robot_ip %s != %s' % (ip, want_ip))
     scale = float(scale_s) if scale_s else 2.0
@@ -298,7 +300,7 @@ def sweep_main(a):
             or a.limit_deg is None or not 0 < a.limit_deg <= SWEEP_MAX_LIMIT_DEG:
         sys.exit('REFUSED: --sweep in (0, 100], --travel-deg in (0, 180], --limit-deg in (0, 90] required')
     ip, scale_s, maxpct_s = robot_description_info()
-    if ip != ('192.168.3.11' if a.real else '127.0.0.1'):
+    if ip != (a.robot_ip if a.real else '127.0.0.1'):
         sys.exit('REFUSED: robot_ip %s' % ip)
     scale = float(scale_s) if scale_s else 2.0
     maxpct = float(maxpct_s) if maxpct_s else 10.0
