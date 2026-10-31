@@ -92,13 +92,14 @@ bool RebelSocket::TryConnect()
     return false;
   }
 
+  framer.Reset();
   {
+    // Descriptor, flag and count change together under the write lock (SendMessageIf relies on it).
     std::lock_guard<std::mutex> lockGuard(socketWriteLock);
     sock = fd;
+    connected = true;
+    ++connectionCount;
   }
-  framer.Reset();
-  connected = true;
-  ++connectionCount;
   RCLCPP_INFO(logger, "Connected to ReBeL at %s:%d", ip.c_str(), port);
   return true;
 }
@@ -296,10 +297,29 @@ bool RebelSocket::WaitForMessage(ReceivedMessage & message, std::chrono::millise
 
 bool RebelSocket::SendMessage(const std::string & msg)
 {
+  return SendLocked(msg, nullptr, 0) == SendResult::kSent;
+}
+
+RebelSocket::SendResult RebelSocket::SendMessageIf(
+  const std::string & msg, std::uint64_t expectedConnectionCount,
+  const std::function<bool()> & stillValid)
+{
+  return SendLocked(msg, &stillValid, expectedConnectionCount);
+}
+
+RebelSocket::SendResult RebelSocket::SendLocked(
+  const std::string & msg, const std::function<bool()> * stillValid,
+  std::uint64_t expectedConnectionCount)
+{
   std::lock_guard<std::mutex> lockGuard(socketWriteLock);
 
   if (sock < 0 || !connected) {
-    return false;
+    return SendResult::kFailed;
+  }
+  if (stillValid != nullptr &&
+    (connectionCount.load() != expectedConnectionCount || !(*stillValid)()))
+  {
+    return SendResult::kNotValid;
   }
 
   std::size_t sent = 0;
@@ -317,8 +337,8 @@ bool RebelSocket::SendMessage(const std::string & msg)
       result < 0 ? std::strerror(errno) : "no bytes written");
     // Let the receive thread notice, close and reconnect.
     ::shutdown(sock, SHUT_RDWR);
-    return false;
+    return SendResult::kFailed;
   }
-  return true;
+  return SendResult::kSent;
 }
 }  // namespace Igus

@@ -274,7 +274,7 @@ measured obstacles (`preview_only: false`) with `preapproach_only: false` and
 a Cartesian approach to 20 mm, and a Cartesian final descent to 10 mm planned clearance
 (`final_standoff_m` 0.01), and ends there. There is no automatic retract/home move.
 `execution_allowed` remains false by default. Scalings are 0.13758 (velocity) and
-0.09542 (acceleration) of the joint limits, the same physical speed as the former 0.05.
+0.0763 (acceleration, 0.4 rad/s^2 cap since 2026-10-31; was 0.09542) of the joint limits.
 The platform is an A4 sheet (0.210 x 0.297 x 0.001 m, centered on the marker, top at
 the marker plane) and the 50 mm cube is placed at the A4 corner `[0.105, 0.1485, 0]` m;
 both are marker-relative. The below-base 4 x 4 x 2 m keep-out box is in
@@ -526,13 +526,13 @@ and cutting behaviour have not been checked on the robot.
 
 Free-space transits (initial approach and inter-segment finish-to-approach
 moves) use dedicated `transit_velocity_scaling` /
-`transit_acceleration_scaling` (0.4127 / 0.2863 of the 0.785 rad/s / 5.24 rad/s²
-joint limits = 0.324 rad/s / 1.50 rad/s², the physical speed of the
-operator-approved 0.15 transit scaling of 2026-09-26 at the former limits).
+`transit_acceleration_scaling` (`box_h_cut_executor.yaml`: 0.20 / 0.0763 of the
+0.785 rad/s / 5.24 rad/s² joint limits = 0.157 rad/s / 0.4 rad/s²).
 Contact descend/traverse/retract strokes use `velocity_scaling` /
-`acceleration_scaling` 0.1376 / 0.0954 (0.108 rad/s / 0.50 rad/s², the physical speed
-of the former 0.05), and `pre_cut_stabilization_duration_s` stays 1.0 s, so cutting
-speed is unchanged. All four scalings are finite values in `(0, 1]` and read-only:
+`acceleration_scaling` 0.1376 / 0.0763 (0.108 rad/s / 0.4 rad/s²), and
+`pre_cut_stabilization_duration_s` stays 1.0 s. The 0.4 rad/s² acceleration cap
+(was 0.50 contact / 0.52 transit) follows from the real arm's ~0.55 rad/s² speed-up limit
+(2026-10-31). All four scalings are finite values in `(0, 1]` and read-only:
 edit `box_h_cut_executor.yaml` and restart the executor to change them.
 Each free-space transit first resolves a pose goal to the exact-pose, collision-free
 IK branch nearest the propagated start state (`NearestBranchTransitPlanner`: seeds
@@ -682,6 +682,113 @@ ros2 service call /servo_keyboard_input/set_cartesian_increment \
 The accepted range is greater than 0 m through 0.03 m. The service affects Cartesian
 arrow, period, and semicolon commands; joint-jog speed is unchanged.
 
+
+### Teleoperation through the controller's Cartesian jog (CRI route, `output:=cri`)
+
+Instead of MoveIt Servo + trajectory controller, the same gamepad and keyboard nodes can drive
+the ReBeL through its own Cartesian jog (the controller does the IK). The Servo route stays the
+default (`output:=servo`) and is unchanged. **The A/B/C axis meaning and the % to mm/s mapping of
+the controller's Cartesian jog are not documented and not measured yet; the first real test must
+be done at low speed with the e-stop at hand.**
+
+Driver (`hardware_protocol:=rebel`, node `/igus_rebel`):
+
+- `~/cart_jog_enable` (`std_srvs/SetBool`): `true` sends `CMD MotionTypeCartBase` (jog held at
+  zero) and waits for the CMDACK and a STATUS with `MODE cartbase`; `false` zeroes the jog and
+  sends `CMD MotionTypeJoint`, confirmed the same way. Entering is refused (with a message)
+  unless the component is active and not latched, STATUS is fresh, no `move_joint` goal / Move
+  Stop is pending, and **no controller claims the arm's command interfaces: deactivate the
+  trajectory controller first** (`ros2 control switch_controllers --deactivate
+  rebel_arm_trajectory_controller`). While the mode is on, controller claims, `move_joint` goals
+  and `reset_and_enable` are refused and the joint `vel_cmd` path is ignored.
+- `~/cart_jog_cmd` (`geometry_msgs/TwistStamped`, base frame only: `frame_id` empty or
+  `cart_jog_base_frame`, anything else is rejected and zeroes the jog). x,y,z,rx,ry,rz go to
+  ALIVEJOG slots 1..6. Zero jog if no command arrives for `cart_jog_timeout_s` (0.15 s). Commands
+  whose `header.stamp` is zero, older than `cart_jog_timeout_s`, more than 0.5 s in the future,
+  from before the current mode entry, or **not strictly newer than the newest accepted stamp of
+  the current session** (duplicate or out of order) are rejected (publishers must stamp every
+  message with a fresh `now()` of the same clock) and do not refresh the watchdog or change the
+  target. An accepted command lives `cart_jog_timeout_s` minus the age of its stamp at receipt
+  (a command stamped 0.12 s ago with a 0.15 s timeout expires after 0.03 s), not a full timeout.
+  There is no STATUS coasting in this mode: any STATUS gap
+  longer than 200 ms sends zero jog; latch and fault-group behaviour apply as in joint mode. A
+  prepared non-zero ALIVEJOG frame is validated and written under the socket write lock, so it
+  can never reach a new connection, a new jog mode or a later session of the same mode (every
+  entry and every exit / reset increments a session generation that the frame and the command
+  callbacks must still match), and it is dropped if the command expired, was replaced by a zero
+  command, a controller claim is set or pending, STATUS coasts, or the STATUS `MODE` is not the
+  one the frame was built for. Any latch, fault, reconnect
+  or deactivate leaves the mode (zero jog first, then `MotionTypeJoint`); re-entering needs a new
+  service call. `~/hardware_state` has `cart_jog_active` / `cart_jog_state`.
+- Hardware parameters (xacro args / `rebel.launch.py` args of the same name, defaults shown):
+  `cart_jog_percent_per_mps` 200 and `cart_jog_percent_per_radps` 100 (**unmeasured
+  placeholders**), `cart_jog_max_percent` 10 (per-axis clamp), `cart_jog_allow_rotation` false,
+  `cart_jog_signs` `1,1,1,1,1,1` (per-axis direction fix without a rebuild), `cart_jog_timeout_s`
+  0.15, `cart_jog_idle_exit_s` 10 (leave the mode when no `cart_jog_cmd` arrives for that long;
+  0 = never; covers a teleop that was killed), `cart_jog_base_frame` `base_link`. The driver also
+  cross-checks the STATUS `MODE` continuously: Cartesian mode but STATUS not cartbase -> zero jog
+  and leave; joint mode but STATUS cartbase/carttool for more than 0.3 s -> latch; entering also
+  requires STATUS `joint`.
+
+Direct joint jog (second mode of the same route; the robot stays in `MotionTypeJoint`, no CRI mode
+switch):
+
+- `~/joint_jog_enable` (`std_srvs/SetBool`) and `~/joint_jog_cmd` (`control_msgs/JointJog`,
+  `velocities` in rad/s; `joint_names` are this hardware's joint names, any subset in any order,
+  joints not listed are 0). Unknown or duplicate name, `joint_names`/`velocities` length mismatch
+  or non-empty `displacements` reject the whole message and zero the jog. Per joint:
+  `jog % = jog_velocity_scale * velocity [deg/s]` (the same conversion as the controller path),
+  non-finite -> 0, clamped to +-`joint_jog_max_percent` (default 10; note that with the default
+  scale 1.65 anything above ~0.106 rad/s saturates at 10 %). Zero jog after `joint_jog_timeout_s`
+  (0.15 s) without a valid command; same `header.stamp` checks, no STATUS coasting and
+  idle auto-exit (`joint_jog_idle_exit_s`, default 10, 0 = never) as the Cartesian mode.
+- Entry has the same refusals as `cart_jog_enable` (no controller claim, no `move_joint`/Move Stop,
+  fresh STATUS, drives enabled, STATUS `MODE joint`), and is refused while the Cartesian mode is
+  not off; `cart_jog_enable true` is refused while joint jog is on. While on: controller claims,
+  `move_joint` goals and `reset_and_enable` are refused and `write()` commands are ignored.
+  Leaving (service false, idle, latch, reconnect, deactivate, STATUS mode not `joint`) zeroes the
+  jog at once; nothing is sent to the controller. `~/hardware_state` has `joint_jog_active` /
+  `joint_jog_state` (`off` | `active`).
+- Hardware parameters / xacro args / `rebel.launch.py` args: `joint_jog_max_percent`,
+  `joint_jog_timeout_s`, `joint_jog_idle_exit_s`.
+
+Limits of the CRI route (both modes):
+
+- The jog modes **refuse**, they do not exit, on `reset_and_enable`, `move_joint` goals and a
+  controller claim (prepared or pending) while one of them is on: the call fails with a message
+  and the mode keeps running. Latch, fault-group fault, reconnect, deactivate, STATUS `MODE`
+  mismatch and the idle timeout leave the mode.
+- A frame that is already handed to the kernel / TCP cannot be retracted. The check under the
+  socket write lock is the last point where a frame can still be dropped, so a stop (latch, exit,
+  zero command, claim) that lands after it can be preceded by at most **one** ALIVEJOG frame (one
+  transmit period) that was built before it. Stop conditions take effect on the next frame.
+- The keyboard is timed incremental jogging, **not** a release-sensitive deadman: a press moves
+  for 0.3 s, each repeat extends it by 0.12 s, and terminal key buffering can extend the motion
+  further (queued repeats are still replayed after the key is released). If the node dies, only the
+  driver's `*_jog_timeout_s` watchdog (0.15 s) stops the arm. At the default 10 % clamp with
+  `jog_velocity_scale` 1.65 (the launch default since 2026-10-31) the commanded joint speed is 6.06 deg/s
+  (jog % = 1.65 * deg/s), i.e. about 1.8 deg per 0.3 s tap, plus 0.73 deg per 0.12 s of held repeat. The gamepad (enable button held,
+  zero on release) is the deadman interface.
+
+Teleop (`output` = `servo` | `cri`; in `cri` mode no Servo service is called):
+
+```bash
+# Gamepad: joy_node + gamepad node, no MoveIt/Servo (button 7 held = move, button 6 toggles the mode)
+ros2 launch igus_rebel_moveit_config cri_teleop.launch.py
+# Keyboard (manual). 't' = twist (Cartesian jog), 'j' = joint jog (keys 1-6, 'r' reverses); switching
+# turns the other mode off first. 'c' toggles the selected mode. The tool frame does nothing here.
+# Params: cri_joint_cmd_topic (/igus_rebel/joint_jog_cmd), cri_joint_enable_service
+# (/igus_rebel/joint_jog_enable), cri_joint_names (joint1..joint6; prefixed names for a dual-arm cell)
+ros2 run igus_rebel_moveit_config rebel_servo_teleop_keyboard --ros-args -p output:=cri
+```
+
+Both nodes call `cart_jog_enable` true on start (the keyboard starts in twist mode) (`cri_auto_enable:=false` to do it with the
+toggle button/key) and false on Ctrl+C, and publish at 50 Hz (never below 20 Hz) to
+`/igus_rebel/cart_jog_cmd` (`cri_cmd_topic`). The gamepad publishes only while the enable button
+is held, a zero twist on release, and zeros itself if `joy_node` goes silent for `joy_timeout_s` (0.15 s; the launch file sets joy_node autorepeat to 20 Hz). Both nodes follow `/igus_rebel/hardware_state` (`cart_jog_state`), so a mode the driver left by itself is shown and the toggle re-enables it. A terminal
+sends no key-release events: the keyboard holds a press for 0.3 s, each auto-repeat extends it by
+0.12 s, so the arm stops at most about 0.12 s after the last repeat (then zeros are streamed and
+the driver watchdog backs this up); `s` stops at once.
 
 ## Project and OMP session RAG
 

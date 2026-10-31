@@ -8,6 +8,25 @@
   <xacro:arg name="robot_ip" default="192.168.3.11"/>
   <!-- CRI MoveJoint velocity cap [%] (driver default 25, hard cap 100); raise only for supervised tests. -->
   <xacro:arg name="move_joint_max_velocity_percent" default="25"/>
+  <!-- jog [%] = scale * velocity [deg/s]. 1.65 since 2026-10-31 (real arm: 0.600 deg/s per jog %, exact 1.667);
+       the C++ fallback when the parameter is absent stays 2.0 (RebelSafety.hpp). controller.yaml gains assume 1.65. -->
+  <xacro:arg name="jog_velocity_scale" default="1.65"/>
+  <!-- Cartesian jog (CRI route) parameters of the Igus/Rebel driver; defaults mirror RebelSafety.hpp.
+       The two scales are UNMEASURED placeholders; the mode is only entered by the ~/cart_jog_enable service. -->
+  <xacro:arg name="cart_jog_percent_per_mps" default="200.0"/>
+  <xacro:arg name="cart_jog_percent_per_radps" default="100.0"/>
+  <xacro:arg name="cart_jog_max_percent" default="10.0"/>
+  <xacro:arg name="cart_jog_allow_rotation" default="false"/>
+  <xacro:arg name="cart_jog_signs" default="1,1,1,1,1,1"/>
+  <xacro:arg name="cart_jog_timeout_s" default="0.15"/>
+  <xacro:arg name="cart_jog_idle_exit_s" default="10.0"/>
+  <xacro:arg name="cart_jog_base_frame" default="base_link"/>
+  <!-- Direct joint jog (CRI route, robot stays in MotionTypeJoint); entered by the ~/joint_jog_enable service. -->
+  <xacro:arg name="joint_jog_max_percent" default="10.0"/>
+  <xacro:arg name="joint_jog_timeout_s" default="0.15"/>
+  <xacro:arg name="joint_jog_idle_exit_s" default="10.0"/>
+  <!-- CRI TCP port of the controller (3920); only changed for the loopback fake robot. -->
+  <xacro:arg name="robot_port" default="3920"/>
   <xacro:arg name="include_ros2_control" default="true"/>
   <xacro:arg name="attach_xeg32" default="true"/>
 
@@ -24,6 +43,19 @@
       arm_id="rebel_arm"
       hardware_protocol="$(arg hardware_protocol)"
       robot_ip="$(arg robot_ip)"
+      robot_port="$(arg robot_port)"
+      jog_velocity_scale="$(arg jog_velocity_scale)"
+      cart_jog_percent_per_mps="$(arg cart_jog_percent_per_mps)"
+      cart_jog_percent_per_radps="$(arg cart_jog_percent_per_radps)"
+      cart_jog_max_percent="$(arg cart_jog_max_percent)"
+      cart_jog_allow_rotation="$(arg cart_jog_allow_rotation)"
+      cart_jog_signs="$(arg cart_jog_signs)"
+      cart_jog_timeout_s="$(arg cart_jog_timeout_s)"
+      cart_jog_idle_exit_s="$(arg cart_jog_idle_exit_s)"
+      cart_jog_base_frame="$(arg cart_jog_base_frame)"
+      joint_jog_max_percent="$(arg joint_jog_max_percent)"
+      joint_jog_timeout_s="$(arg joint_jog_timeout_s)"
+      joint_jog_idle_exit_s="$(arg joint_jog_idle_exit_s)"
       move_joint_max_velocity_percent="$(arg move_joint_max_velocity_percent)"/>
   </xacro:if>
 

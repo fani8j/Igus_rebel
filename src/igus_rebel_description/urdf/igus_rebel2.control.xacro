@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <!-- igus_rebel.control.xacro -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
-    <xacro:macro name="igus_rebel_control" params="arm_id hardware_protocol robot_ip:=192.168.3.11 robot_port:=3920 move_joint_max_velocity_percent:=25">
+    <xacro:macro name="igus_rebel_control" params="arm_id hardware_protocol robot_ip:=192.168.3.11 robot_port:=3920 move_joint_max_velocity_percent:=25 jog_velocity_scale:=1.65 cart_jog_percent_per_mps:=200.0 cart_jog_percent_per_radps:=100.0 cart_jog_max_percent:=10.0 cart_jog_allow_rotation:=false cart_jog_signs:=1,1,1,1,1,1 cart_jog_timeout_s:=0.15 cart_jog_idle_exit_s:=10.0 cart_jog_base_frame:=base_link joint_jog_max_percent:=10.0 joint_jog_timeout_s:=0.15 joint_jog_idle_exit_s:=10.0">
         <xacro:macro name="joint_control" params="joint">
             <joint name="${joint}">
                 <xacro:if value="${hardware_protocol == 'gazebo' or hardware_protocol == 'isaac_topic' or hardware_protocol == 'mock_hardware'}">
@@ -34,6 +34,18 @@
                     <param name="robot_ip">${robot_ip}</param>
                     <param name="robot_port">${robot_port}</param>
                     <param name="move_joint_max_velocity_percent">${move_joint_max_velocity_percent}</param>
+                    <param name="jog_velocity_scale">${jog_velocity_scale}</param>
+                    <param name="cart_jog_percent_per_mps">${cart_jog_percent_per_mps}</param>
+                    <param name="cart_jog_percent_per_radps">${cart_jog_percent_per_radps}</param>
+                    <param name="cart_jog_max_percent">${cart_jog_max_percent}</param>
+                    <param name="cart_jog_allow_rotation">${cart_jog_allow_rotation}</param>
+                    <param name="cart_jog_signs">${cart_jog_signs}</param>
+                    <param name="cart_jog_timeout_s">${cart_jog_timeout_s}</param>
+                    <param name="cart_jog_idle_exit_s">${cart_jog_idle_exit_s}</param>
+                    <param name="cart_jog_base_frame">${cart_jog_base_frame}</param>
+                    <param name="joint_jog_max_percent">${joint_jog_max_percent}</param>
+                    <param name="joint_jog_timeout_s">${joint_jog_timeout_s}</param>
+                    <param name="joint_jog_idle_exit_s">${joint_jog_idle_exit_s}</param>
                 </xacro:if>
             </hardware>
             <xacro:joint_control joint="joint1" />

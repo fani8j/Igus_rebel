@@ -26,6 +26,15 @@ constexpr std::chrono::milliseconds kMessageWaitTimeout{100};
 // kHardwareStatePeriod (10 Hz).
 constexpr std::chrono::milliseconds kTelemetryPollPeriod{10};
 constexpr std::chrono::milliseconds kHardwareStatePeriod{100};
+// Cartesian jog mode: how long a MotionType CMD may take to be acknowledged (CMDACK + STATUS MODE)
+// before entering is abandoned / leaving latches the driver; resend period of MotionTypeJoint.
+constexpr std::chrono::milliseconds kCartModeTimeout{2000};
+constexpr std::chrono::milliseconds kCartExitResendPeriod{500};
+// STATUS says cartbase/carttool while the driver is in joint mode: tolerated this long (a
+// MotionTypeJoint in flight, e.g. right after a reconnect) before the driver latches.
+constexpr std::chrono::milliseconds kModeMismatchGrace{300};
+// A cart_jog_cmd stamped further than this in the future is rejected.
+constexpr std::chrono::milliseconds kCartCmdMaxFuture{500};
 
 std::int64_t ToNs(Safety::SteadyClock::time_point time)
 {
@@ -36,6 +45,20 @@ Safety::SteadyClock::time_point FromNs(std::int64_t ns)
 {
   return Safety::SteadyClock::time_point(std::chrono::nanoseconds(ns));
 }
+
+const char * ModeText(CriMessages::Mode mode)
+{
+  switch (mode) {
+    case CriMessages::Mode::JOINT: return "joint";
+    case CriMessages::Mode::CARTBASE: return "cartbase";
+    case CriMessages::Mode::CARTTOOL: return "carttool";
+    case CriMessages::Mode::PLATFORM: return "platform";
+    case CriMessages::Mode::FSM: return "fsm";
+    default: return "unknown";
+  }
+}
+
+constexpr const char * kJtcJogDeadbandParameter = "jtc_jog_deadband_percent";
 
 std::string Truncate(const std::string & text, std::size_t maxLength = 200)
 {
@@ -50,6 +73,7 @@ Rebel::Rebel()
 : logger_(rclcpp::get_logger("igus_rebel"))
 {
   ZeroJog();
+  StoreLastSent({}, kJogSourceNone);
 }
 
 Rebel::Rebel(const std::string & testIp, int testPort)
@@ -58,6 +82,7 @@ Rebel::Rebel(const std::string & testIp, int testPort)
   port(testPort)
 {
   ZeroJog();
+  StoreLastSent({}, kJogSourceNone);
 }
 
 Rebel::~Rebel()
@@ -75,6 +100,14 @@ void Rebel::ZeroJog()
   }
 }
 
+void Rebel::StoreLastSent(const std::array<float, 6> & jogPercent, int source)
+{
+  for (std::size_t i = 0; i < jogPercent.size(); ++i) {
+    lastSentJog_[i].store(jogPercent[i], std::memory_order_relaxed);
+  }
+  lastSentSource_.store(source, std::memory_order_relaxed);
+}
+
 void Rebel::LatchHardwareError(const std::string & reason)
 {
   // Latch first, then zero: write() re-checks the latch after storing a command.
@@ -83,6 +116,9 @@ void Rebel::LatchHardwareError(const std::string & reason)
     SetLatchReason(reason);  // telemetry only (~/hardware_state); the first cause is kept
   }
   ZeroJog();
+  // Leave the Cartesian jog mode (zero jog, then MotionTypeJoint) via the ALIVEJOG thread.
+  RequestCartExit();
+  RequestJointJogExit();
   // Zero jog does not stop a robot-side joint move; only CMD Move Stop does.
   RequestMoveStop();
   if (wasLatched || !faultMember_) {
@@ -113,6 +149,8 @@ void Rebel::OnPeerFault(const std::string & originName, const std::string & reas
   }
   ZeroJog();
   lastWriteNs = 0;
+  RequestCartExit();
+  RequestJointJogExit();
   RequestMoveStop();
   if (wasLatched) {
     return;
@@ -255,12 +293,20 @@ void Rebel::AliveThreadFunction()
 
   while (continueAlive) {
     ConsumeMoveStopRequest();
+    CartExitStep();
     if (aliveTransmit) {
       if (!announced) {
         RCLCPP_INFO(logger_, "Starting to send ALIVEJOG");
         announced = true;
       }
 
+      // The connection this frame is prepared for: read BEFORE any state is read, and checked again
+      // under the socket write lock right before the bytes go out (SendMessageIf below).
+      const std::uint64_t connectionAtBuild = rebelSocket->ConnectionCount();
+      // The jog session generation is read BEFORE the mode states and the command (see
+      // jogGeneration_): a frame built in an older session can never pass the check below.
+      AliveFrameBuild build;
+      build.generation = jogGeneration_.load();
       const auto now = Safety::SteadyClock::now();
       const bool stale = Safety::IsCommandStale(
         FromNs(lastWriteNs.load()), now, Safety::kCommandWatchdogTimeout);
@@ -270,12 +316,40 @@ void Rebel::AliveThreadFunction()
       // write() stored one just before the latch/hold took effect. A STATUS coast (not latched,
       // not held) keeps sending the frozen jog.
       // While a joint move is active jog is always zero (the robot owns the motion).
+      CartIdleStep(now);
+      JointJogIdleStep(now);
+      const bool modeGuard = ModeGuardZeroesJog(now);
       const bool inhibited = hardwareErrorLatched_.load() || holdJogZero_.load() ||
-        statusHold_.load() || moveState_.load() != kMoveIdle || moveStopRequested_.load();
+        statusHold_.load() || moveState_.load() != kMoveIdle || moveStopRequested_.load() ||
+        modeGuard;
+      build.cartState = cartState_.load();
+      build.jointJogState = jointJogState_.load();
+      const bool cartMode = build.cartState != kCartOff;
+      const bool jointJogMode = build.jointJogState != kJointJogOff;
       if (!stale && !inhibited) {
-        for (std::size_t i = 0; i < currentJog.size(); ++i) {
-          currentJog[i] = jog[i].load();
+        if (cartMode) {
+          // Cartesian jog mode: the six slots are X Y Z A B C, never the joint jog.
+          currentJog = CartJogForTransmit(now, build.revision);
+        } else if (jointJogMode) {
+          // Direct joint jog mode: the six slots are the joints, fed by ~/joint_jog_cmd only.
+          currentJog = JointJogForTransmit(now, build.revision);
+        } else {
+          for (std::size_t i = 0; i < currentJog.size(); ++i) {
+            currentJog[i] = jog[i].load();
+          }
         }
+      }
+      cartLastSent_ = cartMode ? currentJog : std::array<float, 6>{};
+      // Diagnostics only (~/cri_diagnostics): which source this frame is built from.
+      int frameSource = kJogSourceJtc;
+      if (stale) {
+        frameSource = kJogSourceStale;
+      } else if (inhibited) {
+        frameSource = kJogSourceInhibited;
+      } else if (cartMode) {
+        frameSource = kJogSourceCartJog;
+      } else if (jointJogMode) {
+        frameSource = kJogSourceJointJog;
       }
 
       if (stale != wasStale) {
@@ -290,7 +364,39 @@ void Rebel::AliveThreadFunction()
         wasStale = stale;
       }
 
-      rebelSocket->SendMessage(Safety::FormatAliveJog(Ccnt(), currentJog));
+      const bool allZero = std::all_of(
+        currentJog.begin(), currentJog.end(), [](float v) {return v == 0.0f;});
+      if (allZero) {
+        rebelSocket->SendMessage(Safety::FormatAliveJog(Ccnt(), currentJog));
+        StoreLastSent(currentJog, frameSource);
+      } else {
+        if (const auto hook = std::atomic_load(&beforeAliveSendHook_)) {
+          (*hook)();  // tests only: a descheduled ALIVEJOG thread between build and send
+        }
+        // A non-zero frame is validated and written atomically: if the connection changed (a
+        // reconnect re-ran the start-up sequence), or a latch / hold / mode / jog-session change
+        // landed since it was built, it is dropped and a zero frame goes out instead -- never a
+        // stale frame on a new connection or in a new jog mode or session. What this cannot do is
+        // retract a frame that is already handed to the kernel: a stop that lands after this check
+        // can be preceded by at most ONE ALIVEJOG frame (one transmit period) built before it.
+        const auto result = rebelSocket->SendMessageIf(
+          Safety::FormatAliveJog(Ccnt(), currentJog), connectionAtBuild,
+          [this, build]() {return AliveFrameStillValid(build);});
+        StoreLastSent(
+          result == RebelSocket::SendResult::kNotValid ? std::array<float, 6>{} : currentJog,
+          result == RebelSocket::SendResult::kNotValid ? kJogSourceDropped : frameSource);
+        if (result == RebelSocket::SendResult::kNotValid) {
+          RCLCPP_WARN_THROTTLE(
+            logger_, throttleClock_, 2000,
+            "Dropped a prepared non-zero ALIVEJOG frame (connection, latch or jog mode changed "
+            "before it was sent); sending zero jog");
+          if (aliveTransmit) {
+            rebelSocket->SendMessage(Safety::FormatAliveJog(Ccnt(), std::array<float, 6>{}));
+          }
+        }
+      }
+    } else {
+      StoreLastSent({}, kJogSourceNone);
     }
 
     next += Safety::kAlivePeriod;
@@ -410,6 +516,8 @@ void Rebel::HandleMessage(
         // Once per NEW sample, stamped with its receive time; independent of read() and of the
         // latch (see hardwareErrorLatched_).
         PublishRobotJointStates(published);
+        PublishRobotCartPose(published, status);
+        PublishCriDiagnostics(published, status);
         ProcessStatus(status);
         break;
       }
@@ -495,6 +603,12 @@ void Rebel::HandleMessage(
           moveEvents_.cmdError = true;
           moveEvents_.cmdErrorText = error.error;
         }
+        if (error.recjectedCmd == cartEnterCmd_.counter.load()) {
+          cartEnterCmd_.rejected.store(true);
+        }
+        if (error.recjectedCmd == cartExitCmd_.counter.load()) {
+          cartExitCmd_.rejected.store(true);
+        }
         std::string command;
         {
           std::lock_guard<std::mutex> lock(commandsLock);
@@ -522,6 +636,12 @@ void Rebel::HandleMessage(
         if (ack.acceptedCmd == moveCommandCounter_.load() && moveGoalBusy_.load()) {
           std::lock_guard<std::mutex> eventLock(moveEventLock_);
           moveEvents_.cmdAck = true;
+        }
+        if (ack.acceptedCmd == cartEnterCmd_.counter.load()) {
+          cartEnterCmd_.acked.store(true);
+        }
+        if (ack.acceptedCmd == cartExitCmd_.counter.load()) {
+          cartExitCmd_.acked.store(true);
         }
         std::string command;
         {
@@ -579,7 +699,7 @@ bool Rebel::SetDigitalOut(const int & output, const bool & is_on)
   return Command(cmd.str());
 }
 
-bool Rebel::Command(const std::string & command, bool quiet)
+bool Rebel::Command(const std::string & command, bool quiet, TrackedCommand * tracked)
 {
   if (!rebelSocket) {
     return false;
@@ -592,6 +712,12 @@ bool Rebel::Command(const std::string & command, bool quiet)
       unacknowledgedCommands.clear();
     }
     unacknowledgedCommands[commandCount] = command;
+  }
+  if (tracked != nullptr) {
+    // Before the send: the answer can arrive before SendMessage() returns.
+    tracked->acked.store(false);
+    tracked->rejected.store(false);
+    tracked->counter.store(commandCount);
   }
 
   if (!rebelSocket->SendMessage(Safety::FormatCommand(commandCount, command))) {
@@ -616,6 +742,17 @@ void Rebel::OnConnected(bool reconnect)
   // after Enable, as in the original driver.
   aliveTransmit = false;
   ZeroJog();
+  // The MotionTypeJoint below ends the Cartesian jog mode: from here on the joint jog path rules
+  // again, and re-entering needs a new service call.
+  if (cartState_.load() != kCartOff) {
+    RCLCPP_WARN(
+      logger_, "(Re)connect: leaving Cartesian jog mode; MotionTypeJoint is re-sent below");
+  }
+  if (jointJogState_.load() != kJointJogOff) {
+    RCLCPP_WARN(logger_, "(Re)connect: leaving the joint jog mode; jog is zero");
+  }
+  ResetCartJogState();
+  ResetJointJogState();
   // Drive state is in flux until the sequence below took effect: do not monitor it meanwhile.
   faultArmed_ = false;
   connectedAtNs_ = 0;
@@ -673,6 +810,14 @@ void Rebel::ProcessStatus(const CriMessages::Status & status)
 {
   const CriMessages::Kinstate currentKinstate = status.kinstate;
   const std::array<int, 16> & currentErrorJoints = status.errorJoints;
+
+  // Mode first, then the counter: a reader that sees a newer counter sees a mode at least as new.
+  statusMode_.store(static_cast<int>(status.mode));
+  statusModeSeq_.fetch_add(1);
+  if (status.mode != lastLoggedMode_) {
+    RCLCPP_INFO(logger_, "Robot STATUS mode is now '%s'", ModeText(status.mode));
+    lastLoggedMode_ = status.mode;
+  }
 
   if (lastKinstate != currentKinstate) {
     if (lastKinstate != CriMessages::Kinstate::NO_ERROR) {
@@ -852,6 +997,121 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
   }
   readName("digital_output_service", digitalOutputService_);
   readName("trajectory_controller_name", trajectoryControllerName_);
+  jogVelocityScale_ = JOINT_VELOCITY_SCALE;
+  {
+    const auto it = params.find("jog_velocity_scale");
+    if (it != params.end() && !it->second.empty()) {
+      if (!Safety::ParseJogVelocityScale(it->second, jogVelocityScale_)) {
+        RCLCPP_FATAL(
+          logger_, "Invalid jog_velocity_scale '%s' (expected a number in [%.1f, %.1f])",
+          it->second.c_str(), kMinJogVelocityScale, kMaxJogVelocityScale);
+        return CallbackReturn::ERROR;
+      }
+    }
+    if (jogVelocityScale_ != JOINT_VELOCITY_SCALE) {
+      RCLCPP_WARN(
+        logger_, "jog_velocity_scale %.4f (default %.1f): jog %% = scale * velocity [deg/s]",
+        jogVelocityScale_, JOINT_VELOCITY_SCALE);
+    }
+  }
+  // Cartesian jog (CRI route) parameters; the defaults leave the joint jog untouched, the mode is
+  // only entered by the ~/cart_jog_enable service. The two scales are UNMEASURED placeholders.
+  cartConfig_ = Safety::CartJogConfig{};
+  {
+    const auto readCartNumber = [&](const char * key, double minimum, double maximum, double & target) {
+        const auto it = params.find(key);
+        if (it == params.end() || it->second.empty()) {
+          return true;
+        }
+        if (!Safety::ParseBoundedNumber(it->second, minimum, maximum, target)) {
+          RCLCPP_FATAL(
+            logger_, "Invalid %s '%s' (expected a number in [%g, %g])", key, it->second.c_str(),
+            minimum, maximum);
+          return false;
+        }
+        return true;
+      };
+    if (!readCartNumber("cart_jog_percent_per_mps", 0.01, kMaxCartJogScale,
+        cartConfig_.percentPerMps) ||
+      !readCartNumber("cart_jog_percent_per_radps", 0.01, kMaxCartJogScale,
+        cartConfig_.percentPerRadps) ||
+      !readCartNumber("cart_jog_max_percent", 0.01, static_cast<double>(Safety::kMaxJogPercent),
+        cartConfig_.maxPercent) ||
+      !readCartNumber("cart_jog_timeout_s", kMinCartJogTimeoutS, kMaxCartJogTimeoutS,
+        cartConfig_.timeoutS) ||
+      !readCartNumber("cart_jog_idle_exit_s", 0.0, kMaxCartJogIdleExitS, cartConfig_.idleExitS))
+    {
+      return CallbackReturn::ERROR;
+    }
+    const auto rotation = params.find("cart_jog_allow_rotation");
+    if (rotation != params.end() && !rotation->second.empty() &&
+      !Safety::ParseBoolText(rotation->second, cartConfig_.allowRotation))
+    {
+      RCLCPP_FATAL(
+        logger_, "Invalid cart_jog_allow_rotation '%s' (expected true or false)",
+        rotation->second.c_str());
+      return CallbackReturn::ERROR;
+    }
+    const auto signs = params.find("cart_jog_signs");
+    if (signs != params.end() && !signs->second.empty() &&
+      !Safety::ParseCartJogSigns(signs->second, cartConfig_.sign))
+    {
+      RCLCPP_FATAL(
+        logger_, "Invalid cart_jog_signs '%s' (expected six values, each 1 or -1, e.g. "
+        "'1,1,1,1,1,1')", signs->second.c_str());
+      return CallbackReturn::ERROR;
+    }
+    const auto frame = params.find("cart_jog_base_frame");
+    if (frame != params.end() && !frame->second.empty()) {
+      if (!Safety::IsValidFrameName(frame->second)) {
+        RCLCPP_FATAL(logger_, "Invalid cart_jog_base_frame '%s'", frame->second.c_str());
+        return CallbackReturn::ERROR;
+      }
+      cartConfig_.baseFrame = frame->second;
+    }
+    RCLCPP_INFO(
+      logger_,
+      "Cartesian jog (off until ~/cart_jog_enable): %.1f %%/(m/s) and %.1f %%/(rad/s) (UNMEASURED "
+      "placeholders), max %.1f %% per axis, rotation %s, signs %.0f %.0f %.0f %.0f %.0f %.0f, "
+      "timeout %.3f s, idle auto-exit %.1f s (0 = off), base frame '%s'",
+      cartConfig_.percentPerMps, cartConfig_.percentPerRadps, cartConfig_.maxPercent,
+      cartConfig_.allowRotation ? "ALLOWED" : "disabled", cartConfig_.sign[0],
+      cartConfig_.sign[1], cartConfig_.sign[2], cartConfig_.sign[3], cartConfig_.sign[4],
+      cartConfig_.sign[5], cartConfig_.timeoutS, cartConfig_.idleExitS,
+      cartConfig_.baseFrame.c_str());
+  }
+  // Direct joint jog parameters; the mode is only entered by the ~/joint_jog_enable service.
+  jointJogConfig_ = Safety::JointJogConfig{};
+  {
+    const auto readJointNumber = [&](const char * key, double minimum, double maximum, double & target) {
+        const auto it = params.find(key);
+        if (it == params.end() || it->second.empty()) {
+          return true;
+        }
+        if (!Safety::ParseBoundedNumber(it->second, minimum, maximum, target)) {
+          RCLCPP_FATAL(
+            logger_, "Invalid %s '%s' (expected a number in [%g, %g])", key, it->second.c_str(),
+            minimum, maximum);
+          return false;
+        }
+        return true;
+      };
+    if (!readJointNumber("joint_jog_max_percent", 0.01, static_cast<double>(Safety::kMaxJogPercent),
+        jointJogConfig_.maxPercent) ||
+      !readJointNumber("joint_jog_timeout_s", kMinJointJogTimeoutS, kMaxJointJogTimeoutS,
+        jointJogConfig_.timeoutS) ||
+      !readJointNumber("joint_jog_idle_exit_s", 0.0, kMaxJointJogIdleExitS,
+        jointJogConfig_.idleExitS))
+    {
+      return CallbackReturn::ERROR;
+    }
+    RCLCPP_INFO(
+      logger_,
+      "Joint jog (off until ~/joint_jog_enable): jog %% = %.2f * velocity [deg/s], max %.1f %% per "
+      "joint, timeout %.3f s, idle auto-exit %.1f s (0 = off)",
+      jogVelocityScale_, jointJogConfig_.maxPercent, jointJogConfig_.timeoutS,
+      jointJogConfig_.idleExitS);
+  }
   // Joint move caps: lowering is allowed, exceeding the hard caps is not (clamped, with a warning).
   const auto readPercent = [&](const char * key, double hardCap, double & target) {
       const auto it = params.find(key);
@@ -988,6 +1248,21 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
     std::lock_guard<std::mutex> lock(moveEventLock_);
     moveEvents_ = MoveEvents{};
   }
+  ResetCartJogState();
+  ResetJointJogState();
+  statusMode_ = static_cast<int>(CriMessages::Mode::UNKNOWN);
+  statusModeSeq_ = 0;
+  lastLoggedMode_ = CriMessages::Mode::UNKNOWN;
+  cartLastSent_.fill(0.0f);
+  cartActiveSinceNs_ = 0;
+  cartActiveSinceRosNs_ = 0;
+  modeMismatch_ = false;
+  modeMismatchLatched_ = false;
+  cartWasStale_ = true;
+  cartExitActive_ = false;
+  cartExitSent_ = false;
+  cartExitTimeoutLatched_ = false;
+  jointJogWasStale_.store(true);
 
   try {
     node_ = std::make_shared<rclcpp::Node>(nodeName_);
@@ -1008,12 +1283,99 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
     // rclcpp::SensorDataQoS(); hardware_state: reliable.
     robotJointStatePub_ = node_->create_publisher<sensor_msgs::msg::JointState>(
       "~/robot_joint_states", rclcpp::SensorDataQoS().keep_last(10));
+    // robot_cart_pose: the controller's own Cartesian pose (diagnostic), same QoS.
+    robotCartPosePub_ = node_->create_publisher<igus_rebel_msgs::msg::RobotCartPose>(
+      "~/robot_cart_pose", rclcpp::SensorDataQoS().keep_last(10));
+    // cri_diagnostics: raw currents + the jog percent actually sent (read-only instrumentation).
+    criDiagnosticsPub_ = node_->create_publisher<igus_rebel_msgs::msg::CriDiagnostics>(
+      "~/cri_diagnostics", rclcpp::SensorDataQoS().keep_last(10));
+    // Optional JTC-path jog deadband, changeable at runtime. The callback is registered BEFORE the
+    // declaration so that a value from the command line / a parameter file is validated too.
+    paramCallbackHandle_ = node_->add_on_set_parameters_callback(
+      [this](const std::vector<rclcpp::Parameter> & parameters) {
+        rcl_interfaces::msg::SetParametersResult result;
+        result.successful = true;
+        for (const auto & parameter : parameters) {
+          if (parameter.get_name() != kJtcJogDeadbandParameter) {
+            continue;
+          }
+          if (parameter.get_type() != rclcpp::ParameterType::PARAMETER_DOUBLE) {
+            result.successful = false;
+            result.reason = "jtc_jog_deadband_percent must be a double";
+            return result;
+          }
+          const double value = parameter.as_double();
+          if (!Safety::IsValidJogDeadband(value)) {
+            result.successful = false;
+            result.reason = "jtc_jog_deadband_percent must be finite and within [0, " +
+              std::to_string(Safety::kMaxJtcJogDeadbandPercent) + "]";
+            return result;
+          }
+          const double previous = jtcJogDeadbandPercent_.exchange(value);
+          if (previous != value) {
+            RCLCPP_INFO(
+              logger_, "jtc_jog_deadband_percent changed from %.3f to %.3f %% (ros2_control "
+              "jog path only)", previous, value);
+          }
+        }
+        return result;
+      });
+    {
+      rcl_interfaces::msg::ParameterDescriptor descriptor;
+      descriptor.description = "Joint jog percent below which the ros2_control (JTC) path sends 0 "
+        "for that joint; 0 = off. Not applied to cart_jog, joint_jog or move_joint.";
+      descriptor.floating_point_range.resize(1);
+      descriptor.floating_point_range[0].from_value = 0.0;
+      descriptor.floating_point_range[0].to_value = Safety::kMaxJtcJogDeadbandPercent;
+      descriptor.floating_point_range[0].step = 0.0;
+      node_->declare_parameter<double>(kJtcJogDeadbandParameter, 0.0, descriptor);
+    }
     hardwareStatePub_ = node_->create_publisher<igus_rebel_msgs::msg::HardwareState>(
       "~/hardware_state", rclcpp::QoS(rclcpp::KeepLast(10)).reliable());
     // Own callback group: a 3 s reset_and_enable never stalls the hardware_state timer.
     telemetryGroup_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     hardwareStateTimer_ = node_->create_wall_timer(
       kTelemetryPollPeriod, [this]() {PublishHardwareState();}, telemetryGroup_);
+    // Cartesian jog: the service blocks up to ~3 s (own group, serialised); the command
+    // subscription has its own group so it is never stuck behind it.
+    cartSrvGroup_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    cartCmdGroup_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    cartJogSrv_ = node_->create_service<std_srvs::srv::SetBool>(
+      "~/cart_jog_enable",
+      [this](
+        const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+        std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
+        response->success = SetCartJogEnabled(request->data, response->message);
+      },
+      rmw_qos_profile_services_default, cartSrvGroup_);
+    {
+      rclcpp::SubscriptionOptions cartOptions;
+      cartOptions.callback_group = cartCmdGroup_;
+      cartJogSub_ = node_->create_subscription<geometry_msgs::msg::TwistStamped>(
+        "~/cart_jog_cmd", rclcpp::QoS(rclcpp::KeepLast(2)).best_effort(),
+        [this](geometry_msgs::msg::TwistStamped::ConstSharedPtr msg) {OnCartJogCmd(*msg);},
+        cartOptions);
+    }
+    // Direct joint jog: own groups too, so neither of the two jog services can stall the other
+    // mode's command subscription.
+    jointSrvGroup_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    jointCmdGroup_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    jointJogSrv_ = node_->create_service<std_srvs::srv::SetBool>(
+      "~/joint_jog_enable",
+      [this](
+        const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+        std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
+        response->success = SetJointJogEnabled(request->data, response->message);
+      },
+      rmw_qos_profile_services_default, jointSrvGroup_);
+    {
+      rclcpp::SubscriptionOptions jointOptions;
+      jointOptions.callback_group = jointCmdGroup_;
+      jointJogSub_ = node_->create_subscription<control_msgs::msg::JointJog>(
+        "~/joint_jog_cmd", rclcpp::QoS(rclcpp::KeepLast(2)).best_effort(),
+        [this](control_msgs::msg::JointJog::ConstSharedPtr msg) {OnJointJogCmd(*msg);},
+        jointOptions);
+    }
     moveServer_ = rclcpp_action::create_server<MoveJointAction>(
       node_, "~/move_joint",
       [this](const rclcpp_action::GoalUUID & uuid,
@@ -1029,9 +1391,19 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
       digitalOutputService_.c_str(), error.what());
     moveServer_.reset();
     moveGroup_.reset();
+    jointJogSub_.reset();
+    jointJogSrv_.reset();
+    jointCmdGroup_.reset();
+    jointSrvGroup_.reset();
+    cartJogSub_.reset();
+    cartJogSrv_.reset();
+    cartCmdGroup_.reset();
+    cartSrvGroup_.reset();
     hardwareStateTimer_.reset();
     telemetryGroup_.reset();
     hardwareStatePub_.reset();
+    criDiagnosticsPub_.reset();
+    paramCallbackHandle_.reset();
     robotJointStatePub_.reset();
     digital_output_srv_.reset();
     reset_enable_srv_.reset();
@@ -1044,10 +1416,12 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
   rebelSocket->SetConnectedCallback([this](bool reconnect) {OnConnected(reconnect);});
 
   // Service/action callbacks run on their own executor threads instead of inside write().
-  // Three threads: reset_and_enable (up to 3 s) occupies one, the move_joint callbacks and the
-  // hardware_state timer (separate callback groups) always find a free one.
+  // Seven threads: reset_and_enable (up to 3 s) and cart_jog_enable (up to ~3 s) can each occupy
+  // one, the move_joint callbacks, the cart_jog_cmd / joint_jog_cmd subscriptions, the
+  // joint_jog_enable service and the hardware_state timer (separate callback groups) always find
+  // a free one.
   executor_ = std::make_shared<rclcpp::executors::MultiThreadedExecutor>(
-    rclcpp::ExecutorOptions(), 3);
+    rclcpp::ExecutorOptions(), 7);
   executor_->add_node(node_);
   executorThread = std::thread([this]() {executor_->spin();});
 
@@ -1219,6 +1593,8 @@ CallbackReturn Rebel::on_deactivate(const rclcpp_lifecycle::State &)
   }
   ZeroJog();
   lastWriteNs = 0;
+  RequestCartExit();
+  RequestJointJogExit();
   RequestMoveStop();
   RCLCPP_INFO(logger_, "Hardware deactivated: jog set to zero");
   return CallbackReturn::SUCCESS;
@@ -1508,6 +1884,18 @@ return_type Rebel::write(const rclcpp::Time &, const rclcpp::Duration &)
     lastMovingCmd_.store(0.0);
     lastMovingNs_.store(ToNs(Safety::SteadyClock::now()));
   }
+  // Cartesian jog mode (or a pending exit from it): the joint command path is ignored. Claims are
+  // refused in this mode, so vel_cmd is only ever stale data of a released controller; clear it so
+  // that it can never be replayed when the mode ends.
+  const bool cartMode = cartState_.load() != kCartOff;
+  // The direct joint jog mode is the same: claims are refused while it is on (and a claim that
+  // slips through latches), so vel_cmd is stale data only; the topic is the only jog source.
+  const bool jointJogMode = jointJogState_.load() != kJointJogOff;
+  if (cartMode || jointJogMode) {
+    for (double & command : vel_cmd) {
+      command = 0.0;
+    }
+  }
   {
     double maxAbs = 0.0;
     for (const double command : vel_cmd) {
@@ -1524,24 +1912,33 @@ return_type Rebel::write(const rclcpp::Time &, const rclcpp::Duration &)
   // confirmation (ConsumeMoveStopRequest).
   const bool stopPending = moveStopRequested_.load();
   const bool inhibited =
-    holdJogZero_ || statusHold_ || hardwareErrorLatched_ || moveActive || stopPending;
+    holdJogZero_ || statusHold_ || hardwareErrorLatched_ || moveActive || stopPending || cartMode ||
+    jointJogMode;
   if (stopPending && !moveActive) {
     RCLCPP_WARN_THROTTLE(
       logger_, throttleClock_, 2000,
       "Holding jog at zero: a CMD Move Stop is not confirmed yet (waiting for standstill)");
   }
+  std::array<float, 6> percent{};
   for (std::size_t i = 0; i < 6; ++i) {
-    const Safety::JogCommand command = Safety::JogPercentFromVelocity(vel_cmd[i]);
+    const Safety::JogCommand command =
+      Safety::JogPercentFromVelocity(vel_cmd[i], jogVelocityScale_);
     nonFinite = nonFinite || command.nonFinite;
     saturated = saturated || command.saturated;
+    percent[i] = command.percent;
+  }
+  // Optional deadband of THIS path only (JTC velocity commands); 0 = off = unchanged.
+  percent = Safety::ApplyJogDeadband(percent, jtcJogDeadbandPercent_.load());
+  for (std::size_t i = 0; i < 6; ++i) {
     if (inhibited) {
       jog[i].store(0.0f);
     } else if (!statusCoast_) {
-      jog[i].store(command.percent);  // frozen during a STATUS coast (last jog keeps going)
+      jog[i].store(percent[i]);  // frozen during a STATUS coast (last jog keeps going)
     }
   }
   if (holdJogZero_ || statusHold_ || hardwareErrorLatched_ ||
-    moveState_.load() != kMoveIdle || moveStopRequested_.load())
+    moveState_.load() != kMoveIdle || moveStopRequested_.load() ||
+    cartState_.load() != kCartOff || jointJogState_.load() != kJointJogOff)
   {
     // Re-checked after the store so a concurrent ResetAndEnable() or a latch set by another thread
     // (fault-group stop, message thread) can never be overtaken.
@@ -1575,6 +1972,15 @@ bool Rebel::ResetAndEnable(std::string & message)
   }
   if (moveState_.load() != kMoveIdle || moveGoalBusy_.load()) {
     message = "refused: a joint move (move_joint action) is active";
+    return false;
+  }
+  if (cartState_.load() != kCartOff) {
+    // The start-up sequence re-sends MotionTypeJoint: leave the mode first (cart_jog_enable false).
+    message = "refused: Cartesian jog mode is on; switch it off first (cart_jog_enable false)";
+    return false;
+  }
+  if (jointJogState_.load() != kJointJogOff) {
+    message = "refused: joint jog mode is on; switch it off first (joint_jog_enable false)";
     return false;
   }
   JointSnapshot latest;
@@ -1891,6 +2297,72 @@ void Rebel::PublishRobotJointStates(const JointSnapshot & sample)
   }
 }
 
+void Rebel::PublishRobotCartPose(
+  const JointSnapshot & sample, const CriMessages::Status & status)
+{
+  if (!robotCartPosePub_) {
+    return;
+  }
+  try {
+    igus_rebel_msgs::msg::RobotCartPose msg;
+    // Same stamp and same joint values as robot_joint_states of this sample.
+    msg.header.stamp = rclcpp::Time(sample.systemStampNs, RCL_SYSTEM_TIME);
+    for (std::size_t i = 0; i < 6; ++i) {
+      msg.pos_cart_robot_raw[i] = static_cast<double>(status.posCartRobot[i]);
+      msg.joint_position_rad[i] = sample.positionRad[i];
+    }
+    switch (status.mode) {
+      case CriMessages::Mode::JOINT: msg.mode = CriKeywords::MODE_JOINT; break;
+      case CriMessages::Mode::CARTBASE: msg.mode = CriKeywords::MODE_CARTBASE; break;
+      case CriMessages::Mode::CARTTOOL: msg.mode = CriKeywords::MODE_CARTTOOL; break;
+      case CriMessages::Mode::PLATFORM: msg.mode = CriKeywords::MODE_PLATFORM; break;
+      case CriMessages::Mode::FSM: msg.mode = CriKeywords::MODE_FSM; break;
+      default: msg.mode = "unknown"; break;
+    }
+    // KINSTATE values the driver does not know are mapped to UNKNOWN (1000): report 255.
+    const int kinstate = static_cast<int>(status.kinstate);
+    msg.kinstate = (kinstate >= 0 && kinstate <= 254) ? static_cast<std::uint8_t>(kinstate) : 255;
+    robotCartPosePub_->publish(msg);
+  } catch (const std::exception & error) {
+    RCLCPP_WARN_THROTTLE(
+      logger_, throttleClock_, 5000, "Could not publish robot_cart_pose: %s", error.what());
+  }
+}
+
+void Rebel::PublishCriDiagnostics(const JointSnapshot & sample, const CriMessages::Status & status)
+{
+  if (!criDiagnosticsPub_) {
+    return;
+  }
+  try {
+    igus_rebel_msgs::msg::CriDiagnostics msg;
+    // Same stamp as robot_joint_states of this sample (receive time, never "now").
+    msg.header.stamp = rclcpp::Time(sample.systemStampNs, RCL_SYSTEM_TIME);
+    msg.status_sequence = sample.sequence;
+    for (std::size_t i = 0; i < 6; ++i) {
+      msg.position_deg[i] = static_cast<double>(status.posJointCurrent[i]);
+      msg.setpoint_deg[i] = static_cast<double>(status.posJointSetPoint[i]);
+      msg.current_raw[i] = static_cast<std::int32_t>(status.currentjoints[i]);
+      msg.jog_percent_sent[i] = lastSentJog_[i].load(std::memory_order_relaxed);
+    }
+    msg.current_all_raw = static_cast<std::int32_t>(status.currentall);
+    switch (lastSentSource_.load(std::memory_order_relaxed)) {
+      case kJogSourceJtc: msg.jog_source = "jtc"; break;
+      case kJogSourceJointJog: msg.jog_source = "joint_jog"; break;
+      case kJogSourceCartJog: msg.jog_source = "cart_jog"; break;
+      case kJogSourceStale: msg.jog_source = "stale"; break;
+      case kJogSourceInhibited: msg.jog_source = "inhibited"; break;
+      case kJogSourceDropped: msg.jog_source = "dropped"; break;
+      default: msg.jog_source = "none"; break;
+    }
+    msg.jtc_deadband_percent = static_cast<float>(jtcJogDeadbandPercent_.load());
+    criDiagnosticsPub_->publish(msg);
+  } catch (const std::exception & error) {
+    RCLCPP_WARN_THROTTLE(
+      logger_, throttleClock_, 5000, "Could not publish cri_diagnostics: %s", error.what());
+  }
+}
+
 void Rebel::PublishHardwareState()
 {
   if (!hardwareStatePub_ || !rebelSocket) {
@@ -1915,10 +2387,13 @@ void Rebel::PublishHardwareState()
     -1.0;
   const bool fresh = haveStatus && (steadyNow - latest.stamp) <= Safety::kStatusStaleTimeout;
   const std::uint64_t version = latchVersion_.load();
+  const int cartCode = CartJogStateValue();
+  const bool jointJogOn = jointJogState_.load() == kJointJogActive;
 
   // Everything that must be published immediately when it changes (not the continuous age).
   const std::uint64_t key = (latched ? 1u : 0u) | (stopPending ? 2u : 0u) | (moveActive ? 4u : 0u) |
     (activated ? 8u : 0u) | (connected ? 16u : 0u) | (fresh ? 32u : 0u) |
+    (static_cast<std::uint64_t>(cartCode & 3) << 6) | (jointJogOn ? (1u << 14) : 0u) |
     (static_cast<std::uint64_t>(disabledMask & 0x3Fu) << 8) |
     (static_cast<std::uint64_t>(static_cast<std::uint32_t>(kinstate) & 0xFFFFu) << 16) |
     (connectionCount << 32);
@@ -1955,6 +2430,11 @@ void Rebel::PublishHardwareState()
   msg.drives_disabled_mask = static_cast<std::uint8_t>(disabledMask & 0x3Fu);
   msg.kinstate = kinstate;
   msg.activated = activated;
+  msg.cart_jog_active = cartCode == 2;
+  msg.cart_jog_state = cartCode == 0 ? "off" : cartCode == 1 ? "entering" :
+    cartCode == 2 ? "active" : "leaving";
+  msg.joint_jog_active = jointJogOn;
+  msg.joint_jog_state = jointJogOn ? "active" : "off";
   msg.move_joint_max_velocity_percent = moveMaxVelocityPercent_;
   msg.move_joint_max_acceleration_percent = moveMaxAccelerationPercent_;
   try {
@@ -1963,6 +2443,965 @@ void Rebel::PublishHardwareState()
     RCLCPP_WARN_THROTTLE(
       logger_, throttleClock_, 5000, "Could not publish hardware_state: %s", error.what());
   }
+}
+
+//
+// Cartesian jog mode (CRI "CMD MotionTypeCartBase"): the controller does the IK. See Rebel.hpp.
+//
+// ASSUMPTIONS (not verified on the real controller): MotionTypeCartBase / MotionTypeJoint are
+// answered with CMDACK <counter> (CMDERROR on refusal), as every other CMD of this driver; the
+// STATUS MODE field then reads "cartbase" / "joint"; ALIVEJOG A1..A6 mean X Y Z A B C [% of the
+// controller's maximum speed] in the base frame while the mode is cartbase.
+//
+void Rebel::ClearDirectJogCmd(DirectJogCmd & cmd)
+{
+  std::lock_guard<std::mutex> lock(cmd.lock);
+  cmd.target.fill(0.0f);
+  cmd.lastCmdNs = 0;
+  cmd.lastStampNs = 0;
+  cmd.deadlineNs.store(0);
+  cmd.nonZero.store(false);
+  cmd.revision.fetch_add(1);
+}
+
+void Rebel::ResetCartJogState()
+{
+  // State and generation first, then the (locked) clear: a command commit that raced with this
+  // reset either lands before the clear (and is erased) or sees the mode off / the new generation.
+  BumpJogGeneration();
+  cartState_.store(kCartOff);
+  cartExitRequested_.store(false);
+  ClearDirectJogCmd(cartCmd_);
+  for (TrackedCommand * tracked : {&cartEnterCmd_, &cartExitCmd_}) {
+    tracked->counter.store(-1);
+    tracked->acked.store(false);
+    tracked->rejected.store(false);
+  }
+}
+
+void Rebel::RequestCartExit()
+{
+  // Lock-free and allocation-free (read()/write() threads, fault-group callbacks, lifecycle).
+  if (cartState_.load() != kCartOff) {
+    BumpJogGeneration();  // the session ends here: frames / commits of it must not outlive it
+    cartExitRequested_.store(true);
+  }
+}
+
+bool Rebel::AliveFrameStillValid(const AliveFrameBuild & build) const
+{
+  // Runs under the socket write lock: atomics only. Everything that inhibits jog, plus "the jog mode
+  // and session the frame was built for are still the current ones".
+  if (!aliveTransmit.load() || hardwareErrorLatched_.load() || holdJogZero_.load() ||
+    statusHold_.load() || moveState_.load() != kMoveIdle || moveStopRequested_.load())
+  {
+    return false;
+  }
+  if (jogGeneration_.load() != build.generation) {
+    return false;
+  }
+  if (cartState_.load() != build.cartState) {
+    return false;
+  }
+  if (build.cartState != kCartOff && cartExitRequested_.load()) {
+    return false;
+  }
+  if (jointJogState_.load() != build.jointJogState) {
+    return false;
+  }
+  const bool cartMode = build.cartState != kCartOff;
+  if (!cartMode && build.jointJogState == kJointJogOff) {
+    return true;  // controller (write()) jog: coasting and frozen jog are allowed
+  }
+  // A direct jog frame: the controller path must stay out (a claim or a pending one), STATUS must
+  // not be coasting (these modes never coast) and must show the mode the frame was built for.
+  if (velocityClaimMask_.load() != 0 ||
+    claimPendingUntilNs_.load() > ToNs(Safety::SteadyClock::now()))
+  {
+    return false;
+  }
+  if (statusCoast_.load()) {
+    return false;
+  }
+  const int expectedMode = static_cast<int>(
+    cartMode ? CriMessages::Mode::CARTBASE : CriMessages::Mode::JOINT);
+  if (statusMode_.load() != expectedMode) {
+    return false;
+  }
+  const DirectJogCmd & cmd = cartMode ? cartCmd_ : jointCmd_;
+  // The command expired (stamp-based deadline) while the frame waited, or it was replaced by an
+  // all-zero command (or a rejected / invalid message zeroed it) since the frame was built.
+  if (ToNs(Safety::SteadyClock::now()) > cmd.deadlineNs.load()) {
+    return false;
+  }
+  if (cmd.revision.load() != build.revision && !cmd.nonZero.load()) {
+    return false;
+  }
+  return true;
+}
+
+bool Rebel::ModeGuardZeroesJog(Safety::SteadyClock::time_point now)
+{
+  const auto mode = static_cast<CriMessages::Mode>(statusMode_.load());
+  bool mismatch = false;
+  bool off = false;
+  // Direct joint jog: fail closed on anything but a positively identified joint mode (another mode
+  // or no/unknown mode zeroes the frame and leaves the mode). The Cartesian-vs-joint cross-check
+  // below keeps running: a robot that switched to cartbase while the driver sends joint % still
+  // latches after the grace period.
+  bool jointJogTrip = false;
+  if (jointJogState_.load() == kJointJogActive && mode != CriMessages::Mode::JOINT) {
+    jointJogTrip = true;
+    RCLCPP_ERROR(
+      logger_, "STATUS mode is '%s' but the driver is in joint jog mode: sending zero jog and "
+      "leaving the mode", ModeText(mode));
+    RequestJointJogExit();
+  }
+  const int state = cartState_.load();
+  if (state == kCartActive && !cartExitRequested_.load()) {
+    // Fail closed: a non-zero Cartesian output needs a positively identified cartbase in the latest
+    // STATUS. Anything else -- another mode, or no/unknown mode -- zeroes it and leaves the mode.
+    mismatch = mode != CriMessages::Mode::CARTBASE;
+  } else if (state == kCartOff && mode != CriMessages::Mode::UNKNOWN) {
+    // Joint mode keeps today's behaviour: an unknown/not-yet-received mode never trips.
+    off = true;
+    mismatch = mode == CriMessages::Mode::CARTBASE || mode == CriMessages::Mode::CARTTOOL;
+  }
+  // Entering / leaving: the switch is in flight, the enter/exit logic judges it.
+  if (!mismatch) {
+    modeMismatch_ = false;
+    modeMismatchLatched_ = false;
+    return jointJogTrip;
+  }
+  if (!modeMismatch_) {
+    modeMismatch_ = true;
+    modeMismatchSince_ = now;
+    RCLCPP_ERROR(
+      logger_, "STATUS mode is '%s' but the driver is in %s jog mode: sending zero jog",
+      ModeText(mode), off ? "joint" : "Cartesian");
+  }
+  if (!off) {
+    // Active, but the robot is no longer in cartbase (switched by someone else): zero jog and
+    // leave the mode (MotionTypeJoint is re-sent until STATUS confirms joint).
+    RequestCartExit();
+  } else if (!modeMismatchLatched_ && now - modeMismatchSince_ > kModeMismatchGrace) {
+    // Joint velocities would be read as Cartesian speeds: fail closed.
+    modeMismatchLatched_ = true;
+    LatchHardwareError(
+      std::string("robot STATUS mode is '") + ModeText(mode) +
+      "' while the driver sends joint jog (MotionTypeJoint did not take effect)");
+  }
+  return true;
+}
+
+void Rebel::CartIdleStep(Safety::SteadyClock::time_point now)
+{
+  if (cartConfig_.idleExitS <= 0.0 || cartState_.load() != kCartActive ||
+    cartExitRequested_.load())
+  {
+    return;
+  }
+  std::int64_t lastCommandNs = 0;
+  {
+    std::lock_guard<std::mutex> lock(cartCmd_.lock);
+    lastCommandNs = cartCmd_.lastCmdNs;
+  }
+  const std::int64_t referenceNs = std::max(lastCommandNs, cartActiveSinceNs_.load());
+  if (referenceNs == 0) {
+    return;
+  }
+  const auto idle = std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::duration<double>(cartConfig_.idleExitS));
+  if (now - FromNs(referenceNs) > idle) {
+    RCLCPP_WARN(
+      logger_, "No cart_jog_cmd for %.1f s while the Cartesian jog mode is on (cart_jog_idle_exit_s): "
+      "leaving the mode", cartConfig_.idleExitS);
+    RequestCartExit();
+  }
+}
+
+std::array<float, 6> Rebel::CartJogForTransmit(
+  Safety::SteadyClock::time_point now, std::uint64_t & revision)
+{
+  std::array<float, 6> result{};
+  if (cartState_.load() != kCartActive || cartExitRequested_.load()) {
+    return result;
+  }
+  std::array<float, 6> target{};
+  std::int64_t deadlineNs = 0;
+  {
+    std::lock_guard<std::mutex> lock(cartCmd_.lock);
+    target = cartCmd_.target;
+    deadlineNs = cartCmd_.deadlineNs.load();
+    revision = cartCmd_.revision.load();
+  }
+  // The deadline counts from the command's own stamp (see CommitDirectJogCmd), not its receipt.
+  const bool stale = deadlineNs == 0 || ToNs(now) > deadlineNs;
+  if (stale != cartWasStale_) {
+    if (stale) {
+      RCLCPP_WARN(
+        logger_, "No cart_jog_cmd for %.3f s: sending zero Cartesian jog", cartConfig_.timeoutS);
+    } else {
+      RCLCPP_INFO(logger_, "Receiving cart_jog_cmd: forwarding Cartesian jog");
+    }
+    cartWasStale_ = stale;
+  }
+  if (stale) {
+    return result;
+  }
+  // No coasting in Cartesian mode: the controller executes the jog itself, so a frozen non-zero
+  // jog would outlive a deadman release or a rejected command. Any STATUS gap (coast tier or
+  // worse) sends zero. The age is also measured here, so it does not depend on read() running.
+  if (StatusGapZeroesDirectJog(now)) {
+    return result;
+  }
+  result = target;
+  double maxAbs = 0.0;
+  for (const float value : result) {
+    maxAbs = std::max(maxAbs, static_cast<double>(std::fabs(value)));
+  }
+  if (maxAbs > 0.0) {
+    // A STATUS gap that long that jog was zeroed during motion must not auto-resume (read()).
+    lastMovingCmd_.store(maxAbs / 100.0);
+    lastMovingNs_.store(ToNs(now));
+  }
+  return result;
+}
+
+Rebel::JogCommit Rebel::CommitDirectJogCmd(
+  DirectJogCmd & cmd, bool cart, std::uint64_t generationAtStart,
+  const std::array<float, 6> * percent, const builtin_interfaces::msg::Time * stamp,
+  double timeoutS, const std::atomic<std::int64_t> & activeSinceRosNs, const char *& why,
+  double & ageS)
+{
+  why = nullptr;
+  if (const auto hook = std::atomic_load(&beforeJogCommitHook_)) {
+    (*hook)(cart);  // tests only: a callback paused between validation and commit
+  }
+  std::lock_guard<std::mutex> lock(cmd.lock);
+  // Re-check under the command lock: the callback validated before this lock, and the mode may
+  // have been left (and entered again) since. A commit of an older session is dropped.
+  if (!DirectJogActive(cart)) {
+    return JogCommit::kModeOff;
+  }
+  if (jogGeneration_.load() != generationAtStart) {
+    return JogCommit::kSessionChanged;
+  }
+  if (percent == nullptr) {
+    // Invalid / rejected message: zero the target, watchdog / deadline and stamp order untouched.
+    cmd.target.fill(0.0f);
+    cmd.nonZero.store(false);
+    cmd.revision.fetch_add(1);
+    return JogCommit::kCommitted;
+  }
+  // Sampled before the stamp age: a few microseconds of skew make the deadline earlier, never later.
+  const auto steadyNow = Safety::SteadyClock::now();
+  why = JogStampRejection(*stamp, timeoutS, activeSinceRosNs.load(), ageS);
+  if (why != nullptr) {
+    return JogCommit::kStamp;
+  }
+  const std::int64_t stampNs =
+    static_cast<std::int64_t>(stamp->sec) * 1000000000LL + stamp->nanosec;
+  if (!Safety::JogStampIsNewer(stampNs, cmd.lastStampNs)) {
+    return JogCommit::kReplay;
+  }
+  cmd.lastStampNs = stampNs;
+  cmd.target = *percent;
+  cmd.lastCmdNs = ToNs(steadyNow);
+  cmd.deadlineNs.store(ToNs(steadyNow) + Safety::JogCommandLifetimeNs(timeoutS, ageS));
+  cmd.nonZero.store(
+    std::any_of(percent->begin(), percent->end(), [](float v) {return v != 0.0f;}));
+  cmd.revision.fetch_add(1);
+  return JogCommit::kCommitted;
+}
+
+void Rebel::OnCartJogCmd(const geometry_msgs::msg::TwistStamped & msg)
+{
+  // The session generation is captured BEFORE the mode check and the commit re-checks it under the
+  // command lock: a callback paused after validation cannot write into a later session.
+  const std::uint64_t generation = jogGeneration_.load();
+  if (cartState_.load() != kCartActive || cartExitRequested_.load()) {
+    RCLCPP_WARN_THROTTLE(
+      logger_, throttleClock_, 5000,
+      "cart_jog_cmd ignored: Cartesian jog mode is not on (call ~/cart_jog_enable true)");
+    return;
+  }
+  const char * why = nullptr;
+  double ageS = 0.0;
+  if (!msg.header.frame_id.empty() && msg.header.frame_id != cartConfig_.baseFrame) {
+    CommitDirectJogCmd(
+      cartCmd_, true, generation, nullptr, nullptr, cartConfig_.timeoutS, cartActiveSinceRosNs_,
+      why, ageS);  // zero target; the watchdog stamp is not refreshed
+    RCLCPP_ERROR_THROTTLE(
+      logger_, throttleClock_, 2000,
+      "cart_jog_cmd rejected: frame_id '%s' is not the base frame '%s' (only the base frame is "
+      "supported); sending zero Cartesian jog", msg.header.frame_id.c_str(),
+      cartConfig_.baseFrame.c_str());
+    return;
+  }
+  const std::array<double, 6> twist{
+    msg.twist.linear.x, msg.twist.linear.y, msg.twist.linear.z,
+    msg.twist.angular.x, msg.twist.angular.y, msg.twist.angular.z};
+  const Safety::CartJogResult result = Safety::CartJogFromTwist(cartConfig_, twist);
+  // Replay / delay protection (publishers stamp with now() on this machine), decided inside the
+  // commit: a zero stamp, one older than the command watchdog, one more than kCartCmdMaxFuture
+  // ahead, one from before the current mode entry, or one not newer than the newest accepted stamp
+  // of this session is rejected and does NOT refresh the watchdog or change the target. The
+  // command expires timeout - age after its receipt, not a full timeout later.
+  const JogCommit committed = CommitDirectJogCmd(
+    cartCmd_, true, generation, &result.percent, &msg.header.stamp, cartConfig_.timeoutS,
+    cartActiveSinceRosNs_, why, ageS);
+  switch (committed) {
+    case JogCommit::kCommitted:
+      break;
+    case JogCommit::kStamp:
+      RCLCPP_ERROR_THROTTLE(
+        logger_, throttleClock_, 2000, "cart_jog_cmd rejected: %s (age %.3f s)", why, ageS);
+      return;
+    case JogCommit::kReplay:
+      RCLCPP_WARN_THROTTLE(
+        logger_, throttleClock_, 2000,
+        "cart_jog_cmd rejected: header.stamp is not newer than the last accepted one "
+        "(duplicate or out of order); target unchanged");
+      return;
+    case JogCommit::kModeOff:
+    case JogCommit::kSessionChanged:
+      RCLCPP_WARN_THROTTLE(
+        logger_, throttleClock_, 2000,
+        "cart_jog_cmd dropped: the Cartesian jog session ended while the message was processed");
+      return;
+  }
+  if (result.rotationDropped) {
+    RCLCPP_WARN_THROTTLE(
+      logger_, throttleClock_, 5000,
+      "cart_jog_cmd: angular input zeroed (rotation is disabled, cart_jog_allow_rotation=false)");
+  }
+  if (result.nonFinite) {
+    RCLCPP_ERROR_THROTTLE(
+      logger_, throttleClock_, 1000, "Non-finite cart_jog_cmd axis; sending zero for that axis");
+  }
+  if (result.saturated) {
+    RCLCPP_WARN_THROTTLE(
+      logger_, throttleClock_, 1000, "cart_jog_cmd saturated at +-%.1f %% jog",
+      std::min(cartConfig_.maxPercent, static_cast<double>(Safety::kMaxJogPercent)));
+  }
+}
+
+// ALIVEJOG thread. A pending exit keeps jog at zero (CartJogForTransmit) and re-sends
+// MotionTypeJoint until it is confirmed by CMDACK and a STATUS with MODE joint.
+void Rebel::CartExitStep()
+{
+  if (!cartExitRequested_.load()) {
+    cartExitActive_ = false;
+    cartExitSent_ = false;
+    cartExitTimeoutLatched_ = false;
+    return;
+  }
+  if (cartState_.load() == kCartOff) {
+    cartExitRequested_.store(false);  // a stale request: the mode is already off
+    return;
+  }
+  const auto now = Safety::SteadyClock::now();
+  if (!cartExitActive_) {
+    cartExitActive_ = true;
+    cartExitFirstAt_ = now;
+    cartExitSent_ = false;
+    cartExitTimeoutLatched_ = false;
+    RCLCPP_WARN(
+      logger_, "Leaving Cartesian jog mode: jog is zero, sending CMD MotionTypeJoint until it is "
+      "confirmed");
+    // Zero jog first: this iteration still sends its ALIVEJOG (zero, the exit flag is set) before
+    // MotionTypeJoint goes out in the next one, so the controller never switches back to joint
+    // mode with a Cartesian jog value as the last ALIVEJOG on the wire.
+    return;
+  }
+  if (cartExitSent_ && cartExitCmd_.acked.load() &&
+    statusModeSeq_.load() > cartExitSeqAtSend_ &&
+    statusMode_.load() == static_cast<int>(CriMessages::Mode::JOINT))
+  {
+    BumpJogGeneration();
+    cartState_.store(kCartOff);
+    cartExitRequested_.store(false);
+    ClearDirectJogCmd(cartCmd_);
+    cartExitActive_ = false;
+    cartExitSent_ = false;
+    RCLCPP_INFO(logger_, "Cartesian jog mode off: CMD MotionTypeJoint confirmed (joint jog resumes)");
+    return;
+  }
+  if (!cartExitSent_ || now - cartExitLastSendAt_ >= kCartExitResendPeriod) {
+    // Not interleaved with OnConnected() (it re-sends MotionTypeJoint itself and resets the mode).
+    std::unique_lock<std::mutex> startupGuard(startupLock_, std::try_to_lock);
+    if (startupGuard.owns_lock()) {
+      cartExitSeqAtSend_ = statusModeSeq_.load();
+      cartExitSent_ = Command(CriKeywords::COMMAND_MOTIONTYPEJOINT, true, &cartExitCmd_);
+      cartExitLastSendAt_ = now;
+    }
+  }
+  if (!cartExitTimeoutLatched_ && now - cartExitFirstAt_ > kCartModeTimeout) {
+    cartExitTimeoutLatched_ = true;
+    RCLCPP_ERROR(
+      logger_, "CMD MotionTypeJoint was not confirmed within %lld ms after leaving the Cartesian "
+      "jog mode: latching (jog stays zero; recover via the hardware lifecycle reset)",
+      static_cast<long long>(kCartModeTimeout.count()));
+    LatchHardwareError("CMD MotionTypeJoint was not confirmed after leaving the Cartesian jog mode");
+  }
+}
+
+bool Rebel::SetCartJogEnabled(bool enable, std::string & message)
+{
+  std::lock_guard<std::mutex> transition(cartTransitionLock_);
+  if (stopping || !rebelSocket) {
+    message = "driver is stopping";
+    return false;
+  }
+  return enable ? EnterCartJog(message) : LeaveCartJog(message);
+}
+
+bool Rebel::LeaveCartJog(std::string & message)
+{
+  if (cartState_.load() == kCartOff) {
+    message = "Cartesian jog mode is already off";
+    return true;
+  }
+  RequestCartExit();
+  const auto deadline = Safety::SteadyClock::now() + kCartModeTimeout +
+    std::chrono::milliseconds(1000);
+  while (cartState_.load() != kCartOff && Safety::SteadyClock::now() < deadline && !stopping) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  if (cartState_.load() == kCartOff) {
+    message = "Cartesian jog mode off: jog zero, MotionTypeJoint confirmed";
+    return true;
+  }
+  message = "MotionTypeJoint was NOT confirmed; the hardware is latched (jog stays zero). "
+    "Recover with 'ros2 control set_hardware_component_state " + componentName_ +
+    " inactive' then 'active'";
+  return false;
+}
+
+bool Rebel::EnterCartJog(std::string & message)
+{
+  const auto refuse = [&](const std::string & why) {
+      message = "refused: " + why;
+      RCLCPP_WARN(logger_, "cart_jog_enable refused: %s", why.c_str());
+      return false;
+    };
+  const int current = cartState_.load();
+  if (current == kCartActive && !cartExitRequested_.load()) {
+    message = "Cartesian jog mode is already on";
+    return true;
+  }
+  if (current != kCartOff) {
+    return refuse("Cartesian jog mode is still being entered or left (MotionTypeJoint not "
+             "confirmed yet)");
+  }
+
+  {
+    // Same lock as claim preparation and move acceptance: the checks and the transition to
+    // "entering" are one step with respect to a controller claim and a move_joint goal.
+    std::lock_guard<std::mutex> claimGuard(claimLock_);
+    if (jointJogState_.load() != kJointJogOff) {
+      return refuse("joint jog mode is on; switch it off first (joint_jog_enable false)");
+    }
+    if (hardwareErrorLatched_) {
+      return refuse("hardware error is latched; recover via the hardware lifecycle reset");
+    }
+    if (!activated_) {
+      return refuse("hardware component is not active");
+    }
+    BlockingFault blocking;
+    if (faultMember_ &&
+      (faultMember_->HasRootFault() || FindBlockingRootFault(faultMember_, blocking)))
+    {
+      return refuse("fault group '" + faultGroup_ + "' holds an un-recovered root-cause fault");
+    }
+    if (connectedAtNs_.load() == 0 || holdJogZero_) {
+      return refuse("start-up sequence or reset_and_enable in progress");
+    }
+    if (moveGoalBusy_.load() || moveState_.load() != kMoveIdle) {
+      return refuse("a joint move (move_joint action) is active");
+    }
+    if (moveStopRequested_.load()) {
+      return refuse("a CMD Move Stop is not confirmed yet");
+    }
+    const auto nowNs = ToNs(Safety::SteadyClock::now());
+    if (velocityClaimMask_.load() != 0 || claimPendingUntilNs_.load() > nowNs) {
+      return refuse(
+        "a controller claims (or is about to claim) the velocity command interfaces of this arm; "
+        "deactivate it first (e.g. 'ros2 control switch_controllers --deactivate " +
+        trajectoryControllerName_ + "')");
+    }
+    JointSnapshot latest;
+    {
+      std::lock_guard<std::mutex> lock(snapshotLock);
+      latest = snapshot;
+    }
+    const auto now = Safety::SteadyClock::now();
+    if (latest.sequence == 0 ||
+      Safety::IsStatusStale(latest.stamp, now, Safety::kStatusStaleTimeout))
+    {
+      return refuse("STATUS is stale or missing");
+    }
+    if (statusHold_ || statusCoast_) {
+      return refuse("STATUS gap in progress (coast/hold)");
+    }
+    if (rebelSocket->ConnectionCount() != initialConnectionCount) {
+      return refuse("connection was re-established; recover via the hardware lifecycle reset");
+    }
+    if (drivesDisabledMask_.load() != 0) {
+      return refuse("drives are not enabled (call reset_and_enable)");
+    }
+    if (statusMode_.load() != static_cast<int>(CriMessages::Mode::JOINT)) {
+      return refuse(
+        std::string("the robot STATUS mode is '") +
+        ModeText(static_cast<CriMessages::Mode>(statusMode_.load())) + "', not 'joint'");
+    }
+    // Flag before state: a stale exit request must never leak into the new session.
+    cartExitRequested_.store(false);
+    ClearDirectJogCmd(cartCmd_);
+    BumpJogGeneration();  // new session; after the clear, before the state change
+    cartState_.store(kCartEntering);
+  }
+  ZeroJog();
+  RCLCPP_INFO(logger_, "Entering Cartesian jog mode: jog held at zero, sending CMD MotionTypeCartBase");
+
+  // Anything that goes wrong after the command was sent restores joint mode through the exit path
+  // (the controller may have executed a command whose answer was lost).
+  const auto failAfterSend = [&](const std::string & why) {
+      RequestCartExit();
+      const auto deadline = Safety::SteadyClock::now() + kCartModeTimeout +
+        std::chrono::milliseconds(1000);
+      while (cartState_.load() != kCartOff && Safety::SteadyClock::now() < deadline && !stopping) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+      }
+      message = "failed: " + why + (cartState_.load() == kCartOff ?
+        "; the controller is back in joint mode" :
+        "; MotionTypeJoint NOT confirmed, hardware latched (recover via the lifecycle reset)");
+      RCLCPP_ERROR(logger_, "cart_jog_enable %s", message.c_str());
+      return false;
+    };
+
+  const std::uint64_t seqBefore = statusModeSeq_.load();
+  std::string abortReason;
+  bool sent = false;
+  {
+    // Serialised with OnConnected(): a (re)connect resets the mode and re-sends MotionTypeJoint,
+    // so this CMD is either sent before it (and undone) or not sent at all.
+    std::lock_guard<std::mutex> startupGuard(startupLock_);
+    if (cartState_.load() != kCartEntering || cartExitRequested_.load()) {
+      abortReason = "aborted before the command was sent (reconnect or fault)";
+    } else if (hardwareErrorLatched_) {
+      abortReason = "hardware error latched";
+    } else if (!activated_) {
+      abortReason = "hardware component is not active";
+    } else if (rebelSocket->ConnectionCount() != initialConnectionCount) {
+      abortReason = "connection was re-established";
+    } else {
+      sent = Command(CriKeywords::COMMAND_MOTIONTYPECARTBASE, false, &cartEnterCmd_);
+      if (!sent) {
+        abortReason = "could not send MotionTypeCartBase: not connected";
+      }
+    }
+  }
+  if (!sent) {
+    // Nothing reached the controller: it is still in joint mode.
+    BumpJogGeneration();
+    cartState_.store(kCartOff);
+    cartExitRequested_.store(false);
+    return refuse(abortReason);
+  }
+
+  const auto deadline = Safety::SteadyClock::now() + kCartModeTimeout;
+  bool confirmed = false;
+  std::string failure;
+  while (Safety::SteadyClock::now() < deadline) {
+    if (stopping) {
+      failure = "driver is stopping";
+      break;
+    }
+    if (cartState_.load() != kCartEntering || cartExitRequested_.load()) {
+      failure = "aborted (reconnect, latch or deactivate while entering)";
+      break;
+    }
+    if (hardwareErrorLatched_) {
+      failure = "hardware error latched while entering";
+      break;
+    }
+    // A deactivate between the checks and "entering" is not seen by RequestCartExit() (the state
+    // was still off): look at the lifecycle flag directly.
+    if (!activated_) {
+      failure = "hardware component was deactivated while entering";
+      break;
+    }
+    if (rebelSocket->ConnectionCount() != initialConnectionCount) {
+      failure = "connection was re-established while entering";
+      break;
+    }
+    if (cartEnterCmd_.rejected.load()) {
+      failure = "the controller rejected CMD MotionTypeCartBase (CMDERROR)";
+      break;
+    }
+    if (cartEnterCmd_.acked.load() && statusModeSeq_.load() > seqBefore &&
+      statusMode_.load() == static_cast<int>(CriMessages::Mode::CARTBASE))
+    {
+      confirmed = true;
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  if (!confirmed) {
+    if (failure.empty()) {
+      failure = std::string("CMD MotionTypeCartBase not confirmed within ") +
+        std::to_string(kCartModeTimeout.count()) + " ms (CMDACK " +
+        (cartEnterCmd_.acked.load() ? "seen" : "missing") + ", STATUS mode '" +
+        ModeText(static_cast<CriMessages::Mode>(statusMode_.load())) + "')";
+    }
+    return failAfterSend(failure);
+  }
+  int expected = kCartEntering;
+  cartActiveSinceNs_.store(ToNs(Safety::SteadyClock::now()));
+  cartActiveSinceRosNs_.store(node_->get_clock()->now().nanoseconds());
+  ClearDirectJogCmd(cartCmd_);
+  BumpJogGeneration();  // the active session starts here; commits need a generation read after this
+  if (!activated_ || !cartState_.compare_exchange_strong(expected, kCartActive) ||
+    cartExitRequested_.load())
+  {
+    return failAfterSend("aborted while entering (reconnect, latch or deactivate)");
+  }
+  if (!activated_) {  // deactivated right after the transition
+    RequestCartExit();
+    return failAfterSend("hardware component was deactivated while entering");
+  }
+  message = "Cartesian jog mode on (CMD MotionTypeCartBase confirmed); publish "
+    "geometry_msgs/TwistStamped on ~/cart_jog_cmd (base frame '" + cartConfig_.baseFrame +
+    "'); zero jog after " + std::to_string(cartConfig_.timeoutS) + " s without a command";
+  RCLCPP_WARN(logger_, "Cartesian jog mode ON: %s", message.c_str());
+  return true;
+}
+
+//
+// Direct joint jog mode: ALIVEJOG joint % from ~/joint_jog_cmd, the robot stays in MotionTypeJoint.
+// See Rebel.hpp. Mirrors the Cartesian jog mode's interlocks; there is no mode-switch handshake.
+//
+void Rebel::ResetJointJogState()
+{
+  BumpJogGeneration();
+  jointJogState_.store(kJointJogOff);
+  ClearDirectJogCmd(jointCmd_);
+  jointJogActiveSinceNs_.store(0);
+  jointJogActiveSinceRosNs_.store(0);
+  jointJogWasStale_.store(true);
+}
+
+void Rebel::RequestJointJogExit()
+{
+  // Lock-free and allocation-free (read()/write() threads, fault-group callbacks, lifecycle). The
+  // next ALIVEJOG frame is built from jog[] (zero), and a frame already built for the mode is
+  // dropped by AliveFrameStillValid() under the socket write lock. The generation is bumped as well:
+  // the mode may be entered again before that frame is validated, and it must still be dropped.
+  BumpJogGeneration();
+  jointJogState_.store(kJointJogOff);
+}
+
+const char * Rebel::JogStampRejection(
+  const builtin_interfaces::msg::Time & stamp, double timeoutS, std::int64_t activeSinceRosNs,
+  double & ageS) const
+{
+  const std::int64_t stampNs =
+    static_cast<std::int64_t>(stamp.sec) * 1000000000LL + stamp.nanosec;
+  const std::int64_t nowNs = node_->get_clock()->now().nanoseconds();
+  const std::int64_t timeoutNs = static_cast<std::int64_t>(timeoutS * 1e9);
+  ageS = static_cast<double>(nowNs - stampNs) * 1e-9;
+  if (stampNs == 0) {
+    return "zero header.stamp";
+  }
+  if (stampNs < nowNs - timeoutNs) {
+    return "header.stamp older than the command timeout";
+  }
+  if (stampNs > nowNs + std::chrono::duration_cast<std::chrono::nanoseconds>(
+      kCartCmdMaxFuture).count())
+  {
+    return "header.stamp too far in the future";
+  }
+  if (stampNs < activeSinceRosNs) {
+    return "header.stamp from before the current mode entry";
+  }
+  return nullptr;
+}
+
+bool Rebel::StatusGapZeroesDirectJog(Safety::SteadyClock::time_point now)
+{
+  if (statusCoast_.load()) {
+    return true;
+  }
+  std::lock_guard<std::mutex> lock(snapshotLock);
+  return snapshot.sequence == 0 || now - snapshot.stamp > Safety::kStatusStaleTimeout;
+}
+
+void Rebel::JointJogIdleStep(Safety::SteadyClock::time_point now)
+{
+  if (jointJogConfig_.idleExitS <= 0.0 || jointJogState_.load() != kJointJogActive) {
+    return;
+  }
+  std::int64_t lastCommandNs = 0;
+  {
+    std::lock_guard<std::mutex> lock(jointCmd_.lock);
+    lastCommandNs = jointCmd_.lastCmdNs;
+  }
+  const std::int64_t referenceNs = std::max(lastCommandNs, jointJogActiveSinceNs_.load());
+  if (referenceNs == 0) {
+    return;
+  }
+  const auto idle = std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::duration<double>(jointJogConfig_.idleExitS));
+  if (now - FromNs(referenceNs) > idle) {
+    RCLCPP_WARN(
+      logger_, "No joint_jog_cmd for %.1f s while the joint jog mode is on (joint_jog_idle_exit_s): "
+      "leaving the mode", jointJogConfig_.idleExitS);
+    RequestJointJogExit();
+  }
+}
+
+std::array<float, 6> Rebel::JointJogForTransmit(
+  Safety::SteadyClock::time_point now, std::uint64_t & revision)
+{
+  std::array<float, 6> result{};
+  if (jointJogState_.load() != kJointJogActive) {
+    return result;
+  }
+  std::array<float, 6> target{};
+  std::int64_t deadlineNs = 0;
+  {
+    std::lock_guard<std::mutex> lock(jointCmd_.lock);
+    target = jointCmd_.target;
+    deadlineNs = jointCmd_.deadlineNs.load();
+    revision = jointCmd_.revision.load();
+  }
+  // The deadline counts from the command's own stamp (see CommitDirectJogCmd), not its receipt.
+  const bool stale = deadlineNs == 0 || ToNs(now) > deadlineNs;
+  if (stale != jointJogWasStale_.load()) {
+    if (stale) {
+      RCLCPP_WARN(
+        logger_, "No joint_jog_cmd for %.3f s: sending zero joint jog", jointJogConfig_.timeoutS);
+    } else {
+      RCLCPP_INFO(logger_, "Receiving joint_jog_cmd: forwarding joint jog");
+    }
+    jointJogWasStale_.store(stale);
+  }
+  if (stale) {
+    return result;
+  }
+  // No coasting: a frozen non-zero jog would outlive a deadman release.
+  if (StatusGapZeroesDirectJog(now)) {
+    return result;
+  }
+  // Defence in depth: whatever the command path stored, never above the configured clamp.
+  const float limit = static_cast<float>(
+    std::min(jointJogConfig_.maxPercent, static_cast<double>(Safety::kMaxJogPercent)));
+  double maxAbs = 0.0;
+  for (std::size_t i = 0; i < result.size(); ++i) {
+    const float value = target[i];
+    result[i] = std::isfinite(value) ? std::clamp(value, -limit, limit) : 0.0f;
+    maxAbs = std::max(maxAbs, static_cast<double>(std::fabs(result[i])));
+  }
+  if (maxAbs > 0.0) {
+    // A STATUS gap that long that jog was zeroed during motion must not auto-resume (read()).
+    lastMovingCmd_.store(maxAbs / jogVelocityScale_ * Safety::kDegToRad);
+    lastMovingNs_.store(ToNs(now));
+  }
+  return result;
+}
+
+void Rebel::OnJointJogCmd(const control_msgs::msg::JointJog & msg)
+{
+  // Captured before the mode check; the commit re-checks it under the command lock (see
+  // OnCartJogCmd).
+  const std::uint64_t generation = jogGeneration_.load();
+  if (jointJogState_.load() != kJointJogActive) {
+    RCLCPP_WARN_THROTTLE(
+      logger_, throttleClock_, 5000,
+      "joint_jog_cmd ignored: joint jog mode is not on (call ~/joint_jog_enable true)");
+    return;
+  }
+  const char * why = nullptr;
+  double ageS = 0.0;
+  const auto zeroTarget = [&]() {
+      // the watchdog stamp / deadline is not refreshed
+      const char * ignoredWhy = nullptr;
+      double ignoredAge = 0.0;
+      CommitDirectJogCmd(
+        jointCmd_, false, generation, nullptr, nullptr, jointJogConfig_.timeoutS,
+        jointJogActiveSinceRosNs_, ignoredWhy, ignoredAge);
+    };
+  std::array<double, 6> velocities{};
+  std::string error;
+  if (!Safety::MapJointJogMessage(
+      jointNames_, msg.joint_names, msg.velocities, msg.displacements.size(), velocities, error))
+  {
+    zeroTarget();
+    RCLCPP_ERROR_THROTTLE(
+      logger_, throttleClock_, 2000,
+      "joint_jog_cmd rejected: %s; sending zero joint jog", error.c_str());
+    return;
+  }
+  const Safety::JointJogResult result = Safety::JointJogFromVelocities(
+    jogVelocityScale_, jointJogConfig_.maxPercent, velocities);
+  // Same replay / delay / ordering protection and stamp-based expiry as cart_jog_cmd, decided
+  // inside the commit. A stamp rejection zeroes the target (as before); a replay does not touch it.
+  const JogCommit committed = CommitDirectJogCmd(
+    jointCmd_, false, generation, &result.percent, &msg.header.stamp, jointJogConfig_.timeoutS,
+    jointJogActiveSinceRosNs_, why, ageS);
+  switch (committed) {
+    case JogCommit::kCommitted:
+      break;
+    case JogCommit::kStamp:
+      zeroTarget();
+      RCLCPP_ERROR_THROTTLE(
+        logger_, throttleClock_, 2000, "joint_jog_cmd rejected: %s (age %.3f s)", why, ageS);
+      return;
+    case JogCommit::kReplay:
+      RCLCPP_WARN_THROTTLE(
+        logger_, throttleClock_, 2000,
+        "joint_jog_cmd rejected: header.stamp is not newer than the last accepted one "
+        "(duplicate or out of order); target unchanged");
+      return;
+    case JogCommit::kModeOff:
+    case JogCommit::kSessionChanged:
+      RCLCPP_WARN_THROTTLE(
+        logger_, throttleClock_, 2000,
+        "joint_jog_cmd dropped: the joint jog session ended while the message was processed");
+      return;
+  }
+  if (result.nonFinite) {
+    RCLCPP_ERROR_THROTTLE(
+      logger_, throttleClock_, 1000, "Non-finite joint_jog_cmd velocity; sending zero for that joint");
+  }
+  if (result.saturated) {
+    RCLCPP_WARN_THROTTLE(
+      logger_, throttleClock_, 1000, "joint_jog_cmd saturated at +-%.1f %% jog",
+      std::min(jointJogConfig_.maxPercent, static_cast<double>(Safety::kMaxJogPercent)));
+  }
+}
+
+bool Rebel::SetJointJogEnabled(bool enable, std::string & message)
+{
+  std::lock_guard<std::mutex> transition(jointJogTransitionLock_);
+  if (stopping || !rebelSocket) {
+    message = "driver is stopping";
+    return false;
+  }
+  return enable ? EnterJointJog(message) : LeaveJointJog(message);
+}
+
+bool Rebel::LeaveJointJog(std::string & message)
+{
+  if (jointJogState_.load() == kJointJogOff) {
+    message = "joint jog mode is already off";
+    return true;
+  }
+  RequestJointJogExit();
+  ZeroJog();
+  message = "joint jog mode off: jog zero (the robot stays in MotionTypeJoint)";
+  RCLCPP_WARN(logger_, "Joint jog mode OFF: %s", message.c_str());
+  return true;
+}
+
+bool Rebel::EnterJointJog(std::string & message)
+{
+  const auto refuse = [&](const std::string & why) {
+      message = "refused: " + why;
+      RCLCPP_WARN(logger_, "joint_jog_enable refused: %s", why.c_str());
+      return false;
+    };
+  if (jointJogState_.load() == kJointJogActive) {
+    message = "joint jog mode is already on";
+    return true;
+  }
+  {
+    // Same lock as claim preparation, move acceptance and the Cartesian jog entry: the checks and
+    // the transition are one step with respect to a controller claim, a move_joint goal and a
+    // Cartesian jog entry (which refuses while this mode is on, under the same lock).
+    std::lock_guard<std::mutex> claimGuard(claimLock_);
+    if (cartState_.load() != kCartOff) {
+      return refuse(
+        "Cartesian jog mode is on (or still being left); switch it off first (cart_jog_enable "
+        "false)");
+    }
+    if (hardwareErrorLatched_) {
+      return refuse("hardware error is latched; recover via the hardware lifecycle reset");
+    }
+    if (!activated_) {
+      return refuse("hardware component is not active");
+    }
+    BlockingFault blocking;
+    if (faultMember_ &&
+      (faultMember_->HasRootFault() || FindBlockingRootFault(faultMember_, blocking)))
+    {
+      return refuse("fault group '" + faultGroup_ + "' holds an un-recovered root-cause fault");
+    }
+    if (connectedAtNs_.load() == 0 || holdJogZero_) {
+      return refuse("start-up sequence or reset_and_enable in progress");
+    }
+    if (moveGoalBusy_.load() || moveState_.load() != kMoveIdle) {
+      return refuse("a joint move (move_joint action) is active");
+    }
+    if (moveStopRequested_.load()) {
+      return refuse("a CMD Move Stop is not confirmed yet");
+    }
+    const auto nowNs = ToNs(Safety::SteadyClock::now());
+    if (velocityClaimMask_.load() != 0 || claimPendingUntilNs_.load() > nowNs) {
+      return refuse(
+        "a controller claims (or is about to claim) the velocity command interfaces of this arm; "
+        "deactivate it first (e.g. 'ros2 control switch_controllers --deactivate " +
+        trajectoryControllerName_ + "')");
+    }
+    JointSnapshot latest;
+    {
+      std::lock_guard<std::mutex> lock(snapshotLock);
+      latest = snapshot;
+    }
+    const auto now = Safety::SteadyClock::now();
+    if (latest.sequence == 0 ||
+      Safety::IsStatusStale(latest.stamp, now, Safety::kStatusStaleTimeout))
+    {
+      return refuse("STATUS is stale or missing");
+    }
+    if (statusHold_ || statusCoast_) {
+      return refuse("STATUS gap in progress (coast/hold)");
+    }
+    if (rebelSocket->ConnectionCount() != initialConnectionCount) {
+      return refuse("connection was re-established; recover via the hardware lifecycle reset");
+    }
+    if (drivesDisabledMask_.load() != 0) {
+      return refuse("drives are not enabled (call reset_and_enable)");
+    }
+    if (statusMode_.load() != static_cast<int>(CriMessages::Mode::JOINT)) {
+      return refuse(
+        std::string("the robot STATUS mode is '") +
+        ModeText(static_cast<CriMessages::Mode>(statusMode_.load())) + "', not 'joint'");
+    }
+    ClearDirectJogCmd(jointCmd_);
+    jointJogWasStale_.store(true);
+    jointJogActiveSinceNs_.store(ToNs(Safety::SteadyClock::now()));
+    jointJogActiveSinceRosNs_.store(node_->get_clock()->now().nanoseconds());
+    BumpJogGeneration();  // new session: after the clear and the entry stamps, before the state
+    jointJogState_.store(kJointJogActive);
+  }
+  ZeroJog();
+  // A latch, deactivate or reconnect that landed between the checks above and the store only
+  // switches an "off" mode off (no-op): look at the flags again so the mode is never left on.
+  if (hardwareErrorLatched_ || !activated_ ||
+    rebelSocket->ConnectionCount() != initialConnectionCount)
+  {
+    RequestJointJogExit();
+    return refuse("hardware was latched, deactivated or reconnected while entering");
+  }
+  message = "joint jog mode on (the robot stays in MotionTypeJoint); publish "
+    "control_msgs/JointJog (velocities in rad/s) on ~/joint_jog_cmd; max " +
+    std::to_string(jointJogConfig_.maxPercent) + " % jog, zero jog after " +
+    std::to_string(jointJogConfig_.timeoutS) + " s without a command";
+  RCLCPP_WARN(logger_, "Joint jog mode ON: %s", message.c_str());
+  return true;
 }
 
 return_type Rebel::prepare_command_mode_switch(
@@ -1985,6 +3424,22 @@ return_type Rebel::prepare_command_mode_switch(
       logger_,
       "Refusing to let a controller claim the velocity command interfaces of '%s' while a "
       "joint move (move_joint action) is active",
+      componentName_.c_str());
+    return return_type::ERROR;
+  }
+  if (cartState_.load() != kCartOff) {
+    RCLCPP_ERROR(
+      logger_,
+      "Refusing to let a controller claim the velocity command interfaces of '%s' while the "
+      "Cartesian jog mode is on (or still being left): switch it off first (cart_jog_enable "
+      "false)", componentName_.c_str());
+    return return_type::ERROR;
+  }
+  if (jointJogState_.load() != kJointJogOff) {
+    RCLCPP_ERROR(
+      logger_,
+      "Refusing to let a controller claim the velocity command interfaces of '%s' while the "
+      "joint jog mode is on: switch it off first (joint_jog_enable false)",
       componentName_.c_str());
     return return_type::ERROR;
   }
@@ -2039,7 +3494,26 @@ return_type Rebel::perform_command_mode_switch(
   if (claimDuring) {
     claimDuringMove_.store(true);
   }
+  const bool claimDuringCart = claimsOurs && cartState_.load() != kCartOff;
+  const bool claimDuringJointJog = claimsOurs && jointJogState_.load() != kJointJogOff;
   claimGuard.unlock();
+  if (claimDuringJointJog) {
+    // Same as above: cannot be refused here; fail closed rather than run two jog sources.
+    RCLCPP_ERROR(
+      logger_,
+      "A controller claimed the velocity command interfaces of '%s' during the joint jog mode: "
+      "leaving the mode and latching", componentName_.c_str());
+    LatchHardwareError("a controller claimed the joints during the joint jog mode");
+  }
+  if (claimDuringCart) {
+    // The claim cannot be refused here; a controller that holds an old setpoint would jump back
+    // when the mode ends: leave the mode and fail closed (operator recovers via the lifecycle).
+    RCLCPP_ERROR(
+      logger_,
+      "A controller claimed the velocity command interfaces of '%s' during the Cartesian jog "
+      "mode: leaving the mode and latching", componentName_.c_str());
+    LatchHardwareError("a controller claimed the joints during the Cartesian jog mode");
+  }
   if (claimDuring) {
     RequestMoveStop();
     RCLCPP_ERROR(
@@ -2054,6 +3528,14 @@ rclcpp_action::GoalResponse Rebel::OnMoveGoal(
   const rclcpp_action::GoalUUID &, std::shared_ptr<const MoveJointAction::Goal>)
 {
   if (stopping) {
+    return rclcpp_action::GoalResponse::REJECT;
+  }
+  if (cartState_.load() != kCartOff) {
+    RCLCPP_WARN(logger_, "move_joint goal rejected: Cartesian jog mode is on");
+    return rclcpp_action::GoalResponse::REJECT;
+  }
+  if (jointJogState_.load() != kJointJogOff) {
+    RCLCPP_WARN(logger_, "move_joint goal rejected: joint jog mode is on");
     return rclcpp_action::GoalResponse::REJECT;
   }
   // One goal at a time. Everything else is validated by the move thread, which answers with a
@@ -2109,6 +3591,14 @@ std::uint8_t Rebel::CheckMoveAcceptable(
   }
   if (!activated_) {
     reason = "hardware component is not active";
+    return Result::REJECTED;
+  }
+  if (cartState_.load() != kCartOff) {
+    reason = "Cartesian jog mode is on (or still being left); switch it off first";
+    return Result::REJECTED;
+  }
+  if (jointJogState_.load() != kJointJogOff) {
+    reason = "joint jog mode is on; switch it off first (joint_jog_enable false)";
     return Result::REJECTED;
   }
   if (moveStopRequested_.load()) {
@@ -2781,6 +4271,9 @@ void Rebel::Stop()
   }
   stopping = true;
 
+  // Cartesian jog mode: the ALIVEJOG thread sends zero jog from here on (and MotionTypeJoint).
+  RequestCartExit();
+  RequestJointJogExit();
   // Robot-side joint move first: zero jog / Disable do not stop it, only Move Stop does.
   RequestMoveStop();
   if (moveState_.load() != kMoveIdle && rebelSocket && rebelSocket->IsConnected()) {
@@ -2833,6 +4326,11 @@ void Rebel::Stop()
   }
 
   if (rebelSocket && rebelSocket->IsConnected()) {
+    if (cartState_.load() != kCartOff) {
+      // Jog is zero (above); put the controller back into joint mode before disabling.
+      RCLCPP_INFO(logger_, "Stopping while in Cartesian jog mode: sending MotionTypeJoint first");
+      Command(CriKeywords::COMMAND_MOTIONTYPEJOINT);
+    }
     RCLCPP_INFO(logger_, "Stopping: sending Disable and Quit to the ReBeL");
     Command(CriKeywords::COMMAND_DISABLE);
     Command(CriKeywords::COMMAND_QUIT);

@@ -43,14 +43,16 @@ box_h_cut_executor:
     pre_cut_stabilization_duration_s: 1.0
 
     # ---- Speeds (fractions of joint_limits.yaml: 0.785 rad/s, 5.24 rad/s^2) -------------
-    # Contact strokes: 0.1376*0.785 = 0.108 rad/s, 0.0954*5.24 = 0.50 rad/s^2 (operator-approved
-    # rescale 2026-09-27). Finite, in (0, 1].
+    # Planned accelerations are capped at 0.4 rad/s^2 (0.0763*5.24) since 2026-10-31: the real arm
+    # speeds up at ~0.55 rad/s^2 max (brakes on a zero jog at ~1.5), so faster plans cannot be tracked.
+    # Contact strokes: 0.1376*0.785 = 0.108 rad/s (operator-approved rescale 2026-09-27).
+    # Finite, in (0, 1].
     velocity_scaling: 0.1376
-    acceleration_scaling: 0.0954
-    # Free-space transit only. Lowered 2026-09-29 after real-robot moves overshot at transit
-    # ends (operator): 0.20*0.785 = 0.157 rad/s (~9 deg/s); 0.10*5.24 = 0.52 rad/s^2.
+    acceleration_scaling: 0.0763
+    # Free-space transit only. Velocity lowered 2026-09-29 after real-robot moves overshot at transit
+    # ends (operator): 0.20*0.785 = 0.157 rad/s (~9 deg/s). Acceleration 0.0763*5.24 = 0.4 rad/s^2.
     transit_velocity_scaling: 0.20
-    transit_acceleration_scaling: 0.10
+    transit_acceleration_scaling: 0.0763
 
     # ---- Clearances & side tilts ------------------------------------------------------
     # Signed distance along surface_normal: positive hovers, negative penetrates the top plane.

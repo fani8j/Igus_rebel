@@ -56,6 +56,8 @@ const std::string COMMAND_RESET = "Reset";
 const std::string COMMAND_ENABLE = "Enable";
 const std::string COMMAND_DISABLE = "Disable";
 const std::string COMMAND_MOTIONTYPEJOINT = "MotionTypeJoint";
+// Cartesian jog in the robot base frame (CRI "CMD MotionTypeCartBase"); see Rebel cart_jog_enable.
+const std::string COMMAND_MOTIONTYPECARTBASE = "MotionTypeCartBase";
 const std::string COMMAND_QUIT = "QUIT";
 const std::string COMMAND_SETACTIVE = "SetActive";
 const std::string COMMAND_DOUT = "DOUT";

@@ -52,9 +52,11 @@
 #include <string>
 #include <mutex>
 #include <thread>
+#include <vector>
 
 #include <control_msgs/msg/joint_jog.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
+#include <igus_rebel_msgs/msg/hardware_state.hpp>
 #include <igus_rebel_msgs/srv/set_cartesian_increment.hpp>
 #if __has_include(<moveit_msgs/srv/servo_command_type.hpp>)
 #include <moveit_msgs/srv/servo_command_type.hpp>
@@ -64,6 +66,7 @@
 #include <std_srvs/srv/trigger.hpp>
 #endif
 #include <std_msgs/msg/int8.hpp>
+#include <std_srvs/srv/set_bool.hpp>
 #include <rclcpp/rclcpp.hpp>
 #ifndef WIN32
 #include <poll.h>
@@ -100,6 +103,15 @@ constexpr double SPEED_SCALE_FACTOR = 1.25;
 constexpr double DEFAULT_JOINT_VELOCITY_RPS = 0.1;
 constexpr double MIN_JOINT_VELOCITY_RPS = 0.01;
 constexpr double MAX_JOINT_VELOCITY_RPS = 0.4;
+// output:=cri: the driver maps joint rad/s to jog % (jog_velocity_scale * deg/s) and clamps it at
+// joint_jog_max_percent, so faster keyboard speeds were silently cut back to the clamp ('=' did nothing).
+// The keyboard caps its joint speed at that clamp and starts at this fraction of it.
+constexpr double CRI_DEFAULT_JOINT_SPEED_FRACTION = 0.6;
+// Terminal auto-repeat starts this long after the first key event (GNOME/X default 500 ms). A first
+// press shorter than that stopped the arm and restarted it when the repeats began; with output:=cri a
+// first press holds until the repeats can arrive.
+constexpr double DEFAULT_KEY_REPEAT_DELAY_S = 0.5;
+constexpr double KEY_REPEAT_MARGIN_S = 0.08;
 
 // Define used keys
 namespace
@@ -117,6 +129,7 @@ constexpr int8_t KEYCODE_4 = 0x34;
 constexpr int8_t KEYCODE_5 = 0x35;
 constexpr int8_t KEYCODE_6 = 0x36;
 constexpr int8_t KEYCODE_Q = 0x71;
+constexpr int8_t KEYCODE_C = 0x63;
 constexpr int8_t KEYCODE_R = 0x72;
 constexpr int8_t KEYCODE_J = 0x6A;
 constexpr int8_t KEYCODE_T = 0x74;
@@ -234,13 +247,20 @@ private:
 #endif
 };
 
-// Converts key-presses to Twist or Jog commands for Servo, in lieu of a controller
+// Converts key-presses to Twist or Jog commands for Servo, in lieu of a controller.
+// Parameter output:=cri sends them to the Igus/Rebel driver's own jog modes instead; no MoveIt/Servo
+// is involved: Twist -> controller-side Cartesian jog (cart_jog_cmd / cart_jog_enable), JointJog ->
+// direct joint jog (joint_jog_cmd / joint_jog_enable). One of the two is selected ('t' / 'j');
+// the driver allows only one at a time.
 class KeyboardServo
 {
 public:
   KeyboardServo();
   ~KeyboardServo();
   int keyLoop(KeyboardReader& input);
+  // CRI route: zero twist and joint jog, then disable whichever mode is on. No-op in servo mode. Call
+  // before the object is destroyed (the spin thread must still run to receive the answer).
+  void shutdownCri();
 
 private:
   void setCartesianIncrement(
@@ -248,8 +268,15 @@ private:
     std::shared_ptr<igus_rebel_msgs::srv::SetCartesianIncrement::Response> response);
   void stopSpinning();
   void publishActiveCommand();
+  void logCriJointSpeed() const;
   void queueTwist(const geometry_msgs::msg::TwistStamped& command, double hold_s);
   void queueJoint(const control_msgs::msg::JointJog& command, double hold_s);
+  // CRI route: asks the driver to enter/leave a jog mode and waits for the answer.
+  enum CriMode : int { CRI_TWIST = 0, CRI_JOINT = 1 };
+  bool setCriEnabled(CriMode mode, bool enable);
+  // 'j' / 't': switch the selected mode (the other one is disabled first, the answer awaited).
+  bool selectCriMode(CriMode mode);
+  const char* criModeName(CriMode mode) const { return mode == CRI_JOINT ? "Joint jog" : "Cartesian (twist) jog"; }
 #if IGUS_REBEL_HAS_SERVO_COMMAND_TYPE
   void switchCommandType(int8_t command_type, const char* label);
 #else
@@ -280,9 +307,29 @@ private:
   rclcpp::Subscription<std_msgs::msg::Int8>::SharedPtr servo_status_;
   std::atomic<bool> servo_active_{ false };
 #endif
+  // CRI route (output:=cri)
+  bool cri_{ false };
+  std::string cri_cmd_topic_{ "/igus_rebel/cart_jog_cmd" };
+  std::string cri_enable_service_{ "/igus_rebel/cart_jog_enable" };
+  std::string cri_joint_cmd_topic_{ "/igus_rebel/joint_jog_cmd" };
+  std::string cri_joint_enable_service_{ "/igus_rebel/joint_jog_enable" };
+  std::vector<std::string> cri_joint_names_;  // hardware joint names (joint1..joint6, or arm_left_joint1..)
+  bool cri_auto_enable_{ true };
+  CriMode cri_selected_{ CRI_TWIST };  // key loop thread only
+  // Belief per mode, corrected by the driver's hardware_state.
+  std::atomic<bool> cri_on_[2]{};
+  std::atomic<std::int64_t> cri_on_set_ns_[2]{};
+  rclcpp::Subscription<igus_rebel_msgs::msg::HardwareState>::SharedPtr cri_state_sub_;
+  rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr cri_pub_;
+  rclcpp::Publisher<control_msgs::msg::JointJog>::SharedPtr cri_joint_pub_;
+  rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr cri_enable_client_[2];
+
   std::atomic<double> cartesian_velocity_mps_;
   std::atomic<double> angular_velocity_rps_;
   double joint_speed_rps_;
+  double max_joint_speed_rps_{ MAX_JOINT_VELOCITY_RPS };
+  double cri_jog_velocity_scale_{ 1.65 };  // must match the driver's jog_velocity_scale (launch default 1.65 since 2026-10-31)
+  double first_press_hold_s_{ KEYPRESS_DURATION_S };
   double joint_direction_;
   std::string command_frame_id_;
 };
@@ -294,8 +341,77 @@ KeyboardServo::KeyboardServo()
 {
   nh_ = rclcpp::Node::make_shared("servo_keyboard_input");
 
-  twist_pub_ = nh_->create_publisher<geometry_msgs::msg::TwistStamped>(TWIST_TOPIC, ROS_QUEUE_SIZE);
-  joint_pub_ = nh_->create_publisher<control_msgs::msg::JointJog>(JOINT_TOPIC, ROS_QUEUE_SIZE);
+  const std::string output = nh_->declare_parameter("output", std::string("servo"));
+  if (output != "servo" && output != "cri")
+  {
+    throw std::runtime_error("parameter output must be 'servo' or 'cri', got '" + output + "'");
+  }
+  cri_ = output == "cri";
+  cri_cmd_topic_ = nh_->declare_parameter("cri_cmd_topic", cri_cmd_topic_);
+  cri_enable_service_ = nh_->declare_parameter("cri_enable_service", cri_enable_service_);
+  cri_auto_enable_ = nh_->declare_parameter("cri_auto_enable", cri_auto_enable_);
+  cri_joint_cmd_topic_ = nh_->declare_parameter("cri_joint_cmd_topic", cri_joint_cmd_topic_);
+  cri_joint_enable_service_ = nh_->declare_parameter("cri_joint_enable_service", cri_joint_enable_service_);
+  cri_joint_names_ = nh_->declare_parameter(
+    "cri_joint_names", std::vector<std::string>{ "joint1", "joint2", "joint3", "joint4", "joint5", "joint6" });
+  if (cri_ && cri_joint_names_.size() != 6)
+  {
+    throw std::runtime_error("parameter cri_joint_names needs exactly 6 names, got " +
+                             std::to_string(cri_joint_names_.size()));
+  }
+  // Both must match the driver's launch args; a higher value here is still clamped by the driver.
+  cri_jog_velocity_scale_ = nh_->declare_parameter("cri_jog_velocity_scale", cri_jog_velocity_scale_);
+  const double cri_joint_max_percent = nh_->declare_parameter("cri_joint_jog_max_percent", 10.0);
+  const double key_repeat_delay_s = nh_->declare_parameter("key_repeat_delay_s", DEFAULT_KEY_REPEAT_DELAY_S);
+  if (cri_)
+  {
+    if (!(cri_jog_velocity_scale_ > 0.0) || !(cri_joint_max_percent > 0.0) || !(key_repeat_delay_s >= 0.0) ||
+        key_repeat_delay_s > 2.0)
+    {
+      throw std::runtime_error("cri_jog_velocity_scale and cri_joint_jog_max_percent must be > 0, "
+                               "key_repeat_delay_s in [0, 2]");
+    }
+    max_joint_speed_rps_ = std::clamp(cri_joint_max_percent / cri_jog_velocity_scale_ * M_PI / 180.0,
+                                      MIN_JOINT_VELOCITY_RPS, MAX_JOINT_VELOCITY_RPS);
+    joint_speed_rps_ = CRI_DEFAULT_JOINT_SPEED_FRACTION * max_joint_speed_rps_;
+    first_press_hold_s_ = std::max(KEYPRESS_DURATION_S, key_repeat_delay_s + KEY_REPEAT_MARGIN_S);
+  }
+
+  if (cri_)
+  {
+    // base_link only: the driver rejects every other frame_id.
+    cri_pub_ = nh_->create_publisher<geometry_msgs::msg::TwistStamped>(cri_cmd_topic_, 2);
+    cri_joint_pub_ = nh_->create_publisher<control_msgs::msg::JointJog>(cri_joint_cmd_topic_, 2);
+    cri_enable_client_[CRI_TWIST] = nh_->create_client<std_srvs::srv::SetBool>(cri_enable_service_);
+    cri_enable_client_[CRI_JOINT] = nh_->create_client<std_srvs::srv::SetBool>(cri_joint_enable_service_);
+    const std::string state_topic =
+      nh_->declare_parameter("cri_state_topic", std::string("/igus_rebel/hardware_state"));
+    // The driver is the truth about the modes (it can leave one by itself: latch, idle timeout).
+    cri_state_sub_ = nh_->create_subscription<igus_rebel_msgs::msg::HardwareState>(
+      state_topic, rclcpp::QoS(rclcpp::KeepLast(10)).reliable(),
+      [this](igus_rebel_msgs::msg::HardwareState::ConstSharedPtr msg) {
+        const std::int64_t now_ns = nh_->get_clock()->now().nanoseconds();
+        const bool driver_on[2] = { msg->cart_jog_state == "active", msg->joint_jog_state == "active" };
+        const std::string* driver_state_text[2] = { &msg->cart_jog_state, &msg->joint_jog_state };
+        for (const CriMode mode : { CRI_TWIST, CRI_JOINT })
+        {
+          if (driver_on[mode])
+            cri_on_[mode].store(true);
+          else if (cri_on_[mode].load() && now_ns - cri_on_set_ns_[mode].load() > 500000000LL)
+          {
+            cri_on_[mode].store(false);
+            RCLCPP_ERROR(nh_->get_logger(), "The driver left the %s mode (state '%s'): press %s to re-enable",
+                         criModeName(mode), driver_state_text[mode]->c_str(),
+                         mode == cri_selected_ ? "'c'" : (mode == CRI_JOINT ? "'j'" : "'t'"));
+          }
+        }
+      });
+  }
+  else
+  {
+    twist_pub_ = nh_->create_publisher<geometry_msgs::msg::TwistStamped>(TWIST_TOPIC, ROS_QUEUE_SIZE);
+    joint_pub_ = nh_->create_publisher<control_msgs::msg::JointJog>(JOINT_TOPIC, ROS_QUEUE_SIZE);
+  }
   command_timer_ = nh_->create_wall_timer(std::chrono::milliseconds(20), [this]() { publishActiveCommand(); });
   increment_service_ = nh_->create_service<igus_rebel_msgs::srv::SetCartesianIncrement>(
     "~/set_cartesian_increment",
@@ -306,15 +422,18 @@ KeyboardServo::KeyboardServo()
       setCartesianIncrement(request, response);
     });
 
+  if (!cri_)
+  {
 #if IGUS_REBEL_HAS_SERVO_COMMAND_TYPE
-  // MoveIt 2.10 and newer require explicitly selecting the active command type.
-  switch_input_ = nh_->create_client<moveit_msgs::srv::ServoCommandType>("servo_node/switch_command_type");
+    // MoveIt 2.10 and newer require explicitly selecting the active command type.
+    switch_input_ = nh_->create_client<moveit_msgs::srv::ServoCommandType>("servo_node/switch_command_type");
 #else
-  // Humble's servo_node stays idle until ~/start_servo is called.
-  start_servo_ = nh_->create_client<std_srvs::srv::Trigger>("servo_node/start_servo");
-  servo_status_ = nh_->create_subscription<std_msgs::msg::Int8>(
-    "/status", 10, [this](std_msgs::msg::Int8::ConstSharedPtr) { servo_active_.store(true); });
+    // Humble's servo_node stays idle until ~/start_servo is called.
+    start_servo_ = nh_->create_client<std_srvs::srv::Trigger>("servo_node/start_servo");
+    servo_status_ = nh_->create_subscription<std_msgs::msg::Int8>(
+      "/status", 10, [this](std_msgs::msg::Int8::ConstSharedPtr) { servo_active_.store(true); });
 #endif
+  }
 
   // Service callbacks and client responses are handled on a dedicated thread,
   // which is joined in the destructor.
@@ -457,6 +576,16 @@ void KeyboardServo::queueJoint(const control_msgs::msg::JointJog& command, doubl
   active_type_ = CommandType::JOINT;
 }
 
+void KeyboardServo::logCriJointSpeed() const
+{
+  const double max_percent = max_joint_speed_rps_ * 180.0 / M_PI * cri_jog_velocity_scale_;
+  RCLCPP_INFO(nh_->get_logger(), "CRI joint jog: %.1f %% of robot speed (max %.1f %%)%s",
+              joint_speed_rps_ * 180.0 / M_PI * cri_jog_velocity_scale_, max_percent,
+              joint_speed_rps_ >= max_joint_speed_rps_ - 1e-9 ? " - at the cap; raise joint_jog_max_percent on the "
+                                                                "driver and cri_joint_jog_max_percent here for more" :
+                                                                "");
+}
+
 void KeyboardServo::publishActiveCommand()
 {
   std::lock_guard<std::mutex> lock(command_mutex_);
@@ -480,13 +609,108 @@ void KeyboardServo::publishActiveCommand()
   if (active_type_ == CommandType::TWIST)
   {
     active_twist_.header.stamp = nh_->now();
-    twist_pub_->publish(active_twist_);
+    (cri_ ? cri_pub_ : twist_pub_)->publish(active_twist_);
   }
   else
   {
     active_joint_.header.stamp = nh_->now();
-    joint_pub_->publish(active_joint_);
+    (cri_ ? cri_joint_pub_ : joint_pub_)->publish(active_joint_);
   }
+}
+
+bool KeyboardServo::setCriEnabled(CriMode mode, bool enable)
+{
+  const std::string& service = mode == CRI_JOINT ? cri_joint_enable_service_ : cri_enable_service_;
+  const auto& client = cri_enable_client_[mode];
+  const char* name = mode == CRI_JOINT ? "joint_jog_enable" : "cart_jog_enable";
+  if (!client->wait_for_service(enable ? SERVICE_WAIT_TIMEOUT : std::chrono::seconds(1)))
+  {
+    RCLCPP_ERROR(nh_->get_logger(), "%s not available", service.c_str());
+    return false;
+  }
+  auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
+  request->data = enable;
+  auto result = client->async_send_request(request);
+  // The Cartesian mode waits up to ~3 s for the controller to confirm; the joint mode answers at once.
+  if (result.wait_for(std::chrono::seconds(6)) != std::future_status::ready)
+  {
+    client->remove_pending_request(result);
+    RCLCPP_ERROR(nh_->get_logger(), "Timed out waiting for %s", service.c_str());
+    return false;
+  }
+  const auto response = result.get();
+  if (!response->success)
+  {
+    RCLCPP_ERROR(nh_->get_logger(), "%s(%s) refused: %s", name, enable ? "true" : "false",
+                 response->message.c_str());
+    if (!enable)
+      cri_on_[mode] = false;
+    return false;
+  }
+  cri_on_[mode] = enable;
+  cri_on_set_ns_[mode] = nh_->get_clock()->now().nanoseconds();
+  RCLCPP_WARN(nh_->get_logger(), "%s mode %s: %s", criModeName(mode), enable ? "ON" : "OFF",
+              response->message.c_str());
+  return true;
+}
+
+bool KeyboardServo::selectCriMode(CriMode mode)
+{
+  const CriMode other = mode == CRI_JOINT ? CRI_TWIST : CRI_JOINT;
+  {
+    // Drop whatever key command is active: it belongs to the mode being left (the driver zeroes
+    // the jog itself when the mode is disabled, and its watchdog backs that up).
+    std::lock_guard<std::mutex> lock(command_mutex_);
+    active_type_ = CommandType::NONE;
+  }
+  // Always ask the driver to switch the other mode off and wait for the answer, whatever this node
+  // believes (it is idempotent there); only then is the new mode enabled. A refusal aborts, so two
+  // modes are never requested at once.
+  if (!setCriEnabled(other, false))
+  {
+    RCLCPP_ERROR(nh_->get_logger(), "Could not switch the %s mode off; staying in the %s selection",
+                 criModeName(other), criModeName(cri_selected_));
+    return false;
+  }
+  if (!setCriEnabled(mode, true))
+  {
+    // The old mode is off and the new one refused: keep the selection on the mode that was asked
+    // for so 'c' retries it; nothing moves meanwhile.
+    cri_selected_ = mode;
+    RCLCPP_ERROR(nh_->get_logger(), "The %s mode was NOT enabled (the %s mode is off); fix the cause and press 'c'",
+                 criModeName(mode), criModeName(other));
+    return false;
+  }
+  cri_selected_ = mode;
+  return true;
+}
+
+void KeyboardServo::shutdownCri()
+{
+  if (!cri_)
+    return;
+  {
+    // Drop whatever key command is active and stop the republishing timer first.
+    std::lock_guard<std::mutex> lock(command_mutex_);
+    active_type_ = CommandType::NONE;
+  }
+  command_timer_->cancel();
+  for (int i = 0; i < 3; ++i)
+  {
+    geometry_msgs::msg::TwistStamped zero;
+    zero.header.frame_id = PLANNING_FRAME_ID;
+    zero.header.stamp = nh_->now();
+    cri_pub_->publish(zero);
+    control_msgs::msg::JointJog zero_joint;
+    zero_joint.header.stamp = nh_->now();
+    zero_joint.joint_names = cri_joint_names_;
+    zero_joint.velocities.assign(cri_joint_names_.size(), 0.0);
+    cri_joint_pub_->publish(zero_joint);
+  }
+  if (cri_on_[CRI_JOINT] || cri_selected_ == CRI_JOINT)
+    setCriEnabled(CRI_JOINT, false);  // idempotent in the driver
+  if (cri_on_[CRI_TWIST] || cri_auto_enable_)
+    setCriEnabled(CRI_TWIST, false);  // idempotent in the driver
 }
 
 int main(int argc, char** argv)
@@ -498,10 +722,17 @@ int main(int argc, char** argv)
   std::signal(SIGTERM, requestQuit);
 
   int rc = 0;
+  try
   {
     KeyboardReader input;
     KeyboardServo keyboard_servo;
     rc = keyboard_servo.keyLoop(input);
+    keyboard_servo.shutdownCri();
+  }
+  catch (const std::exception& error)
+  {
+    fprintf(stderr, "%s\n", error.what());
+    rc = 1;
   }
   rclcpp::shutdown();
   return rc;
@@ -518,18 +749,36 @@ int KeyboardServo::keyLoop(KeyboardReader& input)
   auto last_motion_key_time = std::chrono::steady_clock::time_point();
 
 #if !IGUS_REBEL_HAS_SERVO_COMMAND_TYPE
-  startServo();
+  if (!cri_)
+    startServo();
 #endif
 
   puts("Reading from keyboard");
   puts("---------------------------");
+  if (cri_)
+  {
+    puts("OUTPUT = cri: no Servo; the driver's own jog modes are used (the trajectory controller must be deactivated first).");
+    puts("  't' selects twist: Twist goes to the controller-side Cartesian jog (base_link only; arrows, '.', ';', i/k, n/m, u/o).");
+    puts("  'j' selects joint jog: keys 1-6 jog the hardware joints directly (robot stays in joint mode); 'r' reverses.");
+    puts("  Only one of the two is on at a time: switching turns the other off first and waits for the driver's answer.");
+    puts("  'c' toggles the selected mode on/off; 's' stops. Twist keys do nothing in joint jog and vice versa.");
+    puts("  The tool frame ('e') is not supported. The driver clamps joint jog to joint_jog_max_percent (default 10 %).");
+    printf("A terminal only sends key presses (auto-repeat while held), no key-release events: a press moves for\n"
+           "%.2f s (key_repeat_delay_s + %.2f s, so a held key does not stop before auto-repeat starts), each repeat\n"
+           "extends it by %.2f s, so the arm stops <= ~%.2f s after the last repeat; then zeros are streamed and the\n"
+           "driver's 0.15 s command watchdog zeroes the jog by itself. 's' stops at once.\n",
+           first_press_hold_s_, KEY_REPEAT_MARGIN_S, REPEAT_HOLD_S, REPEAT_HOLD_S);
+    printf("NOT a release-sensitive deadman: terminal key buffering can extend the motion; one tap at the current\n"
+           "joint speed is ~%.1f deg. '-'/'=' change the joint speed up to the driver clamp. The gamepad is the deadman.\n",
+           joint_speed_rps_ * 180.0 / M_PI * first_press_hold_s_);
+  }
   puts("Twist commands use the selected command frame ('w': base_link, 'e': xeg32_tool_tip)");
   puts("Use arrow keys and the '.' and ';' keys to Cartesian jog");
   puts("Use i/k for TCP roll, n/m for TCP pitch, and u/o for TCP yaw (press 'e' first)");
   puts("Use '-' and '=' to decrease/increase the speed (Cartesian and joint)");
   puts("Use 1|2|3|4|5|6 keys to joint jog. 'r' to reverse the direction of jogging.");
-  puts("Use 'j' to select joint jog. ");
-  puts("Use 't' to select twist ");
+  puts("Use 'j' to select joint jog (output:=cri: also turns the joint jog mode on).");
+  puts("Use 't' to select twist (output:=cri: also turns the Cartesian jog mode on).");
   puts("Use 'w' and 'e' to switch between sending command in planning frame or end effector frame");
   printf("Change the Cartesian increment with the set_cartesian_increment service "
          "(default %.3f m, max %.3f m)\n",
@@ -537,6 +786,13 @@ int KeyboardServo::keyLoop(KeyboardReader& input)
   puts("'q' or Ctrl-C to quit.");
   printf("Speeds: %.4f m/s, %.3f rad/s, joint %.3f rad/s (%.1f deg/s)\n", cartesian_velocity_mps_.load(),
          angular_velocity_rps_.load(), joint_speed_rps_, joint_speed_rps_ * 180.0 / M_PI);
+  if (cri_)
+    logCriJointSpeed();
+
+  if (cri_ && cri_auto_enable_ && !setCriEnabled(CRI_TWIST, true))
+  {
+    RCLCPP_ERROR(nh_->get_logger(), "Cartesian jog mode was NOT enabled; fix the cause and press 'c' to retry");
+  }
 
   while (!g_quit_requested && rclcpp::ok())
   {
@@ -560,14 +816,68 @@ int KeyboardServo::keyLoop(KeyboardReader& input)
     auto twist_msg = std::make_unique<geometry_msgs::msg::TwistStamped>();
     auto joint_msg = std::make_unique<control_msgs::msg::JointJog>();
 
-    joint_msg->joint_names = { "joint1", "joint2", "joint3", "joint4",
-                               "joint5", "joint6"};
+    joint_msg->joint_names = cri_ ? cri_joint_names_ :
+                                    std::vector<std::string>{ "joint1", "joint2", "joint3", "joint4", "joint5", "joint6" };
 
     joint_msg->velocities.resize(6);
     std::fill(joint_msg->velocities.begin(), joint_msg->velocities.end(), 0.0);
     const double cartesian_velocity_mps =
       cartesian_velocity_mps_.load(std::memory_order_relaxed);
     const double angular_velocity_rps = angular_velocity_rps_.load(std::memory_order_relaxed);
+    if (cri_)
+    {
+      // Keys that only make sense for the Servo route are explained and ignored; keys of the mode that
+      // is not selected only print a hint.
+      bool handled = true;
+      switch (c)
+      {
+        case KEYCODE_J:
+          selectCriMode(CRI_JOINT);
+          break;
+        case KEYCODE_T:
+          selectCriMode(CRI_TWIST);
+          break;
+        case KEYCODE_E:
+          RCLCPP_WARN(nh_->get_logger(), "Tool-frame twists are not supported in output:=cri (the driver accepts "
+                                         "base_link only); command frame stays %s", PLANNING_FRAME_ID.c_str());
+          break;
+        case KEYCODE_C:
+          setCriEnabled(cri_selected_, !cri_on_[cri_selected_]);
+          break;
+        case KEYCODE_1:
+        case KEYCODE_2:
+        case KEYCODE_3:
+        case KEYCODE_4:
+        case KEYCODE_5:
+        case KEYCODE_6:
+          if (cri_selected_ != CRI_JOINT)
+            RCLCPP_WARN(nh_->get_logger(), "Twist mode is selected: joint keys do nothing (press 'j' for joint jog)");
+          else
+            handled = false;
+          break;
+        case KEYCODE_LEFT:
+        case KEYCODE_RIGHT:
+        case KEYCODE_UP:
+        case KEYCODE_DOWN:
+        case KEYCODE_PERIOD:
+        case KEYCODE_SEMICOLON:
+        case KEYCODE_I:
+        case KEYCODE_K:
+        case KEYCODE_N:
+        case KEYCODE_M:
+        case KEYCODE_U:
+        case KEYCODE_O:
+          if (cri_selected_ == CRI_JOINT)
+            RCLCPP_WARN(nh_->get_logger(), "Joint jog is selected: twist keys do nothing (press 't' for twist)");
+          else
+            handled = false;
+          break;
+        default:
+          handled = false;
+      }
+      if (handled)
+        continue;
+    }
     // Use read key-press
     switch (c)
     {
@@ -603,6 +913,11 @@ int KeyboardServo::keyLoop(KeyboardReader& input)
         break;
       case KEYCODE_S:
         RCLCPP_DEBUG(nh_->get_logger(), "S");
+        if (cri_ && cri_selected_ == CRI_JOINT)
+        {
+          publish_joint = true;  // all-zero JointJog (velocities were zero-filled above)
+          break;
+        }
         twist_msg->twist.linear.x = 0.0;
         twist_msg->twist.linear.y = 0.0;
         twist_msg->twist.linear.z = 0.0;
@@ -646,11 +961,13 @@ int KeyboardServo::keyLoop(KeyboardReader& input)
           cartesian_velocity_mps * scale, MIN_LINEAR_VELOCITY_MPS, MAX_LINEAR_VELOCITY_MPS);
         const double angular_speed = std::clamp(
           angular_velocity_rps * scale, MIN_ANGULAR_VELOCITY_RPS, MAX_ANGULAR_VELOCITY_RPS);
-        joint_speed_rps_ = std::clamp(joint_speed_rps_ * scale, MIN_JOINT_VELOCITY_RPS, MAX_JOINT_VELOCITY_RPS);
+        joint_speed_rps_ = std::clamp(joint_speed_rps_ * scale, MIN_JOINT_VELOCITY_RPS, max_joint_speed_rps_);
         cartesian_velocity_mps_.store(linear_speed, std::memory_order_relaxed);
         angular_velocity_rps_.store(angular_speed, std::memory_order_relaxed);
         RCLCPP_INFO(nh_->get_logger(), "Speeds: %.4f m/s, %.3f rad/s, joint %.3f rad/s (%.1f deg/s)", linear_speed,
                     angular_speed, joint_speed_rps_, joint_speed_rps_ * 180.0 / M_PI);
+        if (cri_)
+          logCriJointSpeed();
         break;
       }
       case KEYCODE_1:
@@ -716,12 +1033,16 @@ int KeyboardServo::keyLoop(KeyboardReader& input)
     }
 
     // A new key replaces the active velocity and extends its deadline.
-    double hold_s = KEYPRESS_DURATION_S;
+    double hold_s = first_press_hold_s_;
     if (publish_twist || publish_joint)
     {
       const auto key_time = std::chrono::steady_clock::now();
+      // The first auto-repeat comes key_repeat_delay_s after the press, later ones every ~30 ms.
+      // Any same-key event while the press still holds is a repeat (a quick double tap is too: it
+      // then extends by REPEAT_HOLD_S only, never more than a single press).
+      const double repeat_gap_s = std::max(REPEAT_GAP_S, first_press_hold_s_);
       if (c == last_motion_key &&
-          std::chrono::duration<double>(key_time - last_motion_key_time).count() < REPEAT_GAP_S)
+          std::chrono::duration<double>(key_time - last_motion_key_time).count() < repeat_gap_s)
         hold_s = REPEAT_HOLD_S;
       last_motion_key = c;
       last_motion_key_time = key_time;

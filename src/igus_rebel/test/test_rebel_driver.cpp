@@ -15,6 +15,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstdarg>
 #include <cstdio>
 #include <functional>
@@ -29,11 +30,16 @@
 #include <utility>
 #include <vector>
 
+#include "control_msgs/msg/joint_jog.hpp"
+#include "geometry_msgs/msg/twist_stamped.hpp"
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "igus_rebel_msgs/action/move_joint.hpp"
+#include "igus_rebel_msgs/msg/cri_diagnostics.hpp"
 #include "igus_rebel_msgs/msg/hardware_state.hpp"
+#include "igus_rebel_msgs/msg/robot_cart_pose.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
+#include "std_srvs/srv/set_bool.hpp"
 #include "std_srvs/srv/trigger.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "rcutils/logging.h"
@@ -115,6 +121,21 @@ public:
   void SetSendStatus(bool send) {sendStatus_ = send;}
   void SetJointStepDeg(float step) {jointStepDeg_ = step;}
   void SetOverride(float value) {override_ = value;}
+  // CURRENTJOINTS (joints 1-6) / CURRENTALL reported in every STATUS, and an offset added to
+  // POSJOINTSETPOINT (joints 1-6) so that it differs from POSJOINTCURRENT.
+  void SetCurrents(const std::array<int, 6> & joints, int all)
+  {
+    for (std::size_t i = 0; i < 6; ++i) {
+      currents_[i] = joints[i];
+    }
+    currentAll_ = all;
+  }
+  void SetSetpointOffsetDeg(const std::array<float, 6> & offset)
+  {
+    for (std::size_t i = 0; i < 6; ++i) {
+      setpointOffsetDeg_[i] = offset[i];
+    }
+  }
   void DropClient() {dropClient_ = true;}
   // Joints (bit i) reported with ErrorJoint MNE (motor not enabled); cleared by an Enable command.
   void SetDisabledMask(unsigned mask) {disabledMask_ = mask;}
@@ -125,6 +146,18 @@ public:
   // CRI KINSTATE value reported in every STATUS (0 = no error, 99 = motion not allowed).
   void SetKinstate(int kinstate) {kinstate_ = kinstate;}
   std::size_t Connections() const {return connections_.load();}
+
+  // ---- Cartesian jog (CMD MotionTypeCartBase / MotionTypeJoint) emulation ----
+  // The STATUS MODE follows the last accepted MotionType command and, like the real controller,
+  // survives a reconnect of the client.
+  bool ModeIsCartBase() const {return mode_.load() == 1;}
+  void SetCartBaseError(bool error) {cartBaseError_ = error;}            // CMDERROR instead of ACK
+  void SetSuppressCartBaseAck(bool suppress) {suppressCartBaseAck_ = suppress;}  // mode changes
+  void SetIgnoreCartBase(bool ignore) {ignoreCartBase_ = ignore;}        // ACK, mode stays
+  void SetSuppressJointAck(bool suppress) {suppressJointAck_ = suppress;}  // mode changes, no ACK
+  void SetIgnoreMotionTypeJoint(bool ignore) {ignoreJoint_ = ignore;}   // ACK, mode stays
+  // Changes the reported mode unprompted: 0 joint, 1 cartbase, 2 fsm, 3 an unknown string.
+  void ForceMode(int mode) {mode_ = mode;}
 
   // ---- Robot-side "CMD Move Joint" emulation (measured behaviour of the real controller) ----
   // Joint-space linear move at a constant speed after a start latency; MOVETOEXECACK + CMDACK on
@@ -234,23 +267,34 @@ public:
   }
 
   std::array<float, 6> baseJointsDeg{10.0f, 20.0f, -30.0f, 40.0f, 50.0f, -60.0f};
+  // POSCARTROBOT sent in every STATUS: x = kCartPoseBase[0] + joint 1 in deg, the rest constant.
+  static constexpr std::array<float, 6> kCartPoseBase{300.0f, -45.25f, 410.75f, 12.5f, -170.25f, 33.125f};
 
 private:
   std::string MakeStatus(int counter, const std::array<float, 6> & joints)
   {
     std::ostringstream s;
-    s << "CRISTART " << counter << " STATUS MODE joint POSJOINTSETPOINT";
+    s << "CRISTART " << counter << " STATUS MODE " << (mode_.load() == 1 ? "cartbase" : mode_.load() == 2 ? "fsm" :
+      mode_.load() == 3 ? "weirdmode" : "joint")
+      << " POSJOINTSETPOINT";
     for (int i = 0; i < 16; ++i) {
-      s << " " << (i < 6 ? joints[i] : 0.0f);
+      s << " " << (i < 6 ? joints[i] + setpointOffsetDeg_[i].load() : 0.0f);
     }
     s << " POSJOINTCURRENT";
     for (int i = 0; i < 16; ++i) {
       s << " " << (i < 6 ? joints[i] : 0.0f);
     }
-    s << " POSCARTROBOT 0 0 0 0 0 0 POSCARTPLATTFORM 0 0 0 OVERRIDE " << override_.load() <<
-      " DIN 0 DOUT 0 ESTOP 0 SUPPLY 48 CURRENTALL 2 CURRENTJOINTS";
+    // Non-zero POSCARTROBOT so tests can check it is passed through unconverted. x follows
+    // joint 1, so the pair (cart pose, joints) of one STATUS is checkable.
+    s << " POSCARTROBOT";
+    s << " " << (kCartPoseBase[0] + joints[0]);
+    for (int i = 1; i < 6; ++i) {
+      s << " " << kCartPoseBase[i];
+    }
+    s << " POSCARTPLATTFORM 0 0 0 OVERRIDE " << override_.load() <<
+      " DIN 0 DOUT 0 ESTOP 0 SUPPLY 48 CURRENTALL " << currentAll_.load() << " CURRENTJOINTS";
     for (int i = 0; i < 16; ++i) {
-      s << " 0";
+      s << " " << (i < 6 ? currents_[i].load() : 0);
     }
     s << " ERROR 0";
     for (int i = 0; i < 16; ++i) {
@@ -438,6 +482,23 @@ private:
               SendAll(
                 client, "CRISTART " + std::to_string(counter++) + " CMDACK " +
                 body.substr(0, body.find(' ')) + " CRIEND\n");
+            } else if (stripped == "CMD MotionTypeCartBase" || stripped == "CMD MotionTypeJoint") {
+              const std::string counterText = body.substr(0, body.find(' '));
+              const bool cart = stripped == "CMD MotionTypeCartBase";
+              if (cart && cartBaseError_) {
+                SendAll(
+                  client, "CRISTART " + std::to_string(counter++) + " CMDERROR " + counterText +
+                  " Motion type not possible CRIEND\n");
+              } else {
+                if (!(cart ? ignoreCartBase_.load() : ignoreJoint_.load())) {
+                  mode_ = cart ? 1 : 0;
+                }
+                if (!(cart ? suppressCartBaseAck_.load() : suppressJointAck_.load())) {
+                  SendAll(
+                    client, "CRISTART " + std::to_string(counter++) + " CMDACK " + counterText +
+                    " CRIEND\n");
+                }
+              }
             } else if (stripped.rfind("CMD ", 0) == 0) {
               const std::string counterText = body.substr(0, body.find(' '));
               SendAll(
@@ -500,7 +561,16 @@ private:
   std::atomic<int> kinstate_{0};
   std::atomic<float> jointStepDeg_{0.0f};
   std::atomic<float> override_{40.0f};
+  std::array<std::atomic<int>, 6> currents_{};
+  std::atomic<int> currentAll_{2};
+  std::array<std::atomic<float>, 6> setpointOffsetDeg_{};
   std::atomic<std::size_t> connections_{0};
+  std::atomic<int> mode_{0};  // 0 joint, 1 cartbase
+  std::atomic<bool> cartBaseError_{false};
+  std::atomic<bool> suppressCartBaseAck_{false};
+  std::atomic<bool> ignoreCartBase_{false};
+  std::atomic<bool> suppressJointAck_{false};
+  std::atomic<bool> ignoreJoint_{false};
   std::thread thread_;
   std::mutex mutex_;
   std::vector<ReceivedFrame> frames_;
@@ -593,6 +663,7 @@ class TelemetryListener
 public:
   using JointState = sensor_msgs::msg::JointState;
   using HardwareState = igus_rebel_msgs::msg::HardwareState;
+  using RobotCartPose = igus_rebel_msgs::msg::RobotCartPose;
   struct JointSample
   {
     JointState msg;
@@ -620,8 +691,19 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         states_.push_back({*msg, Clock::now()});
       });
+    cartSub_ = node_->create_subscription<RobotCartPose>(
+      "/" + driverNode + "/robot_cart_pose", rclcpp::SensorDataQoS().keep_last(10),
+      [this](RobotCartPose::ConstSharedPtr msg) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        carts_.push_back(*msg);
+      });
     executor_.add_node(node_);
     thread_ = std::thread([this]() {executor_.spin(); finished_ = true;});
+  }
+  std::vector<RobotCartPose> Carts()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return carts_;
   }
   ~TelemetryListener()
   {
@@ -691,6 +773,8 @@ private:
   rclcpp::Node::SharedPtr node_;
   rclcpp::Subscription<JointState>::SharedPtr jointSub_;
   rclcpp::Subscription<HardwareState>::SharedPtr stateSub_;
+  rclcpp::Subscription<RobotCartPose>::SharedPtr cartSub_;
+  std::vector<RobotCartPose> carts_;
   rclcpp::executors::SingleThreadedExecutor executor_;
   std::thread thread_;
   std::mutex mutex_;
@@ -1306,6 +1390,76 @@ TEST_F(RebelDriverTest, TelemetryFlowsWhileInactiveAndAtTenHertz)
   // Activation shows up (immediately, not only at the next 10 Hz tick).
   ASSERT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
   EXPECT_TRUE(telemetry.WaitState([](const auto & msg) {return msg.activated;}, 60ms));
+}
+
+TEST_F(RebelDriverTest, RobotCartPoseCarriesRawPoscartrobotWithTheJointsOfTheSameStatus)
+{
+  FakeCriServer server;
+  StartDriver(server);
+  TelemetryListener telemetry;
+  // Never activated and never read(): the topic is independent of read()/write().
+  ASSERT_TRUE(WaitFor([&]() {return telemetry.Carts().size() >= 5;}, 4000ms));
+
+  // Move joint 1 mid-stream: the cart x (which follows joint 1 in the fake) must change with the
+  // joints in every single sample, i.e. the pair really comes from one STATUS.
+  server.NudgeJointDeg(0, 7.0f);
+  const float expectedJ1Deg = server.baseJointsDeg[0] + 7.0f;
+  ASSERT_TRUE(WaitFor([&]() {
+        const auto carts = telemetry.Carts();
+        return !carts.empty() &&
+        std::fabs(carts.back().joint_position_rad[0] - expectedJ1Deg * kDegToRad) < 1e-4;
+      }, 2000ms));
+
+  const auto carts = telemetry.Carts();
+  bool sawBefore = false;
+  bool sawAfter = false;
+  for (const auto & cart : carts) {
+    // Raw, unconverted values exactly as sent (y..c constant; x = 300 + joint 1 [deg]).
+    constexpr auto base = FakeCriServer::kCartPoseBase;
+    for (std::size_t i = 1; i < 6; ++i) {
+      EXPECT_NEAR(cart.pos_cart_robot_raw[i], base[i], 1e-4) << "index " << i;
+    }
+    const double j1Deg = cart.joint_position_rad[0] / kDegToRad;
+    EXPECT_NEAR(cart.pos_cart_robot_raw[0], base[0] + j1Deg, 1e-3);
+    sawBefore = sawBefore || std::fabs(j1Deg - server.baseJointsDeg[0]) < 1e-3;
+    sawAfter = sawAfter || std::fabs(j1Deg - expectedJ1Deg) < 1e-3;
+    for (std::size_t i = 1; i < 6; ++i) {
+      EXPECT_NEAR(cart.joint_position_rad[i], server.baseJointsDeg[i] * kDegToRad, 1e-5);
+    }
+    EXPECT_EQ(cart.mode, "joint");
+    EXPECT_EQ(cart.kinstate, 0);
+    EXPECT_GT(rclcpp::Time(cart.header.stamp).nanoseconds(), 0);
+  }
+  EXPECT_TRUE(sawBefore);
+  EXPECT_TRUE(sawAfter);
+  for (std::size_t i = 1; i < carts.size(); ++i) {
+    EXPECT_GT(
+      rclcpp::Time(carts[i].header.stamp).nanoseconds(),
+      rclcpp::Time(carts[i - 1].header.stamp).nanoseconds());
+  }
+
+  // The stamp equals that of the robot_joint_states sample of the same STATUS.
+  const auto joints = telemetry.Joints();
+  std::size_t matched = 0;
+  for (const auto & cart : carts) {
+    for (const auto & joint : joints) {
+      if (rclcpp::Time(joint.msg.header.stamp) == rclcpp::Time(cart.header.stamp)) {
+        ++matched;
+        for (std::size_t i = 0; i < 6; ++i) {
+          EXPECT_DOUBLE_EQ(joint.msg.position[i], cart.joint_position_rad[i]);
+        }
+        break;
+      }
+    }
+  }
+  EXPECT_GT(matched, 0u);
+
+  // A reported KINSTATE comes through.
+  server.SetKinstate(99);
+  EXPECT_TRUE(WaitFor([&]() {
+        const auto latest = telemetry.Carts();
+        return !latest.empty() && latest.back().kinstate == 99;
+      }, 1000ms));
 }
 
 TEST_F(RebelDriverTest, RobotJointStatesTrackTheRobotWhileLatchedAndInterfacesStayFrozen)
@@ -5098,6 +5252,2492 @@ TEST(FakeCriServerMove, MoveContinuesWithoutAClientAndStopsOnMoveStop)
   EXPECT_NE(stopped.find("MOVETOEXECEND 0 0 MoveTo USER"), std::string::npos) << stopped;
   EXPECT_FALSE(server.MoveActive());
   ::close(fd);
+}
+
+
+// ======================================================================================
+// Cartesian jog mode (CRI route): CMD MotionTypeCartBase + ALIVEJOG X Y Z A B C
+// ======================================================================================
+namespace
+{
+using TwistStamped = geometry_msgs::msg::TwistStamped;
+using Twist6 = std::array<double, 6>;
+
+// Publishes ~/cart_jog_cmd and calls ~/cart_jog_enable of the driver node, from its own node.
+class CartClient
+{
+public:
+  explicit CartClient(const std::string & driverNode = "igus_rebel")
+  {
+    node_ = std::make_shared<rclcpp::Node>("cart_test_client_" + std::to_string(counter_++));
+    pub_ = node_->create_publisher<TwistStamped>("/" + driverNode + "/cart_jog_cmd", 10);
+    client_ = node_->create_client<std_srvs::srv::SetBool>("/" + driverNode + "/cart_jog_enable");
+    executor_.add_node(node_);
+    thread_ = std::thread([this]() {executor_.spin(); finished_ = true;});
+  }
+  ~CartClient()
+  {
+    StopStream();
+    while (!finished_) {
+      executor_.cancel();
+      std::this_thread::sleep_for(2ms);
+    }
+    if (thread_.joinable()) {
+      thread_.join();
+    }
+  }
+  bool WaitForService() {return client_->wait_for_service(5s);}
+
+  struct Reply
+  {
+    bool answered = false;
+    bool success = false;
+    std::string message;
+  };
+  Reply Enable(bool enable)
+  {
+    auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
+    request->data = enable;
+    auto future = client_->async_send_request(request);
+    Reply reply;
+    if (future.wait_for(8s) == std::future_status::ready) {
+      const auto response = future.get();
+      reply = {true, response->success, response->message};
+    }
+    return reply;
+  }
+  rclcpp::Time Now() {return node_->now();}
+  void Publish(const Twist6 & v, const std::string & frame = "base_link")
+  {
+    PublishStamped(v, node_->now(), frame);
+  }
+  void PublishStamped(
+    const Twist6 & v, const rclcpp::Time & stamp, const std::string & frame = "base_link")
+  {
+    TwistStamped msg;
+    msg.header.frame_id = frame;
+    msg.header.stamp = stamp;
+    msg.twist.linear.x = v[0];
+    msg.twist.linear.y = v[1];
+    msg.twist.linear.z = v[2];
+    msg.twist.angular.x = v[3];
+    msg.twist.angular.y = v[4];
+    msg.twist.angular.z = v[5];
+    pub_->publish(msg);
+  }
+  // Re-publishes the (changeable) command at 50 Hz, like a teleop timer.
+  void StartStream(const Twist6 & v, const std::string & frame = "base_link")
+  {
+    StopStream();
+    {
+      std::lock_guard<std::mutex> lock(streamMutex_);
+      streamValue_ = v;
+      streamFrame_ = frame;
+    }
+    streaming_ = true;
+    streamThread_ = std::thread(
+      [this]() {
+        while (streaming_) {
+          Twist6 value;
+          std::string frame;
+          {
+            std::lock_guard<std::mutex> lock(streamMutex_);
+            value = streamValue_;
+            frame = streamFrame_;
+          }
+          Publish(value, frame);
+          std::this_thread::sleep_for(20ms);
+        }
+      });
+  }
+  void SetStream(const Twist6 & v)
+  {
+    std::lock_guard<std::mutex> lock(streamMutex_);
+    streamValue_ = v;
+  }
+  void StopStream()
+  {
+    streaming_ = false;
+    if (streamThread_.joinable()) {
+      streamThread_.join();
+    }
+  }
+
+private:
+  static inline std::atomic<int> counter_{0};
+  std::atomic<bool> finished_{false};
+  std::atomic<bool> streaming_{false};
+  rclcpp::Node::SharedPtr node_;
+  rclcpp::Publisher<TwistStamped>::SharedPtr pub_;
+  rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr client_;
+  rclcpp::executors::SingleThreadedExecutor executor_;
+  std::thread thread_;
+  std::thread streamThread_;
+  std::mutex streamMutex_;
+  Twist6 streamValue_{};
+  std::string streamFrame_;
+};
+
+bool JogNear(const std::array<double, 6> & jog, const Twist6 & expected, double tolerance = 1e-3)
+{
+  for (std::size_t i = 0; i < 6; ++i) {
+    if (std::fabs(jog[i] - expected[i]) > tolerance) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// True once an ALIVEJOG matching `expected` was received after `after`.
+bool SawJog(
+  FakeCriServer & server, Clock::time_point after, const Twist6 & expected,
+  double tolerance = 1e-3)
+{
+  for (const auto & frame : server.AliveJogs(after)) {
+    if (JogNear(ParseJog(frame.body), expected, tolerance)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Index of the first command equal to `command` in the commands of a connection, or -1.
+int CommandIndex(
+  FakeCriServer & server, const std::string & command, std::size_t connection = 1,
+  std::size_t occurrence = 0)
+{
+  const auto commands = server.Commands(connection);
+  std::size_t seen = 0;
+  for (std::size_t i = 0; i < commands.size(); ++i) {
+    if (commands[i] == command && seen++ == occurrence) {
+      return static_cast<int>(i);
+    }
+  }
+  return -1;
+}
+
+// Newest ALIVEJOG (all six values) received before the `occurrence`-th "CMD <command>" frame of
+// connection 1; empty if there is none. Checks "zero jog first, then the CMD".
+std::vector<double> JogBeforeCommand(
+  FakeCriServer & server, const std::string & command, std::size_t occurrence = 0)
+{
+  std::vector<double> last;
+  std::size_t seen = 0;
+  for (const auto & frame : server.Frames()) {
+    if (frame.connection != 1) {continue;}
+    if (frame.body.rfind("ALIVEJOG ", 0) == 0) {
+      const auto jog = ParseJog(frame.body);
+      last.assign(jog.begin(), jog.end());
+    } else if (frame.body == "CMD " + command && seen++ == occurrence) {
+      return last;
+    }
+  }
+  return {};
+}
+
+bool AllZero(const std::vector<double> & values)
+{
+  return !values.empty() &&
+         std::all_of(values.begin(), values.end(), [](double v) {return v == 0.0;});
+}
+
+class RebelCartJogTest : public RebelMoveTest
+{
+protected:
+  void BeginCart(
+    const std::map<std::string, std::string> & hardwareParameters = {}, bool activate = true)
+  {
+    Begin(hardwareParameters, activate);
+    if (HasFatalFailure()) {
+      return;
+    }
+    StartLoop(0.0);
+    cart = std::make_unique<CartClient>();
+    ASSERT_TRUE(cart->WaitForService());
+  }
+  void TearDown() override
+  {
+    cart.reset();
+    RebelMoveTest::TearDown();
+  }
+  // Enters the mode through the driver method and expects success.
+  void EnterMode()
+  {
+    std::string message;
+    ASSERT_TRUE(rebel->SetCartJogEnabled(true, message)) << message;
+    ASSERT_TRUE(rebel->CartJogActive());
+  }
+  bool Refused(const std::string & expectedText)
+  {
+    std::string message;
+    const bool ok = rebel->SetCartJogEnabled(true, message);
+    EXPECT_FALSE(ok) << message;
+    EXPECT_NE(message.find(expectedText), std::string::npos) << message;
+    return !ok;
+  }
+
+  std::unique_ptr<CartClient> cart;
+};
+}  // namespace
+
+TEST_F(RebelCartJogTest, EntryRefusedWhenNotActivated)
+{
+  BeginCart({}, false);
+  Refused("not active");
+  EXPECT_EQ(server.CountCommands("MotionTypeCartBase"), 0u);
+  EXPECT_EQ(rebel->CartJogStateValue(), 0);
+}
+
+TEST_F(RebelCartJogTest, EntryRefusedWhileLatched)
+{
+  BeginCart();
+  rebel->on_error(rclcpp_lifecycle::State());
+  Refused("latched");
+  EXPECT_EQ(server.CountCommands("MotionTypeCartBase"), 0u);
+}
+
+TEST_F(RebelCartJogTest, EntryRefusedWhenStatusIsStale)
+{
+  BeginCart();
+  loop.reset();  // no read(): the 1 s latch is not reached while STATUS is silent
+  server.SetSendStatus(false);
+  std::this_thread::sleep_for(300ms);
+  Refused("STATUS");
+  server.SetSendStatus(true);
+  EXPECT_EQ(server.CountCommands("MotionTypeCartBase"), 0u);
+}
+
+TEST_F(RebelCartJogTest, EntryRefusedWhileAJointMoveIsBusy)
+{
+  BeginCart();
+  server.SetMoveSpeedDegS(10.0);
+  const auto handle = SendAccepted(Goal({40.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  Refused("joint move");
+  client->Cancel(handle);
+  client->Result(handle);
+  EXPECT_EQ(server.CountCommands("MotionTypeCartBase"), 0u);
+}
+
+TEST_F(RebelCartJogTest, EntryRefusedWhileAMoveStopIsPending)
+{
+  Begin();
+  MAKE_UNCONFIRMED_STOP();
+  // Lifecycle recovery clears the latch; the unconfirmed stop stays pending.
+  EXPECT_EQ(rebel->on_deactivate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  ASSERT_FALSE(rebel->HardwareErrorLatched());
+  Refused("Move Stop");
+  EXPECT_EQ(server.CountCommands("MotionTypeCartBase"), 0u);
+  server.SetIgnoreMoveStop(false);
+  ASSERT_TRUE(WaitFor([&]() {return !server.MoveActive();}, 1000ms));
+}
+
+TEST_F(RebelCartJogTest, EntryRefusedWhileAControllerClaimsAnInterfaceThenWorksOnceReleased)
+{
+  BeginCart();
+  const auto joint = [&](int i) {return rebel->JointNames()[i] + "/velocity";};
+  const std::vector<std::string> all = {joint(0), joint(1), joint(2), joint(3), joint(4), joint(5)};
+
+  // A claim that is prepared but not yet performed already blocks (the controller is about to
+  // take the interfaces).
+  EXPECT_EQ(rebel->prepare_command_mode_switch(all, {}), return_type::OK);
+  Refused("claims");
+  EXPECT_EQ(rebel->perform_command_mode_switch(all, {}), return_type::OK);
+  Refused("claims");
+  // One interface still claimed is enough.
+  EXPECT_EQ(rebel->perform_command_mode_switch({}, {joint(0), joint(1), joint(2), joint(3), joint(4)}),
+    return_type::OK);
+  Refused("claims");
+  EXPECT_EQ(server.CountCommands("MotionTypeCartBase"), 0u);
+
+  // The operator deactivates the controller: entering works.
+  EXPECT_EQ(rebel->perform_command_mode_switch({}, {joint(5)}), return_type::OK);
+  EnterMode();
+}
+
+TEST_F(RebelCartJogTest, EntrySequenceKeepsJogZeroAndOnlyThenForwardsTheTopic)
+{
+  BeginCart();
+  const auto t0 = Clock::now();
+  cart->StartStream({0.02, 0.0, 0.0, 0.0, 0.0, 0.0});  // arrives before the mode is on: ignored
+  std::this_thread::sleep_for(150ms);
+  EXPECT_TRUE(AllJogsZero(server, t0));
+  EXPECT_EQ(server.CountCommands("MotionTypeCartBase"), 0u);
+
+  const auto cartReply = cart->Enable(true);
+  ASSERT_TRUE(cartReply.answered);
+  ASSERT_TRUE(cartReply.success) << cartReply.message;
+  const auto entered = Clock::now();
+  EXPECT_TRUE(server.ModeIsCartBase());
+  EXPECT_TRUE(rebel->CartJogActive());
+  // Start-up sequence, then MotionTypeCartBase, nothing else.
+  auto commands = server.Commands(1);
+  ASSERT_EQ(commands.size(), kStartupSequence.size() + 1);
+  EXPECT_EQ(commands.back(), "MotionTypeCartBase");
+  // Jog was zero up to the MotionTypeCartBase command (nothing Cartesian went out before it).
+  EXPECT_TRUE(AllZero(JogBeforeCommand(server, "MotionTypeCartBase")));
+  {
+    const auto cutoff = server.FirstCommandAfter("MotionTypeCartBase", t0);
+    ASSERT_NE(cutoff, Clock::time_point{});
+    for (const auto & frame : server.AliveJogs(t0)) {
+      if (frame.stamp < cutoff) {
+        EXPECT_TRUE(JogNear(ParseJog(frame.body), {0, 0, 0, 0, 0, 0})) << frame.body;
+      }
+    }
+  }
+  // The streamed command now goes out as Cartesian jog: 0.02 m/s * 200 %/(m/s) = 4 % in slot 1.
+  EXPECT_TRUE(WaitFor([&]() {return SawJog(server, entered, {4.0, 0, 0, 0, 0, 0});}, 1000ms));
+  // The mode is reported on the telemetry topic.
+  TelemetryListener telemetry;
+  EXPECT_TRUE(
+    telemetry.WaitState(
+      [](const igus_rebel_msgs::msg::HardwareState & m) {
+        return m.cart_jog_active && m.cart_jog_state == "active";
+      }, 2000ms));
+  // Calling it again is a no-op.
+  EXPECT_TRUE(cart->Enable(true).success);
+  EXPECT_EQ(server.CountCommands("MotionTypeCartBase"), 1u);
+}
+
+TEST_F(RebelCartJogTest, DefaultScalingClampRotationDisabledAndFrameRejection)
+{
+  BeginCart();
+  EnterMode();
+  // Defaults: 200 %/(m/s), clamp 10 %, rotation off. z = 0.5 m/s -> 100 % -> clamped to 10.
+  auto t = Clock::now();
+  cart->StartStream({0.02, -0.01, 0.5, 0.3, -0.3, 0.3});
+  EXPECT_TRUE(WaitFor([&]() {return SawJog(server, t, {4.0, -2.0, 10.0, 0, 0, 0});}, 1000ms));
+  // Non-base frame: rejected, jog goes (and stays) zero.
+  cart->StartStream({0.02, 0.0, 0.0, 0.0, 0.0, 0.0}, "tool0");
+  t = Clock::now();
+  std::this_thread::sleep_for(150ms);
+  const auto afterReject = Clock::now();
+  std::this_thread::sleep_for(300ms);
+  EXPECT_TRUE(AllJogsZero(server, afterReject));
+  // An empty frame_id is accepted.
+  cart->StartStream({0.01, 0.0, 0.0, 0.0, 0.0, 0.0}, "");
+  t = Clock::now();
+  EXPECT_TRUE(WaitFor([&]() {return SawJog(server, t, {2.0, 0, 0, 0, 0, 0});}, 1000ms));
+  // The joint velocity commands are ignored in the mode (a controller loop would write them).
+  loop->SetVelocity(0.3);
+  t = Clock::now();
+  std::this_thread::sleep_for(300ms);
+  for (const auto & frame : server.AliveJogs(t)) {
+    EXPECT_TRUE(JogNear(ParseJog(frame.body), {2.0, 0, 0, 0, 0, 0})) << frame.body;
+  }
+}
+
+TEST_F(RebelCartJogTest, ParametersSetScalesSignsRotationAndClamp)
+{
+  BeginCart(
+    {{"cart_jog_percent_per_mps", "100"}, {"cart_jog_percent_per_radps", "50"},
+      {"cart_jog_max_percent", "15"}, {"cart_jog_allow_rotation", "true"},
+      {"cart_jog_signs", "-1,1,-1,1,1,-1"}});
+  EnterMode();
+  auto t = Clock::now();
+  cart->StartStream({0.1, -0.1, 0.1, 0.2, -0.2, 0.2});
+  EXPECT_TRUE(WaitFor([&]() {return SawJog(server, t, {-10, -10, -10, 10, -10, -10});}, 1000ms));
+  cart->SetStream({1.0, 1.0, 0.0, 1.0, 0.0, 0.0});  // clamp at +-15 %, sign applied before it
+  t = Clock::now();
+  EXPECT_TRUE(WaitFor([&]() {return SawJog(server, t, {-15, 15, 0, 15, 0, 0});}, 1000ms));
+}
+
+TEST_F(RebelCartJogTest, InvalidCartJogParametersAreRejectedAtInit)
+{
+  for (const auto & bad : std::vector<std::pair<std::string, std::string>>{
+    {"cart_jog_signs", "1,1,2,1,1,1"}, {"cart_jog_signs", "1,1,1"}, {"cart_jog_max_percent", "0"},
+    {"cart_jog_max_percent", "101"}, {"cart_jog_percent_per_mps", "-5"},
+    {"cart_jog_percent_per_radps", "nan"}, {"cart_jog_timeout_s", "0.001"},
+    {"cart_jog_timeout_s", "5"}, {"cart_jog_allow_rotation", "maybe"},
+    {"cart_jog_base_frame", "bad frame"}})
+  {
+    Igus::Rebel bad_rebel("127.0.0.1", 1);
+    auto info = MakeInfo();
+    info.hardware_parameters[bad.first] = bad.second;
+    const auto start = Clock::now();
+    EXPECT_EQ(bad_rebel.on_init(info), CallbackReturn::ERROR) << bad.first << "=" << bad.second;
+    EXPECT_LT(Clock::now() - start, 500ms) << "must fail before connecting";
+  }
+}
+
+TEST_F(RebelCartJogTest, WatchdogZeroesJogWithoutCommandsAndThereIsNoStutterWhileStreaming)
+{
+  BeginCart();
+  EnterMode();
+  const auto t = Clock::now();
+  cart->StartStream({0.02, 0.0, 0.0, 0.0, 0.0, 0.0});
+  ASSERT_TRUE(WaitFor([&]() {return SawJog(server, t, {4.0, 0, 0, 0, 0, 0});}, 1000ms));
+  // 50 Hz stream, 0.15 s watchdog: no zero frame while commands keep coming.
+  const auto streamingFrom = Clock::now();
+  std::this_thread::sleep_for(600ms);
+  std::size_t frames = 0;
+  for (const auto & frame : server.AliveJogs(streamingFrom)) {
+    ++frames;
+    EXPECT_TRUE(JogNear(ParseJog(frame.body), {4.0, 0, 0, 0, 0, 0})) << frame.body;
+  }
+  EXPECT_GT(frames, 40u);
+  // The topic goes silent: zero within the watchdog (+ ALIVEJOG period and delivery margin).
+  cart->StopStream();
+  const auto silentFrom = Clock::now();
+  std::this_thread::sleep_for(500ms);
+  EXPECT_TRUE(AllJogsZero(server, silentFrom + 230ms));
+  EXPECT_TRUE(WaitFor([&]() {return SawJog(server, silentFrom - 100ms, {4.0, 0, 0, 0, 0, 0});}, 10ms));
+  // The mode stays on; a new command moves again.
+  EXPECT_TRUE(rebel->CartJogActive());
+  const auto again = Clock::now();
+  cart->StartStream({0.0, 0.01, 0.0, 0.0, 0.0, 0.0});
+  EXPECT_TRUE(WaitFor([&]() {return SawJog(server, again, {0, 2.0, 0, 0, 0, 0});}, 1000ms));
+  // A zero twist (button released) zeroes immediately.
+  cart->SetStream({0, 0, 0, 0, 0, 0});
+  const auto zeroAt = Clock::now();
+  std::this_thread::sleep_for(150ms);
+  EXPECT_TRUE(AllJogsZero(server, zeroAt + 60ms));
+}
+
+TEST_F(RebelCartJogTest, LeavingByServiceZeroesJogThenConfirmsMotionTypeJointAndJointJogResumes)
+{
+  BeginCart();
+  EnterMode();
+  cart->StartStream({0.02, 0.0, 0.0, 0.0, 0.0, 0.0});
+  ASSERT_TRUE(WaitFor([&]() {return SawJog(server, Clock::now() - 60ms, {4.0, 0, 0, 0, 0, 0});}, 1000ms));
+
+  const auto leaving = Clock::now();
+  const auto reply = cart->Enable(false);
+  const auto answered = Clock::now();
+  ASSERT_TRUE(reply.answered);
+  EXPECT_TRUE(reply.success) << reply.message;
+  EXPECT_FALSE(server.ModeIsCartBase());
+  EXPECT_EQ(rebel->CartJogStateValue(), 0);
+  // The topic is still being published: it must be ignored now. Jog is zero from the request on.
+  const int cartIndex = CommandIndex(server, "MotionTypeCartBase");
+  const int jointIndex = CommandIndex(server, "MotionTypeJoint", 1, 1);  // 0 = start-up sequence
+  ASSERT_GE(cartIndex, 0);
+  ASSERT_GT(jointIndex, cartIndex);
+  EXPECT_EQ(server.Commands(1).back(), "MotionTypeJoint");
+  // Zero jog first, then MotionTypeJoint: the ALIVEJOG right before the CMD is all zero.
+  EXPECT_TRUE(AllZero(JogBeforeCommand(server, "MotionTypeJoint", 1)));
+  std::this_thread::sleep_for(200ms);
+  EXPECT_TRUE(AllJogsZero(server, answered + 30ms));
+  (void)leaving;
+  // Joint jog works again.
+  loop->SetVelocity(0.1);
+  EXPECT_TRUE(WaitFor([&]() {return AnyNonZeroJog(server, Clock::now() - 60ms);}, 1000ms));
+  // Leaving twice is fine; re-entering needs a new call.
+  std::string message;
+  EXPECT_TRUE(rebel->SetCartJogEnabled(false, message)) << message;
+}
+
+TEST_F(RebelCartJogTest, ClaimIsRefusedAndMoveJointRejectedWhileInTheMode)
+{
+  BeginCart();
+  EnterMode();
+  const auto joint = [&](int i) {return rebel->JointNames()[i] + "/velocity";};
+  const std::vector<std::string> all = {joint(0), joint(1), joint(2), joint(3), joint(4), joint(5)};
+  EXPECT_EQ(rebel->prepare_command_mode_switch(all, {}), return_type::ERROR);
+  EXPECT_EQ(rebel->prepare_command_mode_switch({"unrelated/position"}, {}), return_type::OK);
+  EXPECT_TRUE(rebel->CartJogActive());
+
+  const std::size_t movesBefore = server.MoveCommands().size();
+  const auto handle = client->Send(Goal({4.0, 0, 0, 0, 0, 0}));
+  EXPECT_EQ(handle, nullptr) << "a move_joint goal must be rejected while the mode is on";
+  EXPECT_EQ(server.MoveCommands().size(), movesBefore);
+  EXPECT_FALSE(rebel->MoveGoalBusy());
+
+  // The mode survives these refusals.
+  EXPECT_TRUE(rebel->CartJogActive());
+  // reset_and_enable would re-send MotionTypeJoint: refused while the mode is on.
+  std::string message;
+  EXPECT_FALSE(rebel->ResetAndEnable(message));
+  EXPECT_NE(message.find("Cartesian"), std::string::npos) << message;
+}
+
+TEST_F(RebelCartJogTest, ClaimThatCannotBeRefusedLeavesTheModeAndLatches)
+{
+  BeginCart();
+  EnterMode();
+  cart->StartStream({0.02, 0.0, 0.0, 0.0, 0.0, 0.0});
+  ASSERT_TRUE(WaitFor([&]() {return SawJog(server, Clock::now() - 60ms, {4.0, 0, 0, 0, 0, 0});}, 1000ms));
+  const auto joint = [&](int i) {return rebel->JointNames()[i] + "/velocity";};
+  const auto at = Clock::now();
+  // Humble activates the controller even when prepare refused.
+  rebel->perform_command_mode_switch(
+    {joint(0), joint(1), joint(2), joint(3), joint(4), joint(5)}, {});
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+  ASSERT_TRUE(WaitFor([&]() {return rebel->CartJogStateValue() == 0;}, 3000ms));
+  EXPECT_FALSE(server.ModeIsCartBase());
+  EXPECT_TRUE(AllZero(JogBeforeCommand(server, "MotionTypeJoint", 1)));
+  std::this_thread::sleep_for(100ms);
+  EXPECT_TRUE(AllJogsZero(server, at + 30ms));
+  EXPECT_EQ(server.Commands(1).back(), "MotionTypeJoint");
+}
+
+TEST_F(RebelCartJogTest, LeavingByLatchZeroesJogAndRestoresJointMode)
+{
+  BeginCart();
+  EnterMode();
+  cart->StartStream({0.02, 0.0, 0.0, 0.0, 0.0, 0.0});
+  ASSERT_TRUE(WaitFor([&]() {return SawJog(server, Clock::now() - 60ms, {4.0, 0, 0, 0, 0, 0});}, 1000ms));
+  const auto at = Clock::now();
+  rebel->on_error(rclcpp_lifecycle::State());  // latches
+  ASSERT_TRUE(rebel->HardwareErrorLatched());
+  EXPECT_NE(rebel->CartJogStateValue(), 2);
+  ASSERT_TRUE(WaitFor([&]() {return rebel->CartJogStateValue() == 0;}, 3000ms));
+  EXPECT_FALSE(server.ModeIsCartBase());
+  EXPECT_EQ(server.Commands(1).back(), "MotionTypeJoint");
+  EXPECT_TRUE(AllZero(JogBeforeCommand(server, "MotionTypeJoint", 1)));
+  std::this_thread::sleep_for(100ms);
+  // The stream goes on, but nothing is forwarded; jog stayed zero from the latch on.
+  EXPECT_TRUE(AllJogsZero(server, at + 30ms));
+  // Re-entering is refused while latched.
+  Refused("latched");
+}
+
+TEST_F(RebelCartJogTest, LeavingByReconnectResendsTheStartupSequenceAndStaysOff)
+{
+  BeginCart();
+  EnterMode();
+  cart->StartStream({0.02, 0.0, 0.0, 0.0, 0.0, 0.0});
+  ASSERT_TRUE(WaitFor([&]() {return SawJog(server, Clock::now() - 60ms, {4.0, 0, 0, 0, 0, 0});}, 1000ms));
+  ASSERT_TRUE(server.ModeIsCartBase());
+  const auto at = Clock::now();
+  server.DropClient();
+  // The fake numbers every accepted TCP connection; use the newest one that carries the start-up
+  // sequence (a stray extra accept of the fake must not matter for this test).
+  std::size_t second = 0;
+  ASSERT_TRUE(
+    WaitFor(
+      [&]() {
+        for (std::size_t c = server.Connections(); c >= 2; --c) {
+          if (server.Commands(c).size() >= 6) {
+            second = c;
+            return true;
+          }
+        }
+        return false;
+      }, 3000ms))
+    << "connections " << server.Connections() << " all " << server.Commands().size();
+  EXPECT_EQ(server.Commands(second), kStartupSequence);  // includes MotionTypeJoint, as today
+  ASSERT_TRUE(WaitFor([&]() {return rebel->CartJogStateValue() == 0;}, 1000ms));
+  EXPECT_FALSE(server.ModeIsCartBase());
+  std::this_thread::sleep_for(200ms);
+  // Nothing non-zero on the new connection although the topic keeps streaming.
+  for (const auto & frame : server.AliveJogs(at)) {
+    if (frame.connection == second) {
+      EXPECT_TRUE(JogNear(ParseJog(frame.body), {0, 0, 0, 0, 0, 0})) << frame.body;
+    }
+  }
+  EXPECT_TRUE(WaitFor([&]() {return rebel->HardwareErrorLatched();}, 2000ms));
+}
+
+TEST_F(RebelCartJogTest, LeavingByDeactivateZeroesJogAndRestoresJointMode)
+{
+  BeginCart();
+  EnterMode();
+  cart->StartStream({0.02, 0.0, 0.0, 0.0, 0.0, 0.0});
+  ASSERT_TRUE(WaitFor([&]() {return SawJog(server, Clock::now() - 60ms, {4.0, 0, 0, 0, 0, 0});}, 1000ms));
+  const auto at = Clock::now();
+  EXPECT_EQ(rebel->on_deactivate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  ASSERT_TRUE(WaitFor([&]() {return rebel->CartJogStateValue() == 0;}, 3000ms));
+  EXPECT_FALSE(server.ModeIsCartBase());
+  EXPECT_EQ(server.Commands(1).back(), "MotionTypeJoint");
+  EXPECT_TRUE(AllZero(JogBeforeCommand(server, "MotionTypeJoint", 1)));
+  std::this_thread::sleep_for(100ms);
+  EXPECT_TRUE(AllJogsZero(server, at + 30ms));
+  Refused("not active");
+}
+
+TEST_F(RebelCartJogTest, EntryFailsCleanlyWhenTheControllerRejectsOrDoesNotFollow)
+{
+  BeginCart();
+  // CMDERROR: fails at once, joint mode untouched (MotionTypeJoint restores it anyway).
+  server.SetCartBaseError(true);
+  std::string message;
+  auto start = Clock::now();
+  EXPECT_FALSE(rebel->SetCartJogEnabled(true, message));
+  EXPECT_LT(Clock::now() - start, 1500ms);
+  EXPECT_NE(message.find("rejected"), std::string::npos) << message;
+  EXPECT_EQ(rebel->CartJogStateValue(), 0);
+  EXPECT_FALSE(server.ModeIsCartBase());
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  server.SetCartBaseError(false);
+
+  // CMDACK but the STATUS mode never becomes cartbase: not confirmed, joint mode re-asserted.
+  server.SetIgnoreCartBase(true);
+  EXPECT_FALSE(rebel->SetCartJogEnabled(true, message));
+  EXPECT_NE(message.find("not confirmed"), std::string::npos) << message;
+  EXPECT_EQ(rebel->CartJogStateValue(), 0);
+  EXPECT_EQ(server.Commands(1).back(), "MotionTypeJoint");
+  server.SetIgnoreCartBase(false);
+
+  // The mode changes but no CMDACK arrives: the entry is abandoned and the mode undone.
+  server.SetSuppressCartBaseAck(true);
+  EXPECT_FALSE(rebel->SetCartJogEnabled(true, message));
+  EXPECT_NE(message.find("not confirmed"), std::string::npos) << message;
+  EXPECT_NE(message.find("joint mode"), std::string::npos) << message;
+  EXPECT_FALSE(server.ModeIsCartBase());
+  EXPECT_EQ(rebel->CartJogStateValue(), 0);
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  EXPECT_TRUE(AllJogsZero(server, {}));
+  // A clean entry still works afterwards.
+  server.SetSuppressCartBaseAck(false);
+  EnterMode();
+}
+
+TEST_F(RebelCartJogTest, UnconfirmedMotionTypeJointLatches)
+{
+  BeginCart();
+  EnterMode();
+  server.SetSuppressJointAck(true);
+  std::string message;
+  const auto start = Clock::now();
+  EXPECT_FALSE(rebel->SetCartJogEnabled(false, message));
+  EXPECT_GE(Clock::now() - start, 1800ms);
+  EXPECT_NE(message.find("NOT confirmed"), std::string::npos) << message;
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+  EXPECT_NE(rebel->CartJogStateValue(), 2);
+  EXPECT_TRUE(AllJogsZero(server, start));
+  // Recovery: the lifecycle reset re-sends the start-up sequence (MotionTypeJoint) and ends the mode.
+  server.SetSuppressJointAck(false);
+  EXPECT_EQ(rebel->on_deactivate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_EQ(rebel->CartJogStateValue(), 0);
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+}
+
+TEST_F(RebelCartJogTest, StatusCoastSendsZeroCartesianJogAndAHoldDuringMotionLatches)
+{
+  BeginCart();
+  EnterMode();
+  cart->StartStream({0.02, 0.0, 0.0, 0.0, 0.0, 0.0});
+  ASSERT_TRUE(WaitFor([&]() {return SawJog(server, Clock::now() - 60ms, {4.0, 0, 0, 0, 0, 0});}, 1000ms));
+
+  // Short STATUS gap (coast tier): no coasting in Cartesian mode -- zero, whatever the stream says.
+  server.SetSendStatus(false);
+  const auto pauseStart = Clock::now();
+  ASSERT_TRUE(WaitFor([&]() {return rebel->StatusCoastActive();}, 1000ms));
+  const auto coastStart = Clock::now();
+  cart->SetStream({0.04, 0.0, 0.0, 0.0, 0.0, 0.0});
+  std::this_thread::sleep_for(pauseStart + 300ms - Clock::now());
+  server.SetSendStatus(true);
+  ASSERT_TRUE(WaitFor([&]() {return !rebel->StatusCoastActive();}, 1000ms));
+  const auto resumed = Clock::now();
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  std::size_t checked = 0;
+  for (const auto & frame : server.AliveJogs(coastStart + 30ms)) {
+    if (frame.stamp > resumed - 20ms) {continue;}
+    ++checked;
+    EXPECT_TRUE(JogNear(ParseJog(frame.body), {0, 0, 0, 0, 0, 0})) << frame.body;
+  }
+  EXPECT_GE(checked, 3u);
+  EXPECT_TRUE(WaitFor([&]() {return SawJog(server, resumed + 30ms, {8.0, 0, 0, 0, 0, 0});}, 1000ms));
+
+  // Long gap (hold tier) while moving: zero jog, and the resume latches (no auto-resume).
+  server.SetSendStatus(false);
+  const auto holdPause = Clock::now();
+  ASSERT_TRUE(WaitFor([&]() {return rebel->StatusHoldActive();}, 1000ms));
+  const auto holdStart = Clock::now();
+  std::this_thread::sleep_for(holdPause + 600ms - Clock::now());
+  server.SetSendStatus(true);
+  ASSERT_TRUE(WaitFor([&]() {return rebel->HardwareErrorLatched();}, 1000ms));
+  for (const auto & frame : server.AliveJogs(holdStart + 30ms)) {
+    EXPECT_TRUE(JogNear(ParseJog(frame.body), {0, 0, 0, 0, 0, 0})) << frame.body;
+  }
+  ASSERT_TRUE(WaitFor([&]() {return rebel->CartJogStateValue() == 0;}, 3000ms));
+  EXPECT_FALSE(server.ModeIsCartBase());
+}
+
+// ---- STATUS mode cross-check, idle auto-exit, enter/deactivate ----
+TEST_F(RebelCartJogTest, UnpromptedSwitchToJointWhileActiveZeroesJogAndLeavesTheMode)
+{
+  BeginCart();
+  EnterMode();
+  cart->StartStream({0.02, 0.0, 0.0, 0.0, 0.0, 0.0});
+  ASSERT_TRUE(WaitFor([&]() {return SawJog(server, Clock::now() - 60ms, {4.0, 0, 0, 0, 0, 0});}, 1000ms));
+  const auto at = Clock::now();
+  server.ForceMode(0);  // someone else switched the robot to joint mode
+  ASSERT_TRUE(WaitFor([&]() {return rebel->CartJogStateValue() != 2;}, 1000ms));
+  // Zero jog from the first frame that saw the new mode (STATUS 20 ms + one ALIVEJOG period).
+  std::this_thread::sleep_for(150ms);
+  EXPECT_TRUE(AllJogsZero(server, at + 80ms));
+  ASSERT_TRUE(WaitFor([&]() {return rebel->CartJogStateValue() == 0;}, 3000ms));
+  EXPECT_EQ(server.CountCommands("MotionTypeJoint", at), 1u);  // restored through the exit path
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  EXPECT_TRUE(AllJogsZero(server, at + 80ms));
+}
+
+TEST_F(RebelCartJogTest, RobotStaysCartbaseAfterRecoveryLatchesAndJointJogStaysZero)
+{
+  BeginCart();
+  EnterMode();
+  server.SetIgnoreMotionTypeJoint(true);  // MotionTypeJoint is acknowledged but does not take effect
+  rebel->on_error(rclcpp_lifecycle::State());
+  ASSERT_TRUE(rebel->HardwareErrorLatched());
+  loop.reset();
+  // Operator recovery: inactive -> active re-sends the start-up sequence (MotionTypeJoint ignored).
+  EXPECT_EQ(rebel->on_deactivate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  EXPECT_TRUE(server.ModeIsCartBase());
+  const auto at = Clock::now();
+  StartLoop(0.1);  // the recovered JTC commands joint velocity: would be read as Cartesian speed
+  ASSERT_TRUE(WaitFor([&]() {return rebel->HardwareErrorLatched();}, 2000ms));
+  std::this_thread::sleep_for(150ms);
+  EXPECT_TRUE(AllJogsZero(server, at + 30ms));
+  Refused("latched");
+}
+
+TEST_F(RebelCartJogTest, OffWhileRobotReportsCartbaseLatchesAfterTheGraceAndKeepsJogZero)
+{
+  BeginCart();
+  loop->SetVelocity(0.1);
+  ASSERT_TRUE(WaitFor([&]() {return AnyNonZeroJog(server, Clock::now() - 60ms);}, 1000ms));
+  const auto at = Clock::now();
+  server.ForceMode(1);
+  ASSERT_TRUE(WaitFor([&]() {return rebel->HardwareErrorLatched();}, 2000ms));
+  EXPECT_GE(Clock::now() - at, 250ms);  // not before the grace period
+  std::this_thread::sleep_for(100ms);
+  EXPECT_TRUE(AllJogsZero(server, at + 60ms));
+}
+
+TEST_F(RebelCartJogTest, EntryRefusedWhenTheRobotModeIsNotJoint)
+{
+  BeginCart();
+  server.ForceMode(2);  // fsm: not a mismatch for the guard, but not joint either
+  std::this_thread::sleep_for(100ms);
+  Refused("not 'joint'");
+  EXPECT_EQ(server.CountCommands("MotionTypeCartBase"), 0u);
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  server.ForceMode(0);
+  std::this_thread::sleep_for(100ms);
+  EnterMode();
+}
+
+TEST_F(RebelCartJogTest, IdleAutoExitLeavesTheModeWhenNoCommandArrives)
+{
+  BeginCart({{"cart_jog_idle_exit_s", "0.8"}});
+  EnterMode();
+  const auto at = Clock::now();
+  cart->StartStream({0.02, 0.0, 0.0, 0.0, 0.0, 0.0});
+  std::this_thread::sleep_for(1200ms);
+  EXPECT_TRUE(rebel->CartJogActive()) << "commands keep the mode alive";
+  cart->StopStream();
+  const auto silent = Clock::now();
+  ASSERT_TRUE(WaitFor([&]() {return rebel->CartJogStateValue() == 0;}, 4000ms));
+  EXPECT_GE(Clock::now() - silent, 600ms);
+  EXPECT_FALSE(server.ModeIsCartBase());
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  EXPECT_EQ(server.Commands(1).back(), "MotionTypeJoint");
+  EXPECT_TRUE(AllZero(JogBeforeCommand(server, "MotionTypeJoint", 1)));
+  (void)at;
+}
+
+TEST_F(RebelCartJogTest, IdleAutoExitCountsFromEntryWhenNoCommandEverArrives)
+{
+  BeginCart({{"cart_jog_idle_exit_s", "0.6"}});
+  EnterMode();
+  ASSERT_TRUE(WaitFor([&]() {return rebel->CartJogStateValue() == 0;}, 4000ms));
+  EXPECT_FALSE(server.ModeIsCartBase());
+}
+
+TEST_F(RebelCartJogTest, IdleAutoExitCanBeDisabledAndInvalidValuesAreRejected)
+{
+  BeginCart({{"cart_jog_idle_exit_s", "0"}});
+  EnterMode();
+  std::this_thread::sleep_for(1200ms);
+  EXPECT_TRUE(rebel->CartJogActive());
+  for (const char * bad : {"-1", "abc", "4000"}) {
+    Igus::Rebel bad_rebel("127.0.0.1", 1);
+    auto info = MakeInfo();
+    info.hardware_parameters["cart_jog_idle_exit_s"] = bad;
+    EXPECT_EQ(bad_rebel.on_init(info), CallbackReturn::ERROR) << bad;
+  }
+}
+
+TEST_F(RebelCartJogTest, DeactivateWhileEnteringAbortsAndRestoresJointMode)
+{
+  BeginCart();
+  server.SetSuppressCartBaseAck(true);  // the entry waits for the (missing) CMDACK
+  std::string message;
+  std::future<bool> entering = std::async(
+    std::launch::async, [&]() {return rebel->SetCartJogEnabled(true, message);});
+  ASSERT_TRUE(WaitFor([&]() {return rebel->CartJogStateValue() == 1;}, 1000ms));
+  const auto start = Clock::now();
+  EXPECT_EQ(rebel->on_deactivate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  ASSERT_EQ(entering.wait_for(5s), std::future_status::ready);
+  EXPECT_FALSE(entering.get());
+  EXPECT_LT(Clock::now() - start, 1500ms) << "must not wait for the 2 s confirmation timeout";
+  EXPECT_NE(message.find("deactivate"), std::string::npos) << message;
+  ASSERT_TRUE(WaitFor([&]() {return rebel->CartJogStateValue() == 0;}, 3000ms));
+  EXPECT_FALSE(server.ModeIsCartBase());
+}
+
+// ---- prepared ALIVEJOG frames cannot cross a reconnect / latch; coast; unknown mode; stamps ----
+namespace
+{
+// Holds the ALIVEJOG thread right before its first non-zero send until Release().
+class AliveHold
+{
+public:
+  explicit AliveHold(Igus::Rebel & driver)
+  : rebel_(driver)
+  {
+    rebel_.SetBeforeAliveSendHookForTest(
+      [this]() {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (done_) {return;}
+        entered_ = true;
+        condition_.notify_all();
+        condition_.wait(lock, [this]() {return release_;});
+        done_ = true;
+      });
+  }
+  ~AliveHold()
+  {
+    Release();
+    rebel_.SetBeforeAliveSendHookForTest(nullptr);
+  }
+  bool WaitEntered(std::chrono::milliseconds timeout)
+  {
+    std::unique_lock<std::mutex> lock(mutex_);
+    return condition_.wait_for(lock, timeout, [this]() {return entered_;});
+  }
+  void Release()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    release_ = true;
+    condition_.notify_all();
+  }
+
+private:
+  Igus::Rebel & rebel_;
+  std::mutex mutex_;
+  std::condition_variable condition_;
+  bool entered_ = false;
+  bool release_ = false;
+  bool done_ = false;
+};
+
+// Newest connection that carries the start-up sequence (>= 2), waiting up to `timeout`.
+std::size_t WaitSecondConnection(FakeCriServer & server, std::chrono::milliseconds timeout)
+{
+  std::size_t found = 0;
+  WaitFor(
+    [&]() {
+      for (std::size_t c = server.Connections(); c >= 2; --c) {
+        if (server.Commands(c).size() >= 6) {
+          found = c;
+          return true;
+        }
+      }
+      return false;
+    }, timeout);
+  return found;
+}
+}  // namespace
+
+TEST_F(RebelCartJogTest, PreparedCartesianFrameCannotCrossAReconnect)
+{
+  BeginCart();
+  EnterMode();
+  AliveHold hold(*rebel);
+  cart->StartStream({0.02, 0.0, 0.0, 0.0, 0.0, 0.0});
+  ASSERT_TRUE(hold.WaitEntered(2000ms));  // a [4,0,0,0,0,0] frame is built and waits
+  server.DropClient();
+  const std::size_t second = WaitSecondConnection(server, 3000ms);
+  ASSERT_GE(second, 2u) << "no reconnect";
+  EXPECT_EQ(server.Commands(second), kStartupSequence);
+  hold.Release();
+  std::this_thread::sleep_for(300ms);
+  // Nothing non-zero reaches the new connection, not even the one stale frame.
+  std::size_t frames = 0;
+  for (const auto & frame : server.AliveJogs()) {
+    if (frame.connection >= second) {
+      ++frames;
+      EXPECT_TRUE(JogNear(ParseJog(frame.body), {0, 0, 0, 0, 0, 0})) << frame.body;
+    }
+  }
+  EXPECT_GT(frames, 5u);
+}
+
+TEST_F(RebelCartJogTest, PreparedJointFrameCannotCrossAReconnect)
+{
+  BeginCart();
+  loop->SetVelocity(0.1);
+  ASSERT_TRUE(WaitFor([&]() {return AnyNonZeroJog(server, Clock::now() - 60ms);}, 1000ms));
+  AliveHold hold(*rebel);
+  ASSERT_TRUE(hold.WaitEntered(2000ms));
+  // No read() any more (it would latch on the reconnect): only the connection check in the socket
+  // send can stop the prepared frame -- state, latch and hold flags are all unchanged.
+  loop->Stop();
+  server.DropClient();
+  const std::size_t second = WaitSecondConnection(server, 3000ms);
+  ASSERT_GE(second, 2u);
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  hold.Release();
+  std::this_thread::sleep_for(300ms);
+  for (const auto & frame : server.AliveJogs()) {
+    if (frame.connection >= second) {
+      EXPECT_TRUE(JogNear(ParseJog(frame.body), {0, 0, 0, 0, 0, 0})) << frame.body;
+    }
+  }
+}
+
+TEST_F(RebelCartJogTest, PreparedCartesianFrameIsDroppedWhenALatchLandsBeforeTheSend)
+{
+  BeginCart();
+  EnterMode();
+  AliveHold hold(*rebel);
+  cart->StartStream({0.02, 0.0, 0.0, 0.0, 0.0, 0.0});
+  ASSERT_TRUE(hold.WaitEntered(2000ms));
+  rebel->on_error(rclcpp_lifecycle::State());  // latch + exit request
+  const auto latched = Clock::now();
+  hold.Release();
+  ASSERT_TRUE(WaitFor([&]() {return rebel->CartJogStateValue() == 0;}, 3000ms));
+  EXPECT_TRUE(AllJogsZero(server, latched));
+}
+
+TEST_F(RebelCartJogTest, UnknownModeWhileActiveFailsClosedAndLeavesTheMode)
+{
+  BeginCart();
+  EnterMode();
+  cart->StartStream({0.02, 0.0, 0.0, 0.0, 0.0, 0.0});
+  ASSERT_TRUE(WaitFor([&]() {return SawJog(server, Clock::now() - 60ms, {4.0, 0, 0, 0, 0, 0});}, 1000ms));
+  server.SetSendStatus(false);       // freeze STATUS so the seam below is not overwritten
+  std::this_thread::sleep_for(40ms);
+  rebel->SetStatusModeForTest(static_cast<int>(Igus::CriMessages::Mode::UNKNOWN));
+  const auto at = Clock::now();
+  ASSERT_TRUE(WaitFor([&]() {return rebel->CartJogStateValue() == 3;}, 120ms)) << "no exit request";
+  std::this_thread::sleep_for(60ms);
+  EXPECT_TRUE(AllJogsZero(server, at + 40ms));
+  server.SetSendStatus(true);        // STATUS is back (joint after MotionTypeJoint): exit confirms
+  ASSERT_TRUE(WaitFor([&]() {return rebel->CartJogStateValue() == 0;}, 3000ms));
+  EXPECT_FALSE(server.ModeIsCartBase());
+}
+
+TEST_F(RebelCartJogTest, UnknownModeStringMakesStatusStaleSoJogIsZeroAndTheDriverLatches)
+{
+  BeginCart();
+  EnterMode();
+  cart->StartStream({0.02, 0.0, 0.0, 0.0, 0.0, 0.0});
+  ASSERT_TRUE(WaitFor([&]() {return SawJog(server, Clock::now() - 60ms, {4.0, 0, 0, 0, 0, 0});}, 1000ms));
+  const auto at = Clock::now();
+  server.ForceMode(3);  // "weirdmode": the whole STATUS is rejected as malformed
+  std::this_thread::sleep_for(400ms);
+  EXPECT_TRUE(AllJogsZero(server, at + 300ms));
+  ASSERT_TRUE(WaitFor([&]() {return rebel->HardwareErrorLatched();}, 3000ms));
+  EXPECT_TRUE(AllJogsZero(server, at + 300ms));
+}
+
+TEST_F(RebelCartJogTest, CommandStampsAreChecked)
+{
+  BeginCart();
+  const rclcpp::Time beforeEntry = cart->Now();
+  EnterMode();
+  const auto jogAt = [&](const rclcpp::Time & stamp, const std::string & frame = "base_link") {
+      cart->PublishStamped({0.02, 0.0, 0.0, 0.0, 0.0, 0.0}, stamp, frame);
+    };
+  // Hammers one stamped command at 50 Hz for 300 ms and reports whether motion appeared.
+  const auto moves = [&](const std::function<rclcpp::Time()> & stamp) {
+      const auto from = Clock::now();
+      for (int i = 0; i < 15; ++i) {
+        jogAt(stamp());
+        std::this_thread::sleep_for(20ms);
+      }
+      std::this_thread::sleep_for(60ms);
+      return AnyNonZeroJog(server, from);
+    };
+  // Stamped before the mode entry but still inside the watchdog window (age < 0.15 s): only the
+  // "before the current mode entry" rule can reject it.
+  {
+    const auto from = Clock::now();
+    jogAt(beforeEntry);
+    std::this_thread::sleep_for(100ms);
+    EXPECT_FALSE(AnyNonZeroJog(server, from));
+  }
+  // Zero stamp, an old one (a replay after the watchdog expired), a far-future one: rejected.
+  EXPECT_FALSE(moves([&]() {return rclcpp::Time(0, 0, RCL_ROS_TIME);}));
+  EXPECT_FALSE(moves([&]() {return cart->Now() - rclcpp::Duration(1, 0);}));
+  EXPECT_FALSE(moves([&]() {return cart->Now() + rclcpp::Duration(2, 0);}));
+  EXPECT_TRUE(rebel->CartJogActive());
+  // A fresh stamp is accepted, and the mode kept working.
+  EXPECT_TRUE(moves([&]() {return cart->Now();}));
+  // After the watchdog expired, one replayed old non-zero command does not restart motion.
+  std::this_thread::sleep_for(400ms);
+  const auto replay = Clock::now();
+  jogAt(cart->Now() - rclcpp::Duration(0, 400000000));
+  std::this_thread::sleep_for(150ms);
+  EXPECT_FALSE(AnyNonZeroJog(server, replay));
+}
+
+TEST_F(RebelCartJogTest, TopicIsIgnoredAndNothingChangesWhileTheModeWasNeverEntered)
+{
+  BeginCart();
+  const auto t = Clock::now();
+  cart->StartStream({0.05, 0.05, 0.05, 0.5, 0.5, 0.5});
+  std::this_thread::sleep_for(400ms);
+  EXPECT_TRUE(AllJogsZero(server, t));
+  EXPECT_EQ(server.CountCommands("MotionTypeCartBase"), 0u);
+  EXPECT_EQ(server.Commands(1), kStartupSequence);
+  // Joint jog behaves as before.
+  loop->SetVelocity(0.1);
+  EXPECT_TRUE(WaitFor([&]() {return AnyNonZeroJog(server, Clock::now() - 60ms);}, 1000ms));
+}
+
+
+// ======================================================================================
+// Direct joint jog mode (CRI route): ALIVEJOG joint % from ~/joint_jog_cmd, robot stays in joint mode
+// ======================================================================================
+namespace
+{
+using JointJogMsg = control_msgs::msg::JointJog;
+
+// Publishes ~/joint_jog_cmd and calls ~/joint_jog_enable of the driver node, from its own node.
+class JointClient
+{
+public:
+  explicit JointClient(const std::string & driverNode = "igus_rebel")
+  {
+    node_ = std::make_shared<rclcpp::Node>("joint_test_client_" + std::to_string(counter_++));
+    pub_ = node_->create_publisher<JointJogMsg>("/" + driverNode + "/joint_jog_cmd", 10);
+    client_ = node_->create_client<std_srvs::srv::SetBool>("/" + driverNode + "/joint_jog_enable");
+    executor_.add_node(node_);
+    thread_ = std::thread([this]() {executor_.spin(); finished_ = true;});
+  }
+  ~JointClient()
+  {
+    StopStream();
+    while (!finished_) {
+      executor_.cancel();
+      std::this_thread::sleep_for(2ms);
+    }
+    if (thread_.joinable()) {
+      thread_.join();
+    }
+  }
+  bool WaitForService() {return client_->wait_for_service(5s);}
+  CartClient::Reply Enable(bool enable)
+  {
+    auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
+    request->data = enable;
+    auto future = client_->async_send_request(request);
+    CartClient::Reply reply;
+    if (future.wait_for(8s) == std::future_status::ready) {
+      const auto response = future.get();
+      reply = {true, response->success, response->message};
+    }
+    return reply;
+  }
+  rclcpp::Time Now() {return node_->now();}
+  // Names default to joint1..joint6 in order with the given six velocities.
+  static JointJogMsg Make(const Twist6 & v, const rclcpp::Time & stamp)
+  {
+    JointJogMsg msg;
+    msg.header.stamp = stamp;
+    msg.joint_names = {"joint1", "joint2", "joint3", "joint4", "joint5", "joint6"};
+    msg.velocities.assign(v.begin(), v.end());
+    return msg;
+  }
+  void PublishRaw(const JointJogMsg & msg) {pub_->publish(msg);}
+  void Publish(const Twist6 & v) {pub_->publish(Make(v, node_->now()));}
+  void PublishStamped(const Twist6 & v, const rclcpp::Time & stamp) {pub_->publish(Make(v, stamp));}
+  // Re-publishes the (changeable) command at 50 Hz, like the keyboard timer.
+  void StartStream(const Twist6 & v)
+  {
+    StopStream();
+    {
+      std::lock_guard<std::mutex> lock(streamMutex_);
+      streamValue_ = v;
+    }
+    streaming_ = true;
+    streamThread_ = std::thread(
+      [this]() {
+        while (streaming_) {
+          Twist6 value;
+          {
+            std::lock_guard<std::mutex> lock(streamMutex_);
+            value = streamValue_;
+          }
+          Publish(value);
+          std::this_thread::sleep_for(20ms);
+        }
+      });
+  }
+  void SetStream(const Twist6 & v)
+  {
+    std::lock_guard<std::mutex> lock(streamMutex_);
+    streamValue_ = v;
+  }
+  void StopStream()
+  {
+    streaming_ = false;
+    if (streamThread_.joinable()) {
+      streamThread_.join();
+    }
+  }
+
+private:
+  static inline std::atomic<int> counter_{0};
+  std::atomic<bool> finished_{false};
+  std::atomic<bool> streaming_{false};
+  rclcpp::Node::SharedPtr node_;
+  rclcpp::Publisher<JointJogMsg>::SharedPtr pub_;
+  rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr client_;
+  rclcpp::executors::SingleThreadedExecutor executor_;
+  std::thread thread_;
+  std::thread streamThread_;
+  std::mutex streamMutex_;
+  Twist6 streamValue_{};
+};
+
+// jog [%] of the default jog_velocity_scale (2.0) for a joint velocity in rad/s.
+double Pct(double radPerS) {return 2.0 * radPerS * 180.0 / M_PI;}
+
+class RebelJointJogTest : public RebelCartJogTest
+{
+protected:
+  void BeginJoint(
+    const std::map<std::string, std::string> & hardwareParameters = {}, bool activate = true)
+  {
+    BeginCart(hardwareParameters, activate);
+    if (HasFatalFailure()) {
+      return;
+    }
+    joint = std::make_unique<JointClient>();
+    ASSERT_TRUE(joint->WaitForService());
+  }
+  void TearDown() override
+  {
+    joint.reset();
+    RebelCartJogTest::TearDown();
+  }
+  void EnterJoint()
+  {
+    std::string message;
+    ASSERT_TRUE(rebel->SetJointJogEnabled(true, message)) << message;
+    ASSERT_TRUE(rebel->JointJogActive());
+  }
+  bool JointRefused(const std::string & expectedText)
+  {
+    std::string message;
+    const bool ok = rebel->SetJointJogEnabled(true, message);
+    EXPECT_FALSE(ok) << message;
+    EXPECT_NE(message.find(expectedText), std::string::npos) << message;
+    return !ok;
+  }
+  // True if after a single (non-streamed) command the jog is non-zero for a short while.
+  bool MovesAfterSingle(const JointJogMsg & msg)
+  {
+    const auto from = Clock::now();
+    joint->PublishRaw(msg);
+    std::this_thread::sleep_for(60ms);
+    return AnyNonZeroJog(server, from);
+  }
+
+  std::unique_ptr<JointClient> joint;
+};
+}  // namespace
+
+TEST_F(RebelJointJogTest, EntryRefusedWhenNotActivated)
+{
+  BeginJoint({}, false);
+  JointRefused("not active");
+  EXPECT_EQ(rebel->JointJogStateValue(), 0);
+}
+
+TEST_F(RebelJointJogTest, EntryRefusedWhileLatched)
+{
+  BeginJoint();
+  rebel->on_error(rclcpp_lifecycle::State());
+  JointRefused("latched");
+}
+
+TEST_F(RebelJointJogTest, EntryRefusedWhenStatusIsStale)
+{
+  BeginJoint();
+  loop.reset();  // no read(): the 1 s latch is not reached while STATUS is silent
+  server.SetSendStatus(false);
+  std::this_thread::sleep_for(300ms);
+  JointRefused("STATUS");
+  server.SetSendStatus(true);
+}
+
+TEST_F(RebelJointJogTest, EntryRefusedWhileDrivesAreDisabled)
+{
+  BeginJoint();
+  server.SetIgnoreEnable(true);
+  server.SetDisabledMask(0x01);
+  std::this_thread::sleep_for(150ms);
+  JointRefused("drives");
+}
+
+TEST_F(RebelJointJogTest, EntryRefusedWhileAJointMoveIsBusy)
+{
+  BeginJoint();
+  server.SetMoveSpeedDegS(10.0);
+  const auto handle = SendAccepted(Goal({40.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  JointRefused("joint move");
+  client->Cancel(handle);
+  client->Result(handle);
+}
+
+TEST_F(RebelJointJogTest, EntryRefusedWhileAMoveStopIsPending)
+{
+  Begin();
+  MAKE_UNCONFIRMED_STOP();
+  EXPECT_EQ(rebel->on_deactivate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  ASSERT_FALSE(rebel->HardwareErrorLatched());
+  JointRefused("Move Stop");
+  server.SetIgnoreMoveStop(false);
+  ASSERT_TRUE(WaitFor([&]() {return !server.MoveActive();}, 1000ms));
+}
+
+TEST_F(RebelJointJogTest, EntryRefusedWhileAControllerClaimsAnInterfaceThenWorksOnceReleased)
+{
+  BeginJoint();
+  const auto name = [&](int i) {return rebel->JointNames()[i] + "/velocity";};
+  const std::vector<std::string> all = {name(0), name(1), name(2), name(3), name(4), name(5)};
+  // A claim that is prepared but not yet performed already blocks.
+  EXPECT_EQ(rebel->prepare_command_mode_switch(all, {}), return_type::OK);
+  JointRefused("claims");
+  EXPECT_EQ(rebel->perform_command_mode_switch(all, {}), return_type::OK);
+  JointRefused("claims");
+  // One interface still claimed is enough.
+  EXPECT_EQ(
+    rebel->perform_command_mode_switch({}, {name(0), name(1), name(2), name(3), name(4)}),
+    return_type::OK);
+  JointRefused("claims");
+  EXPECT_EQ(rebel->JointJogStateValue(), 0);
+  EXPECT_EQ(rebel->perform_command_mode_switch({}, {name(5)}), return_type::OK);
+  EnterJoint();
+}
+
+TEST_F(RebelJointJogTest, EntryRefusedWhenTheRobotModeIsNotJoint)
+{
+  BeginJoint();
+  server.ForceMode(2);  // fsm: not a mismatch for the cart guard, but not joint either
+  std::this_thread::sleep_for(100ms);
+  JointRefused("not 'joint'");
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  server.ForceMode(0);
+  std::this_thread::sleep_for(100ms);
+  EnterJoint();
+}
+
+TEST_F(RebelJointJogTest, EntryRefusedWhenTheRobotReportsCartbase)
+{
+  BeginJoint();
+  server.ForceMode(1);
+  std::this_thread::sleep_for(60ms);  // well inside the 0.3 s latch grace of the cart guard
+  JointRefused("not 'joint'");
+  server.ForceMode(0);
+}
+
+TEST_F(RebelJointJogTest, EnteringSendsNothingKeepsJogZeroAndOnlyThenForwardsTheTopic)
+{
+  BeginJoint();
+  const auto t0 = Clock::now();
+  joint->StartStream({0.0, 0.05, 0.0, 0.0, 0.0, 0.0});  // arrives before the mode is on: ignored
+  std::this_thread::sleep_for(150ms);
+  EXPECT_TRUE(AllJogsZero(server, t0));
+
+  const auto reply = joint->Enable(true);
+  ASSERT_TRUE(reply.answered);
+  ASSERT_TRUE(reply.success) << reply.message;
+  const auto entered = Clock::now();
+  EXPECT_TRUE(rebel->JointJogActive());
+  // No mode switch: the robot stays in joint mode and no CMD went out.
+  EXPECT_FALSE(server.ModeIsCartBase());
+  EXPECT_EQ(server.Commands(1), kStartupSequence);
+  EXPECT_TRUE(WaitFor([&]() {return SawJog(server, entered, {0, Pct(0.05), 0, 0, 0, 0});}, 1000ms));
+  TelemetryListener telemetry;
+  EXPECT_TRUE(
+    telemetry.WaitState(
+      [](const igus_rebel_msgs::msg::HardwareState & m) {
+        return m.joint_jog_active && m.joint_jog_state == "active" && !m.cart_jog_active &&
+        m.cart_jog_state == "off";
+      }, 2000ms));
+  // Calling it again is a no-op.
+  EXPECT_TRUE(joint->Enable(true).success);
+  EXPECT_EQ(server.Commands(1), kStartupSequence);
+}
+
+TEST_F(RebelJointJogTest, ScalesWithTheJogVelocityScaleClampsToTheMaximumAndKeepsSigns)
+{
+  BeginJoint();
+  EnterJoint();
+  // Default clamp 10 %: 0.05 rad/s = 5.73 %, 0.5 rad/s = 57 % -> 10.
+  auto t = Clock::now();
+  joint->StartStream({0.05, -0.05, 0.0, 0.5, -0.5, 0.01});
+  EXPECT_TRUE(
+    WaitFor(
+      [&]() {return SawJog(server, t, {Pct(0.05), -Pct(0.05), 0, 10.0, -10.0, Pct(0.01)});}, 1000ms));
+  const auto settle = Clock::now();
+  std::this_thread::sleep_for(200ms);
+  for (const auto & frame : server.AliveJogs(settle)) {
+    for (const double value : ParseJog(frame.body)) {
+      EXPECT_LE(std::fabs(value), 10.0 + 1e-6) << frame.body;
+    }
+  }
+}
+
+TEST_F(RebelJointJogTest, MaxPercentAndVelocityScaleParametersApply)
+{
+  BeginJoint({{"joint_jog_max_percent", "15"}, {"jog_velocity_scale", "1.0"}});
+  EnterJoint();
+  EXPECT_DOUBLE_EQ(rebel->JointJogSettings().maxPercent, 15.0);
+  const auto t = Clock::now();
+  joint->StartStream({0.1, 0.5, -0.5, 0, 0, 0});  // 1.0 * 0.1 rad/s = 5.73 %; the others clamp
+  EXPECT_TRUE(
+    WaitFor(
+      [&]() {return SawJog(server, t, {0.1 * 180.0 / M_PI, 15.0, -15.0, 0, 0, 0});}, 1000ms));
+}
+
+TEST_F(RebelJointJogTest, NonFiniteVelocitiesBecomeZeroForThatJointOnly)
+{
+  BeginJoint();
+  EnterJoint();
+  const auto nan = std::numeric_limits<double>::quiet_NaN();
+  const auto inf = std::numeric_limits<double>::infinity();
+  const auto t = Clock::now();
+  joint->StartStream({nan, inf, 0.05, -inf, 0.0, 0.02});
+  EXPECT_TRUE(WaitFor([&]() {return SawJog(server, t, {0, 0, Pct(0.05), 0, 0, Pct(0.02)});}, 1000ms));
+  const auto settle = Clock::now();
+  std::this_thread::sleep_for(150ms);
+  for (const auto & frame : server.AliveJogs(settle)) {
+    EXPECT_TRUE(JogNear(ParseJog(frame.body), {0, 0, Pct(0.05), 0, 0, Pct(0.02)})) << frame.body;
+  }
+}
+
+TEST_F(RebelJointJogTest, SubsetsAndAnyOrderMapToTheNamedHardwareJoints)
+{
+  BeginJoint();
+  EnterJoint();
+  auto msg = JointClient::Make({0, 0, 0, 0, 0, 0}, joint->Now());
+  msg.joint_names = {"joint6", "joint2"};
+  msg.velocities = {-0.03, 0.04};
+  auto t = Clock::now();
+  const auto publishLoop = [&](const JointJogMsg & base) {
+      for (int i = 0; i < 15; ++i) {
+        auto m = base;
+        m.header.stamp = joint->Now();
+        joint->PublishRaw(m);
+        std::this_thread::sleep_for(20ms);
+      }
+    };
+  publishLoop(msg);
+  EXPECT_TRUE(SawJog(server, t, {0, Pct(0.04), 0, 0, 0, -Pct(0.03)}));
+  // A single joint, an empty message (all zero) and the reverse order.
+  msg.joint_names = {"joint3"};
+  msg.velocities = {0.02};
+  t = Clock::now();
+  publishLoop(msg);
+  EXPECT_TRUE(SawJog(server, t, {0, 0, Pct(0.02), 0, 0, 0}));
+  msg.joint_names = {};
+  msg.velocities = {};
+  t = Clock::now();
+  publishLoop(msg);
+  EXPECT_TRUE(rebel->JointJogActive()) << "an empty (all zero) command is valid";
+  EXPECT_TRUE(AllJogsZero(server, t + 60ms));
+  msg.joint_names = {"joint6", "joint5", "joint4", "joint3", "joint2", "joint1"};
+  msg.velocities = {0.06, 0.05, 0.04, 0.03, 0.02, 0.01};
+  t = Clock::now();
+  publishLoop(msg);
+  EXPECT_TRUE(
+    SawJog(server, t, {Pct(0.01), Pct(0.02), Pct(0.03), Pct(0.04), Pct(0.05), Pct(0.06)}));
+}
+
+TEST_F(RebelJointJogTest, InvalidMessagesAreRejectedAsAWholeAndZeroTheJogAtOnce)
+{
+  BeginJoint();
+  EnterJoint();
+  struct Case
+  {
+    const char * name;
+    std::function<void(JointJogMsg &)> corrupt;
+  };
+  const std::vector<Case> cases = {
+    {"unknown name", [](JointJogMsg & m) {m.joint_names[1] = "joint7";}},
+    {"name of another arm's joint", [](JointJogMsg & m) {m.joint_names[0] = "arm_left_joint1";}},
+    {"duplicate name", [](JointJogMsg & m) {m.joint_names[3] = m.joint_names[0];}},
+    {"more names than velocities", [](JointJogMsg & m) {m.velocities.pop_back();}},
+    {"more velocities than names", [](JointJogMsg & m) {m.velocities.push_back(0.01);}},
+    {"displacements present", [](JointJogMsg & m) {m.displacements = {0.0, 0.0};}},
+    {"displacements with names only", [](JointJogMsg & m) {
+        m.displacements.assign(m.joint_names.size(), 0.1);
+      }},
+  };
+  for (const auto & testCase : cases) {
+    SCOPED_TRACE(testCase.name);
+    // A valid command makes the jog non-zero first (and arms a 0.15 s watchdog window) ...
+    joint->PublishRaw(JointClient::Make({0.05, 0.05, 0.05, 0.05, 0.05, 0.05}, joint->Now()));
+    ASSERT_TRUE(WaitFor([&]() {return AnyNonZeroJog(server, Clock::now() - 30ms);}, 500ms));
+    // ... then an invalid one zeroes it at once: well before that watchdog could.
+    auto bad = JointClient::Make({0.05, 0.05, 0.05, 0.05, 0.05, 0.05}, joint->Now());
+    testCase.corrupt(bad);
+    joint->PublishRaw(bad);
+    const auto rejected = Clock::now();
+    std::this_thread::sleep_for(100ms);
+    EXPECT_TRUE(AllJogsZero(server, rejected + 40ms));
+    EXPECT_TRUE(rebel->JointJogActive()) << "an invalid message does not leave the mode";
+    // Let the watchdog window end before the next case.
+    std::this_thread::sleep_for(200ms);
+  }
+  // A message with one valid and one unknown joint moves neither.
+  auto partial = JointClient::Make({0, 0, 0, 0, 0, 0}, joint->Now());
+  partial.joint_names = {"joint1", "nope"};
+  partial.velocities = {0.05, 0.05};
+  EXPECT_FALSE(MovesAfterSingle(partial));
+}
+
+TEST_F(RebelJointJogTest, WatchdogZeroesJogWithoutCommandsAndThereIsNoStutterWhileStreaming)
+{
+  BeginJoint();
+  EnterJoint();
+  const auto t = Clock::now();
+  joint->StartStream({0.05, 0, 0, 0, 0, 0});
+  ASSERT_TRUE(WaitFor([&]() {return SawJog(server, t, {Pct(0.05), 0, 0, 0, 0, 0});}, 1000ms));
+  const auto streamingFrom = Clock::now();
+  std::this_thread::sleep_for(600ms);
+  std::size_t frames = 0;
+  for (const auto & frame : server.AliveJogs(streamingFrom)) {
+    ++frames;
+    EXPECT_TRUE(JogNear(ParseJog(frame.body), {Pct(0.05), 0, 0, 0, 0, 0})) << frame.body;
+  }
+  EXPECT_GT(frames, 40u);
+  joint->StopStream();
+  const auto silentFrom = Clock::now();
+  std::this_thread::sleep_for(500ms);
+  EXPECT_TRUE(AllJogsZero(server, silentFrom + 230ms));
+  EXPECT_TRUE(rebel->JointJogActive());
+  const auto again = Clock::now();
+  joint->StartStream({0, 0.03, 0, 0, 0, 0});
+  EXPECT_TRUE(WaitFor([&]() {return SawJog(server, again, {0, Pct(0.03), 0, 0, 0, 0});}, 1000ms));
+  joint->SetStream({0, 0, 0, 0, 0, 0});
+  const auto zeroAt = Clock::now();
+  std::this_thread::sleep_for(150ms);
+  EXPECT_TRUE(AllJogsZero(server, zeroAt + 60ms));
+}
+
+TEST_F(RebelJointJogTest, CommandStampsAreChecked)
+{
+  BeginJoint();
+  const rclcpp::Time beforeEntry = joint->Now();
+  EnterJoint();
+  const auto moves = [&](const std::function<rclcpp::Time()> & stamp) {
+      const auto from = Clock::now();
+      for (int i = 0; i < 15; ++i) {
+        joint->PublishStamped({0.05, 0, 0, 0, 0, 0}, stamp());
+        std::this_thread::sleep_for(20ms);
+      }
+      std::this_thread::sleep_for(60ms);
+      return AnyNonZeroJog(server, from);
+    };
+  {
+    const auto from = Clock::now();
+    joint->PublishStamped({0.05, 0, 0, 0, 0, 0}, beforeEntry);
+    std::this_thread::sleep_for(100ms);
+    EXPECT_FALSE(AnyNonZeroJog(server, from)) << "stamped before the mode entry";
+  }
+  EXPECT_FALSE(moves([&]() {return rclcpp::Time(0, 0, RCL_ROS_TIME);}));
+  EXPECT_FALSE(moves([&]() {return joint->Now() - rclcpp::Duration(1, 0);}));
+  EXPECT_FALSE(moves([&]() {return joint->Now() + rclcpp::Duration(2, 0);}));
+  EXPECT_TRUE(rebel->JointJogActive());
+  EXPECT_TRUE(moves([&]() {return joint->Now();}));
+  std::this_thread::sleep_for(400ms);
+  const auto replay = Clock::now();
+  joint->PublishStamped({0.05, 0, 0, 0, 0, 0}, joint->Now() - rclcpp::Duration(0, 400000000));
+  std::this_thread::sleep_for(150ms);
+  EXPECT_FALSE(AnyNonZeroJog(server, replay));
+}
+
+TEST_F(RebelJointJogTest, TopicIsIgnoredAndNothingChangesWhileTheModeWasNeverEntered)
+{
+  BeginJoint();
+  const auto t = Clock::now();
+  joint->StartStream({0.05, 0.05, 0.05, 0.05, 0.05, 0.05});
+  std::this_thread::sleep_for(400ms);
+  EXPECT_TRUE(AllJogsZero(server, t));
+  EXPECT_EQ(server.Commands(1), kStartupSequence);
+  loop->SetVelocity(0.1);
+  EXPECT_TRUE(WaitFor([&]() {return AnyNonZeroJog(server, Clock::now() - 60ms);}, 1000ms));
+}
+
+TEST_F(RebelJointJogTest, ControllerCommandsAreIgnoredWhileTheModeIsOnAndResumeAfterLeaving)
+{
+  BeginJoint();
+  EnterJoint();
+  loop->SetVelocity(0.3);  // a controller loop would write this every cycle
+  auto t = Clock::now();
+  joint->StartStream({0, 0.02, 0, 0, 0, 0});
+  ASSERT_TRUE(WaitFor([&]() {return SawJog(server, t, {0, Pct(0.02), 0, 0, 0, 0});}, 1000ms));
+  t = Clock::now();
+  std::this_thread::sleep_for(300ms);
+  for (const auto & frame : server.AliveJogs(t)) {
+    EXPECT_TRUE(JogNear(ParseJog(frame.body), {0, Pct(0.02), 0, 0, 0, 0})) << frame.body;
+  }
+  // Without joint commands the jog is zero, not the controller's 0.3 rad/s.
+  joint->StopStream();
+  const auto silent = Clock::now();
+  std::this_thread::sleep_for(400ms);
+  EXPECT_TRUE(AllJogsZero(server, silent + 230ms));
+}
+
+TEST_F(RebelJointJogTest, LeavingByServiceZeroesJogAtOnceSendsNoCommandAndTheControllerPathResumes)
+{
+  BeginJoint();
+  EnterJoint();
+  joint->StartStream({0.05, 0, 0, 0, 0, 0});
+  ASSERT_TRUE(WaitFor([&]() {return SawJog(server, Clock::now() - 60ms, {Pct(0.05), 0, 0, 0, 0, 0});}, 1000ms));
+  const auto reply = joint->Enable(false);
+  const auto answered = Clock::now();
+  ASSERT_TRUE(reply.answered);
+  EXPECT_TRUE(reply.success) << reply.message;
+  EXPECT_EQ(rebel->JointJogStateValue(), 0);
+  EXPECT_EQ(server.Commands(1), kStartupSequence) << "no mode switch in either direction";
+  // The stream goes on: nothing is forwarded; zero from the answer on (one ALIVEJOG period margin).
+  std::this_thread::sleep_for(200ms);
+  EXPECT_TRUE(AllJogsZero(server, answered + 30ms));
+  // Leaving twice is fine; the controller path works again.
+  std::string message;
+  EXPECT_TRUE(rebel->SetJointJogEnabled(false, message)) << message;
+  joint->StopStream();
+  loop->SetVelocity(0.1);
+  EXPECT_TRUE(WaitFor([&]() {return AnyNonZeroJog(server, Clock::now() - 60ms);}, 1000ms));
+}
+
+TEST_F(RebelJointJogTest, WhileOnClaimsMoveJointResetAndEnableAreRefused)
+{
+  BeginJoint();
+  EnterJoint();
+  const auto name = [&](int i) {return rebel->JointNames()[i] + "/velocity";};
+  const std::vector<std::string> all = {name(0), name(1), name(2), name(3), name(4), name(5)};
+  EXPECT_EQ(rebel->prepare_command_mode_switch(all, {}), return_type::ERROR);
+  EXPECT_EQ(rebel->prepare_command_mode_switch({"unrelated/position"}, {}), return_type::OK);
+  EXPECT_TRUE(rebel->JointJogActive());
+  const std::size_t movesBefore = server.MoveCommands().size();
+  EXPECT_EQ(client->Send(Goal({4.0, 0, 0, 0, 0, 0})), nullptr);
+  EXPECT_EQ(server.MoveCommands().size(), movesBefore);
+  EXPECT_FALSE(rebel->MoveGoalBusy());
+  std::string message;
+  EXPECT_FALSE(rebel->ResetAndEnable(message));
+  EXPECT_NE(message.find("joint jog"), std::string::npos) << message;
+  EXPECT_TRUE(rebel->JointJogActive());
+}
+
+TEST_F(RebelJointJogTest, AClaimThatCannotBeRefusedLeavesTheModeAndLatches)
+{
+  BeginJoint();
+  EnterJoint();
+  joint->StartStream({0.05, 0, 0, 0, 0, 0});
+  ASSERT_TRUE(WaitFor([&]() {return SawJog(server, Clock::now() - 60ms, {Pct(0.05), 0, 0, 0, 0, 0});}, 1000ms));
+  const auto name = [&](int i) {return rebel->JointNames()[i] + "/velocity";};
+  const auto at = Clock::now();
+  // Humble activates the controller even when prepare refused.
+  rebel->perform_command_mode_switch({name(0), name(1), name(2), name(3), name(4), name(5)}, {});
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+  EXPECT_EQ(rebel->JointJogStateValue(), 0);
+  std::this_thread::sleep_for(150ms);
+  EXPECT_TRUE(AllJogsZero(server, at + 30ms));
+}
+
+TEST_F(RebelJointJogTest, MutualExclusionWithTheCartesianJogModeInBothDirections)
+{
+  BeginJoint();
+  // joint on -> cartesian refused.
+  EnterJoint();
+  Refused("joint jog mode is on");
+  EXPECT_EQ(server.CountCommands("MotionTypeCartBase"), 0u);
+  EXPECT_EQ(rebel->CartJogStateValue(), 0);
+  EXPECT_TRUE(cart->Enable(true).answered);  // through the service as well
+  EXPECT_EQ(rebel->CartJogStateValue(), 0);
+  EXPECT_TRUE(rebel->JointJogActive());
+  // joint off -> cartesian works.
+  std::string message;
+  EXPECT_TRUE(rebel->SetJointJogEnabled(false, message)) << message;
+  EnterMode();
+  // cartesian on -> joint refused, cartesian untouched.
+  JointRefused("Cartesian jog mode is on");
+  EXPECT_EQ(rebel->JointJogStateValue(), 0);
+  EXPECT_TRUE(rebel->CartJogActive());
+  EXPECT_FALSE(joint->Enable(true).success);
+  // cartesian off -> joint works again, and the CartBase/Joint commands were only the cart's.
+  EXPECT_TRUE(rebel->SetCartJogEnabled(false, message)) << message;
+  ASSERT_EQ(rebel->CartJogStateValue(), 0);
+  EnterJoint();
+  EXPECT_EQ(server.CountCommands("MotionTypeCartBase"), 1u);
+  EXPECT_EQ(server.CountCommands("MotionTypeJoint"), 2u);  // start-up + the cart exit
+}
+
+TEST_F(RebelJointJogTest, EntryIsRefusedWhileTheCartesianModeIsStillBeingLeft)
+{
+  BeginJoint();
+  EnterMode();
+  server.SetSuppressJointAck(true);  // MotionTypeJoint is never acknowledged: "leaving" persists
+  std::string cartMessage;
+  std::future<bool> leaving = std::async(
+    std::launch::async, [&]() {return rebel->SetCartJogEnabled(false, cartMessage);});
+  ASSERT_TRUE(WaitFor([&]() {return rebel->CartJogStateValue() == 3;}, 1000ms));
+  JointRefused("Cartesian jog mode is on");
+  EXPECT_EQ(rebel->JointJogStateValue(), 0);
+  leaving.wait();  // the unconfirmed exit latches after ~3 s
+}
+
+TEST_F(RebelJointJogTest, LeavingByLatchZeroesJogAtOnce)
+{
+  BeginJoint();
+  EnterJoint();
+  joint->StartStream({0.05, 0, 0, 0, 0, 0});
+  ASSERT_TRUE(WaitFor([&]() {return SawJog(server, Clock::now() - 60ms, {Pct(0.05), 0, 0, 0, 0, 0});}, 1000ms));
+  const auto at = Clock::now();
+  rebel->on_error(rclcpp_lifecycle::State());
+  ASSERT_TRUE(rebel->HardwareErrorLatched());
+  EXPECT_EQ(rebel->JointJogStateValue(), 0);
+  std::this_thread::sleep_for(150ms);
+  EXPECT_TRUE(AllJogsZero(server, at + 30ms));
+  JointRefused("latched");
+}
+
+TEST_F(RebelJointJogTest, LeavingByReconnectResetsTheStateAndNothingCrossesToTheNewConnection)
+{
+  BeginJoint();
+  EnterJoint();
+  joint->StartStream({0.05, 0, 0, 0, 0, 0});
+  ASSERT_TRUE(WaitFor([&]() {return SawJog(server, Clock::now() - 60ms, {Pct(0.05), 0, 0, 0, 0, 0});}, 1000ms));
+  const auto at = Clock::now();
+  server.DropClient();
+  const std::size_t second = WaitSecondConnection(server, 3000ms);
+  ASSERT_GE(second, 2u) << "no reconnect";
+  EXPECT_EQ(server.Commands(second), kStartupSequence);
+  ASSERT_TRUE(WaitFor([&]() {return rebel->JointJogStateValue() == 0;}, 1000ms));
+  std::this_thread::sleep_for(200ms);
+  for (const auto & frame : server.AliveJogs(at)) {
+    if (frame.connection == second) {
+      EXPECT_TRUE(JogNear(ParseJog(frame.body), {0, 0, 0, 0, 0, 0})) << frame.body;
+    }
+  }
+  EXPECT_TRUE(WaitFor([&]() {return rebel->HardwareErrorLatched();}, 2000ms));
+}
+
+TEST_F(RebelJointJogTest, LeavingByDeactivateZeroesJog)
+{
+  BeginJoint();
+  EnterJoint();
+  joint->StartStream({0.05, 0, 0, 0, 0, 0});
+  ASSERT_TRUE(WaitFor([&]() {return SawJog(server, Clock::now() - 60ms, {Pct(0.05), 0, 0, 0, 0, 0});}, 1000ms));
+  const auto at = Clock::now();
+  EXPECT_EQ(rebel->on_deactivate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_EQ(rebel->JointJogStateValue(), 0);
+  std::this_thread::sleep_for(150ms);
+  EXPECT_TRUE(AllJogsZero(server, at + 30ms));
+  JointRefused("not active");
+}
+
+TEST_F(RebelJointJogTest, ResetStateAfterLatchRecoveryStartsOff)
+{
+  BeginJoint();
+  EnterJoint();
+  rebel->on_error(rclcpp_lifecycle::State());
+  EXPECT_EQ(rebel->on_deactivate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_EQ(rebel->JointJogStateValue(), 0);
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  loop.reset();
+  StartLoop(0.0);
+  // The stream that never stopped does not start the mode again; only a new call does.
+  const auto t = Clock::now();
+  joint->StartStream({0.05, 0, 0, 0, 0, 0});
+  std::this_thread::sleep_for(200ms);
+  EXPECT_TRUE(AllJogsZero(server, t));
+}
+
+TEST_F(RebelJointJogTest, UnpromptedSwitchToAnotherModeWhileActiveZeroesJogAndLeavesTheMode)
+{
+  BeginJoint();
+  EnterJoint();
+  joint->StartStream({0.05, 0, 0, 0, 0, 0});
+  ASSERT_TRUE(WaitFor([&]() {return SawJog(server, Clock::now() - 60ms, {Pct(0.05), 0, 0, 0, 0, 0});}, 1000ms));
+  const auto at = Clock::now();
+  server.ForceMode(2);  // someone else switched the robot to fsm
+  ASSERT_TRUE(WaitFor([&]() {return rebel->JointJogStateValue() == 0;}, 1000ms));
+  std::this_thread::sleep_for(150ms);
+  EXPECT_TRUE(AllJogsZero(server, at + 80ms));
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  server.ForceMode(0);
+  std::this_thread::sleep_for(100ms);
+  // The stream is still running but the mode stays off.
+  const auto after = Clock::now();
+  std::this_thread::sleep_for(150ms);
+  EXPECT_TRUE(AllJogsZero(server, after));
+}
+
+TEST_F(RebelJointJogTest, CartbaseWhileActiveZeroesJogLeavesTheModeAndThenLatchesLikeJointMode)
+{
+  BeginJoint();
+  EnterJoint();
+  joint->StartStream({0.05, 0, 0, 0, 0, 0});
+  ASSERT_TRUE(WaitFor([&]() {return SawJog(server, Clock::now() - 60ms, {Pct(0.05), 0, 0, 0, 0, 0});}, 1000ms));
+  const auto at = Clock::now();
+  server.ForceMode(1);
+  ASSERT_TRUE(WaitFor([&]() {return rebel->JointJogStateValue() == 0;}, 1000ms));
+  // Joint % would be read as Cartesian speeds: the existing guard latches after its grace period.
+  ASSERT_TRUE(WaitFor([&]() {return rebel->HardwareErrorLatched();}, 2000ms));
+  std::this_thread::sleep_for(100ms);
+  EXPECT_TRUE(AllJogsZero(server, at + 80ms));
+}
+
+TEST_F(RebelJointJogTest, UnknownModeWhileActiveFailsClosedAndLeavesTheMode)
+{
+  BeginJoint();
+  EnterJoint();
+  joint->StartStream({0.05, 0, 0, 0, 0, 0});
+  ASSERT_TRUE(WaitFor([&]() {return SawJog(server, Clock::now() - 60ms, {Pct(0.05), 0, 0, 0, 0, 0});}, 1000ms));
+  server.SetSendStatus(false);  // freeze STATUS so the seam below is not overwritten
+  std::this_thread::sleep_for(40ms);
+  rebel->SetStatusModeForTest(static_cast<int>(Igus::CriMessages::Mode::UNKNOWN));
+  const auto at = Clock::now();
+  ASSERT_TRUE(WaitFor([&]() {return rebel->JointJogStateValue() == 0;}, 120ms));
+  std::this_thread::sleep_for(60ms);
+  EXPECT_TRUE(AllJogsZero(server, at + 40ms));
+  server.SetSendStatus(true);
+}
+
+TEST_F(RebelJointJogTest, IdleAutoExitLeavesTheModeWhenNoCommandArrives)
+{
+  BeginJoint({{"joint_jog_idle_exit_s", "0.8"}});
+  EnterJoint();
+  joint->StartStream({0.05, 0, 0, 0, 0, 0});
+  std::this_thread::sleep_for(1200ms);
+  EXPECT_TRUE(rebel->JointJogActive()) << "commands keep the mode alive";
+  joint->StopStream();
+  const auto silent = Clock::now();
+  ASSERT_TRUE(WaitFor([&]() {return rebel->JointJogStateValue() == 0;}, 4000ms));
+  EXPECT_GE(Clock::now() - silent, 600ms);
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  EXPECT_EQ(server.Commands(1), kStartupSequence);
+}
+
+TEST_F(RebelJointJogTest, IdleAutoExitCountsFromEntryWhenNoCommandEverArrives)
+{
+  BeginJoint({{"joint_jog_idle_exit_s", "0.6"}});
+  EnterJoint();
+  ASSERT_TRUE(WaitFor([&]() {return rebel->JointJogStateValue() == 0;}, 4000ms));
+}
+
+TEST_F(RebelJointJogTest, IdleAutoExitCanBeDisabled)
+{
+  BeginJoint({{"joint_jog_idle_exit_s", "0"}});
+  EnterJoint();
+  std::this_thread::sleep_for(1200ms);
+  EXPECT_TRUE(rebel->JointJogActive());
+}
+
+TEST_F(RebelJointJogTest, InvalidJointJogParametersAreRejectedAtInit)
+{
+  for (const auto & bad : std::vector<std::pair<std::string, std::string>>{
+    {"joint_jog_max_percent", "0"}, {"joint_jog_max_percent", "-5"},
+    {"joint_jog_max_percent", "101"}, {"joint_jog_max_percent", "nan"},
+    {"joint_jog_max_percent", "abc"}, {"joint_jog_timeout_s", "0.001"},
+    {"joint_jog_timeout_s", "5"}, {"joint_jog_timeout_s", "inf"},
+    {"joint_jog_idle_exit_s", "-1"}, {"joint_jog_idle_exit_s", "abc"},
+    {"joint_jog_idle_exit_s", "4000"}})
+  {
+    Igus::Rebel bad_rebel("127.0.0.1", 1);
+    auto info = MakeInfo();
+    info.hardware_parameters[bad.first] = bad.second;
+    const auto start = Clock::now();
+    EXPECT_EQ(bad_rebel.on_init(info), CallbackReturn::ERROR) << bad.first << "=" << bad.second;
+    EXPECT_LT(Clock::now() - start, 500ms) << "must fail before connecting";
+  }
+}
+
+TEST_F(RebelJointJogTest, DefaultsAreTenPercentWatchdogAndIdleExit)
+{
+  BeginJoint();
+  EXPECT_DOUBLE_EQ(rebel->JointJogSettings().maxPercent, 10.0);
+  EXPECT_DOUBLE_EQ(rebel->JointJogSettings().timeoutS, 0.15);
+  EXPECT_DOUBLE_EQ(rebel->JointJogSettings().idleExitS, 10.0);
+}
+
+TEST_F(RebelJointJogTest, StatusCoastSendsZeroJogAndAHoldDuringMotionLatches)
+{
+  BeginJoint();
+  EnterJoint();
+  joint->StartStream({0.05, 0, 0, 0, 0, 0});
+  ASSERT_TRUE(WaitFor([&]() {return SawJog(server, Clock::now() - 60ms, {Pct(0.05), 0, 0, 0, 0, 0});}, 1000ms));
+  // Short STATUS gap (coast tier): the controller path would freeze the jog; the direct mode sends zero.
+  server.SetSendStatus(false);
+  const auto pauseStart = Clock::now();
+  ASSERT_TRUE(WaitFor([&]() {return rebel->StatusCoastActive();}, 1000ms));
+  const auto coastStart = Clock::now();
+  std::this_thread::sleep_for(pauseStart + 300ms - Clock::now());
+  server.SetSendStatus(true);
+  ASSERT_TRUE(WaitFor([&]() {return !rebel->StatusCoastActive();}, 1000ms));
+  const auto resumed = Clock::now();
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  std::size_t checked = 0;
+  for (const auto & frame : server.AliveJogs(coastStart + 30ms)) {
+    if (frame.stamp > resumed - 20ms) {continue;}
+    ++checked;
+    EXPECT_TRUE(JogNear(ParseJog(frame.body), {0, 0, 0, 0, 0, 0})) << frame.body;
+  }
+  EXPECT_GE(checked, 3u);
+  EXPECT_TRUE(WaitFor([&]() {return SawJog(server, resumed + 30ms, {Pct(0.05), 0, 0, 0, 0, 0});}, 1000ms));
+  // Long gap (hold tier) while moving: zero jog, and the resume latches (no auto-resume).
+  server.SetSendStatus(false);
+  const auto holdPause = Clock::now();
+  ASSERT_TRUE(WaitFor([&]() {return rebel->StatusHoldActive();}, 1000ms));
+  const auto holdStart = Clock::now();
+  std::this_thread::sleep_for(holdPause + 600ms - Clock::now());
+  server.SetSendStatus(true);
+  ASSERT_TRUE(WaitFor([&]() {return rebel->HardwareErrorLatched();}, 1000ms));
+  for (const auto & frame : server.AliveJogs(holdStart + 30ms)) {
+    EXPECT_TRUE(JogNear(ParseJog(frame.body), {0, 0, 0, 0, 0, 0})) << frame.body;
+  }
+  EXPECT_EQ(rebel->JointJogStateValue(), 0);
+}
+
+TEST_F(RebelJointJogTest, PreparedFrameCannotCrossAReconnect)
+{
+  BeginJoint();
+  EnterJoint();
+  AliveHold hold(*rebel);
+  joint->StartStream({0.05, 0, 0, 0, 0, 0});
+  ASSERT_TRUE(hold.WaitEntered(2000ms));
+  server.DropClient();
+  const std::size_t second = WaitSecondConnection(server, 3000ms);
+  ASSERT_GE(second, 2u) << "no reconnect";
+  hold.Release();
+  std::this_thread::sleep_for(300ms);
+  std::size_t frames = 0;
+  for (const auto & frame : server.AliveJogs()) {
+    if (frame.connection >= second) {
+      ++frames;
+      EXPECT_TRUE(JogNear(ParseJog(frame.body), {0, 0, 0, 0, 0, 0})) << frame.body;
+    }
+  }
+  EXPECT_GT(frames, 5u);
+}
+
+TEST_F(RebelJointJogTest, PreparedFrameIsDroppedWhenALatchLandsBeforeTheSend)
+{
+  BeginJoint();
+  EnterJoint();
+  AliveHold hold(*rebel);
+  joint->StartStream({0.05, 0, 0, 0, 0, 0});
+  ASSERT_TRUE(hold.WaitEntered(2000ms));
+  rebel->on_error(rclcpp_lifecycle::State());
+  const auto latched = Clock::now();
+  hold.Release();
+  std::this_thread::sleep_for(200ms);
+  EXPECT_TRUE(AllJogsZero(server, latched));
+}
+
+TEST_F(RebelJointJogTest, PreparedFrameIsDroppedWhenTheModeIsLeftBeforeTheSend)
+{
+  BeginJoint();
+  EnterJoint();
+  AliveHold hold(*rebel);
+  joint->StartStream({0.05, 0, 0, 0, 0, 0});
+  ASSERT_TRUE(hold.WaitEntered(2000ms));
+  // No latch, no hold, same connection: only the mode itself changes under the prepared frame.
+  std::string message;
+  EXPECT_TRUE(rebel->SetJointJogEnabled(false, message)) << message;
+  const auto left = Clock::now();
+  hold.Release();
+  std::this_thread::sleep_for(200ms);
+  EXPECT_TRUE(AllJogsZero(server, left));
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+}
+
+TEST_F(RebelJointJogTest, EntryIsRefusedWhenALatchOrDeactivateRacesIt)
+{
+  // A fault between the checks and the transition must never leave the mode on: hammer enter
+  // against latch + lifecycle recovery and require off whenever latched or deactivated.
+  BeginJoint();
+  for (int round = 0; round < 20; ++round) {
+    std::future<bool> entering = std::async(
+      std::launch::async, [&]() {std::string m; return rebel->SetJointJogEnabled(true, m);});
+    rebel->on_deactivate(rclcpp_lifecycle::State());
+    entering.wait();
+    EXPECT_EQ(rebel->JointJogStateValue(), 0) << "round " << round;
+    EXPECT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  }
+}
+
+
+// ======================================================================================
+// Direct jog sessions: generation, commit race, replay / ordering, expiry from the stamp,
+// dispatch-time revalidation of a prepared frame (both modes unless noted)
+// ======================================================================================
+namespace
+{
+// Holds a cart_jog_cmd / joint_jog_cmd callback between its validation and its commit until
+// Release(). One shot: later callbacks pass.
+class CommitHold
+{
+public:
+  explicit CommitHold(Igus::Rebel & driver)
+  : rebel_(driver)
+  {
+    rebel_.SetBeforeJogCommitHookForTest(
+      [this](bool) {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (done_) {return;}
+        entered_ = true;
+        condition_.notify_all();
+        condition_.wait(lock, [this]() {return release_;});
+        done_ = true;
+      });
+  }
+  ~CommitHold()
+  {
+    Release();
+    rebel_.SetBeforeJogCommitHookForTest(nullptr);
+  }
+  bool WaitEntered(std::chrono::milliseconds timeout)
+  {
+    std::unique_lock<std::mutex> lock(mutex_);
+    return condition_.wait_for(lock, timeout, [this]() {return entered_;});
+  }
+  void Release()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    release_ = true;
+    condition_.notify_all();
+  }
+
+private:
+  Igus::Rebel & rebel_;
+  std::mutex mutex_;
+  std::condition_variable condition_;
+  bool entered_ = false;
+  bool release_ = false;
+  bool done_ = false;
+};
+
+// True if any ALIVEJOG received in [from, to) is non-zero.
+bool NonZeroBetween(FakeCriServer & server, Clock::time_point from, Clock::time_point to)
+{
+  for (const auto & frame : server.AliveJogs(from)) {
+    if (frame.stamp >= to) {continue;}
+    for (double value : ParseJog(frame.body)) {
+      if (value != 0.0) {return true;}
+    }
+  }
+  return false;
+}
+
+// Param: true = Cartesian jog, false = direct joint jog.
+class RebelJogSessionTest : public RebelJointJogTest, public ::testing::WithParamInterface<bool>
+{
+protected:
+  bool IsCart() const {return GetParam();}
+  void EnterMode()
+  {
+    if (IsCart()) {RebelCartJogTest::EnterMode();} else {EnterJoint();}
+  }
+  void LeaveMode()
+  {
+    std::string message;
+    if (IsCart()) {
+      ASSERT_TRUE(rebel->SetCartJogEnabled(false, message)) << message;
+    } else {
+      ASSERT_TRUE(rebel->SetJointJogEnabled(false, message)) << message;
+    }
+    ASSERT_FALSE(ModeOn());
+  }
+  bool ModeOn() const {return IsCart() ? rebel->CartJogActive() : rebel->JointJogActive();}
+  // A command whose frames are non-zero: X 4 % (Cartesian) / joint 1 at Pct(0.05) %.
+  Twist6 Nz() const {return IsCart() ? Twist6{0.02, 0, 0, 0, 0, 0} : Twist6{0.05, 0, 0, 0, 0, 0};}
+  static Twist6 Zero() {return Twist6{0, 0, 0, 0, 0, 0};}
+  rclcpp::Time Now() {return IsCart() ? cart->Now() : joint->Now();}
+  void PublishAt(const Twist6 & v, const rclcpp::Time & stamp)
+  {
+    if (IsCart()) {cart->PublishStamped(v, stamp);} else {joint->PublishStamped(v, stamp);}
+  }
+  void StartStream(const Twist6 & v)
+  {
+    if (IsCart()) {cart->StartStream(v);} else {joint->StartStream(v);}
+  }
+  void StopStream()
+  {
+    if (IsCart()) {cart->StopStream();} else {joint->StopStream();}
+  }
+  // The first ALIVEJOG received at or after `after` is all zero.
+  bool FirstFrameAfterIsZero(Clock::time_point after)
+  {
+    WaitFor([&]() {return !server.AliveJogs(after).empty();}, 1000ms);
+    const auto frames = server.AliveJogs(after);
+    EXPECT_FALSE(frames.empty());
+    if (frames.empty()) {return false;}
+    return JogNear(ParseJog(frames.front().body), Zero());
+  }
+};
+}  // namespace
+
+TEST_P(RebelJogSessionTest, EntryAndEveryExitAdvanceTheSessionGeneration)
+{
+  BeginJoint();
+  const std::uint64_t g0 = rebel->JogGeneration();
+  EnterMode();
+  const std::uint64_t g1 = rebel->JogGeneration();
+  EXPECT_GT(g1, g0);
+  LeaveMode();
+  const std::uint64_t g2 = rebel->JogGeneration();
+  EXPECT_GT(g2, g1);
+  EnterMode();
+  const std::uint64_t g3 = rebel->JogGeneration();
+  EXPECT_GT(g3, g2);
+  rebel->on_deactivate(rclcpp_lifecycle::State());  // exit request
+  EXPECT_GT(rebel->JogGeneration(), g3);
+}
+
+TEST_P(RebelJogSessionTest, CommandCommitOfAnOlderSessionIsDropped)
+{
+  BeginJoint();
+  EnterMode();
+  CommitHold hold(*rebel);
+  // Stamped slightly in the future so that it still passes the stamp rules of the next session:
+  // only the session generation can reject it at the commit.
+  PublishAt(Nz(), Now() + rclcpp::Duration(0, 300000000));
+  ASSERT_TRUE(hold.WaitEntered(2000ms));  // validated, not committed
+  LeaveMode();
+  EnterMode();
+  const auto resumed = Clock::now();
+  hold.Release();
+  std::this_thread::sleep_for(300ms);
+  EXPECT_TRUE(AllJogsZero(server, resumed));
+  EXPECT_TRUE(ModeOn());
+}
+
+TEST_P(RebelJogSessionTest, PreparedFrameIsDroppedWhenAZeroCommandArrivesBeforeTheSend)
+{
+  BeginJoint();
+  EnterMode();
+  AliveHold hold(*rebel);
+  StartStream(Nz());
+  ASSERT_TRUE(hold.WaitEntered(2000ms));
+  StopStream();
+  PublishAt(Zero(), Now());  // newer than every streamed command, refreshes the deadline
+  std::this_thread::sleep_for(60ms);
+  const auto released = Clock::now();
+  hold.Release();
+  std::this_thread::sleep_for(200ms);
+  EXPECT_TRUE(AllJogsZero(server, released));
+  EXPECT_TRUE(ModeOn());
+}
+
+TEST_P(RebelJogSessionTest, PreparedFrameIsDroppedWhenTheCommandExpiresBeforeTheSend)
+{
+  BeginJoint();
+  EnterMode();
+  AliveHold hold(*rebel);
+  StartStream(Nz());
+  ASSERT_TRUE(hold.WaitEntered(2000ms));
+  StopStream();
+  std::this_thread::sleep_for(260ms);  // > the 0.15 s command timeout, the ALIVEJOG thread is held
+  const auto released = Clock::now();
+  hold.Release();
+  std::this_thread::sleep_for(200ms);
+  EXPECT_TRUE(AllJogsZero(server, released));
+  EXPECT_TRUE(ModeOn());
+}
+
+TEST_P(RebelJogSessionTest, PreparedFrameIsDroppedWhenTheStatusModeChangesBeforeTheSend)
+{
+  BeginJoint();
+  EnterMode();
+  AliveHold hold(*rebel);
+  StartStream(Nz());
+  ASSERT_TRUE(hold.WaitEntered(2000ms));
+  server.SetSendStatus(false);  // freeze STATUS so the seam below is not overwritten
+  std::this_thread::sleep_for(40ms);
+  rebel->SetStatusModeForTest(static_cast<int>(Igus::CriMessages::Mode::UNKNOWN));
+  const auto released = Clock::now();
+  hold.Release();
+  EXPECT_TRUE(FirstFrameAfterIsZero(released));
+  server.SetSendStatus(true);
+}
+
+TEST_P(RebelJogSessionTest, PreparedFrameIsDroppedWhenAControllerClaimAppearsBeforeTheSend)
+{
+  BeginJoint();
+  EnterMode();
+  AliveHold hold(*rebel);
+  StartStream(Nz());
+  ASSERT_TRUE(hold.WaitEntered(2000ms));
+  rebel->SetVelocityClaimMaskForTest(1u);  // no latch: only the dispatch check can see it
+  const auto released = Clock::now();
+  hold.Release();
+  EXPECT_TRUE(FirstFrameAfterIsZero(released));
+  rebel->SetVelocityClaimMaskForTest(0u);
+}
+
+TEST_P(RebelJogSessionTest, OlderOrDuplicateStampsAreRejectedAndTheTargetStaysZero)
+{
+  BeginJoint();
+  EnterMode();
+  const rclcpp::Time older = Now();
+  std::this_thread::sleep_for(5ms);
+  const rclcpp::Time newer = Now();
+  PublishAt(Zero(), newer);  // accepted: first command of the session
+  std::this_thread::sleep_for(30ms);
+  const auto t = Clock::now();
+  PublishAt(Nz(), older);  // age ~35 ms < timeout, but older than the newest accepted stamp
+  std::this_thread::sleep_for(200ms);
+  EXPECT_FALSE(AnyNonZeroJog(server, t)) << "an older stamp was accepted";
+  // Duplicate stamp.
+  const rclcpp::Time same = Now();
+  PublishAt(Zero(), same);
+  std::this_thread::sleep_for(30ms);
+  const auto t2 = Clock::now();
+  PublishAt(Nz(), same);
+  std::this_thread::sleep_for(200ms);
+  EXPECT_FALSE(AnyNonZeroJog(server, t2)) << "a duplicate stamp was accepted";
+  // A newer stamp is still accepted, the mode kept working.
+  const auto t3 = Clock::now();
+  PublishAt(Nz(), Now());
+  EXPECT_TRUE(WaitFor([&]() {return AnyNonZeroJog(server, t3);}, 1000ms));
+  EXPECT_TRUE(ModeOn());
+}
+
+TEST_P(RebelJogSessionTest, ACommandExpiresFromItsOwnStampNotFromItsReceipt)
+{
+  BeginJoint();
+  EnterMode();
+  // Stamped 0.12 s ago with the default 0.15 s timeout: lives about 0.03 s, not 0.15 s. The stamp
+  // must not predate the mode entry, so let the entry age first.
+  std::this_thread::sleep_for(200ms);
+  const auto t = Clock::now();
+  PublishAt(Nz(), Now() - rclcpp::Duration(0, 120000000));
+  std::this_thread::sleep_for(450ms);
+  EXPECT_TRUE(NonZeroBetween(server, t, t + 60ms)) << "the (still valid) command was not accepted";
+  EXPECT_FALSE(NonZeroBetween(server, t + 100ms, t + 450ms)) << "lived a full timeout";
+  // A fresh stamp keeps its full lifetime (not shortened).
+  const auto t2 = Clock::now();
+  PublishAt(Nz(), Now());
+  std::this_thread::sleep_for(250ms);
+  EXPECT_TRUE(NonZeroBetween(server, t2 + 60ms, t2 + 120ms)) << "fresh command expired early";
+  EXPECT_FALSE(NonZeroBetween(server, t2 + 230ms, t2 + 250ms));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+  Modes, RebelJogSessionTest, ::testing::Bool(),
+  [](const ::testing::TestParamInfo<bool> & info) {return info.param ? "Cartesian" : "Joint";});
+
+// The Cartesian exit is completed by the ALIVEJOG thread, so only the joint mode can be left and
+// entered again while that thread is held between building and sending a frame.
+TEST_F(RebelJointJogTest, PreparedFrameFromAnOlderSessionIsDroppedAfterDisableAndReenable)
+{
+  BeginJoint();
+  EnterJoint();
+  AliveHold hold(*rebel);
+  joint->StartStream({0.05, 0, 0, 0, 0, 0});
+  ASSERT_TRUE(hold.WaitEntered(2000ms));
+  joint->StopStream();
+  std::string message;
+  ASSERT_TRUE(rebel->SetJointJogEnabled(false, message)) << message;
+  EnterJoint();
+  const auto released = Clock::now();
+  hold.Release();
+  std::this_thread::sleep_for(250ms);
+  EXPECT_TRUE(AllJogsZero(server, released));
+  EXPECT_TRUE(rebel->JointJogActive());
+}
+
+TEST_F(RebelJointJogTest, PreparedFrameFromAnOlderSessionIsDroppedEvenIfTheNewSessionHasACommand)
+{
+  BeginJoint();
+  EnterJoint();
+  AliveHold hold(*rebel);
+  joint->StartStream({0.05, 0, 0, 0, 0, 0});
+  ASSERT_TRUE(hold.WaitEntered(2000ms));
+  joint->StopStream();
+  std::string message;
+  ASSERT_TRUE(rebel->SetJointJogEnabled(false, message)) << message;
+  EnterJoint();
+  // A fresh non-zero command of the NEW session: mode state, claims, STATUS mode, deadline,
+  // revision and non-zero flag all look fine for the old frame -- only the generation differs.
+  joint->Publish({0.05, 0, 0, 0, 0, 0});
+  std::this_thread::sleep_for(60ms);
+  const auto released = Clock::now();
+  hold.Release();
+  const auto frames = [&]() {
+      std::this_thread::sleep_for(60ms);
+      return server.AliveJogs(released);
+    }();
+  ASSERT_FALSE(frames.empty());
+  EXPECT_TRUE(JogNear(ParseJog(frames.front().body), {0, 0, 0, 0, 0, 0}))
+    << "the old session's frame was sent: " << frames.front().body;
+}
+
+// ======================================================================================
+// jtc_jog_deadband_percent (JTC path only) and ~/cri_diagnostics
+// ======================================================================================
+namespace
+{
+using CriDiagnostics = igus_rebel_msgs::msg::CriDiagnostics;
+
+// Subscribes to ~/cri_diagnostics from a separate node spun on its own thread.
+class DiagnosticsListener
+{
+public:
+  explicit DiagnosticsListener(const std::string & driverNode = "igus_rebel")
+  {
+    static std::atomic<int> counter{0};
+    node_ = std::make_shared<rclcpp::Node>("diag_listener_" + std::to_string(counter++));
+    sub_ = node_->create_subscription<CriDiagnostics>(
+      "/" + driverNode + "/cri_diagnostics", rclcpp::SensorDataQoS().keep_last(10),
+      [this](CriDiagnostics::ConstSharedPtr msg) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        messages_.push_back(*msg);
+        systemReceivedNs_.push_back(SystemNowNs());
+      });
+    executor_.add_node(node_);
+    thread_ = std::thread([this]() {executor_.spin(); finished_ = true;});
+  }
+  ~DiagnosticsListener()
+  {
+    while (!finished_) {
+      executor_.cancel();
+      std::this_thread::sleep_for(2ms);
+    }
+    if (thread_.joinable()) {
+      thread_.join();
+    }
+  }
+  std::vector<CriDiagnostics> Messages()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return messages_;
+  }
+  std::int64_t LastReceivedSystemNs()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return systemReceivedNs_.empty() ? 0 : systemReceivedNs_.back();
+  }
+  // Waits for a message received after `fromIndex` messages that satisfies `predicate`.
+  template<class Predicate>
+  bool WaitMessage(Predicate predicate, std::chrono::milliseconds timeout, std::size_t fromIndex = 0)
+  {
+    return WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (std::size_t i = fromIndex; i < messages_.size(); ++i) {
+          if (predicate(messages_[i])) {
+            return true;
+          }
+        }
+        return false;
+      }, timeout);
+  }
+
+private:
+  std::atomic<bool> finished_{false};
+  rclcpp::Node::SharedPtr node_;
+  rclcpp::Subscription<CriDiagnostics>::SharedPtr sub_;
+  rclcpp::executors::SingleThreadedExecutor executor_;
+  std::thread thread_;
+  std::mutex mutex_;
+  std::vector<CriDiagnostics> messages_;
+  std::vector<std::int64_t> systemReceivedNs_;
+};
+
+// Sets / reads parameters of the driver node over the real parameter services.
+class DriverParameters
+{
+public:
+  explicit DriverParameters(const std::string & driverNode = "igus_rebel")
+  {
+    static std::atomic<int> counter{0};
+    node_ = std::make_shared<rclcpp::Node>("param_client_" + std::to_string(counter++));
+    client_ = std::make_shared<rclcpp::SyncParametersClient>(node_, "/" + driverNode);
+  }
+  bool WaitForService() {return client_->wait_for_service(5s);}
+  // True if the driver accepted the value.
+  bool SetDeadband(double value)
+  {
+    const auto results = client_->set_parameters({rclcpp::Parameter("jtc_jog_deadband_percent", value)});
+    return results.size() == 1 && results[0].successful;
+  }
+  double Deadband()
+  {
+    return client_->get_parameter<double>("jtc_jog_deadband_percent", -1.0);
+  }
+
+private:
+  rclcpp::Node::SharedPtr node_;
+  std::shared_ptr<rclcpp::SyncParametersClient> client_;
+};
+
+// 0.3 % / 0.8 % jog of the default jog_velocity_scale (2.0), as a joint velocity in rad/s.
+double VelocityForPercent(double percent) {return percent / 2.0 * Igus::Safety::kDegToRad;}
+
+class RebelJtcDeadbandTest : public RebelJointJogTest
+{
+protected:
+  void BeginDeadband()
+  {
+    BeginJoint();
+    if (HasFatalFailure()) {
+      return;
+    }
+    params = std::make_unique<DriverParameters>();
+    ASSERT_TRUE(params->WaitForService());
+  }
+  void TearDown() override
+  {
+    params.reset();
+    RebelJointJogTest::TearDown();
+  }
+  // All six jog values of every frame received after `after` are `expected`.
+  bool EveryJogIs(Clock::time_point after, double expected, std::size_t minimumFrames)
+  {
+    const auto frames = server.AliveJogs(after);
+    if (frames.size() < minimumFrames) {
+      return false;
+    }
+    for (const auto & frame : frames) {
+      for (const double value : ParseJog(frame.body)) {
+        if (std::fabs(value - expected) > 1e-3) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  std::unique_ptr<DriverParameters> params;
+};
+}  // namespace
+
+TEST_F(RebelJtcDeadbandTest, DefaultIsOffAndTheParameterRejectsBadValues)
+{
+  BeginDeadband();
+  EXPECT_DOUBLE_EQ(params->Deadband(), 0.0);
+  EXPECT_TRUE(params->SetDeadband(0.5));
+  EXPECT_DOUBLE_EQ(params->Deadband(), 0.5);
+  for (const double bad : {2.5, -0.1, std::numeric_limits<double>::quiet_NaN(),
+      std::numeric_limits<double>::infinity()})
+  {
+    EXPECT_FALSE(params->SetDeadband(bad)) << bad;
+    EXPECT_DOUBLE_EQ(params->Deadband(), 0.5) << bad;  // unchanged
+  }
+  EXPECT_TRUE(params->SetDeadband(2.0));
+  EXPECT_TRUE(params->SetDeadband(0.0));
+  EXPECT_DOUBLE_EQ(params->Deadband(), 0.0);
+}
+
+TEST_F(RebelJtcDeadbandTest, OffByDefaultPassesSmallJtcJogUnchanged)
+{
+  BeginDeadband();
+  const auto t = Clock::now();
+  loop->SetVelocity(VelocityForPercent(0.3));
+  EXPECT_TRUE(WaitFor([&]() {return SawJog(server, t, {0.3, 0.3, 0.3, 0.3, 0.3, 0.3});}, 1000ms));
+}
+
+TEST_F(RebelJtcDeadbandTest, DeadbandZeroesSmallJtcJogOnlyAndPassesLargerJog)
+{
+  BeginDeadband();
+  ASSERT_TRUE(params->SetDeadband(0.5));
+
+  // 0.3 % < 0.5 %: the ros2_control path sends 0 for every joint.
+  loop->SetVelocity(VelocityForPercent(0.3));
+  std::this_thread::sleep_for(100ms);  // the frames of an older command are gone
+  auto t = Clock::now();
+  std::this_thread::sleep_for(300ms);
+  EXPECT_TRUE(EveryJogIs(t, 0.0, 10)) << "0.3 % was not zeroed";
+  EXPECT_FALSE(SawJog(server, t, {0.3, 0.3, 0.3, 0.3, 0.3, 0.3}));
+
+  // 0.8 % >= 0.5 %: passes unchanged.
+  loop->SetVelocity(VelocityForPercent(0.8));
+  t = Clock::now();
+  EXPECT_TRUE(WaitFor([&]() {return SawJog(server, t, {0.8, 0.8, 0.8, 0.8, 0.8, 0.8});}, 1000ms));
+
+  // Back to 0.3 %, deadband removed at runtime: passes again.
+  ASSERT_TRUE(params->SetDeadband(0.0));
+  loop->SetVelocity(VelocityForPercent(0.3));
+  t = Clock::now();
+  EXPECT_TRUE(WaitFor([&]() {return SawJog(server, t, {0.3, 0.3, 0.3, 0.3, 0.3, 0.3});}, 1000ms));
+}
+
+TEST_F(RebelJtcDeadbandTest, DeadbandDoesNotApplyToTheCriJointJog)
+{
+  BeginDeadband();
+  ASSERT_TRUE(params->SetDeadband(0.5));
+  EnterJoint();
+  const auto t = Clock::now();
+  joint->StartStream({VelocityForPercent(0.3), 0.0, 0.0, 0.0, 0.0, 0.0});
+  // 0.3 % on joint 1 reaches the robot although it is below the JTC deadband.
+  EXPECT_TRUE(WaitFor([&]() {return SawJog(server, t, {0.3, 0, 0, 0, 0, 0});}, 1000ms));
+}
+
+TEST_F(RebelJtcDeadbandTest, CriDiagnosticsCarryStatusCurrentsSetpointAndTheLastSentJog)
+{
+  BeginDeadband();
+  server.SetCurrents({100, -200, 300, -400, 500, -600}, 1234);
+  server.SetSetpointOffsetDeg({0.5f, 0.0f, 0.0f, 0.0f, 0.0f, -0.25f});
+  DiagnosticsListener listener;
+
+  // 0.8 % from the ros2_control path (deadband 0.5).
+  ASSERT_TRUE(params->SetDeadband(0.5));
+  loop->SetVelocity(VelocityForPercent(0.8));
+  ASSERT_TRUE(
+    listener.WaitMessage(
+      [](const CriDiagnostics & m) {
+        return m.jog_source == "jtc" && std::fabs(m.jog_percent_sent[3] - 0.8f) < 1e-3 &&
+        m.current_raw[0] == 100;
+      }, 3000ms));
+  CriDiagnostics last;
+  {
+    const auto messages = listener.Messages();
+    last = messages.back();
+    // The sample of the fake STATUS.
+    EXPECT_EQ(last.current_raw[0], 100);
+    EXPECT_EQ(last.current_raw[1], -200);
+    EXPECT_EQ(last.current_raw[5], -600);
+    EXPECT_EQ(last.current_all_raw, 1234);
+    for (std::size_t i = 0; i < 6; ++i) {
+      EXPECT_NEAR(last.position_deg[i], server.baseJointsDeg[i], 1e-3) << i;
+    }
+    EXPECT_NEAR(last.setpoint_deg[0], server.baseJointsDeg[0] + 0.5, 1e-3);
+    EXPECT_NEAR(last.setpoint_deg[1], server.baseJointsDeg[1], 1e-3);
+    EXPECT_NEAR(last.setpoint_deg[5], server.baseJointsDeg[5] - 0.25, 1e-3);
+    EXPECT_NEAR(last.jtc_deadband_percent, 0.5f, 1e-6);
+    // The stamp is the STATUS receive time (system clock), not far from the delivery time.
+    EXPECT_LT(
+      std::llabs(
+        listener.LastReceivedSystemNs() - rclcpp::Time(last.header.stamp).nanoseconds()),
+      500000000);
+    // One message per valid STATUS: the sequence is strictly increasing.
+    for (std::size_t i = 1; i < messages.size(); ++i) {
+      EXPECT_GT(messages[i].status_sequence, messages[i - 1].status_sequence);
+    }
+  }
+
+  // 0.3 % is below the deadband: what was SENT is 0, still from the jtc path.
+  loop->SetVelocity(VelocityForPercent(0.3));
+  std::size_t from = listener.Messages().size() + 5;
+  ASSERT_TRUE(
+    listener.WaitMessage(
+      [](const CriDiagnostics & m) {
+        return m.jog_source == "jtc" && m.jog_percent_sent[3] == 0.0f;
+      }, 3000ms, from));
+
+  // The joint jog mode reports its own source and the percent it sent.
+  loop->SetVelocity(0.0);
+  EnterJoint();
+  joint->StartStream({0.0, VelocityForPercent(0.4), 0.0, 0.0, 0.0, 0.0});
+  EXPECT_TRUE(
+    listener.WaitMessage(
+      [](const CriDiagnostics & m) {
+        return m.jog_source == "joint_jog" && std::fabs(m.jog_percent_sent[1] - 0.4f) < 1e-3;
+      }, 3000ms));
 }
 
 int main(int argc, char ** argv)

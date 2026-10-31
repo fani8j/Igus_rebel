@@ -1073,10 +1073,10 @@ private:
       field<double>("cartesian_step_m", kRO, 0.003, &S::cartesian_step_m),
       field<double>("planning_timeout_s", kRO, 15.0, &S::planning_timeout_s),
       field<double>("velocity_scaling", kRO, 0.1376, &S::velocity_scaling),
-      field<double>("acceleration_scaling", kRO, 0.0954, &S::acceleration_scaling),
+      field<double>("acceleration_scaling", kRO, 0.0763, &S::acceleration_scaling),  // 0.4 rad/s^2
       field<double>("transit_velocity_scaling", kRO, 0.1376, &S::transit_velocity_scaling),
       field<double>(
-        "transit_acceleration_scaling", kRO, 0.0954, &S::transit_acceleration_scaling),
+        "transit_acceleration_scaling", kRO, 0.0763, &S::transit_acceleration_scaling),  // 0.4 rad/s^2
       runtime("execution_enabled", rclcpp::ParameterValue(false)),
       runtime("debug_motion_execution_enabled", rclcpp::ParameterValue(false)),
       field<str>("cut_debug_cut", kPlan, "middle", &S::cut_debug_cut),

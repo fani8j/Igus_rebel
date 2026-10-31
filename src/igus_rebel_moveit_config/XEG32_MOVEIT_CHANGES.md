@@ -416,12 +416,12 @@ order, collision policy, stabilization dwell, and execution gates are unchanged.
 
 Free-space transits (initial approach and inter-segment finish-to-approach
 moves) use dedicated `transit_velocity_scaling` / `transit_acceleration_scaling`
-(`box_h_cut_executor.yaml`: 0.4127 / 0.2863 of the 0.785 rad/s / 5.24 rad/s² joint
-limits, i.e. 0.324 rad/s / 1.50 rad/s², the physical speed of the operator-approved
-0.15 transit scaling of 2026-09-26 at the former limits). Contact
+(`box_h_cut_executor.yaml`: 0.20 / 0.0763 of the 0.785 rad/s / 5.24 rad/s² joint
+limits, i.e. 0.157 rad/s / 0.4 rad/s²). Contact
 descend/traverse/retract strokes use `velocity_scaling` / `acceleration_scaling`
-0.1376 / 0.0954 (0.108 rad/s / 0.50 rad/s², the physical speed of the former 0.05),
-and `pre_cut_stabilization_duration_s` stays 1.0 s, so cutting speed is unchanged.
+0.1376 / 0.0763 (0.108 rad/s / 0.4 rad/s²), and `pre_cut_stabilization_duration_s`
+stays 1.0 s. Accelerations are capped at 0.4 rad/s² since 2026-10-31 (the real arm
+speeds up at ~0.55 rad/s² max).
 All scalings are read-only, finite and within `(0, 1]`; out-of-range values fail
 closed at startup.
 Each free-space transit is wrapped by `NearestBranchTransitPlanner`: a pose goal is

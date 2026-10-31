@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "igus_rebel/CriMessages.hpp"
 
@@ -15,6 +16,41 @@ namespace Igus
 {
 // jog [%] = JOINT_VELOCITY_SCALE * velocity [deg/s]. Empirical scale of the original driver.
 constexpr double JOINT_VELOCITY_SCALE = 2.0;
+// Optional hardware parameter jog_velocity_scale replaces JOINT_VELOCITY_SCALE (default unchanged).
+// Sanity range: a lower value commands LESS jog per velocity, a higher one more; the +-100 % jog
+// clamp applies in every case.
+constexpr double kMinJogVelocityScale = 0.5;
+constexpr double kMaxJogVelocityScale = 4.0;
+
+// ---- Cartesian jog (CRI "CMD MotionTypeCartBase" + ALIVEJOG X Y Z A B C), see Safety::CartJog* ----
+// The two scales are PLACEHOLDERS: how many percent of the controller's maximum Cartesian speed one
+// m/s or one rad/s corresponds to, and the meaning of the A/B/C axes, are NOT documented and have
+// NOT been measured on the arm yet (to be measured on the real robot). The real protection is the
+// per-axis clamp kDefaultCartJogMaxPercent (10 %), whatever the true mapping is; the first real
+// test must be done at low speed with the operator at the e-stop.
+constexpr double kDefaultCartJogPercentPerMps = 200.0;    // 0.05 m/s -> 10 % (unmeasured)
+constexpr double kDefaultCartJogPercentPerRadps = 100.0;  // 0.10 rad/s -> 10 % (unmeasured)
+constexpr double kDefaultCartJogMaxPercent = 10.0;
+constexpr double kDefaultCartJogTimeoutS = 0.15;
+constexpr double kMinCartJogTimeoutS = 0.03;
+constexpr double kMaxCartJogTimeoutS = 1.0;
+// No cart_jog_cmd for this long while the mode is on: leave it (0 disables). Covers a teleop that
+// died (SIGKILL) and left the controller in Cartesian mode.
+constexpr double kDefaultCartJogIdleExitS = 10.0;
+constexpr double kMaxCartJogIdleExitS = 3600.0;
+constexpr double kMaxCartJogScale = 2000.0;  // sanity bound of the two scale parameters
+constexpr const char * kDefaultCartJogBaseFrame = "base_link";
+
+// ---- Direct joint jog (~/joint_jog_enable, ~/joint_jog_cmd): ALIVEJOG joint % in MotionTypeJoint ----
+// jog_i [%] = jog_velocity_scale * velocity_i [deg/s], clamped to +-joint_jog_max_percent. The mode
+// switches nothing on the controller; the real protection is that clamp (10 % by default).
+constexpr double kDefaultJointJogMaxPercent = 10.0;
+constexpr double kDefaultJointJogTimeoutS = 0.15;
+constexpr double kMinJointJogTimeoutS = 0.03;
+constexpr double kMaxJointJogTimeoutS = 1.0;
+// No joint_jog_cmd for this long while the mode is on: leave it (0 disables).
+constexpr double kDefaultJointJogIdleExitS = 10.0;
+constexpr double kMaxJointJogIdleExitS = 3600.0;
 
 namespace Safety
 {
@@ -133,8 +169,100 @@ struct JogCommand
 };
 
 // Converts a joint velocity command [rad/s] to a CRI jog percentage:
-// JOINT_VELOCITY_SCALE * velocity / degToRad, non-finite -> 0, clamped to [-100, 100].
-JogCommand JogPercentFromVelocity(double velocityRadPerSec);
+// scale * velocity / degToRad (scale defaults to JOINT_VELOCITY_SCALE), non-finite -> 0, clamped
+// to [-100, 100].
+JogCommand JogPercentFromVelocity(
+  double velocityRadPerSec, double scale = JOINT_VELOCITY_SCALE);
+
+// Largest accepted value of the driver parameter jtc_jog_deadband_percent.
+constexpr double kMaxJtcJogDeadbandPercent = 2.0;
+
+// True if `deadbandPercent` is finite and within [0, kMaxJtcJogDeadbandPercent].
+bool IsValidJogDeadband(double deadbandPercent);
+
+// Optional deadband of the ros2_control (JTC) jog path only: every joint whose |percent| is
+// strictly below `deadbandPercent` is set to 0.0; |percent| == deadband is kept, the sign of a
+// kept value is unchanged. A deadband <= 0, NaN or infinite (invalid) changes nothing, and a
+// non-finite jog value is passed through untouched (FormatAliveJog turns it into 0 as before).
+// Never apply this to the Cartesian jog, the joint jog topic or the move_joint paths.
+std::array<float, 6> ApplyJogDeadband(
+  const std::array<float, 6> & jogPercent, double deadbandPercent);
+
+// Parses the optional hardware parameter jog_velocity_scale. True and *scale set only for a
+// finite number in [kMinJogVelocityScale, kMaxJogVelocityScale] with no trailing characters.
+bool ParseJogVelocityScale(const std::string & text, double & scale);
+
+struct CartJogConfig
+{
+  double percentPerMps = kDefaultCartJogPercentPerMps;
+  double percentPerRadps = kDefaultCartJogPercentPerRadps;
+  double maxPercent = kDefaultCartJogMaxPercent;  // per-axis clamp, <= 100
+  bool allowRotation = false;
+  // Per-axis sign (+1 or -1) for x, y, z, rx, ry, rz -> ALIVEJOG slots 1..6.
+  std::array<double, 6> sign{1.0, 1.0, 1.0, 1.0, 1.0, 1.0};
+  double timeoutS = kDefaultCartJogTimeoutS;
+  double idleExitS = kDefaultCartJogIdleExitS;
+  std::string baseFrame = kDefaultCartJogBaseFrame;
+};
+
+struct CartJogResult
+{
+  std::array<float, 6> percent{};
+  bool nonFinite = false;        // at least one input axis was NaN/inf (that axis is 0)
+  bool saturated = false;        // at least one axis was clamped to maxPercent
+  bool rotationDropped = false;  // rotation disabled and a non-zero angular input was zeroed
+};
+
+// twist = {vx, vy, vz [m/s], wx, wy, wz [rad/s]}. percent = sign * scale * value, non-finite -> 0,
+// each axis clamped to +-min(maxPercent, 100); angular axes are 0 unless allowRotation.
+CartJogResult CartJogFromTwist(const CartJogConfig & config, const std::array<double, 6> & twist);
+
+struct JointJogConfig
+{
+  double maxPercent = kDefaultJointJogMaxPercent;  // per-joint clamp, <= 100
+  double timeoutS = kDefaultJointJogTimeoutS;
+  double idleExitS = kDefaultJointJogIdleExitS;
+};
+
+struct JointJogResult
+{
+  std::array<float, 6> percent{};
+  bool nonFinite = false;  // at least one input was NaN/inf (that joint is 0)
+  bool saturated = false;  // at least one joint was clamped to maxPercent
+};
+
+// velocities in rad/s per hardware joint (0 for joints not commanded). percent =
+// JogPercentFromVelocity(v, scale), non-finite -> 0, then clamped to +-min(maxPercent, 100).
+JointJogResult JointJogFromVelocities(
+  double scale, double maxPercent, const std::array<double, 6> & velocities);
+
+// Maps a JointJog message onto the hardware's six joints. `names` and `velocities` must have the
+// same length, every name must be one of `hardwareJoints` exactly once, and `displacements` must be
+// empty. On success `out` holds the velocity per hardware joint (0 for joints not listed). On
+// failure `out` is all zero and `error` says why; the whole message is to be rejected.
+bool MapJointJogMessage(
+  const std::array<std::string, 6> & hardwareJoints, const std::vector<std::string> & names,
+  const std::vector<double> & velocities, std::size_t displacementCount,
+  std::array<double, 6> & out, std::string & error);
+
+// Direct jog (cart_jog_cmd / joint_jog_cmd) command lifetime, counted from the message STAMP and
+// not from its receipt: timeout - age, with age clamped to >= 0 (a stamp slightly in the future
+// gets the full timeout) and the result clamped to [0, timeout]. A message that sat in a queue or
+// in a paused callback for part of its timeout therefore expires on time.
+std::int64_t JogCommandLifetimeNs(double timeoutS, double ageS);
+
+// Replay / ordering rule inside one jog session: a command is accepted only if its stamp is
+// strictly newer than the newest accepted one (0 = none yet). Duplicates and older stamps are
+// rejected whatever their age.
+bool JogStampIsNewer(std::int64_t stampNs, std::int64_t lastAcceptedStampNs);
+
+// Parsers of the optional cart_jog_* hardware parameters (the whole string must parse).
+bool ParseBoundedNumber(const std::string & text, double minimum, double maximum, double & value);
+bool ParseBoolText(const std::string & text, bool & value);
+// "1,1,-1,1,1,1" (also space separated): six values, each exactly +1 or -1.
+bool ParseCartJogSigns(const std::string & text, std::array<double, 6> & signs);
+// Non-empty; letters, digits, '_', '/', '.', '-' only.
+bool IsValidFrameName(const std::string & name);
 
 // True if the last command is older than timeout, or if no command was ever written
 // (lastWrite == time_point{}).

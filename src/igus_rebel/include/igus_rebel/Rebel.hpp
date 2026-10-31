@@ -16,12 +16,18 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
+#include "rclcpp/node_interfaces/node_parameters_interface.hpp"
 #include "rclcpp_lifecycle/state.hpp"
 #include "igus_rebel_msgs/action/move_joint.hpp"
+#include "igus_rebel_msgs/msg/cri_diagnostics.hpp"
 #include "igus_rebel_msgs/msg/digital_output.hpp"
 #include "igus_rebel_msgs/msg/hardware_state.hpp"
+#include "igus_rebel_msgs/msg/robot_cart_pose.hpp"
+#include "geometry_msgs/msg/twist_stamped.hpp"
+#include "control_msgs/msg/joint_jog.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 #include "igus_rebel_msgs/srv/set_digital_output.hpp"
+#include "std_srvs/srv/set_bool.hpp"
 #include "std_srvs/srv/trigger.hpp"
 #include <hardware_interface/system_interface.hpp>
 
@@ -111,6 +117,9 @@ private:
   std::string nodeName_ = kDefaultNodeName;
   std::string digitalOutputService_ = kDefaultDigitalOutputService;
   std::string trajectoryControllerName_ = kDefaultTrajectoryControllerName;
+  // Optional hardware parameter jog_velocity_scale: jog [%] = scale * velocity [deg/s]. Default is
+  // JOINT_VELOCITY_SCALE (2.0); set once in on_init, read-only afterwards.
+  double jogVelocityScale_ = JOINT_VELOCITY_SCALE;
   // Optional hardware parameter fault_group: Rebel instances in one process with the same group
   // name stop together (see FaultGroup.hpp). Empty = not in a group = no change in behaviour.
   // faultMember_ is created before the message thread starts (so it can be read there without
@@ -263,6 +272,182 @@ private:
   // perform_command_mode_switch, which cannot refuse the switch: Humble still activates the
   // controllers). The move thread aborts and latches on it; cleared when a move starts.
   std::atomic<bool> claimDuringMove_{false};
+  // ---- State shared by the two direct jog modes (Cartesian jog and joint jog) ----
+  // Latest accepted command of one mode. Written by the subscription thread (CommitDirectJogCmd),
+  // read by the ALIVEJOG thread (target/lastCmdNs/deadline under `lock`; the atomics also by
+  // AliveFrameStillValid() under the socket write lock, which may only use atomics).
+  struct DirectJogCmd
+  {
+    std::mutex lock;                  // held for a few instructions only
+    std::array<float, 6> target{};    // jog [%]; all zero = no motion
+    std::int64_t lastCmdNs = 0;       // steady ns of the last accepted command (idle-exit reference)
+    std::int64_t lastStampNs = 0;     // ROS ns of the newest accepted stamp of THIS session; 0 = none
+    // Steady ns after which the target must no longer be sent: receipt + (timeout - age of the
+    // stamp at receipt), so a command that was already old when it arrived expires on time.
+    // 0 = no command / expired.
+    std::atomic<std::int64_t> deadlineNs{0};
+    // Incremented on every commit to `target`, including zeroing for an invalid / rejected message
+    // and every session reset. A frame remembers the revision it was built from.
+    std::atomic<std::uint64_t> revision{0};
+    std::atomic<bool> nonZero{false};  // the current target has a non-zero element
+  };
+  // Session generation of the direct jog modes (one counter for both): incremented on every entry
+  // AND every exit / reset path (service enter/leave, RequestCartExit, RequestJointJogExit, latch,
+  // reconnect, deactivate, ...). The ALIVEJOG thread captures it before it builds a frame and a
+  // command callback captures it before it validates a message; a frame / commit made in an older
+  // session is dropped even if the mode is "active" again by then (disable + re-enable).
+  std::atomic<std::uint64_t> jogGeneration_{0};
+  void BumpJogGeneration() {jogGeneration_.fetch_add(1);}
+  // What an ALIVEJOG frame was built from (captured by the ALIVEJOG thread; generation FIRST).
+  struct AliveFrameBuild
+  {
+    std::uint64_t generation = 0;
+    int cartState = 0;       // CartState
+    int jointJogState = 0;   // JointJogState
+    std::uint64_t revision = 0;  // DirectJogCmd::revision of the active direct mode at build
+  };
+  enum class JogCommit {kCommitted, kModeOff, kSessionChanged, kStamp, kReplay};
+
+  // ---- Cartesian jog mode (CRI "CMD MotionTypeCartBase"), see SetCartJogEnabled() ----
+  // The controller does the IK: ~/cart_jog_cmd (TwistStamped, base frame) is converted to jog [%]
+  // for X Y Z A B C and sent in the same ALIVEJOG stream. Off by default; every hardware parameter
+  // (cart_jog_*) leaves the joint-jog behaviour byte-identical while the mode is never entered.
+  //   Off -> Entering (SetCartJogEnabled(true) checked, MotionTypeCartBase sent) -> Active (CMDACK
+  //   and a STATUS with MODE cartbase seen) -> [exit requested] -> Off (MotionTypeJoint CMDACK and
+  //   a STATUS with MODE joint). Every exit except the explicit service call (latch, peer fault,
+  //   deactivate, error, claim, timeout) only sets cartExitRequested_ (lock-free); the ALIVEJOG
+  //   thread then sends zero jog and MotionTypeJoint until confirmed (CartExitStep). A (re)connect
+  //   goes straight to Off because OnConnected() re-sends MotionTypeJoint.
+  enum CartState : int {kCartOff = 0, kCartEntering = 1, kCartActive = 2};
+  struct TrackedCommand
+  {
+    std::atomic<int> counter{-1};  // CRI counter of the tracked CMD; -1 = none
+    std::atomic<bool> acked{false};
+    std::atomic<bool> rejected{false};
+  };
+  Safety::CartJogConfig cartConfig_;  // set in on_init, read-only afterwards
+  std::atomic<int> cartState_{kCartOff};
+  std::atomic<bool> cartExitRequested_{false};
+  // One enter/leave at a time (service threads, tests).
+  std::mutex cartTransitionLock_;
+  // Latest accepted cart_jog_cmd (jog [%], receipt time, stamp order, deadline, revision).
+  DirectJogCmd cartCmd_;
+  TrackedCommand cartEnterCmd_;
+  TrackedCommand cartExitCmd_;
+  // STATUS MODE of the latest STATUS (CriMessages::Mode as int) and a counter that counts STATUS
+  // messages; the mode is stored before the counter is incremented (message thread).
+  std::atomic<int> statusMode_{static_cast<int>(CriMessages::Mode::UNKNOWN)};
+  std::atomic<std::uint64_t> statusModeSeq_{0};
+  CriMessages::Mode lastLoggedMode_ = CriMessages::Mode::UNKNOWN;  // message thread only
+  // steady ns when the mode last became Active (idle auto-exit reference); 0 = not active.
+  std::atomic<std::int64_t> cartActiveSinceNs_{0};
+  // node clock (ROS time) ns of the same instant: cart_jog_cmd stamps before it are rejected.
+  std::atomic<std::int64_t> cartActiveSinceRosNs_{0};
+  // ALIVEJOG thread only: STATUS mode vs driver state cross-check (see ModeGuardZeroesJog).
+  bool modeMismatch_ = false;
+  Safety::SteadyClock::time_point modeMismatchSince_{};
+  bool modeMismatchLatched_ = false;
+  std::array<float, 6> cartLastSent_{};
+  bool cartWasStale_ = true;
+  bool cartExitActive_ = false;
+  Safety::SteadyClock::time_point cartExitFirstAt_{};
+  Safety::SteadyClock::time_point cartExitLastSendAt_{};
+  std::uint64_t cartExitSeqAtSend_ = 0;
+  bool cartExitSent_ = false;
+  bool cartExitTimeoutLatched_ = false;
+  rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr cartJogSrv_;
+  rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr cartJogSub_;
+  rclcpp::CallbackGroup::SharedPtr cartSrvGroup_;
+  rclcpp::CallbackGroup::SharedPtr cartCmdGroup_;
+
+  bool EnterCartJog(std::string & message);
+  bool LeaveCartJog(std::string & message);
+  // Lock-free; callable from any thread/path that latches, faults or deactivates.
+  void RequestCartExit();
+  // ALIVEJOG thread: drives a pending exit (zero jog is guaranteed by the caller's inhibit).
+  void CartExitStep();
+  // ALIVEJOG thread: true if the latest STATUS MODE contradicts the driver's jog mode (jog is then
+  // sent as zero). Active but not cartbase -> leave the mode; Off but cartbase/carttool for longer
+  // than a grace period (a MotionTypeJoint that did not take) -> latch. Unknown mode: never trips.
+  bool ModeGuardZeroesJog(Safety::SteadyClock::time_point now);
+  // ALIVEJOG thread: leaves the mode after cart_jog_idle_exit_s without a cart_jog_cmd.
+  void CartIdleStep(Safety::SteadyClock::time_point now);
+  // ALIVEJOG thread: jog [%] to send in the Cartesian mode (watchdog, coast freeze).
+  // `revision` receives the DirectJogCmd revision the returned frame was built from.
+  std::array<float, 6> CartJogForTransmit(
+    Safety::SteadyClock::time_point now, std::uint64_t & revision);
+  void OnCartJogCmd(const geometry_msgs::msg::TwistStamped & msg);
+  // Resets the mode bookkeeping to "off" (on_init, OnConnected).
+  void ResetCartJogState();
+
+  // ---- Direct joint jog mode, see SetJointJogEnabled() ----
+  // ~/joint_jog_cmd (control_msgs/JointJog, rad/s per named hardware joint) is converted to joint
+  // ALIVEJOG [%] with the same scale as the controller path and sent in the same stream. The robot
+  // stays in MotionTypeJoint (no CRI mode switch), so there is no entering/leaving handshake:
+  // Off <-> Active, both transitions are instant and every exit is lock-free (jointJogState_ is set
+  // to off; the ALIVEJOG thread then builds the next frame from jog[], which is zero). Exclusive
+  // with the Cartesian jog mode and with every other jog source (controller claims, joint moves).
+  enum JointJogState : int {kJointJogOff = 0, kJointJogActive = 1};
+  Safety::JointJogConfig jointJogConfig_;  // set in on_init, read-only afterwards
+  std::atomic<int> jointJogState_{kJointJogOff};
+  // Held for a few instructions only (subscription thread <-> ALIVEJOG thread). One enter/leave at
+  // a time through jointJogTransitionLock_.
+  std::mutex jointJogTransitionLock_;
+  DirectJogCmd jointCmd_;  // latest accepted joint_jog_cmd
+  std::atomic<std::int64_t> jointJogActiveSinceNs_{0};
+  std::atomic<std::int64_t> jointJogActiveSinceRosNs_{0};
+  std::atomic<bool> jointJogWasStale_{true};  // log edge only; set at entry, flipped by the ALIVEJOG thread
+  rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr jointJogSrv_;
+  rclcpp::Subscription<control_msgs::msg::JointJog>::SharedPtr jointJogSub_;
+  rclcpp::CallbackGroup::SharedPtr jointSrvGroup_;
+  rclcpp::CallbackGroup::SharedPtr jointCmdGroup_;
+
+  bool EnterJointJog(std::string & message);
+  bool LeaveJointJog(std::string & message);
+  // Lock-free and allocation-free; callable from any thread/path that latches, faults or deactivates.
+  void RequestJointJogExit();
+  // ALIVEJOG thread: leaves the mode after joint_jog_idle_exit_s without a joint_jog_cmd.
+  void JointJogIdleStep(Safety::SteadyClock::time_point now);
+  // ALIVEJOG thread: jog [%] to send in the joint jog mode (watchdog, no coast).
+  std::array<float, 6> JointJogForTransmit(
+    Safety::SteadyClock::time_point now, std::uint64_t & revision);
+  void OnJointJogCmd(const control_msgs::msg::JointJog & msg);
+  void ResetJointJogState();
+  // Evaluated by the socket under its write lock right before a non-zero ALIVEJOG goes out: atomics
+  // only. Besides latch / hold / move / connection (the socket) it requires the same jog session
+  // (generation), the same mode states, and for a frame built in a direct jog mode: no controller
+  // claim, STATUS not coasting, the expected STATUS MODE, an unexpired command deadline, and that
+  // the command was not replaced by an all-zero one since the frame was built.
+  // A frame already handed to the kernel / TCP cannot be retracted: a stop that lands after this
+  // check can be preceded by at most one ALIVEJOG frame (one transmit period) built before it.
+  bool AliveFrameStillValid(const AliveFrameBuild & build) const;
+  bool DirectJogActive(bool cart) const
+  {
+    return cart ? (cartState_.load() == kCartActive && !cartExitRequested_.load()) :
+           jointJogState_.load() == kJointJogActive;
+  }
+  // Commits one command to `cmd` under its lock, after re-checking that the mode is still active,
+  // that the session generation is the one captured at the start of the callback, and (when
+  // `percent` is non-null) that the stamp still passes JogStampRejection() and is newer than the
+  // newest accepted stamp. `percent == nullptr` commits an all-zero target for an invalid message
+  // (watchdog and stamp order untouched). Otherwise drops without changing the target.
+  JogCommit CommitDirectJogCmd(
+    DirectJogCmd & cmd, bool cart, std::uint64_t generationAtStart,
+    const std::array<float, 6> * percent, const builtin_interfaces::msg::Time * stamp,
+    double timeoutS, const std::atomic<std::int64_t> & activeSinceRosNs, const char *& why,
+    double & ageS);
+  // Clears a direct jog command (session start / end): zero target, no deadline, no stamp order,
+  // revision bumped.
+  static void ClearDirectJogCmd(DirectJogCmd & cmd);
+  // Shared by the two direct jog modes. Empty string = acceptable; otherwise why the header.stamp is
+  // rejected (zero, older than the watchdog, too far in the future, before the mode entry).
+  const char * JogStampRejection(
+    const builtin_interfaces::msg::Time & stamp, double timeoutS, std::int64_t activeSinceRosNs,
+    double & ageS) const;
+  // ALIVEJOG thread: true if a STATUS gap (coast tier or worse, or a stale snapshot) forbids any
+  // non-zero direct jog: those modes never coast.
+  bool StatusGapZeroesDirectJog(Safety::SteadyClock::time_point now);
+
   // Serializes the actual CMD Move Stop send (ALIVEJOG thread, Stop()) with the CMD Move Joint
   // send, and makes "may this move still go out?" atomic with the send.
   // Lock order (outer -> inner), never the reverse:
@@ -278,6 +463,8 @@ private:
   std::shared_ptr<std::function<void()>> beforeMoveSendHook_;
   std::shared_ptr<std::function<void()>> beforeHandleMessageHook_;
   std::shared_ptr<std::function<void()>> beforeMoveFinishHook_;
+  std::shared_ptr<std::function<void()>> beforeAliveSendHook_;
+  std::shared_ptr<std::function<void(bool)>> beforeJogCommitHook_;
   // STATUS showed joint motion since the current/last CMD Move Joint was sent (see
   // ExecuteMoveGoal): standstill only confirms a Move Stop for a robot that was moving.
   std::atomic<bool> moveMotionSeen_{false};
@@ -299,6 +486,34 @@ private:
   std::int64_t pubLastStampNs_ = 0;  // steady ns of the sample pubLastPos_ belongs to; 0 = none
   std::array<double, 6> pubVel_{};
   bool pubVelValid_ = false;
+  // ~/robot_cart_pose: the controller's own POSCARTROBOT of the same STATUS sample (raw), with
+  // that sample's joint angles. Message thread only; diagnostic, never read by any control path.
+  rclcpp::Publisher<igus_rebel_msgs::msg::RobotCartPose>::SharedPtr robotCartPosePub_;
+  // ~/cri_diagnostics: raw per-joint CURRENTJOINTS, set-point/actual position and the jog percent
+  // of the last ALIVEJOG frame, once per valid STATUS (message thread). Read-only instrumentation:
+  // nothing here is read by any control path.
+  rclcpp::Publisher<igus_rebel_msgs::msg::CriDiagnostics>::SharedPtr criDiagnosticsPub_;
+  void PublishCriDiagnostics(const JointSnapshot & sample, const CriMessages::Status & status);
+  // Where the most recent ALIVEJOG frame came from (jog_source of ~/cri_diagnostics).
+  enum JogSource : int
+  {
+    kJogSourceNone = 0,       // ALIVEJOG not being transmitted
+    kJogSourceJtc = 1,        // the ros2_control write() path (jog[])
+    kJogSourceJointJog = 2,   // ~/joint_jog_cmd
+    kJogSourceCartJog = 3,    // ~/cart_jog_cmd
+    kJogSourceStale = 4,      // no fresh write(): watchdog zero
+    kJogSourceInhibited = 5,  // latch / hold / move / pending stop / mode guard: zero
+    kJogSourceDropped = 6     // a prepared non-zero frame was rejected, zero went out instead
+  };
+  // Written by the ALIVEJOG thread after each frame, read lock-free by the message thread. The six
+  // values and the source are separate atomics: a reader may see a mix of two adjacent frames.
+  std::array<std::atomic<float>, 6> lastSentJog_;
+  std::atomic<int> lastSentSource_{kJogSourceNone};
+  void StoreLastSent(const std::array<float, 6> & jogPercent, int source);
+  // Optional deadband [%] of the ros2_control (JTC) jog path only (parameter
+  // jtc_jog_deadband_percent of the driver node, [0, 2], default 0 = off). Applied in write().
+  std::atomic<double> jtcJogDeadbandPercent_{0.0};
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr paramCallbackHandle_;
   // ~/hardware_state: a timer (own callback group, so reset_and_enable cannot stall it) polls
   // every kTelemetryPollPeriod and publishes at 10 Hz and immediately when a flag changed.
   rclcpp::Publisher<igus_rebel_msgs::msg::HardwareState>::SharedPtr hardwareStatePub_;
@@ -309,6 +524,7 @@ private:
   std::int64_t hwPubLastNs_ = 0;
   std::uint64_t hwPubLastVersion_ = 0;
   void PublishRobotJointStates(const JointSnapshot & sample);
+  void PublishRobotCartPose(const JointSnapshot & sample, const CriMessages::Status & status);
   void PublishHardwareState();
   void SetLatchReason(const std::string & reason);
   void ClearLatchReason();
@@ -336,7 +552,7 @@ private:
   // Other functions
   int Ccnt();
   // quiet: no warning when the send fails (used by the repeated Move Stop retry).
-  bool Command(const std::string &, bool quiet = false);
+  bool Command(const std::string &, bool quiet = false, TrackedCommand * tracked = nullptr);
   void OnConnected(bool reconnect);
   void ZeroJog();
   // Latches the hardware error. If it was not latched yet and this instance is in a fault group,
@@ -431,6 +647,53 @@ public:
       hook ? std::make_shared<std::function<void()>>(std::move(hook)) :
       std::shared_ptr<std::function<void()>>());
   }
+  // Cartesian jog mode (service ~/cart_jog_enable). enable=true refuses (false, reason in
+  // `message`) unless the component is active and not latched, STATUS is fresh, no joint move or
+  // Move Stop is pending and NO controller claims a command interface of this arm; it then sends
+  // CMD MotionTypeCartBase and waits (max 2 s) for CMDACK and STATUS MODE cartbase. enable=false
+  // zeroes the jog and sends CMD MotionTypeJoint, confirmed the same way. Blocks up to ~3 s.
+  bool SetCartJogEnabled(bool enable, std::string & message);
+  // True while the mode is confirmed on and no exit is pending.
+  bool CartJogActive() const {return cartState_.load() == kCartActive && !cartExitRequested_.load();}
+  // 0 off, 1 entering, 2 active, 3 leaving (exit requested, MotionTypeJoint not confirmed yet).
+  int CartJogStateValue() const
+  {
+    const int state = cartState_.load();
+    return (state != kCartOff && cartExitRequested_.load()) ? 3 : state;
+  }
+  const Safety::CartJogConfig & CartJogSettings() const {return cartConfig_;}
+  // Direct joint jog mode (service ~/joint_jog_enable). enable=true refuses (false, reason in
+  // `message`) on the same conditions as the Cartesian jog mode, and additionally while the
+  // Cartesian jog mode is not off; it sends nothing to the controller (the robot stays in
+  // MotionTypeJoint) and requires STATUS mode joint. enable=false zeroes the jog at once.
+  bool SetJointJogEnabled(bool enable, std::string & message);
+  bool JointJogActive() const {return jointJogState_.load() == kJointJogActive;}
+  int JointJogStateValue() const {return jointJogState_.load();}
+  const Safety::JointJogConfig & JointJogSettings() const {return jointJogConfig_;}
+  // Runs in the ALIVEJOG thread after a NON-ZERO frame was built, right before it is sent (nullptr
+  // clears): a test can hold the thread there across a reconnect.
+  void SetBeforeAliveSendHookForTest(std::function<void()> hook)
+  {
+    std::atomic_store(
+      &beforeAliveSendHook_,
+      hook ? std::make_shared<std::function<void()>>(std::move(hook)) :
+      std::shared_ptr<std::function<void()>>());
+  }
+  // Runs in the cart_jog_cmd / joint_jog_cmd callback (argument true = Cartesian) after the message
+  // was validated and right before the commit under the command lock (nullptr clears): a test can
+  // hold the callback there across a mode exit + re-entry.
+  void SetBeforeJogCommitHookForTest(std::function<void(bool)> hook)
+  {
+    std::atomic_store(
+      &beforeJogCommitHook_,
+      hook ? std::make_shared<std::function<void(bool)>>(std::move(hook)) :
+      std::shared_ptr<std::function<void(bool)>>());
+  }
+  std::uint64_t JogGeneration() const {return jogGeneration_.load();}
+  // Pretends a controller claims velocity interfaces (bit i = joint i) without latching; 0 clears.
+  void SetVelocityClaimMaskForTest(unsigned mask) {velocityClaimMask_.store(mask);}
+  // Overrides the remembered STATUS mode (CriMessages::Mode as int) until the next STATUS.
+  void SetStatusModeForTest(int mode) {statusMode_.store(mode);}
   bool StatusCoastActive() const {return statusCoast_.load();}
   bool HardwareErrorLatched() const {return hardwareErrorLatched_.load();}
   // Fault groups: drive/kinematics errors are only monitored once armed (see RebelSafety.hpp),

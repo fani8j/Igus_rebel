@@ -12,8 +12,10 @@ find_package(std_msgs REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/CriDiagnostics.msg"
   "msg/DigitalOutput.msg"
   "msg/HardwareState.msg"
+  "msg/RobotCartPose.msg"
   "srv/SetDigitalOutput.srv"
   "srv/SetCartesianIncrement.srv"
   "action/MoveJoint.action"

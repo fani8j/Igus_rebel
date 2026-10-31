@@ -20,26 +20,23 @@ rebel_arm_trajectory_controller:
     command_interfaces: [velocity]
     state_interfaces: [position, velocity]
 
-    # D gains are 0: in the 2026-09-09 tuning runs d = 0 ... 0.05 made no measurable
-    # difference (RMS/peak error within run-to-run noise), and the D term acts on the
-    # velocity estimated from 20-30 ms STATUS samples, which only adds noise.
-    # 2026-09-30 sim-tuned candidate (NOT yet run on the real arm with these values). The
-    # 2026-09-09 gains (p 4, ff 1.0/0.9) were tuned with the robot override at ~30-37 %; the driver
-    # now sends Override 100. A real joint1 +25 deg move with the old gains at override 100
-    # (0.324 rad/s, 1.5 rad/s^2) overshot 15.5 deg and rang for 6 s. Fit of that recording (rms
-    # 0.14 deg): plant gain 1.26, delay 0.078 s, velocity lag tau 0.16 s and a robot-side
-    # acceleration limit of ~0.52 rad/s^2. A loopback fake robot with that plant reproduces the
-    # real move (14-16 deg overshoot); there p 1.0 / ff 0.4 gives 0 overshoot and ~2.1-2.4 s to
-    # within 1 deg for 25 deg moves at 0.324 rad/s (planned accel 1.5 or 0.5) and at 0.108 rad/s.
-    # Planned decelerations above ~0.5 rad/s^2 exceed what the robot can follow, so keep transit
-    # acceleration scaling near 0.1 (0.5 rad/s^2) too. Re-verify on the arm with small moves.
+    # Gains validated on the real left arm 2026-10-31 together with jog_velocity_scale 1.65
+    # (launch/xacro default; they assume that scale). History: 2026-09-09 p 4 / ff 1.0 (tuned at
+    # robot override ~30-37 %) overshot 15.5 deg at override 100; 2026-09-30 p 1 / ff 0.4 (sim);
+    # 2026-10-26 sim fit scale 1.65 + p 3 / ff 0.6 + planned accel cap 0.4 rad/s^2. Real ladder
+    # S0-S7: 0 overshoot, final error 0.000 deg, settle to 0.05 deg in 0.08-0.2 s (the one
+    # peak/plan 1.11 "fail" is STATUS stamp jitter in the 0.2 s window metric). The robot speeds up
+    # at ~0.55 rad/s^2 max (brakes on zero jog at ~1.5), so keep planned accelerations <= 0.4 rad/s^2
+    # (box_h_cut_executor.yaml). D = 0: it acts on a velocity estimated from 20-30 ms STATUS samples
+    # and only adds noise. Evidence: scan_results/jtc_tracking_real_20261026/run_real_20261031_A/ and
+    # scan_results/jog_speed_check_20261031/.
     gains:
-      joint1: { p: 1.0, i: 0.0, d: 0.0, i_clamp: 0.0, ff_velocity_scale: 0.4 }
-      joint2: { p: 1.0, i: 0.0, d: 0.0, i_clamp: 0.0, ff_velocity_scale: 0.4 }
-      joint3: { p: 1.0, i: 0.0, d: 0.0, i_clamp: 0.0, ff_velocity_scale: 0.4 }
-      joint4: { p: 1.0, i: 0.0, d: 0.0, i_clamp: 0.0, ff_velocity_scale: 0.4 }
-      joint5: { p: 1.0, i: 0.0, d: 0.0, i_clamp: 0.0, ff_velocity_scale: 0.4 }
-      joint6: { p: 1.0, i: 0.0, d: 0.0, i_clamp: 0.0, ff_velocity_scale: 0.4 }
+      joint1: { p: 3.0, i: 0.0, d: 0.0, i_clamp: 0.0, ff_velocity_scale: 0.6 }
+      joint2: { p: 3.0, i: 0.0, d: 0.0, i_clamp: 0.0, ff_velocity_scale: 0.6 }
+      joint3: { p: 3.0, i: 0.0, d: 0.0, i_clamp: 0.0, ff_velocity_scale: 0.6 }
+      joint4: { p: 3.0, i: 0.0, d: 0.0, i_clamp: 0.0, ff_velocity_scale: 0.6 }
+      joint5: { p: 3.0, i: 0.0, d: 0.0, i_clamp: 0.0, ff_velocity_scale: 0.6 }
+      joint6: { p: 3.0, i: 0.0, d: 0.0, i_clamp: 0.0, ff_velocity_scale: 0.6 }
 
     # Trajectory tolerances. Chosen from the 2026-09-09 real-arm tuning bags
     # (~/rebel_controller_tuning, best gains, velocity scaling 0.1): normal tracking lag

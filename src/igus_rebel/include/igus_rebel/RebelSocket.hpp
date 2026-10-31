@@ -82,6 +82,17 @@ public:
   // and the receive thread reconnects).
   bool SendMessage(const std::string &);
 
+  enum class SendResult {kSent, kNotValid, kFailed};
+  // Sends only if the connection is still number `expectedConnectionCount` and `stillValid()`
+  // (called with the write lock held, right before the bytes go out) returns true. The check and
+  // the send are atomic with respect to every other sender and to a connection change (which
+  // swaps the descriptor and the count under the same lock): a frame prepared for an old
+  // connection or an old driver state can never reach the wire later. `stillValid` must be
+  // short, lock-free and must not call back into the socket.
+  SendResult SendMessageIf(
+    const std::string & msg, std::uint64_t expectedConnectionCount,
+    const std::function<bool()> & stillValid);
+
 private:
   std::string ip;
   int port;
@@ -115,6 +126,9 @@ private:
   void PushMessages(std::vector<std::string> && messages);  // stamps the receive time
   void ReceiveThreadFunction();
   void InterruptibleSleep(std::chrono::milliseconds duration);
+  SendResult SendLocked(
+    const std::string & msg, const std::function<bool()> * stillValid,
+    std::uint64_t expectedConnectionCount);
 };
 }  // namespace Igus
 

@@ -28,3 +28,7 @@ int32 kinstate                           # kinematics state of the latest STATUS
 bool activated                           # component is ACTIVE (read()/write() are being called)
 float64 move_joint_max_velocity_percent      # configured cap on a move_joint goal's velocity_percent, in % (after the 100 % hard-cap clamp); constant
 float64 move_joint_max_acceleration_percent  # configured cap on a move_joint goal's acceleration_percent, in % (after the hard-cap clamp); constant
+bool cart_jog_active                     # Cartesian jog mode (CRI MotionTypeCartBase) is on and confirmed; the joint vel_cmd path is ignored
+string cart_jog_state                    # "off" | "entering" | "active" | "leaving" (leaving = MotionTypeJoint not yet confirmed)
+bool joint_jog_active                    # direct joint jog mode (~/joint_jog_enable) is on; the robot stays in MotionTypeJoint and the joint vel_cmd path is ignored
+string joint_jog_state                   # "off" | "active" (no mode switch on the controller, so no entering/leaving state)

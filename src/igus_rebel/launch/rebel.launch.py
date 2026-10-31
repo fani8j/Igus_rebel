@@ -5,7 +5,6 @@ from launch.substitutions import (
     Command,
     FindExecutable,
     LaunchConfiguration,
-    PathJoinSubstitution,
     PythonExpression,
 )
 from launch.actions import DeclareLaunchArgument, RegisterEventHandler
@@ -34,6 +33,81 @@ def generate_launch_description():
         description="CRI controller IPv4 address (192.168.3.11 wired LAN, 192.168.50.133 Wi-Fi)",
     )
 
+    jog_velocity_scale_arg = DeclareLaunchArgument(
+        "jog_velocity_scale",
+        default_value="1.65",
+        description="Joint jog scale: jog [%] = scale * velocity [deg/s]. 1.65 since 2026-10-31 (real left arm: "
+                    "the robot moves 0.600 deg/s per jog %, exact scale 1.667, 10-100 %; the C++ fallback "
+                    "when the parameter is absent stays 2.0). controller.yaml gains assume this scale.",
+    )
+    cart_jog_percent_per_mps_arg = DeclareLaunchArgument(
+        "cart_jog_percent_per_mps",
+        default_value="200.0",
+        description="Cartesian jog (CRI route): jog [%] per m/s of linear speed. UNMEASURED placeholder.",
+    )
+    cart_jog_percent_per_radps_arg = DeclareLaunchArgument(
+        "cart_jog_percent_per_radps",
+        default_value="100.0",
+        description="Cartesian jog: jog [%] per rad/s of angular speed. UNMEASURED placeholder.",
+    )
+    cart_jog_max_percent_arg = DeclareLaunchArgument(
+        "cart_jog_max_percent",
+        default_value="10.0",
+        description="Cartesian jog: per-axis clamp [%].",
+    )
+    cart_jog_allow_rotation_arg = DeclareLaunchArgument(
+        "cart_jog_allow_rotation",
+        default_value="false",
+        description="Cartesian jog: false zeroes the angular input (true only after measuring A/B/C).",
+    )
+    cart_jog_signs_arg = DeclareLaunchArgument(
+        "cart_jog_signs",
+        default_value="1,1,1,1,1,1",
+        description="Cartesian jog: per-axis sign (1 or -1) for x,y,z,rx,ry,rz, to fix directions without a rebuild.",
+    )
+    cart_jog_timeout_s_arg = DeclareLaunchArgument(
+        "cart_jog_timeout_s",
+        default_value="0.15",
+        description="Cartesian jog: zero jog if no cart_jog_cmd arrives for this long [s].",
+    )
+    cart_jog_idle_exit_s_arg = DeclareLaunchArgument(
+        "cart_jog_idle_exit_s",
+        default_value="10.0",
+        description="Cartesian jog: leave the mode after this many seconds without a cart_jog_cmd (0 = never).",
+    )
+    cart_jog_base_frame_arg = DeclareLaunchArgument(
+        "cart_jog_base_frame",
+        default_value="base_link",
+        description="Cartesian jog: header.frame_id a cart_jog_cmd must carry (empty is accepted).",
+    )
+    joint_jog_max_percent_arg = DeclareLaunchArgument(
+        "joint_jog_max_percent",
+        default_value="10.0",
+        description="Direct joint jog (CRI route): per-joint clamp [%] on top of jog_velocity_scale.",
+    )
+    joint_jog_timeout_s_arg = DeclareLaunchArgument(
+        "joint_jog_timeout_s",
+        default_value="0.15",
+        description="Direct joint jog: zero jog if no joint_jog_cmd arrives for this long [s].",
+    )
+    joint_jog_idle_exit_s_arg = DeclareLaunchArgument(
+        "joint_jog_idle_exit_s",
+        default_value="10.0",
+        description="Direct joint jog: leave the mode after this many seconds without a joint_jog_cmd (0 = never).",
+    )
+    robot_port_arg = DeclareLaunchArgument(
+        "robot_port",
+        default_value="3920",
+        description="CRI TCP port (3920 on the real controller; change only for a loopback fake)",
+    )
+
+    controller_params_file_arg = DeclareLaunchArgument(
+        "controller_params_file",
+        default_value="",
+        description="absolute path of a ros2_control parameter file replacing the default "
+                    "controller.yaml (empty = default, nothing changes)",
+    )
+
     tool_variant_arg = DeclareLaunchArgument(
         "tool_variant",
         default_value="knife_c",
@@ -52,17 +126,19 @@ def generate_launch_description():
     igus_rebel_pkg = get_package_share_directory("igus_rebel")
     igus_rebel_desc_pkg = get_package_share_directory("igus_rebel_description")
 
-    controller_config_path = PathJoinSubstitution(
+    # controller_params_file: absolute path of a replacement ros2_control parameter file (default
+    # "" = the package's controller.yaml / controller_mock.yaml, i.e. no change in behaviour).
+    controller_config_path = PythonExpression(
         [
-            igus_rebel_pkg,
-            "config",
-            PythonExpression(
-                [
-                    "'controller.yaml' if '",
-                    LaunchConfiguration("hardware_protocol"),
-                    "' == 'rebel' else 'controller_mock.yaml'",
-                ]
-            ),
+            "'",
+            LaunchConfiguration("controller_params_file"),
+            "' if '",
+            LaunchConfiguration("controller_params_file"),
+            "' != '' else '",
+            os.path.join(igus_rebel_pkg, "config"),
+            "/' + ('controller.yaml' if '",
+            LaunchConfiguration("hardware_protocol"),
+            "' == 'rebel' else 'controller_mock.yaml')",
         ]
     )
 
@@ -82,6 +158,32 @@ def generate_launch_description():
                 LaunchConfiguration("hardware_protocol"),
                 " robot_ip:=",
                 LaunchConfiguration("robot_ip"),
+                " robot_port:=",
+                LaunchConfiguration("robot_port"),
+                " jog_velocity_scale:=",
+                LaunchConfiguration("jog_velocity_scale"),
+                " cart_jog_percent_per_mps:=",
+                LaunchConfiguration("cart_jog_percent_per_mps"),
+                " cart_jog_percent_per_radps:=",
+                LaunchConfiguration("cart_jog_percent_per_radps"),
+                " cart_jog_max_percent:=",
+                LaunchConfiguration("cart_jog_max_percent"),
+                " cart_jog_allow_rotation:=",
+                LaunchConfiguration("cart_jog_allow_rotation"),
+                " cart_jog_signs:=",
+                LaunchConfiguration("cart_jog_signs"),
+                " cart_jog_timeout_s:=",
+                LaunchConfiguration("cart_jog_timeout_s"),
+                " cart_jog_idle_exit_s:=",
+                LaunchConfiguration("cart_jog_idle_exit_s"),
+                " cart_jog_base_frame:=",
+                LaunchConfiguration("cart_jog_base_frame"),
+                " joint_jog_max_percent:=",
+                LaunchConfiguration("joint_jog_max_percent"),
+                " joint_jog_timeout_s:=",
+                LaunchConfiguration("joint_jog_timeout_s"),
+                " joint_jog_idle_exit_s:=",
+                LaunchConfiguration("joint_jog_idle_exit_s"),
                 " tool_variant:=",
                 LaunchConfiguration("tool_variant"),
                 " move_joint_max_velocity_percent:=",
@@ -176,6 +278,20 @@ def generate_launch_description():
     return LaunchDescription([
         hardware_protocol_arg,
         robot_ip_arg,
+        jog_velocity_scale_arg,
+        cart_jog_percent_per_mps_arg,
+        cart_jog_percent_per_radps_arg,
+        cart_jog_max_percent_arg,
+        cart_jog_allow_rotation_arg,
+        cart_jog_signs_arg,
+        cart_jog_timeout_s_arg,
+        cart_jog_idle_exit_s_arg,
+        cart_jog_base_frame_arg,
+        joint_jog_max_percent_arg,
+        joint_jog_timeout_s_arg,
+        joint_jog_idle_exit_s_arg,
+        robot_port_arg,
+        controller_params_file_arg,
         move_joint_vel_arg,
         tool_variant_arg,
         mock_move_joint_arg,
