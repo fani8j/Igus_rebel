@@ -433,4 +433,5 @@ saving but NOT outcome-neutral (one cut blocked -> allowed, one rejected -> acce
 between the R2 rewrite and the SAM3 outline: the generic selection `max(d_t) <= max(d_o)` flips on tiny plane changes);
 (2) evaluating the SAM3 outline before its R2/R3 rewrite and skipping the rewrite when the outline already wins: correct
 but never fires on the replay set (211 of the 238 rewrite captures are generic boxes, which need both evaluations).
-Replay harness: `/tmp/bsd_prof` (bench_prof.py + compare_strict.py; reads the original captures under `outputs/`).
+Replay harness and results: `My Passport/igus_nvidia/bsd_speed/bench_20261102` (run.sh, bench_prof.py, compare_strict.py,
+*.jsonl; reads the original captures under `outputs/`, baseline code via `git archive 5344f73`).
