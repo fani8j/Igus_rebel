@@ -198,6 +198,11 @@ _CACHE_MAX = 2
 _PROJECT_CHUNK = 1 << 16
 _ZBUF_CACHE: "dict[tuple, ProjectedCloud]" = {}
 _WINNERS_MEMO: dict = {}
+# region winners of the current projected cloud, keyed by (id(cloud), region):
+# the guided-plane fit runs twice on the same quad (noise-adaptive second pass)
+# and truncation recovery re-checks candidates, so regions repeat
+_REGION_MEMO: dict = {}
+_REGION_MEMO_MAX = 4
 _IMAGE_SHAPE_CACHE: "dict[tuple, tuple[int, int]]" = {}
 
 
@@ -249,6 +254,7 @@ def clear_caches() -> None:
     """Drop every per-process cache (tests / long-running processes)."""
     _ZBUF_CACHE.clear()
     _WINNERS_MEMO.clear()
+    _REGION_MEMO.clear()
     _IMAGE_SHAPE_CACHE.clear()
 
 
@@ -391,7 +397,8 @@ def zbuffer_winners(pc: ProjectedCloud, region: Optional[tuple] = None
                     ) -> ProjectedWinners:
     """Winners of a :class:`ProjectedCloud`, optionally only for pixels in
     ``region = (u0, v0, u1, v1)`` (inclusive integer bounds). All-pixel
-    winners are memoised on the cloud; region queries are recomputed."""
+    winners are memoised on the cloud; the last few region queries of the
+    current cloud are memoised too (outputs are read-only arrays)."""
     if pc.status != "ok":
         return ProjectedWinners(pc.status, pc.input_point_count,
                                 pc.projected_point_count)
@@ -407,10 +414,19 @@ def zbuffer_winners(pc: ProjectedCloud, region: Optional[tuple] = None
             _WINNERS_MEMO[id(pc)] = (pc, out)
         return out
     u0, v0, u1, v1 = (int(x) for x in region)
+    key = (id(pc), u0, v0, u1, v1)
+    memo = _REGION_MEMO.get(key)
+    if memo is not None and memo[0] is pc:
+        return memo[1]
     sel = (pc.bu >= u0) & (pc.bu <= u1) & (pc.bv >= v0) & (pc.bv <= v1)
     wu, wv, xw = _winners(pc, sel)
-    return ProjectedWinners("ok", pc.input_point_count, pc.projected_point_count,
-                            wu=_ro(wu), wv=_ro(wv), xyz_win=_ro(xw))
+    out = ProjectedWinners("ok", pc.input_point_count, pc.projected_point_count,
+                           wu=_ro(wu), wv=_ro(wv), xyz_win=_ro(xw))
+    if not _cache_disabled():
+        if any(v[0] is not pc for v in _REGION_MEMO.values()):
+            _REGION_MEMO.clear()  # another cloud: drop its regions
+        _cache_put(_REGION_MEMO, key, (pc, out), limit=_REGION_MEMO_MAX)
+    return out
 
 
 def mask_region(mask: np.ndarray) -> Optional[tuple]:
@@ -438,6 +454,7 @@ def projected_cloud(pcd_path: Any, camera: CameraModel, width: int, height: int,
                                        int(height), float(min_depth_m))
         # one capture at a time: keep a single projected cloud (~75 MB)
         _WINNERS_MEMO.clear()
+        _REGION_MEMO.clear()
         _cache_put(_ZBUF_CACHE, key, hit, limit=1)
     return hit
 

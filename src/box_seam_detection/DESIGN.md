@@ -412,3 +412,25 @@ up in a separate python process (+1.3 s per request). `extrinsic_required: true`
 refuses a capture whose live TF lookup failed (2 s `tf_timeout_s`; the request ends with status error) instead of assuming
 the recorded constant; it needs `use_tf: true`. Node parameter `pipeline_root` ("" = under `output_root`): the replay
 measured +0.3 s per request (median) for the pipeline records on the NTFS-3G USB drive vs the internal SSD (~2.4 MB each).
+
+## Box-fit speedups (2026-11-02; outcome-neutral)
+
+Three changes with unchanged results (258-capture replay vs 5344f73, same machine state: every status, reason, cut
+permission, selected attempt, truncation method, box profile and seam source identical; corners, seam and planner-snapshot
+points 0.0000 mm apart). Mean request 2.00 -> 1.82 s (median 1.85 -> 1.70; faster on 258/259); box fit (depth_join +
+candidate_eval + truncation + finalize) 1.06 -> 0.88 s.
+- `pbd/plane_fit._fit_plane_svd`: the plane normal is the smallest-eigenvalue eigenvector of the 3x3 (weighted) scatter
+  matrix instead of the N x 3 SVD (same plane to ~1e-15, the Huber-IRLS polish of every guided-plane fit was most of its
+  cost). `AUTOLABEL_V2_EXACT_SVD=1` restores the SVD.
+- `pbd/sam3_depth_fusion.zbuffer_winners`: region queries are memoised for the current projected cloud (last 4 regions);
+  the noise-adaptive second guided fit and `_plane_p95_all_mm` ask for the same region as the first fit.
+- `autolabel/depth_top.ransac_plane` (depth thread, runs beside the SAM3 query): support counted in place (no two
+  (downsample x block) temporaries), the SVD refit subset gathered by index instead of copying every inlier, the RMS from
+  the residuals already computed.
+
+Tried and dropped: (1) vectorised RANSAC hypotheses ranked on an 8192-point subsample + top-8 full recount: 0.2 s more
+saving but NOT outcome-neutral (one cut blocked -> allowed, one rejected -> accepted, ~10 generic boxes switching
+between the R2 rewrite and the SAM3 outline: the generic selection `max(d_t) <= max(d_o)` flips on tiny plane changes);
+(2) evaluating the SAM3 outline before its R2/R3 rewrite and skipping the rewrite when the outline already wins: correct
+but never fires on the replay set (211 of the 238 rewrite captures are generic boxes, which need both evaluations).
+Replay harness: `/tmp/bsd_prof` (bench_prof.py + compare_strict.py; reads the original captures under `outputs/`).

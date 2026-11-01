@@ -304,7 +304,11 @@ def ransac_plane(points: np.ndarray, *, thresh: float, iters: int,
         block_ok = valid[s:e]
         if not block_ok.any():
             continue
-        dist = np.abs(W32 @ normals[s:e].T + offs[s:e])
+        # in place: the same float32 values as abs(W32 @ n.T + offs) without
+        # two (downsample x block) temporaries
+        dist = W32 @ normals[s:e].T
+        dist += offs[s:e]
+        np.abs(dist, out=dist)
         counts = (dist < thresh).sum(axis=0)
         counts[~block_ok] = 0
         j = int(np.argmax(counts))
@@ -318,17 +322,24 @@ def ransac_plane(points: np.ndarray, *, thresh: float, iters: int,
             "workspace may be empty or downsample too small"
         )
     normal, dist = best_n, best_d
-    inliers = np.abs(pts @ normal + dist) < thresh
+    resid = pts @ normal + dist
+    inliers = np.abs(resid) < thresh
     # Least-squares refit on full-resolution inliers, orientation pinned.
     for _ in range(2):
-        if int(inliers.sum()) < 3:
+        sel = np.flatnonzero(inliers)
+        if sel.size < 3:
             break
-        refit_n, refit_d = _fit_plane_svd(pts[inliers])
+        if sel.size > _REFIT_MAX:
+            # the same stride subset _fit_plane_svd would take of pts[inliers],
+            # gathered without copying every inlier first
+            sel = sel[::int(-(-sel.size // _REFIT_MAX))]
+        refit_n, refit_d = _fit_plane_svd(pts[sel])
         if float(refit_n @ normal) < 0:
             refit_n, refit_d = -refit_n, -refit_d
         normal, dist = refit_n, refit_d
-        inliers = np.abs(pts @ normal + dist) < thresh
-    rms = float(np.sqrt(np.mean((pts[inliers] @ normal + dist) ** 2)))
+        resid = pts @ normal + dist
+        inliers = np.abs(resid) < thresh
+    rms = float(np.sqrt(np.mean(resid[inliers] ** 2)))
     return normal, dist, inliers, rms
 
 
