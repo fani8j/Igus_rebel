@@ -106,11 +106,11 @@ class IO:
         self._scene_imgs: collections.deque = collections.deque(maxlen=12)
         self.wrist_info: Optional[CameraInfo] = None
         self.scene_info: Optional[CameraInfo] = None
-        self.node.create_subscription(Image, "/wrist_camera/color/image_raw", lambda m: self._wrist_imgs.append((time.monotonic(), m)),
+        self.node.create_subscription(Image, "/arm_left/wrist_camera/color/image_raw", lambda m: self._wrist_imgs.append((time.monotonic(), m)),
                                       qos_profile_sensor_data, callback_group=cb)
         self.node.create_subscription(Image, "/camera/color/image_raw", lambda m: self._scene_imgs.append((time.monotonic(), m)),
                                       qos_profile_sensor_data, callback_group=cb)
-        self.node.create_subscription(CameraInfo, "/wrist_camera/color/camera_info", self._on_wi, qos_profile_sensor_data, callback_group=cb)
+        self.node.create_subscription(CameraInfo, "/arm_left/wrist_camera/color/camera_info", self._on_wi, qos_profile_sensor_data, callback_group=cb)
         self.node.create_subscription(CameraInfo, "/camera/color/camera_info", self._on_si, qos_profile_sensor_data, callback_group=cb)
         # services / actions
         self.cli_hw = self.node.create_client(ListHardwareComponents, "/controller_manager/list_hardware_components", callback_group=cb)

@@ -50,3 +50,16 @@ color_ae_roi_bottom: 1079
 # daylight (2026-10-03: white table R-B -19, carton warmth 24 -> 1), which breaks the
 # warm-colour carton mask in detect_tape_seam. Flicker came from exposure, not WB.
 enable_color_auto_white_balance: true
+
+# Image transports: only what consumers use (aruco_verification and cut_recorder
+# read color compressed; box perception reads raw; depth compressedDepth kept
+# for recording, re-added 2026-10-26). Drops color theora. depth/image_unaligned
+# (+ its transports), */metadata, device_status and depth_filters/status are
+# hard-coded in orbbec_camera 2.9.3;
+# nothing is encoded or sent on a topic nobody subscribes to.
+color.image_raw.enable_pub_plugins: ["image_transport/compressed", "image_transport/raw"]
+depth.image_raw.enable_pub_plugins: ["image_transport/compressedDepth", "image_transport/raw"]
+
+# QoS stays at the driver default (RELIABLE). Tried BEST_EFFORT (SENSOR_DATA)
+# 2026-10-31: color raw and points lost about half their frames on this PC
+# (6 MB frames vs a 212 KB UDP receive buffer). Subscribers use best effort.

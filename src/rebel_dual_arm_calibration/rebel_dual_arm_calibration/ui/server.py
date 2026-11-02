@@ -927,8 +927,8 @@ def main(args=None):
                           ("camera_info_topic", "/camera/color/camera_info"), ("targets_file", ""),
                           ("min_marker_perimeter_rate", 0.02), ("session_dir", ""),
                           ("allow_real_move", False), ("tcp_xacro_path", DEFAULT_XACRO_PATH),
-                          ("wrist_image_topic", "/wrist_camera/color/image_raw"),
-                          ("wrist_camera_info_topic", "/wrist_camera/color/camera_info"),
+                          ("wrist_image_topic", "/arm_left/wrist_camera/color/image_raw"),
+                          ("wrist_camera_info_topic", "/arm_left/wrist_camera/color/camera_info"),
                           ("wrist_handeye_output_dir", ""), ("wrist_camera_serial", ""), ("wrist_cad_roll_deg", 0.0)):
         node.declare_parameter(name, default)
     from rcl_interfaces.msg import ParameterDescriptor

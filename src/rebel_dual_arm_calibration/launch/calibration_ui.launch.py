@@ -6,7 +6,7 @@
 ``hover_correction_left_mm`` / ``hover_correction_right_mm`` ("x,y,z" mm in that arm's base frame, default off) add a
 constant shift to every approach-assist prediction; the page shows it while active and every hover record logs it.
 Single-arm modes also get the "Wrist camera" tab (eye-in-hand hand-eye calibration of the camera on the arm; see README):
-``wrist_image_topic`` / ``wrist_camera_info_topic`` (default /wrist_camera/color/...), ``wrist_handeye_output_dir`` (default
+``wrist_image_topic`` / ``wrist_camera_info_topic`` (default /arm_left/wrist_camera/color/...), ``wrist_handeye_output_dir`` (default
 ``<output_dir>/wrist_handeye``), ``wrist_camera_serial`` (recorded in the result), ``wrist_cad_roll_deg`` (image roll of the
 rough CAD mount guess).  Its automatic sequence on REAL hardware additionally needs ``allow_real_move:=true``.
 The "0. TCP" tab (TCP pivot calibration) reads the xacro given by ``tcp_xacro_path`` and never writes it.
@@ -52,8 +52,8 @@ def launch_setup(context):
         params["wrist_handeye_output_dir"] = wd
     elif session_dir:
         params["wrist_handeye_output_dir"] = os.path.join(session_dir, "wrist_handeye")
-    params["wrist_image_topic"] = LaunchConfiguration("wrist_image_topic", default="/wrist_camera/color/image_raw").perform(context)
-    params["wrist_camera_info_topic"] = LaunchConfiguration("wrist_camera_info_topic", default="/wrist_camera/color/camera_info").perform(context)
+    params["wrist_image_topic"] = LaunchConfiguration("wrist_image_topic", default="/arm_left/wrist_camera/color/image_raw").perform(context)
+    params["wrist_camera_info_topic"] = LaunchConfiguration("wrist_camera_info_topic", default="/arm_left/wrist_camera/color/camera_info").perform(context)
     params["wrist_camera_serial"] = LaunchConfiguration("wrist_camera_serial", default="").perform(context)
     params["wrist_cad_roll_deg"] = float(LaunchConfiguration("wrist_cad_roll_deg", default="0.0").perform(context))
     params["allow_real_move"] = LaunchConfiguration("allow_real_move").perform(context).strip().lower() in ("1", "true", "yes")
@@ -83,9 +83,9 @@ def generate_launch_description():
                                           "(its base frame), e.g. '-5.3,8.1,0' or '[-5.3, 8.1, 0]'; |v| <= 20 mm; empty = off"),
         DeclareLaunchArgument("hover_correction_right_mm", default_value="",
                               description="same for the RIGHT arm"),
-        DeclareLaunchArgument("wrist_image_topic", default_value="/wrist_camera/color/image_raw",
+        DeclareLaunchArgument("wrist_image_topic", default_value="/arm_left/wrist_camera/color/image_raw",
                               description="wrist (eye-in-hand) camera colour image, single_* modes"),
-        DeclareLaunchArgument("wrist_camera_info_topic", default_value="/wrist_camera/color/camera_info"),
+        DeclareLaunchArgument("wrist_camera_info_topic", default_value="/arm_left/wrist_camera/color/camera_info"),
         DeclareLaunchArgument("wrist_handeye_output_dir", default_value="",
                               description="where the wrist hand-eye samples / result go (default <output_dir>/wrist_handeye)"),
         DeclareLaunchArgument("wrist_camera_serial", default_value="", description="recorded in the wrist result YAML"),

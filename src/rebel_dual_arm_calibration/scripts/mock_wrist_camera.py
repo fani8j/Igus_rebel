@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """MOCK ONLY - simulated wrist (eye-in-hand) camera for end-to-end tests of the wrist hand-eye UI.  NOT FOR REAL ROBOTS.
 
-Publishes /wrist_camera/color/image_raw (rgb8, 1280x800) and /wrist_camera/color/camera_info the way the Orbbec driver would,
+Publishes /arm_left/wrist_camera/color/image_raw (rgb8, 1280x800) and /arm_left/wrist_camera/color/camera_info the way the Orbbec driver would,
 with the table board RENDERED at the pose that follows from the LIVE mock arm TF (base_link -> link6), a hidden ground-truth
 mount ``truth_xyz`` / ``truth_rpy_deg`` (link6 -> optical) and the board pose ``board_xyz`` / ``board_rpy_deg`` (board frame:
 origin = board centre, z INTO the table).  The calibration should recover truth_* from these images.
@@ -49,8 +49,8 @@ class MockWristCamera(Node):
         self.base, self.tip, self.frame = g("base_frame"), g("tip_frame"), g("frame_id")
         self.board = BoardImage(table_spec(), margin=0.010, plate=0.0)
         self.rng = np.random.default_rng(3)
-        self.pub = self.create_publisher(Image, "/wrist_camera/color/image_raw", qos_profile_sensor_data)
-        self.pub_info = self.create_publisher(CameraInfo, "/wrist_camera/color/camera_info", qos_profile_sensor_data)
+        self.pub = self.create_publisher(Image, "/arm_left/wrist_camera/color/image_raw", qos_profile_sensor_data)
+        self.pub_info = self.create_publisher(CameraInfo, "/arm_left/wrist_camera/color/camera_info", qos_profile_sensor_data)
         self.buf = Buffer()
         self.tfl = TransformListener(self.buf, self, spin_thread=True)     # TF must not queue behind the (slow) rendering
         # like the Orbbec driver: wrist_camera_link -> optical frame (identity on the real camera); link6 -> wrist_camera_link

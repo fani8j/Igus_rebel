@@ -1,0 +1,30 @@
+# usb_cam parameters for the RIGHT arm's gripper camera (arm_right),
+# "HD USB Camera" 05a3:9230. Published as /arm_right/gripper_camera/...
+#
+# Both gripper cameras are the same model with no USB serial number, so they
+# are told apart by USB port (/dev/v4l/by-path), not by-id: 3.2 = right,
+# 3.3 = left (2026-10-26, see left_gripper_camera.yaml). Swapping the cables
+# swaps the topics.
+/**:
+  ros__parameters:
+    video_device: "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:3.2:1.0-video-index0"
+    camera_name: "arm_right_gripper_camera"
+    frame_id: "arm_right_gripper_camera_optical_frame"
+    camera_info_url: ""   # uncalibrated
+    # Camera JPEG passthrough on image_raw/compressed (no decode, ~1 % CPU);
+    # there is no raw image_raw topic in this mode. See knife_camera.yaml.
+    pixel_format: "raw_mjpeg"
+    av_device_format: "YUV422P"
+    image_width: 1280
+    image_height: 720
+    framerate: 30.0
+    io_method: "mmap"
+    brightness: -1        # -1 = leave the camera's own setting
+    contrast: -1
+    saturation: -1
+    sharpness: -1
+    gain: -1
+    auto_white_balance: true
+    autoexposure: true
+    autofocus: false
+    focus: -1

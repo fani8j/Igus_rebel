@@ -752,7 +752,7 @@ written to the URDF; the result is a YAML (`wrist_handeye/v1`), a xacro snippet 
 ```bash
 ros2 launch rebel_dual_arm_calibration calibration_ui.launch.py mode:=single_left start_recorder:=false \
   output_dir:=~/dual_arm_calibration/wrist_$(date +%Y%m%d) targets_file:=~/dual_arm_calibration/targets_measured.yaml \
-  wrist_image_topic:=/wrist_camera/color/image_raw wrist_camera_info_topic:=/wrist_camera/color/camera_info \
+  wrist_image_topic:=/arm_left/wrist_camera/color/image_raw wrist_camera_info_topic:=/arm_left/wrist_camera/color/camera_info \
   wrist_camera_serial:=CV27561000GA allow_real_move:=true       # allow_real_move only for the supervised real run
 # result files: <output_dir>/wrist_handeye/ (wrist_samples.jsonl, images/, scene_board.json, wrist_handeye_result.yaml, ...)
 ```
@@ -822,7 +822,7 @@ frame never gets a second parent. The YAML also keeps `T_link6_optical`. Offline
 `test/data/wrist_real_20261013/`.
 
 **Mock.** `scripts/mock_wrist_camera.py` (MOCK ONLY; refuses unless every hardware component is `mock_components/GenericSystem`) renders the
-table board into `/wrist_camera/...` from the live mock arm TF and a hidden mount. `POST /api/wrist/mock_board` (button "Mock board") sets a
+table board into `/arm_left/wrist_camera/...` from the live mock arm TF and a hidden mount. `POST /api/wrist/mock_board` (button "Mock board") sets a
 synthetic `T_base_board` and is refused on anything that is not mock hardware. Evidence: `scan_results/wrist_handeye_ui_20261013/`.
 
 ## TCP calibration

@@ -405,7 +405,7 @@ def run_main(argv):
         ci = io.wait_camera_info("wrist", 3.0)
         if ci is None:
             if not is_mock:
-                raise RuntimeError("no /wrist_camera/color/camera_info")
+                raise RuntimeError("no /arm_left/wrist_camera/color/camera_info")
             info("WARN: no wrist camera_info (mock): assuming f=626 px, 1280x800, no distortion")
             K, D, size, frame_id, model = DEFAULT_K, np.zeros(5), (1280, 800), CHILD_FRAME, "plumb_bob"
         else:

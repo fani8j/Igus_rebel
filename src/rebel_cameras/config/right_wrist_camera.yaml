@@ -1,6 +1,6 @@
 # Gemini 305 on the RIGHT arm's knife (arm_right). Same settings as
 # wrist_camera.yaml (left arm); passed to gemini_301_series.launch.py.
-camera_name: right_wrist_camera
+camera_name: right_wrist_camera   # TF frame prefix; topics are /arm_right/wrist_camera (cameras.launch.py)
 serial_number: CV27561000NP   # 2026-10-15: assigned to the right arm
 
 enable_color: true

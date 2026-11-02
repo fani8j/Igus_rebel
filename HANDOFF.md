@@ -262,6 +262,33 @@ Servo point velocity 0. The gamepad teleop has the same Servo/JTC path and was n
   `ros2 run knife_camera focus_tune.sh`), applied with v4l2-ctl because usb_cam 0.8.1's
   `focus_auto`/`exposure_auto` names fail on kernel 6.x; auto exposure/WB kept,
   `exposure_dynamic_framerate` off. Crosshair overlay at the knife-tip pixel is deferred.
+- **Camera topics per arm + gripper cameras (2026-10-20)**: `cameras.launch.py` now publishes
+  `/arm_left/wrist_camera/...` (was `/wrist_camera`) and `/arm_right/wrist_camera/...` (was
+  `/right_wrist_camera`); TF frames are unchanged (`wrist_camera_*`, `right_wrist_camera_*`;
+  orbbec takes topics from the launch arg, frames from the config `camera_name`). New USB
+  gripper cameras (05a3:9230, no serial, chosen by USB port): `/arm_left/gripper_camera`
+  (port 1-1.3; 1-1.2 gave USB errors -32/-71 after a reboot) and `/arm_right/gripper_camera` (port 1-1.1), raw_mjpeg 1280x720 at 30 Hz,
+  ~1 % CPU each, measured on domain 173. Consumers updated (calibration UI, mock wrist camera,
+  tools/wrist_handeye, cut_recorder, camera_sync_check). Not yet verified: the renamed 305
+  topics and their TF frames on a fresh launch (the running launch was left alone).
+  Historical text below uses the old topic names.
+  The C930e knife webcam was removed from `cameras.launch.py` the same day (arg `knife`
+  gone); start it with `ros2 launch knife_camera knife_camera.launch.py` if needed.
+  Startup race fixed: usb_cam scans all /dev/video* at start and aborts if an Orbbec node
+  vanishes mid-scan (USB reset / driver claim), so the gripper cameras start first and the
+  Orbbecs wait 2 s (`GRIPPER_SCAN_DELAY_S`). No `respawn` on them: with Ctrl+C launch
+  respawned them forever. 4 clean start/stop cycles on domain 173, all cameras at rate.
+  2026-10-22: gripper auto-recovery: `scripts/gripper_camera_supervisor.py` (tests:
+  `test/test_gripper_camera_supervisor.py`, 10 pass) restarts usb_cam on child exit, device
+  path gone/changed, or camera_info stall. Verified on domain 187: SIGSTOP stall -> restart
+  -> 30 Hz; Ctrl+C clean, no restarts. Not yet verified: physical unplug/replug of a gripper
+  camera (USB reset needs root: no udev rule for 05a3:9230) and Orbbec hot-replug recovery.
+  2026-10-26: after a reboot the hub sits in PC port 3, so the gripper configs are now by-path
+  `usb-0:3.3` (left, unverified guess) / `usb-0:3.2` (right); the launch warning lists where gripper cameras
+  are plugged in. The 336 (hub port 2-3.1) dropped off USB every ~20 s whenever it, the left 305 (2-3.4)
+  and both gripper cameras (1-3.x) streamed together; any two of them were stable for 75 s, so it looks
+  like hub power/bandwidth. Wrist 305s now default to off (`wrist:=true right_wrist:=true` to enable);
+  scene + grippers ran 75 s with no drops. Re-enabling the 305s needs the 336 or a 305 moved off the hub.
 - **Cameras (`rebel_cameras`, 2026-09-27)**: `ros2 launch rebel_cameras cameras.launch.py`
   starts the Gemini 336 (`/camera`, serial CP96563000LY), Gemini 305 (`/wrist_camera`,
   CV27561000NP) and the knife webcam. **2026-10-15:** two 305s, one per knife:
