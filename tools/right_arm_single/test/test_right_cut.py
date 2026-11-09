@@ -96,3 +96,30 @@ def test_main_refuses_without_domain(monkeypatch, capsys):
 
 def test_typed():
     assert rc._typed("false") is False and rc._typed("0.5") == 0.5 and rc._typed("abc") == "abc"
+
+
+def test_start_top_at_moves_seam_end_and_keeps_mtime(tmp_path):
+    p = tmp_path / "conv.json"
+    pt = lambda x, y: {"x": x, "y": y, "z": 0.0}
+    doc = {"seam_start": pt(0.0, 0.0), "seam_end": pt(0.4, 0.0), "seam_center": pt(0.2, 0.0),
+           "back_right": pt(0.4, 0.1), "front_right": pt(0.4, -0.1),
+           "back_middle_right": pt(0.4, 0.05), "front_middle_right": pt(0.4, -0.05),
+           rs.PROVENANCE_KEY: {}}
+    p.write_text(json.dumps(doc))
+    import os
+    os.utime(p, (1000.0, 1000.0))
+    rc.start_top_at(p, 0.75)  # 75 % from the LEFT end = 25 % from the converted start (right end)
+    out = json.loads(p.read_text())
+    assert out["seam_end"]["x"] == pytest.approx(0.1)
+    assert out["back_middle_right"] == pytest.approx({"x": 0.25, "y": 0.05, "z": 0.0})
+    assert out["seam_start"] == doc["seam_start"] and out["seam_center"] == doc["seam_center"]
+    assert out[rs.PROVENANCE_KEY]["top_start_fraction_from_left_end"] == 0.75
+    assert p.stat().st_mtime == pytest.approx(1000.0)
+
+
+@pytest.mark.parametrize("bad", [0.0, 0.01, 0.96, 1.0])
+def test_start_top_at_rejects_out_of_range(tmp_path, bad):
+    p = tmp_path / "conv.json"
+    p.write_text("{}")
+    with pytest.raises(rc.CutError):
+        rc.start_top_at(p, bad)

@@ -1,0 +1,144 @@
+# rollout_config_turbovla_real3nov.yaml -- settings for groot_ros_rollout.py with the TURBOVLA backend, RIGHT arm (checkpoint real3nov-10k, R1).
+# Copy of rollout_config_turbovla_right.yaml (right19-10k); differs ONLY in: the pinned checkpoint sha, the language/instruction, these header comments
+# and training_range (run_mock_test.sh --suite right --model real3nov asserts this).  recorder_size [1152, 648] is the same as right19.
+# Same client, same safety machinery, and the SAME gates, speed limits, freshness and execution limits as rollout_config_turbovla.yaml
+# (left arm); diff the files: only the model contract, the right-arm topics/joints, the training range and the language differ.
+# Every key is required (the script has no hidden defaults); override single values with
+#   groot_ros_rollout.py --config rollout_config_turbovla_real3nov.yaml --set gates.max_target_step_rad=0.03
+# Units: rad, rad/s, seconds.
+#
+# TurboVLA contract (checkpoint $T/real3nov/real3nov/runs/real3nov-10k/checkpoints/steps_10000_ema_pytorch_model.pt, sha256 53d1f024..., trained on 12
+# RIGHT-arm robot-playback episodes of the 3 Nov set (real_right_3nov_clean_v1, 15 Hz resampled to 30 Hz; 5 box poses x front / back / right flap,
+# 3 held out) with ONE instruction "open the next closed flap of the cardboard box"; $T = ~/turbovla).  Start pose = the 29 Oct start
+# [-0.349, 0.407, 1.118, 0.293, -0.962, 0.153] rad (right flap demos start at [-0.349, 0.400, 1.131, 0.209, -0.936, 0.305]):
+#   observation  head + wrist_left, each 224x224 RGB; the knife slot is filled black BY THE SERVER; 14-D state
+#                [left j1..6 = 0, left gripper = 0, right joint1..6 (measured, rad) in channels 7..12, right gripper = 0]
+#                (everything but the right joints is ZERO on purpose: normalisation std 0.01 there, any real value is far off-distribution)
+#   cameras      the model's `wrist_left` SLOT was fed the RIGHT gripper camera in training (dataset key wrist_right), so here
+#                wrist_left = /arm_right/gripper_camera/image_raw/compressed
+#   images       training videos were 1152x648 (16:9) and stretched to 224x224 with one PIL resize (default bicubic), no crop.
+#                Live: decode -> PIL BILINEAR resize to 1152x648 (recorder_rgb; the JPEG draft step never scales below 1152x648, so for the
+#                1920x1080 head and the 1280x720 gripper camera it is a no-op) -> the same single PIL resize to 224x224.
+#   action       (30, 14) absolute radians; only channels 7..12 (right joints) are used
+#   control      30 Hz logical rate, ACT temporal ensemble (horizon 30, decay k = 0.01, a fresh chunk EVERY step)
+#
+# RAISED GATES (operator request 2026-10-30, taken over unchanged from the right19 config; offline real3nov held-out: 99.8 % of frames pass both):
+# first_step_max_rad 0.15 and max_target_step_rad 0.10 (left config: 0.05 / 0.05).  The right19 measurements were: this model's
+# first command is far from the state: held-out median max_j |chunk[0] - state| 0.053 rad, p95 0.16-0.22 rad, and the ensembled target is
+# about as far (median 0.05, p95 0.15-0.24 rad).  At 0.05/0.05 only 30-39 % of held-out frames pass and a run stops within ~1 s; at
+# 0.15/0.10 80-81 % pass and the first refusal comes after 542 / 955 frames (offline, open loop; closed loop will differ).
+# What still bounds the motion: one step moves at most 0.10 rad per joint, at <= 0.1 rad/s (timing), in-flight abort at 2x that speed
+# or 0.2 rad tracking error, row_step 0.1, URDF limits - 0.05 and training range +- 0.1 on all 30 rows and on the target.
+# Every other gate and limit is identical to the left config (asserted by run_mock_test.sh --suite right --model real3nov).
+
+policy:
+  backend: turbovla
+
+server:
+  host: 127.0.0.1            # TurboVLA policy server (ZeroMQ ROUTER, same msgpack-numpy framing as the GR00T server).  Same host or an SSH tunnel.
+  port: 5556
+  timeout_s: 6.0             # one get_action must answer within this ...
+  first_query_timeout_s: 60.0   # ... except the first of a run (CUDA warm-up on the server)
+  get_action_retries: 1      # ... else it is re-sent once on a fresh socket (the arm is idle then); a second miss = query failed
+  ping_timeout_s: 3.0
+  ping_attempts: 3
+  api_token: null
+  expect_checkpoint_sha256: 53d1f024930295be142cba3aad14550b6f7e1568fead7653b42b24a8b86a83d1   # refuse (execute) when the server announces another checkpoint
+
+# Informational: the server fixes the language (the training instruction); it is cross-checked against get_modality_config (model.language).
+instruction: "open the next closed flap of the cardboard box"
+
+model:
+  recorder_size: [1152, 648] # [W, H] intermediate = the size of the training videos (no aspect change for 16:9 cameras)
+  image_size: [224, 224]     # [W, H] fed to the server: ONE PIL Image.fromarray(rgb1152x648).resize((224, 224)) (Pillow default resample)
+  state_dim: 14
+  action_dim: 14
+  chunk_len: 30              # rows of the server's chunk
+  control_rate_hz: 30.0      # logical rate: nominal time_from_start of one step = 1/30 s
+  server_cameras: [head, knife, wrist_left]   # what get_modality_config must announce (knife = black, server side)
+  language: "open the next closed flap of the cardboard box"   # null = do not cross-check
+  arm_channels: [7, 13]      # [first, end) model channels of the controlled arm: right joints 7..12 (left config: [0, 6]); cross-checked with the server
+cameras:
+  head:
+    topic: /camera/color/image_raw/compressed
+    expected_size: [1920, 1080]
+  wrist_left:                # the model's slot name; it carries the RIGHT arm's gripper camera (see header)
+    topic: /arm_right/gripper_camera/image_raw/compressed
+    expected_size: [1280, 720]
+
+# mode recorder_pil: PIL open -> draft("RGB", (1152, 648)) -> convert RGB -> BILINEAR resize to 1152x648 (model.recorder_size), then the 224 resize
+# of the TurboVLA data pipeline.  The only mode for this backend.  BILINEAR is an ASSUMPTION for the filter that produced the 1152x648
+# training videos (their metadata does not record it); see README.md.
+preprocess:
+  mode: recorder_pil
+
+ensemble:                    # ACTTemporalEnsembler (copy of the bundle's act_temporal.py)
+  horizon: 30
+  decay: 0.01
+  mode: act                  # act = ACT temporal ensemble, one target per step (the bundle's runtime) | chunk = diagnostic:
+                             # no ensemble, execute the first chunk_exec_steps raw rows of each chunk as one trajectory
+  chunk_exec_steps: 10       # chunk mode only (1..30; 10 steps = 1/3 s of model time at 30 Hz)
+
+ros:
+  joint_states_topic: /joint_states
+  robot_description_topic: /robot_description
+  joints: [arm_right_joint1, arm_right_joint2, arm_right_joint3, arm_right_joint4, arm_right_joint5, arm_right_joint6]
+  action: /arm_right_trajectory_controller/follow_joint_trajectory   # dual-table bringup (rebel_dual_table_description), one controller_manager
+  controller_manager: /controller_manager
+  wait_for_inputs_s: 10.0
+
+freshness:                   # a query/execution is refused when an input is older than this (receive time on this machine)
+  max_image_age_s: 0.5
+  max_joint_age_s: 0.2
+  max_image_header_age_s: null
+  check_image_size: true
+
+# Step-synchronous loop: every cycle = snapshot -> preprocess -> get_action -> ensemble -> gates -> ONE single-point
+# FollowJointTrajectory goal (time_from_start = max(1/30 s, max|dq| / max_joint_vel)) -> wait for it -> next cycle.  STOP-AND-GO: the arm
+# comes to rest after every step.  Smoother streaming is a later tuning step for the real arm.
+execution:
+  max_joint_vel: 0.1         # rad/s per joint; timing is only ever stretched to respect it, never compressed
+  max_steps: 3000            # stop after this many executed steps (training episodes: 1112-2660 frames at 30 fps = steps)
+  max_time_s: 900.0
+  confirm_timeout_s: 120.0
+  hold_time_s: 1.0           # time_from_start of the hold goal sent after an abnormal stop
+  result_margin_s: 5.0       # extra time allowed for a goal beyond its trajectory duration
+  settle_tol_rad: 0.01       # after a goal: wait until the arm is this close to the target ...
+  settle_timeout_s: 0.3      # ... for at most this long (logged only; per step, so keep it short)
+  tracking_error_rad: 0.2    # |measured - linearly interpolated command|
+  inflight_joint_stale_s: 0.5
+  max_measured_vel_factor: 2.0   # abort if the speed over 0.25 s exceeds factor * max_joint_vel
+
+# Gates (all evaluated and logged; any failure refuses the step, stops the run and holds the arm).  Per step:
+#   state_in_training_range   measured left joints inside training_range +- training_margin_rad
+#   finite / shape            raw chunk exactly (30, 14), all values finite
+#   first_step                |raw chunk[0, :6] - state| <= first_step_max_rad
+#   row_step                  |raw chunk[i] - raw chunk[i-1]| <= row_step_max_rad  (all rows when check_all_rows)
+#   urdf_limits/training_range raw rows (all 30 when check_all_rows, else row 0 only) inside URDF limits - urdf_inset_rad / training +- margin
+#   target_finite/target_step the ENSEMBLED target is finite and |target - state| <= max_target_step_rad
+#   target_urdf_limits/target_training_range  the ensembled target inside both ranges
+#   velocity cap              via timing: time_from_start >= max|dq| / execution.max_joint_vel
+gates:
+  first_step_max_rad: 0.15    # left config 0.05; raised for this model, see the header
+  row_step_max_rad: 0.1
+  max_target_step_rad: 0.10   # left config 0.05; raised for this model, see the header
+  max_segment_disp_rad: 0.3   # chunk mode: max |segment row - state| over the executed rows
+  urdf_inset_rad: 0.05
+  training_margin_rad: 0.1
+  state_in_training_range: true
+  check_all_rows: true
+training_range:              # right joint1..6 min/max (channels 7..12) of the checkpoint's normalization.json action bounds (all 15 episodes incl. the 3 held out)
+  min: [-0.37769, 0.17489, 0.22855, -0.41875, -1.51561, -0.49965]
+  max: [0.59679, 1.66351, 2.40769, 0.69531, 0.69836, 0.49979]
+
+observe:
+  period_s: 0.2              # fixed pause between queries in observe mode (observe never moves the arm)
+  max_queries: 0             # 0 = until max_time_s / stop
+
+logging:
+  run_root: ~/groot/runs
+  fallback_root: /tmp/groot_runs
+  save_images: false         # also save the two 224x224 model inputs of every query
+  image_quality: 90
+  log_full_chunk: false      # true: write the whole (30,14) raw chunk into every record (about 10 kB per step); false: a summary
+  print_every: 10            # console line every N passing queries (always for the first and for every refusal)

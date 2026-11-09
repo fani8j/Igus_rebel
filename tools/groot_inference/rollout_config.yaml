@@ -1,0 +1,110 @@
+# rollout_config.yaml -- settings for groot_ros_rollout.py (GR00T N1.7 closed-loop client, single igus ReBeL arm).
+# Every key is required (the script has no hidden defaults); override single values with
+#   groot_ros_rollout.py --set gates.first_step_max_rad=0.03 --set execution.horizon=4
+# Units: rad, rad/s, seconds.
+
+# Which policy server / model contract this config drives: groot (this file) | turbovla (rollout_config_turbovla.yaml).
+policy:
+  backend: groot
+
+server:
+  host: 127.0.0.1            # GR00T policy server (ZeroMQ REP).  Same host or an SSH tunnel.
+  port: 5555
+  timeout_s: 6.0             # one get_action must answer within this ...
+  first_query_timeout_s: 60.0   # ... except the first of a run (model warm-up on the server)
+  get_action_retries: 1      # ... else it is re-sent once on a fresh socket (the arm is idle then); a second miss = query failed
+  ping_timeout_s: 3.0        # the REQ socket is recreated and the ping repeated ...
+  ping_attempts: 3           # ... up to this many times before giving up
+  api_token: null            # only if the server was started with one
+
+# Task text.  Training episodes (12 mocap-teleop episodes of the LEFT arm, flap-top-open): 9 carry "open the box flaps",
+# 3 (mocap_left_13, _15, _new_1) "open flap 1".  The text barely matters (offline MAE 0.0154 vs 0.0157, within noise).
+instruction: "open the box flaps"
+
+# Model input.  video keys / state key / language key are the ones of the fine-tuned checkpoint (processor_config.json /
+# get_modality_config).  The checkpoint was trained on the 12 mocap episodes mocap_left_* (LeRobot v3.0, 30 fps; the model
+# sees every 2nd frame = 15 Hz): `head` = /camera/color/image_raw/compressed and `wrist_left` = the LEFT arm's gripper camera
+# /arm_left/gripper_camera/image_raw/compressed (user confirmed "cam 2 = gripper camera"); the knife camera is not used.
+# expected_size is [width, height] of the source image as published by the live camera topic (checked per frame).
+model:
+  state_key: single_arm
+  action_key: single_arm
+  language_key: annotation.human.task_description
+  video_size: [640, 480]     # [W, H] fed to the model = size of the recorded training videos
+  chunk_len: 16              # steps the server returns
+  fps: 15.0                  # training frame rate: nominal time between chunk steps = 1/fps
+cameras:
+  head:
+    topic: /camera/color/image_raw/compressed
+    expected_size: [1920, 1080]
+  wrist_left:
+    topic: /arm_left/gripper_camera/image_raw/compressed
+    expected_size: [1280, 720]
+
+# Image preprocessing.
+#   mode recorder_pil   (default) exactly the mocap recorder (robot_remote/recording/record_dataset.py image_msg_to_rgb +
+#                       resize_rgb): PIL open -> draft("RGB", (640, 480)) -> convert RGB -> PIL BILINEAR resize to 640x480
+#                       (aspect ratio NOT preserved: 16:9 is squashed to 4:3).  No JPEG round trip.  The other keys below are unused.
+#   mode opencv_legacy  the old OpenCV recipe of the lid_open recordings: resize `scale` INTER_AREA -> JPEG round trip -> INTER_AREA
+#                       to video_size.  Not the recipe of this checkpoint; kept for experiments.
+preprocess:
+  mode: recorder_pil
+  scale: 0.5                 # opencv_legacy only
+  jpeg_roundtrip: true       # opencv_legacy only
+  jpeg_quality: 90           # opencv_legacy only
+
+# ROS side
+ros:
+  joint_states_topic: /joint_states
+  robot_description_topic: /robot_description
+  joints: [joint1, joint2, joint3, joint4, joint5, joint6]
+  action: /rebel_arm_trajectory_controller/follow_joint_trajectory
+  controller_manager: /controller_manager
+  wait_for_inputs_s: 10.0    # at start: wait this long for joint states + both images
+
+# A query/execution is refused when an input is older than this (receive time on this machine).
+freshness:
+  max_image_age_s: 0.5
+  max_joint_age_s: 0.2
+  max_image_header_age_s: null   # also compare the image header stamp with the clock (null = log only)
+  check_image_size: true         # refuse when a decoded image is not cameras.*.expected_size
+
+execution:
+  horizon: 8                 # steps of each chunk that are sent (<= model.chunk_len)
+  max_joint_vel: 0.1         # rad/s per joint; timing is only ever stretched to respect it, never compressed
+  max_steps: 1200            # stop after this many executed model steps (training episodes: 1112-2660 frames at 30 fps = 556-1330 model steps)
+  max_time_s: 600.0          # wall-clock limit of the whole run
+  confirm_timeout_s: 120.0
+  hold_time_s: 1.0           # time_from_start of the hold goal sent after an abnormal stop
+  result_margin_s: 5.0       # extra time allowed for a goal beyond its trajectory duration
+  settle_tol_rad: 0.02       # after a goal: wait until the arm is this close to the last point ...
+  settle_timeout_s: 1.0      # ... for at most this long (logged only)
+  # in-flight monitor of a running goal (any violation: cancel, hold, stop)
+  tracking_error_rad: 0.2    # |measured - linearly interpolated command|
+  inflight_joint_stale_s: 0.5
+  max_measured_vel_factor: 2.0   # abort if the speed over 0.25 s exceeds factor * max_joint_vel
+
+# Gates on the chunk (all evaluated and logged; any failure refuses the whole chunk)
+gates:
+  first_step_max_rad: 0.05   # |chunk[0] - current state|  (also catches relative-vs-absolute mix-ups)
+  max_step_rad: 0.1          # |chunk[i] - chunk[i-1]|
+  urdf_inset_rad: 0.05       # targets must stay inside URDF limits shrunk by this
+  urdf_limit_mode: refuse    # refuse | clamp: clamp targets onto the shrunk URDF limits instead of refusing the chunk ...
+  urdf_clamp_max_rad: 0.15   # ... but still refuse a target that is beyond them by more than this (clamp mode only)
+  training_margin_rad: 0.1   # targets must stay inside the training range widened by this
+  max_chunk_disp_rad: 0.3    # |chunk[i] - state| over the executed horizon
+  state_in_training_range: true  # the current state must itself be inside training range +- margin
+  validate_full_chunk: true  # step/limit/range gates look at all chunk_len steps (false: executed horizon only)
+training_range:              # joint1..6 = arm_left_joint1..6 state min/max of the 12 mocap episodes (= checkpoint statistics)
+  min: [-0.0742, -0.4252, 0.2618, -3.0191, -1.3366, -3.0194]
+  max: [0.6765, 1.6973, 2.3543, 2.9405, 1.5563, 3.0276]
+
+observe:
+  period_s: 1.0              # pause between queries in observe mode
+  max_queries: 0             # 0 = until max_time_s / stop
+
+logging:
+  run_root: ~/groot/runs     # ~/groot is a symlink to the external drive; if missing, fallback_root is used (with a warning)
+  fallback_root: /tmp/groot_runs
+  save_images: false         # also save the two model input images of every query (640x480 JPEG)
+  image_quality: 90

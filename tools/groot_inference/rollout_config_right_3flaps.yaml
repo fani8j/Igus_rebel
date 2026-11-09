@@ -1,0 +1,107 @@
+# rollout_config_right_3flaps.yaml -- groot_ros_rollout.py settings for the GR00T N1.7 checkpoint real_right_3flaps_35ep_15fps,
+# RIGHT arm.  Copy of rollout_config_right20.yaml; differs only in model.fps (15), the instruction, max_steps and training_range.
+#   groot_ros_rollout.py --config rollout_config_right_3flaps.yaml [--instruction "open the back flap of the cardboard box"]
+# Units: rad, rad/s, seconds.
+#
+# Checkpoint (2026-11-06, ~/Downloads/real_right_3flaps.tar.gz -> ~/groot/checkpoints/real_right_3flaps/
+# real_right_3flaps_35ep_15fps/checkpoint-3200; same architecture, processor and hyper-parameters as the 20ep one, 3200 steps):
+#   35 episodes at 15 fps (every 2nd frame of the 30 fps recordings; state/action and relative-action statistics match that
+#   exactly, std within 3 %): the 20 real_right episodes of 29 Oct (front flap; corrupt ep 19 included) + the 15 robot-playback
+#   episodes real_right_3nov_raw of 3 Nov (5 box poses x front, back, right flap).  Video keys head + wrist_right, 16-step
+#   chunks (16 steps = 1.07 s at 15 fps).  Source videos 1152x648; the processor rescales the short edge to 256 anyway.
+# Task texts (one per episode; the model is conditioned on them, so the instruction picks the flap):
+#   "open the front flap of the cardboard box"  start [-0.349, 0.407, 1.118, 0.293, -0.962, 0.153]  (29 Oct + 3 Nov)
+#   "open the back flap of the cardboard box"   start same as front; in the 3 Nov set the front flap was already open
+#   "open the right flap of the cardboard box"  start [-0.349, 0.400, 1.131, 0.209, -0.935, 0.305]; front + back already open
+# The server must run this checkpoint (start_server.sh start --checkpoint ...); it announces wrist_right like the 20ep one, so
+# the client cannot tell the two right-arm checkpoints apart: check the server's checkpoint (start_server.sh status) first.
+
+policy:
+  backend: groot
+
+server:
+  host: 127.0.0.1
+  port: 5555
+  timeout_s: 6.0
+  first_query_timeout_s: 60.0
+  get_action_retries: 1
+  ping_timeout_s: 3.0
+  ping_attempts: 3
+  api_token: null
+
+instruction: "open the front flap of the cardboard box"   # or back / right flap (see header); override with --instruction
+
+model:
+  state_key: single_arm
+  action_key: single_arm
+  language_key: annotation.human.task_description
+  video_size: [640, 360]     # [W, H] fed to the model (16:9 "360p"; both cameras must have the same size or the processor fails)
+  chunk_len: 16
+  fps: 15.0                  # every 2nd recorded frame: nominal time between chunk steps = 1/15 s
+cameras:
+  head:
+    topic: /camera/color/image_raw/compressed
+    expected_size: [1920, 1080]
+  wrist_right:               # the RIGHT arm's gripper camera (dataset key wrist_right)
+    topic: /arm_right/gripper_camera/image_raw/compressed
+    expected_size: [1280, 720]
+
+# recorder_pil: PIL open -> draft("RGB", (640, 360)) -> RGB -> BILINEAR to 640x360 (no aspect change for these 16:9 cameras).
+# The training images went camera -> 1152x648 (recorder) -> h264 -> 360p (filter not recorded); offline the direct path matches well.
+preprocess:
+  mode: recorder_pil
+  scale: 0.5                 # opencv_legacy only
+  jpeg_roundtrip: true       # opencv_legacy only
+  jpeg_quality: 90           # opencv_legacy only
+
+ros:
+  joint_states_topic: /joint_states
+  robot_description_topic: /robot_description
+  joints: [arm_right_joint1, arm_right_joint2, arm_right_joint3, arm_right_joint4, arm_right_joint5, arm_right_joint6]
+  action: /arm_right_trajectory_controller/follow_joint_trajectory   # dual-table bringup (rebel_dual_table_description)
+  controller_manager: /controller_manager
+  wait_for_inputs_s: 10.0
+
+freshness:
+  max_image_age_s: 0.5
+  max_joint_age_s: 0.2
+  max_image_header_age_s: null
+  check_image_size: true
+
+execution:
+  horizon: 8                 # steps of each chunk that are sent (8 steps = 0.53 s of model time at 15 Hz)
+  max_joint_vel: 0.1         # rad/s per joint; timing is only ever stretched to respect it, never compressed
+  max_steps: 1200            # training episodes: 314-1061 model steps at 15 fps (3 Nov: 699-862)
+  max_time_s: 1200.0
+  confirm_timeout_s: 120.0
+  hold_time_s: 1.0
+  result_margin_s: 5.0
+  settle_tol_rad: 0.02
+  settle_timeout_s: 1.0
+  tracking_error_rad: 0.2
+  inflight_joint_stale_s: 0.5
+  max_measured_vel_factor: 2.0
+
+gates:                       # identical to the left config
+  first_step_max_rad: 0.05
+  max_step_rad: 0.1
+  urdf_inset_rad: 0.05
+  urdf_limit_mode: refuse
+  urdf_clamp_max_rad: 0.15
+  training_margin_rad: 0.1
+  max_chunk_disp_rad: 0.3
+  state_in_training_range: true
+  validate_full_chunk: true
+training_range:              # arm_right_joint1..6 state+action min/max of the 34 good episodes (29 Oct ep 19 corrupt, excluded; it only lowers j2 min to 0)
+  min: [-0.4306, 0.1749, -1.1257, -1.4312, -1.6371, -1.7277]
+  max: [0.8175, 2.3941, 2.4079, 1.7467, 0.6992, 1.4074]
+
+observe:
+  period_s: 1.0
+  max_queries: 0
+
+logging:
+  run_root: ~/groot/runs
+  fallback_root: /tmp/groot_runs
+  save_images: false
+  image_quality: 90

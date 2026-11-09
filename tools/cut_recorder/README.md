@@ -1,5 +1,12 @@
 # cut_recorder
 
+> **Fallback backend since 2026-10-26.** The launches (`dual_cut_system.launch.py`, `move_group.launch.py`) now start
+> robot_remote's raw rosbag2 recorder by default (`cut_recorder_backend:=raw`; full-resolution bags in the same `clip.json`
+> sidecar folders plus `index.jsonl`). This tool is started with `cut_recorder_backend:=video`, and automatically when
+> `~/robot_remote` or `rosbag2_py` is missing. It is unchanged. `record_cut_video` is now `true | false | always` (`always` also
+> starts a recorder in mock), `cut_video_cameras` empty = all (old names `knife,scene,wrist,right_wrist,left_gripper,right_gripper,
+> left_vision,right_vision` are mapped to the raw recorder's keys and back).
+
 Automatically records video of the knife, scene and wrist cameras while a
 trajectory is executing on the igus ReBeL arm, one clip folder per execution.
 
@@ -55,14 +62,15 @@ ends at `--max-clip-s`.
 | `--post-roll-s` | 3.0 | idle time before a clip is closed |
 | `--max-clip-s` | 900 | hard clip length limit |
 | `--now` | off | record immediately until Ctrl-C |
-| `--cameras` | `knife,scene,wrist,right_wrist` | which cameras to record |
+| `--cameras` | `knife,scene,wrist,right_wrist,left_vision,right_vision` | which cameras to record |
+| `--camera-domain N` | off | read the camera topics in a second ROS context in domain N (real cell: cameras in 11, robot/coordinator in the shell domain 12); the `*_vision` overlays are always read in the shell domain |
 | `--camera SPEC` | | define/override a camera (repeatable), see below |
 | `--scene-scale` | 0.5 | downscale of the scene camera |
 | `--out-dir` | see below | output directory |
 | `--snapshot` | `/home/farhan/Igus_rebel/outputs/seam_3d_base_link.json` | copied into each clip folder |
 | `--no-snapshot` | | do not copy a snapshot |
 
-Camera spec: `name=topic[:type[:fps[:scale]]]` where `type` is `raw`
+Camera spec: `name=topic[:type[:fps[:scale[:domain]]]]` where `domain` is `camera` (read in the `--camera-domain` context, default) or `main` (always the shell domain) and `type` is `raw`
 (`sensor_msgs/Image`; rgb8, bgr8, mono8) or `compressed`
 (`sensor_msgs/CompressedImage`, decoded with `cv2.imdecode`). Omitted fields
 inherit the default of a camera with the same name (else raw/15 fps/1.0; a
@@ -70,8 +78,11 @@ topic ending in `/compressed` defaults to `compressed`). Defaults:
 
 - `knife=/knife_camera/image_raw/compressed:compressed:30:1.0`
 - `scene=/camera/color/image_raw/compressed:compressed:15:0.5`
-- `wrist=/wrist_camera/color/image_raw/compressed:compressed:15:1.0` (Gemini 305, left arm)
-- `right_wrist=/right_wrist_camera/color/image_raw/compressed:compressed:15:1.0` (Gemini 305, right arm)
+- `wrist=/arm_left/wrist_camera/color/image_raw/compressed:compressed:15:1.0` (Gemini 305, left arm)
+- `right_wrist=/arm_right/wrist_camera/color/image_raw/compressed:compressed:15:1.0` (Gemini 305, right arm)
+- `left_vision=/side_cut_vision/arm_left/overlay/compressed:compressed:15:1.0:main` and `right_vision=.../arm_right/...` (overlays of the passive `side_cut_vision` probe, ~3 Hz, published in the robot domain; the 15 fps video repeats each overlay until the next, so it stays in time sync with the other cameras)
+- `left_gripper=/arm_left/gripper_camera/image_raw/compressed:compressed:30:1.0` (USB gripper camera, left arm; not in the default list)
+- `right_gripper=/arm_right/gripper_camera/image_raw/compressed:compressed:30:1.0` (USB gripper camera, right arm; not in the default list)
 
 The Orbbec `.../compressed` topics come from image_transport's compressed plugin:
 the camera node JPEG-encodes only while someone subscribes, so the recorder

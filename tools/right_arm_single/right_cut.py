@@ -56,6 +56,29 @@ class CutError(Exception):
     pass
 
 
+def start_top_at(path, fraction):
+    """Make the converted snapshot's top cut start `fraction` of the seam from the carton's LEFT end.
+
+    Operator 2026-10-20: cut the right top part in the LEFT arm's travel direction (same knife
+    orientation), from where the left arm stops to the right end. In the converted (relabelled) file
+    seam_start is the carton's right end, so seam_end moves to 1 - fraction of the seam; the two
+    midpoints derived from seam_end follow, and the planner travels seam_end -> seam_start
+    (middle_cut_reverse_travel). Corners and seam_center are unchanged, so the carton is the same box.
+    The file keeps its mtime (it must never look fresher than the capture)."""
+    if not 0.05 <= fraction <= 0.95:
+        raise CutError(f"--start-fraction {fraction} is outside [0.05, 0.95]")
+    path = Path(path)
+    mtime = path.stat().st_mtime
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    s, e = doc["seam_start"], doc["seam_end"]
+    doc["seam_end"] = {k: s[k] + (1.0 - fraction) * (e[k] - s[k]) for k in ("x", "y", "z")}
+    for mid, corner in (("back_middle_right", "back_right"), ("front_middle_right", "front_right")):
+        doc[mid] = {k: 0.5 * (doc[corner][k] + doc["seam_end"][k]) for k in ("x", "y", "z")}
+    doc[rs.PROVENANCE_KEY]["top_start_fraction_from_left_end"] = fraction
+    path.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+    os.utime(path, (mtime, mtime))
+
+
 # ------------------------------------------------------------------ pure helpers (unit-tested)
 def parse_hardware(urdf_xml):
     """(plugin, robot_ip or None) of the single ros2_control hardware in a URDF string."""
@@ -286,6 +309,12 @@ def cmd_plan(args, ros):
         if not 0.0 <= args.inward_mm <= 8.0:
             raise CutError(f"--inward-mm {args.inward_mm} is outside [0, 8] mm")
         wanted["left_cut_inward_m"] = args.inward_mm / 1000.0
+    if args.cut == "top":
+        if args.start_fraction is not None:
+            start_top_at(output, args.start_fraction)
+            print(f"top cut starts {args.start_fraction * 100:.0f} % of the seam from the LEFT end and "
+                  "runs to the right end in the left arm's direction")
+        wanted["middle_cut_reverse_travel"] = args.start_fraction is not None
     ros.set_parameter("external_snapshot_file", output)
     for key, value in wanted.items():
         ros.set_parameter(key, value)
@@ -399,6 +428,9 @@ def build_parser():
     plan.add_argument("--inward-mm", type=float, default=RIGHT_FACE_INWARD_MM,
                       help=f"face only: push the whole stroke this far into the detected face "
                            f"(left_cut_inward_m, 0..8 mm, default {RIGHT_FACE_INWARD_MM:g})")
+    plan.add_argument("--start-fraction", type=float, default=None,
+                      help="top only: start the cut this fraction of the seam from the carton's LEFT end "
+                           "(0.05..0.95) and cut toward the right end in the left arm's direction")
     plan.add_argument("--set", action="append", metavar="PARAM=VALUE",
                       help="extra planning parameter, e.g. left_cut_extend_to_corners=false (repeatable)")
     execute = sub.add_parser("execute", help="dispatch the retained plan")

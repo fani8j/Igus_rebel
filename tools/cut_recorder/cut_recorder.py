@@ -23,8 +23,11 @@ Output (per clip, folder named by local time YYYYmmdd_HHMMSS)
   seam_3d_base_link.json   copy of the current snapshot (best effort)
 
 Camera spec syntax (--camera, repeatable; overrides a default of that name):
-  name=topic[:type[:fps[:scale]]]     type = raw (sensor_msgs/Image) or
+  name=topic[:type[:fps[:scale[:domain]]]]
+                                      type = raw (sensor_msgs/Image) or
                                       compressed (sensor_msgs/CompressedImage)
+                                      domain = camera (read in the --camera-domain context, default) or
+                                      main (always the robot-domain context)
 """
 from __future__ import annotations
 
@@ -56,6 +59,7 @@ EXTERNAL_DRIVE = '/media/farhan/My Passport'
 EXTERNAL_OUT_DIR = EXTERNAL_DRIVE + '/igus_nvidia/cut_videos'
 FALLBACK_OUT_DIR = '/home/farhan/Igus_rebel/outputs/cut_videos'
 
+MAX_DOMAIN_ID = 232       # Fast DDS: higher ids do not work (port numbers too high)
 STATUS_ACCEPTED = 1
 STATUS_EXECUTING = 2
 ACTIVE_STATUSES = (STATUS_ACCEPTED, STATUS_EXECUTING)
@@ -76,6 +80,9 @@ class CameraSpec:
     kind: str = 'raw'          # 'raw' | 'compressed'
     fps: float = 15.0
     scale: float = 1.0
+    # 'camera': read in the --camera-domain context when one is given; 'main': always the robot-domain
+    # context (the side_cut_vision overlays are published there, next to the coordinator status).
+    domain: str = 'camera'
 
 
 DEFAULT_CAMERAS = {
@@ -86,13 +93,38 @@ DEFAULT_CAMERAS = {
     'scene': CameraSpec('scene', '/camera/color/image_raw/compressed',
                         'compressed', 15.0, 0.5),
     # Gemini 305 on the left arm's knife (rebel_cameras wrist_camera.yaml).
-    'wrist': CameraSpec('wrist', '/wrist_camera/color/image_raw/compressed',
+    'wrist': CameraSpec('wrist', '/arm_left/wrist_camera/color/image_raw/compressed',
                         'compressed', 15.0, 1.0),
     # Gemini 305 on the right arm's knife (rebel_cameras right_wrist_camera.yaml).
     'right_wrist': CameraSpec('right_wrist',
-                              '/right_wrist_camera/color/image_raw/compressed',
+                              '/arm_right/wrist_camera/color/image_raw/compressed',
                               'compressed', 15.0, 1.0),
+    # USB gripper cameras (rebel_cameras *_gripper_camera.yaml); not recorded
+    # by default, add them with --cameras.
+    'left_gripper': CameraSpec('left_gripper',
+                               '/arm_left/gripper_camera/image_raw/compressed',
+                               'compressed', 30.0, 1.0),
+    'right_gripper': CameraSpec('right_gripper',
+                                '/arm_right/gripper_camera/image_raw/compressed',
+                                'compressed', 30.0, 1.0),
+    # side_cut_vision probe overlays (measure-only probe, ~3 Hz): published in the robot domain; the 15 fps
+    # video repeats each overlay until the next one (the FrameMapper gap fill), so it stays in time sync
+    # with the other cameras. No frames (probe not running) -> status 'no frames' as for any camera.
+    'left_vision': CameraSpec('left_vision', '/side_cut_vision/arm_left/overlay/compressed',
+                              'compressed', 15.0, 1.0, 'main'),
+    'right_vision': CameraSpec('right_vision', '/side_cut_vision/arm_right/overlay/compressed',
+                               'compressed', 15.0, 1.0, 'main'),
 }
+
+
+def plan_camera_contexts(specs, camera_domain: Optional[int], main_domain: int) -> Dict[str, str]:
+    """Which context each camera is read in: 'main' (robot domain) or 'camera' (second context).
+
+    A second context exists only when --camera-domain differs from the robot domain and at least one spec
+    wants it; otherwise everything is read in the main context."""
+    separate = (camera_domain is not None and camera_domain != main_domain
+                and any(sp.domain == 'camera' for sp in specs))
+    return {sp.name: ('camera' if separate and sp.domain == 'camera' else 'main') for sp in specs}
 
 
 def parse_camera_spec(text: str) -> CameraSpec:
@@ -116,13 +148,17 @@ def parse_camera_spec(text: str) -> CameraSpec:
         base.fps if base else 15.0)
     scale = float(parts[3]) if len(parts) > 3 and parts[3].strip() else (
         base.scale if base else 1.0)
-    if len(parts) > 4:
+    if len(parts) > 5:
         raise ValueError(f'camera spec {text!r}: too many fields')
+    domain = parts[4].strip() if len(parts) > 4 and parts[4].strip() else (
+        base.domain if base else 'camera')
+    if domain not in ('main', 'camera'):
+        raise ValueError(f'camera spec {text!r}: domain must be main or camera')
     if not (0 < fps <= 240):
         raise ValueError(f'camera spec {text!r}: fps out of range')
     if not (0 < scale <= 4):
         raise ValueError(f'camera spec {text!r}: scale out of range')
-    return CameraSpec(name, topic, kind, fps, scale)
+    return CameraSpec(name, topic, kind, fps, scale, domain)
 
 
 # --------------------------------------------------------------------------
@@ -430,6 +466,7 @@ class CameraRecorder:
             'video_duration_s': round(self._mapper.next_index / self.spec.fps, 3),
             'first_frame_offset_s': self.first_frame_offset_s,
             'tail_padded_frames': self.tail_padded,
+            'domain': self.spec.domain,
         }
         if self.write_error:
             d['error'] = self.write_error
@@ -580,26 +617,70 @@ class CutRecorder:
         self.sm = ClipStateMachine(args.post_roll_s, args.max_clip_s)
         self.clip: Optional[Clip] = None
         self._active_goals: Dict[str, int] = {}
+        # dual-arm coordinator trigger: recording while it executes (incl. waiting at a phase barrier)
+        self._coord_active = False
         self._lock = threading.Lock()
         sensor_qos = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT,
                                 history=HistoryPolicy.KEEP_LAST, depth=2)
         self._subs = []
         if args.now:
             self.log('--now: recording immediately; status topic ignored')
+        elif args.coordinator_status_topic:
+            from dual_cut_msgs.msg import CoordinatorStatus
+            self._coord_states = (CoordinatorStatus.STATE_WAITING_BARRIER, CoordinatorStatus.STATE_EXECUTING)
+            self._subs.append(self.node.create_subscription(
+                CoordinatorStatus, args.coordinator_status_topic, self._on_coord_status, 10))
         else:
             self._subs.append(self.node.create_subscription(
                 GoalStatusArray, args.status_topic, self._on_status,
                 qos_profile_action_status_default))
+        # optional second context for the camera topics (real cell: cameras in domain 11, robot in 12)
+        self._cam_ctx = self._cam_node = self._cam_executor = self._cam_thread = None
+        cam_domain = getattr(args, 'camera_domain', None)
+        main_domain = rclpy.get_default_context().get_domain_id()
+        self._contexts = plan_camera_contexts(specs, cam_domain, main_domain)
+        if 'camera' in self._contexts.values():
+            from rclpy.context import Context
+            from rclpy.executors import MultiThreadedExecutor
+            self._cam_ctx = Context()
+            rclpy.init(args=[], context=self._cam_ctx, domain_id=cam_domain,
+                       **self._init_kwargs())
+            self._cam_node = rclpy.create_node(
+                'cut_recorder_cameras', context=self._cam_ctx, cli_args=[],
+                use_global_arguments=False, start_parameter_services=False,
+                enable_rosout=False)
+            try:
+                self._cam_node.destroy_publisher(self._cam_node._parameter_event_publisher)
+                self._cam_node._parameter_event_publisher = None
+            except Exception:
+                pass
+            self._cam_executor = MultiThreadedExecutor(num_threads=2, context=self._cam_ctx)
+            self._cam_executor.add_node(self._cam_node)
+            self.log(f'camera topics read in ROS domain {cam_domain} '
+                     f'(second context); status/vision topics in domain {main_domain}')
+        elif cam_domain is not None:
+            self.log(f'--camera-domain {cam_domain} is the robot domain: one context')
         for s in specs:
             msg_t = self._msg_type(s)
-            self._subs.append(self.node.create_subscription(
+            node = self._cam_node if self._contexts[s.name] == 'camera' else self.node
+            self._subs.append(node.create_subscription(
                 msg_t, s.topic, self._make_cam_cb(s.name), sensor_qos, raw=True))
         self.timer = self.node.create_timer(0.1, self._tick)
         self.log('cameras: ' + ', '.join(
             f'{s.name}={s.topic} ({s.kind}, {s.fps:g} fps, scale {s.scale:g})'
             for s in specs))
-        if not args.now:
+        if args.coordinator_status_topic and not args.now:
+            self.log(f'waiting for the coordinator to execute on {args.coordinator_status_topic}')
+        elif not args.now:
             self.log(f'waiting for trajectory goals on {args.status_topic}')
+
+    @staticmethod
+    def _init_kwargs() -> dict:
+        try:
+            from rclpy.signals import SignalHandlerOptions
+            return {'signal_handler_options': SignalHandlerOptions.NO}
+        except ImportError:  # pragma: no cover
+            return {}
 
     @staticmethod
     def _msg_type(spec: CameraSpec):
@@ -630,6 +711,10 @@ class CutRecorder:
             self.clip.update_goal_status(every)
         self._tick()
 
+    def _on_coord_status(self, msg) -> None:
+        self._coord_active = int(msg.state) in self._coord_states
+        self._tick()
+
     def _make_cam_cb(self, name: str):
         def cb(data: bytes) -> None:
             clip = self.clip
@@ -640,11 +725,11 @@ class CutRecorder:
     def _tick(self) -> None:
         if self.args.now:
             return
-        ev = self.sm.update(time.monotonic(), bool(self._active_goals))
+        ev = self.sm.update(time.monotonic(), bool(self._active_goals) or self._coord_active)
         if ev is None:
             return
         if ev[0] == 'start':
-            self._start_clip('status')
+            self._start_clip('coordinator' if self.args.coordinator_status_topic else 'status')
             if self.clip is not None:
                 self.clip.note_goals(self._active_goals)
                 self.clip._write_meta(None, None, recording=True)
@@ -684,6 +769,10 @@ class CutRecorder:
         from rclpy.executors import SingleThreadedExecutor
         ex = SingleThreadedExecutor()
         ex.add_node(self.node)
+        if self._cam_executor is not None:
+            self._cam_thread = threading.Thread(
+                target=self._cam_executor.spin, name='ros-camera-executor', daemon=True)
+            self._cam_thread.start()
         if self.args.now:
             self.sm.force_open(time.monotonic())
             self._start_clip('now')
@@ -692,8 +781,15 @@ class CutRecorder:
                 ex.spin_once(timeout_sec=0.1)
         finally:
             self._stop_clip('shutdown')
+            if self._cam_executor is not None:
+                self._cam_executor.shutdown()
+                if self._cam_thread is not None:
+                    self._cam_thread.join(timeout=2.0)
             ex.shutdown()
             self.node.destroy_node()
+            if self._cam_node is not None:
+                self._cam_node.destroy_node()
+                self._cam_ctx.shutdown()
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -702,17 +798,24 @@ def build_parser() -> argparse.ArgumentParser:
                     'a trajectory (subscriptions only).')
     p.add_argument('--status-topic', default=DEFAULT_STATUS_TOPIC,
                    help='FollowJointTrajectory action status topic (default: %(default)s)')
+    p.add_argument('--coordinator-status-topic', default='',
+                   help='dual-arm cell: record while this dual_cut_msgs/CoordinatorStatus topic reports '
+                        'WAITING_BARRIER or EXECUTING (replaces --status-topic), e.g. /dual_cut_coordinator/status')
     p.add_argument('--post-roll-s', type=float, default=3.0,
                    help='keep recording this long after the last active goal (default 3.0)')
     p.add_argument('--max-clip-s', type=float, default=900.0,
                    help='hard-close a clip after this many seconds (default 900)')
     p.add_argument('--now', action='store_true',
                    help='record immediately until Ctrl-C (ignore the status topic)')
-    p.add_argument('--cameras', default='knife,scene,wrist,right_wrist',
+    p.add_argument('--cameras', default='knife,scene,wrist,right_wrist,left_vision,right_vision',
                    help='comma-separated camera names to record '
-                        '(default: knife,scene,wrist,right_wrist)')
+                        '(default: knife,scene,wrist,right_wrist,left_vision,right_vision)')
     p.add_argument('--camera', action='append', default=[], metavar='SPEC',
-                   help='define/override a camera: name=topic[:raw|compressed[:fps[:scale]]]; repeatable')
+                   help='define/override a camera: name=topic[:raw|compressed[:fps[:scale[:main|camera]]]]; repeatable')
+    p.add_argument('--camera-domain', type=int, default=None, metavar='N',
+                   help='read the camera topics (all specs except the main-domain vision overlays) in a second '
+                        'ROS context in domain N (real cell: cameras in 11, robot/coordinator in the shell '
+                        'domain 12). Default: everything in the shell domain')
     p.add_argument('--scene-scale', type=float, default=None,
                    help='downscale factor of the scene camera (default 0.5)')
     p.add_argument('--out-dir', default=None,
@@ -755,6 +858,9 @@ def main(argv=None) -> int:
         args.out_dir = default_out_dir()
     if args.post_roll_s < 0 or args.max_clip_s <= 0:
         print('cut_recorder: bad --post-roll-s/--max-clip-s', file=sys.stderr)
+        return 2
+    if args.camera_domain is not None and not (0 <= args.camera_domain <= MAX_DOMAIN_ID):
+        print(f'cut_recorder: --camera-domain must be 0..{MAX_DOMAIN_ID}', file=sys.stderr)
         return 2
     try:
         os.makedirs(args.out_dir, exist_ok=True)

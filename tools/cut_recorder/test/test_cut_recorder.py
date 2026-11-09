@@ -180,7 +180,7 @@ def test_parse_camera_spec():
 def test_resolve_cameras():
     p = cr.build_parser()
     specs = cr.resolve_cameras(p.parse_args([]))
-    assert [s.name for s in specs] == ['knife', 'scene', 'wrist', 'right_wrist']
+    assert [s.name for s in specs] == ['knife', 'scene', 'wrist', 'right_wrist', 'left_vision', 'right_vision']
     assert specs[1].scale == 0.5
     specs = cr.resolve_cameras(p.parse_args(['--cameras', 'knife,scene',
                                              '--scene-scale', '0.25']))
@@ -388,3 +388,75 @@ def test_recorder_no_tail_padding_without_frames_or_when_complete():
     rec.add_frame(100.9, _frame(2))
     st = rec.close(stop_rel_s=1.0)
     assert st['tail_padded_frames'] == 0 and len(ws[0].frames) == 10
+
+
+# ---------------------------------------------------------------- camera domain split / vision overlays
+def test_default_vision_specs():
+    p = cr.build_parser()
+    specs = {s.name: s for s in cr.resolve_cameras(p.parse_args([]))}
+    lv, rv = specs['left_vision'], specs['right_vision']
+    assert lv.topic == '/side_cut_vision/arm_left/overlay/compressed' and lv.kind == 'compressed'
+    assert rv.topic == '/side_cut_vision/arm_right/overlay/compressed'
+    assert lv.fps == 15.0 and lv.scale == 1.0                   # 15 fps video, overlays repeated between frames
+    assert lv.domain == 'main' and rv.domain == 'main'          # published in the robot domain
+    for n in ('knife', 'scene', 'wrist', 'right_wrist'):
+        assert specs[n].domain == 'camera'
+    assert cr.parse_camera_spec('left_vision=/other').domain == 'main'    # inherits the default's domain
+    assert cr.parse_camera_spec('mycam=/x/compressed').domain == 'camera'
+    assert cr.parse_camera_spec('mycam=/x/compressed:compressed:5:1:main').domain == 'main'
+    with pytest.raises(ValueError):
+        cr.parse_camera_spec('mycam=/x:raw:5:1:robot')
+
+
+def test_camera_domain_split_plan():
+    specs = cr.resolve_cameras(cr.build_parser().parse_args([]))
+    # no --camera-domain, or equal to the robot domain: one context
+    for cd in (None, 12):
+        assert set(cr.plan_camera_contexts(specs, cd, 12).values()) == {'main'}
+    plan = cr.plan_camera_contexts(specs, 11, 12)
+    assert plan['wrist'] == plan['right_wrist'] == plan['scene'] == plan['knife'] == 'camera'
+    assert plan['left_vision'] == plan['right_vision'] == 'main'
+    only_main = [s for s in specs if s.domain == 'main']
+    assert set(cr.plan_camera_contexts(only_main, 11, 12).values()) == {'main'}   # no camera context needed
+
+
+def test_camera_domain_option_and_range():
+    p = cr.build_parser()
+    assert p.parse_args([]).camera_domain is None
+    assert p.parse_args(['--camera-domain', '11']).camera_domain == 11
+    assert cr.main(['--camera-domain', '233', '--out-dir', '/tmp/cr_unused_dir']) == 2
+    assert cr.main(['--camera-domain', '-1', '--out-dir', '/tmp/cr_unused_dir']) == 2
+
+
+def test_second_context_is_subscription_only():
+    text = open(SRC).read()
+    assert 'domain_id=cam_domain' in text and "'cut_recorder_cameras'" in text
+    # the camera node gets subscriptions only (checked on the whole file by test_only_subscriptions_created)
+    assert set(re.findall(r'\.create_(\w+)\(', text)) <= {'node', 'subscription', 'timer'}
+    assert 'create_publisher' not in text
+
+
+def test_slow_overlay_stream_stays_in_time_sync_with_a_fast_camera():
+    """A 3 Hz overlay in a 15 fps video: every video frame k shows the newest overlay stamped at or before
+    k/15 s (zero-order hold), like the 15 Hz wrist stream, and both videos have the same length."""
+    wrist, ww = _rec(fps=15.0)
+    vision, vw = _rec(fps=15.0)
+    start = 100.0
+    for k in range(0, 31):                                        # 2 s of 15 Hz wrist frames
+        wrist.add_frame(start + k / 15.0, _frame(k))
+    ov_stamps = [i / 3.0 for i in range(0, 7)]                   # 3 Hz overlays at 0, .333, ... 2.0 s
+    for i, t in enumerate(ov_stamps):
+        vision.add_frame(start + t + 0.02, _frame(100 + i))       # published 20 ms after the stamp it shows
+    sw = wrist.close(stop_rel_s=2.0)
+    sv = vision.close(stop_rel_s=2.0)
+    assert sw['frames_in_video'] == sv['frames_in_video'] == 31
+    frames = vw[0].frames
+    assert len(frames) == 31 and len(ww[0].frames) == 31
+    import math
+    idx = [math.floor((ts + 0.02) * 15.0 + 0.5) for ts in ov_stamps]
+    for k, v in enumerate(frames):
+        expect = max(i for i, j in enumerate(idx) if j <= k)
+        assert v == 100 + expect, (k, v)
+    # the newest overlay shown at video time t was stamped at most one overlay period (0.333 s) earlier
+    assert sv['frames_written'] == 7 and sv['frames_duplicated'] == 31 - 7
+    assert sv['domain'] == 'camera'                               # stats carry the spec's domain
