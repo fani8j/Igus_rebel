@@ -120,6 +120,9 @@ void RebelSocket::PushMessages(std::vector<std::string> && messages)
     return;
   }
 
+  const auto receivedAt = std::chrono::steady_clock::now();
+  const std::int64_t receivedSystemNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::system_clock::now().time_since_epoch()).count();
   std::size_t dropped = 0;
   {
     std::lock_guard<std::mutex> lockGuard(messageLock);
@@ -129,7 +132,11 @@ void RebelSocket::PushMessages(std::vector<std::string> && messages)
         unprocessedMessages.pop_front();
         ++dropped;
       }
-      unprocessedMessages.push_back(std::move(message));
+      unprocessedMessages.push_back({std::move(message), receivedAt, receivedSystemNs});
+    }
+    if (dropped > 0) {
+      // Under messageLock: a consumer that pops after this push sees the new count.
+      droppedMessages.fetch_add(dropped);
     }
   }
   messageCondition.notify_one();
@@ -259,12 +266,22 @@ std::string RebelSocket::GetMessage()
   if (unprocessedMessages.empty()) {
     return "";
   }
-  std::string msg = std::move(unprocessedMessages.front());
+  std::string msg = std::move(unprocessedMessages.front().text);
   unprocessedMessages.pop_front();
   return msg;
 }
 
 bool RebelSocket::WaitForMessage(std::string & message, std::chrono::milliseconds timeout)
+{
+  ReceivedMessage received;
+  if (!WaitForMessage(received, timeout)) {
+    return false;
+  }
+  message = std::move(received.text);
+  return true;
+}
+
+bool RebelSocket::WaitForMessage(ReceivedMessage & message, std::chrono::milliseconds timeout)
 {
   std::unique_lock<std::mutex> lock(messageLock);
   messageCondition.wait_for(

@@ -15,11 +15,24 @@ Everything runs in namespace /arm_<arm>:
   camera_pole_collision camera_pole_collision.py on the DUAL TF tree (base_frame:=arm_<arm>_base_link),
                         publishing in frame base_link (output_frame_id) into /arm_<arm>/ apply_planning_scene and
                         /arm_<arm>/box_motion/camera_pole_collision.
+  table_collision       table_collision.py (arg table_in_arm_scene, default true): the dual cell's `table` box as
+                        collision object `table` in this arm's scene, in the arm's planning frame (base_link), from
+                        the same calibration YAML and table size/thickness/setback as the dual URDF, padded by
+                        table_padding_m (default 10 mm; the arm's base_link is exempt through an ACM entry, every other
+                        link keeps the margin; the coordinator's table_min_clearance_m gate uses the same value).
+                        Without it only the coordinator's
+                        final world check sees the table and refuses plans the per-arm planner could have routed
+                        around it.
   joint_state_relay     /joint_states (dual) -> /arm_<arm>/joint_states with arm_<arm>_jointN -> jointN.
 
 Executor parameters = box_h_cut_executor.yaml (arg executor_config) + config/arm_<arm>_executor_overrides.yaml
 (arg executor_overrides) + execution_enabled:=false. Read-only parameters (e.g. external_snapshot_file in a
 test) are set only here, at launch.
+
+SPEED PROFILE (arg speed_profile, default|fast, default `default`): `default` changes nothing. `fast` applies the four
+speed scalings of igus_rebel_moveit_config/config/speed_profile_fast.yaml AFTER the executor YAML, the overrides file and
+the launch-owned values, so neither file can undo them (an overrides file that sets a scaling gets a WARNING). The active
+profile and the effective scalings are logged at start-up.
 
 BLADE COLLISION (arg blade_collision, default true since 2026-10-15 when the main install got the executor with
 carton_contact_links; knife_c only): the single-arm knife_c model has no collision
@@ -45,7 +58,7 @@ not carry them at all).
 import os
 from pathlib import Path
 
-from ament_index_python.packages import get_package_share_directory
+from ament_index_python.packages import PackageNotFoundError, get_package_prefix, get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction, TimerAction
 from launch.conditions import IfCondition
@@ -115,6 +128,65 @@ def node_parameters(document, source):
     return merged
 
 
+SPEED_PROFILES = ("default", "fast")
+SPEED_SCALING_KEYS = ("velocity_scaling", "acceleration_scaling", "transit_velocity_scaling",
+                      "transit_acceleration_scaling")
+SPEED_PROFILE_FILE = "speed_profile_fast.yaml"
+# joint_limits.yaml (igus_rebel_moveit_config): the scalings are fractions of these; only used for the log line.
+JOINT_LIMIT_VELOCITY_RAD_S = 0.785
+JOINT_LIMIT_ACCELERATION_RAD_S2 = 5.24
+
+
+def speed_profile_path():
+    return os.path.join(get_package_share_directory(MOVEIT_CONFIG), "config", SPEED_PROFILE_FILE)
+
+
+def speed_profile_parameters(profile, profile_file=None):
+    """Executor parameters the speed profile sets ({} for `default`). Fail closed: an unknown profile, or a fast profile file
+    that does not define exactly the four finite scalings in (0, 1], is a launch error."""
+    if profile not in SPEED_PROFILES:
+        raise RuntimeError(f"speed_profile must be one of {SPEED_PROFILES}, got {profile!r}")
+    if profile == "default":
+        return {}
+    path = profile_file or speed_profile_path()
+    params = node_parameters({k: v for k, v in (load_yaml(Path(path)) or {}).items() if k == EXECUTOR_NODE}, path)
+    if set(params) != set(SPEED_SCALING_KEYS):
+        raise RuntimeError(f"{path}: the {EXECUTOR_NODE} section must define exactly {SPEED_SCALING_KEYS}, got {sorted(params)}")
+    for name, value in params.items():
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not (0.0 < float(value) <= 1.0):
+            raise RuntimeError(f"{path}: {name} must be a number in (0, 1], got {value!r}")
+    return {name: float(value) for name, value in params.items()}
+
+
+def speed_profile_summary(profile, params):
+    """One log line: the active profile and the effective scalings with their physical values (rad/s, rad/s^2).
+    A scaling the YAML does not set is shown as the executor's code default."""
+    code_defaults = {"velocity_scaling": 0.1376, "acceleration_scaling": 0.0763,
+                     "transit_velocity_scaling": 0.1376, "transit_acceleration_scaling": 0.0763}
+
+    def show(name, limit):
+        value = float(params.get(name, code_defaults[name]))
+        return f"{name}={value:g} ({value * limit:.3f} {'rad/s' if limit == JOINT_LIMIT_VELOCITY_RAD_S else 'rad/s^2'})"
+
+    v, a = JOINT_LIMIT_VELOCITY_RAD_S, JOINT_LIMIT_ACCELERATION_RAD_S2
+    return (f"speed_profile={profile}: contact {show('velocity_scaling', v)} {show('acceleration_scaling', a)}; "
+            f"{show('transit_velocity_scaling', v)} {show('transit_acceleration_scaling', a)}")
+
+
+TABLE_SCRIPT = "table_collision.py"
+
+
+def table_script_installed():
+    """True when table_collision.py is in this package's install. The launch files of a --symlink-install tree
+    change with the source, the script only after a rebuild: without this check a stale install would abort the
+    whole launch on 'executable not found'."""
+    try:
+        prefix = get_package_prefix(THIS)
+    except PackageNotFoundError:
+        return False
+    return os.path.isfile(os.path.join(prefix, "lib", THIS, TABLE_SCRIPT))
+
+
 def default_calibration_file():
     return os.path.join(get_package_share_directory("rebel_dual_table_description"), "config",
                         "dual_arm_calibration.yaml")
@@ -166,7 +238,7 @@ def with_blade_disable_pairs(srdf_text, fragment_text):
     return srdf_text[:index] + fragment_text.rstrip("\n") + "\n" + srdf_text[index:]
 
 
-BLADE_MIN_CLEARANCES_M = {"hover_clearance_m": 0.012, "left_lateral_standoff_m": 0.012}
+BLADE_MIN_CLEARANCES_M = {"hover_clearance_m": 0.012, "left_lateral_standoff_m": 0.0165}
 
 
 def blade_contact_links(executor_params):
@@ -178,7 +250,7 @@ def blade_contact_links(executor_params):
 
 
 def load_executor_parameters(executor_config, overrides_file, arm=None, calibration_file=None,
-                             blade_collision=False):
+                             blade_collision=False, speed_profile="default", speed_profile_file=None):
     base = node_parameters(load_yaml(Path(executor_config)), executor_config)
     overrides = {}
     if overrides_file:
@@ -197,8 +269,16 @@ def load_executor_parameters(executor_config, overrides_file, arm=None, calibrat
         merged["carton_contact_links"] = blade_contact_links(merged)
         # The blade box sits ~1 mm from the carton at the 10 mm hover/standoff poses, so an OMPL approach transit
         # can graze it (2026-10-15, 1 of 3 strict 09:20 runs refused); 12 mm passed both captures.
+        # left_lateral_standoff_m is measured from the cut line, which is left_cut_inward_m (7 mm) inside the wall,
+        # so the left hover TCP is only standoff - 7 mm from the wall and the box reaches ~6 mm ahead of the TCP:
+        # at 12 mm it overlapped the carton at the hover pose and the left face planned at 11 of 44 yaw cells.
+        # 15 mm: 34 of 44, min free-space blade-box clearance 0.81 mm (scan_results/left_face_blade_20261018/).
+        # 16.5 mm (2026-10-18 sweep 14..22 mm, 25/25/split settings): same windows as 15-16 mm, min clearance 1.77 mm;
+        # 17 mm loses yaw -5 on 0749 (scan_results/standoff_sweep_20261018/).
         for name in BLADE_MIN_CLEARANCES_M:
             merged[name] = max(float(merged.get(name, 0.0)), BLADE_MIN_CLEARANCES_M[name])
+    # LAST: the speed profile wins over the executor YAML and the overrides file ({} for `default`: nothing changes).
+    merged.update(speed_profile_parameters(speed_profile, speed_profile_file))
     return merged
 
 
@@ -294,7 +374,14 @@ def launch_setup(context):
         overrides = os.path.join(this_share, "config", f"arm_{arm}_executor_overrides.yaml")
     calibration = os.path.expanduser(LaunchConfiguration("calibration_file").perform(context).strip()) \
         or default_calibration_file()
-    executor_params = load_executor_parameters(executor_config, overrides, arm, calibration, use_blade)
+    speed_profile = LaunchConfiguration("speed_profile", default="default").perform(context).strip()
+    executor_params = load_executor_parameters(executor_config, overrides, arm, calibration, use_blade, speed_profile)
+    override_params = node_parameters(load_yaml(Path(overrides)), overrides) if overrides else {}
+    speed_notes = [f"[{THIS}] arm_{arm}: {speed_profile_summary(speed_profile, executor_params)}"]
+    if speed_profile != "default":
+        speed_notes += [f"[{THIS}] WARNING arm_{arm}: {overrides} sets {name}={override_params[name]!r}; the {speed_profile} "
+                        f"speed profile wins ({executor_params[name]!r})"
+                        for name in SPEED_SCALING_KEYS if name in override_params]
     overrides_notes = overrides_mismatches(
         arm, calibration, node_parameters(load_yaml(Path(overrides)), overrides) if overrides else {})
 
@@ -324,13 +411,36 @@ def launch_setup(context):
         remappings=[("/box_motion/camera_pole_collision", f"/{ns}/box_motion/camera_pole_collision")],
         output="screen")
 
+    table_wanted = LaunchConfiguration("table_in_arm_scene").perform(context).strip().lower() == "true"
+    table_missing = table_wanted and not table_script_installed()
+    table = Node(
+        condition=IfCondition(LaunchConfiguration("table_in_arm_scene")),
+        package=THIS, executable=TABLE_SCRIPT, name="table_collision", namespace=ns,
+        parameters=[{"use_sim_time": use_sim_time,
+                     "arm": arm,
+                     "calibration_file": calibration,   # the SAME file as the dual URDF / right base transform
+                     "output_frame_id": "base_link",
+                     "table_size": float(LaunchConfiguration("table_size").perform(context)),
+                     "table_thickness": float(LaunchConfiguration("table_thickness").perform(context)),
+                     "table_base_setback": float(LaunchConfiguration("table_base_setback").perform(context)),
+                     "padding_m": float(LaunchConfiguration("table_padding_m").perform(context))}],
+        output="screen")
+
     relay = Node(
         condition=IfCondition(LaunchConfiguration("run_relay")),
         package=THIS, executable="joint_state_relay.py", name="joint_state_relay", namespace=ns,
         parameters=[{"use_sim_time": use_sim_time, "arm": arm}], output="screen")
 
     actions = [LogInfo(msg=f"[{THIS}] arm_{arm}: executor parameters from {executor_config} + {overrides}"),
+               *[LogInfo(msg=note) for note in speed_notes],
                move_group_node, relay, camera_pole, delayed_executor]
+    if table_missing:
+        actions.insert(0, LogInfo(msg=(
+            f"[{THIS}] WARNING arm_{arm}: table_in_arm_scene:=true but {TABLE_SCRIPT} is not in the install of "
+            f"{THIS} (rebuild the package); the table is NOT in this arm's planning scene, only the coordinator's "
+            "final world check sees it")))
+    elif table_wanted:
+        actions.append(table)
     if arm == "right":
         actions.insert(0, LogInfo(msg=(
             f"[{THIS}] arm_right: snapshot_planning_base_xyz/rpy = arm_right_base of {calibration} "
@@ -360,9 +470,28 @@ def generate_launch_description():
         DeclareLaunchArgument("calibration_file", default_value="",
                               description="dual_arm_calibration YAML (empty = rebel_dual_table_description default); "
                                           "source of the right arm's snapshot_planning_base_xyz/rpy"),
+        DeclareLaunchArgument("speed_profile", default_value="default", choices=list(SPEED_PROFILES),
+                              description="default = box_h_cut_executor.yaml speeds unchanged; fast = the opt-in profile of "
+                                          "igus_rebel_moveit_config/config/speed_profile_fast.yaml (applied last, wins over "
+                                          "the overrides file); NOT validated on the real arms"),
         DeclareLaunchArgument("run_executor", default_value="true"),
         DeclareLaunchArgument("run_camera_pole", default_value="true"),
         DeclareLaunchArgument("run_relay", default_value="true"),
+        DeclareLaunchArgument("table_in_arm_scene", default_value="true", choices=["true", "false"],
+                              description="put the dual cell's table into this arm's planning scene as the collision "
+                                          "object `table` (false = the previous stack: only the coordinator's final "
+                                          "world check sees the table)"),
+        DeclareLaunchArgument("table_size", default_value="0.65",
+                              description="table edge length; must equal the xacro arg table_size of "
+                                          "rebel_dual_table.urdf.xacro"),
+        DeclareLaunchArgument("table_thickness", default_value="0.04",
+                              description="must equal the xacro arg table_thickness"),
+        DeclareLaunchArgument("table_base_setback", default_value="0.110",
+                              description="must equal the xacro arg table_base_setback"),
+        DeclareLaunchArgument("table_padding_m", default_value="0.010",
+                              description="grows the table box on every face (default 10 mm, = the coordinator's "
+                                          "table_min_clearance_m); the base link is exempt (ACM), every other "
+                                          "link keeps the margin; 0 = no margin"),
         DeclareLaunchArgument("box_h_cut_start_delay", default_value="3.0"),
         OpaqueFunction(function=launch_setup),
     ])

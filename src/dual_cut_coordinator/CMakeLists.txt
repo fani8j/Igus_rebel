@@ -15,6 +15,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(dual_cut_msgs REQUIRED)
+find_package(igus_rebel_msgs REQUIRED)
 find_package(geometric_shapes REQUIRED)
 find_package(moveit_core REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -33,6 +34,7 @@ find_package(trajectory_msgs REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(srdfdom REQUIRED)
 find_package(urdf REQUIRED)
+find_package(nlohmann_json REQUIRED)
 
 # Pure logic (WP5): trajectory sampling / concatenation / prefixing, swept-volume validator,
 # phase bookkeeping. No node, no executor dependency.
@@ -42,21 +44,26 @@ add_library(dual_cut_coordinator_lib SHARED
   src/phase_plan.cpp
   src/gates.cpp
   src/phase_validator.cpp
+  src/top_split.cpp
+  src/sequence_plan.cpp
+  src/plan_policy.cpp
+  src/cri_transit.cpp
 )
 target_include_directories(dual_cut_coordinator_lib PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 target_link_libraries(dual_cut_coordinator_lib PUBLIC Eigen3::Eigen)
+target_link_libraries(dual_cut_coordinator_lib PRIVATE nlohmann_json::nlohmann_json)
 ament_target_dependencies(dual_cut_coordinator_lib PUBLIC
   dual_cut_msgs geometric_shapes moveit_core sensor_msgs trajectory_msgs)
 
 # Stub node: starts, creates nothing, spins. WP6 replaces it (coordinator_node.cpp, execution.cpp,
 # monitor.cpp).
-add_executable(dual_cut_coordinator_node src/coordinator_node.cpp src/execution.cpp src/monitor.cpp)
+add_executable(dual_cut_coordinator_node src/coordinator_node.cpp src/execution.cpp src/monitor.cpp src/sequence_mode.cpp src/cri_execution.cpp)
 target_link_libraries(dual_cut_coordinator_node dual_cut_coordinator_lib)
 ament_target_dependencies(dual_cut_coordinator_node
   rclcpp rclcpp_action control_msgs controller_manager_msgs lifecycle_msgs moveit_msgs std_srvs std_msgs shape_msgs rcl_interfaces geometric_shapes
-  sensor_msgs trajectory_msgs geometry_msgs dual_cut_msgs)
+  sensor_msgs trajectory_msgs geometry_msgs dual_cut_msgs igus_rebel_msgs)
 
 # Offline measurement tool (WP5b): FCL cross-arm distance vs a brute-force triangle reference.
 add_executable(fcl_accuracy tools/fcl_accuracy.cpp)
@@ -93,7 +100,7 @@ if(BUILD_TESTING)
 
   set(DUAL_CUT_TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/test/data")
 
-  foreach(t test_trajectory_tools test_swept_volume test_phase_plan test_real_dual_model test_gates test_phase_validator)
+  foreach(t test_trajectory_tools test_swept_volume test_phase_plan test_real_dual_model test_gates test_phase_validator test_top_split test_sequence test_plan_policy test_cri_transit)
     ament_add_gtest(${t} test/${t}.cpp)
     target_link_libraries(${t} dual_cut_coordinator_lib)
     ament_target_dependencies(${t} ament_index_cpp srdfdom urdf)

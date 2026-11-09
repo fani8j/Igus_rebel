@@ -28,7 +28,8 @@ def generate_launch_description():
     dual_args = {"hardware_protocol": "mock_hardware", "calibration_file": calibration_file}
     forwarded = {name: LaunchConfiguration(name) for name in (
         "use_sim_time", "executor_config", "executor_overrides_left", "executor_overrides_right",
-        "box_h_cut_start_delay", "calibration_file", "blade_collision")}
+        "box_h_cut_start_delay", "calibration_file", "blade_collision", "table_in_arm_scene", "table_padding_m",
+        "speed_profile")}
     return LaunchDescription([
         DeclareLaunchArgument("use_gui", default_value="false", description="RViz of the dual move_group"),
         DeclareLaunchArgument("use_sim_time", default_value="false"),
@@ -39,13 +40,24 @@ def generate_launch_description():
         DeclareLaunchArgument("blade_collision", default_value="true", choices=["true", "false"],
                               description="per-arm planners: knife_c_blade collision box + carton_contact_links "
                                           "(see per_arm_planning.launch.py)"),
+        DeclareLaunchArgument("table_in_arm_scene", default_value="true", choices=["true", "false"],
+                              description="per-arm planners: the dual cell's table as collision object `table` "
+                                          "(see per_arm_planning.launch.py)"),
+        DeclareLaunchArgument("table_padding_m", default_value="0.010",
+                              description="padding of that table box (default 10 mm = the coordinator's table_min_clearance_m; "
+                                          "the base link is exempt, every other link keeps the margin)"),
+        DeclareLaunchArgument("speed_profile", default_value="default", choices=["default", "fast"],
+                              description="opt-in speed profile of the per-arm executors (see per_arm_planning.launch.py)"),
         DeclareLaunchArgument("calibration_file", default_value=os.path.join(
             get_package_share_directory("rebel_dual_table_description"), "config", "dual_arm_calibration.yaml"),
                               description="dual_arm_calibration YAML for the right arm's snapshot transform"),
         DeclareLaunchArgument("run_dual_move_group", default_value="true"),
+        DeclareLaunchArgument("allow_move_group_execution", default_value="false", choices=["true", "false"],
+                              description="false (default): the dual /move_group is plan-only (no RViz Plan & Execute)"),
         include("rebel_dual_table_description", "dual_table.launch.py", dual_args),
         include("rebel_dual_table_moveit_config", "move_group.launch.py",
-                {**dual_args, "use_gui": LaunchConfiguration("use_gui")},
+                {**dual_args, "use_gui": LaunchConfiguration("use_gui"),
+                 "allow_trajectory_execution": LaunchConfiguration("allow_move_group_execution")},
                 condition=IfCondition(LaunchConfiguration("run_dual_move_group"))),
         include("dual_cut_bringup", "both_arms_planning.launch.py", forwarded),
     ])

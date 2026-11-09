@@ -6,6 +6,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -14,8 +15,12 @@
 #include <vector>
 
 #include "rclcpp/rclcpp.hpp"
+#include "rclcpp_action/rclcpp_action.hpp"
 #include "rclcpp_lifecycle/state.hpp"
+#include "igus_rebel_msgs/action/move_joint.hpp"
 #include "igus_rebel_msgs/msg/digital_output.hpp"
+#include "igus_rebel_msgs/msg/hardware_state.hpp"
+#include "sensor_msgs/msg/joint_state.hpp"
 #include "igus_rebel_msgs/srv/set_digital_output.hpp"
 #include "std_srvs/srv/trigger.hpp"
 #include <hardware_interface/system_interface.hpp>
@@ -23,6 +28,7 @@
 #include "igus_rebel/RebelSocket.hpp"
 #include "igus_rebel/CriMessages.hpp"
 #include "igus_rebel/FaultGroup.hpp"
+#include "igus_rebel/MoveSupervisor.hpp"
 #include "igus_rebel/RebelSafety.hpp"
 
 using namespace hardware_interface;
@@ -45,6 +51,9 @@ private:
   {
     std::array<double, 6> positionRad{};
     Safety::SteadyClock::time_point stamp{};
+    // Wall-clock (system_clock) time of the same instant, ns since the Unix epoch: the header
+    // stamp of ~/robot_joint_states (the acquisition time of the sample, never "now").
+    std::int64_t systemStampNs = 0;
     std::uint64_t sequence = 0;  // 0 = no valid STATUS yet
     float overridePercent = 0.0f;
     // Cumulative count of CRI message counter values skipped (any message type) up to this
@@ -53,7 +62,9 @@ private:
   };
 
   rclcpp::Node::SharedPtr node_;
-  std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
+  // Two threads: the move_joint cancel callback must never wait behind reset_and_enable (which
+  // blocks up to 3 s). The action server has its own callback group.
+  std::shared_ptr<rclcpp::executors::MultiThreadedExecutor> executor_;
   std::thread executorThread;
 
   std::shared_ptr<RebelSocket> rebelSocket;
@@ -78,7 +89,21 @@ private:
   // and never cleared automatically. Only on_activate() clears it, and only after confirming a
   // fresh STATUS. The component name (from the URDF ros2_control tag) is used in the log/recovery
   // text so the operator has the exact commands to run.
+  //
+  // WHILE LATCHED /joint_states IS FROZEN AND MUST NOT BE TRUSTED: read() returns ERROR, so
+  // ros2_control moves the component to UNCONFIGURED and stops calling read(); the state
+  // interfaces keep their last values and joint_state_broadcaster keeps publishing them with
+  // fresh stamps (measured: the arm coasted on while /joint_states stayed put). The driver does
+  // not touch the state interfaces from any other thread (data race) and does not write NaN into
+  // them. Use the node's own telemetry instead, which keeps running while latched, UNCONFIGURED
+  // or INACTIVE: ~/robot_joint_states (latest STATUS, stamped with its receive time) and
+  // ~/hardware_state (latched, latch_reason, status age, ...), see PublishTelemetry().
   std::atomic<bool> hardwareErrorLatched_{false};
+  // First cause of the current latch (set right after the latch flag by LatchHardwareError /
+  // OnPeerFault, cleared when the latch clears). latchVersion_ changes on every set/clear.
+  mutable std::mutex latchReasonLock_;
+  std::string latchReason_;
+  std::atomic<std::uint64_t> latchVersion_{0};
   std::string componentName_;
   // Optional hardware parameters (see on_init); the defaults reproduce the single-arm names.
   // Two Igus/Rebel instances in one controller_manager need distinct node_name values (and
@@ -86,6 +111,9 @@ private:
   std::string nodeName_ = kDefaultNodeName;
   std::string digitalOutputService_ = kDefaultDigitalOutputService;
   std::string trajectoryControllerName_ = kDefaultTrajectoryControllerName;
+  // Optional hardware parameter jog_velocity_scale: jog [%] = scale * velocity [deg/s]. Default is
+  // JOINT_VELOCITY_SCALE (2.0); set once in on_init, read-only afterwards.
+  double jogVelocityScale_ = JOINT_VELOCITY_SCALE;
   // Optional hardware parameter fault_group: Rebel instances in one process with the same group
   // name stop together (see FaultGroup.hpp). Empty = not in a group = no change in behaviour.
   // faultMember_ is created before the message thread starts (so it can be read there without
@@ -180,13 +208,150 @@ private:
   // ROS2 communication
   rclcpp::Service<igus_rebel_msgs::srv::SetDigitalOutput>::SharedPtr digital_output_srv_;
 
+  // ---- Robot-side joint move (CRI "CMD Move Joint"), see ExecuteMoveGoal() ----
+  // Once a Move Joint is sent the robot owns the motion: zero jog, a paused ALIVEJOG or a closed
+  // socket do NOT stop it, only "CMD Move Stop" does. Hence every stop/fault path calls
+  // RequestMoveStop().
+  using MoveJointAction = igus_rebel_msgs::action::MoveJoint;
+  using MoveGoalHandle = rclcpp_action::ServerGoalHandle<MoveJointAction>;
+  enum MoveState : int {kMoveIdle = 0, kMoveSending = 1, kMoveMoving = 2, kMoveStopping = 3};
+  // Events of the current move, filled by the message thread, read by the move thread.
+  struct MoveEvents
+  {
+    bool moveAck = false;     // MOVETOEXECACK
+    bool cmdAck = false;      // CMDACK for the Move Joint counter
+    bool cmdError = false;    // CMDERROR for the Move Joint counter
+    std::string cmdErrorText;
+    bool endSeen = false;     // MOVETOEXECEND
+    int endCode = 0;
+    std::string endReason;
+    // MOVETOEXECERROR (or an EXECERROR while the move is active): the robot failed the move,
+    // e.g. "605 MOVETOEXECERROR 0 0 MoveTo Hardware error _ESTOP". The numeric code 0 does NOT
+    // mean success. The first error of the goal is kept. It never confirms a pending Move Stop.
+    bool errorSeen = false;
+    std::string errorType;    // "MOVETOEXECERROR" or "EXECERROR"
+    std::string errorReason;  // everything after the program token
+  };
+
+  std::atomic<int> moveState_{kMoveIdle};
+  // One goal at a time: set when a goal is accepted, cleared when its result was sent.
+  std::atomic<bool> moveGoalBusy_{false};
+  std::atomic<bool> moveCancelRequested_{false};
+  // "CMD Move Stop" wanted. Sent by the ALIVEJOG thread (within ~10 ms of the request, then every
+  // Safety::kMoveStopResendPeriod) and PERSISTENT: a successful socket write is not a
+  // confirmation. While it is set jog is held at zero and new moves are refused. It is cleared
+  // ONLY when the robot is known to have stopped: (a) MOVETOEXECEND of the move, (b) standstill
+  // on fresh STATUS after motion was seen, or (c) all six drives disabled on fresh STATUS (the
+  // robot cannot move) -- or when a fresh start-up sequence / on_init resets the driver, or the
+  // move that owned it ended without a stop. A MOVETOEXECERROR / EXECERROR (the robot reporting
+  // that it failed, e.g. an e-stop) is NOT a confirmation: it faults the move and requests the
+  // stop, which then needs one of (a)-(c). Standstill without ever seeing motion does NOT
+  // confirm (the robot may not have started yet). Recovery of a never-confirmed stop: e-stop
+  // (or switch the drives off) -> "Pending CMD Move Stop confirmed" is logged -> inactive ->
+  // active (set_hardware_component_state) -> cycle the controllers.
+  std::atomic<bool> moveStopRequested_{false};
+  // When the next CMD Move Stop may go out; ArmNow() on every false->true transition of
+  // moveStopRequested_ (see Safety::ResendTimer: a concurrent deadline update cannot overwrite it).
+  Safety::ResendTimer moveStopTimer_;
+  // Standstill tracking for a pending stop with no move thread (ALIVEJOG thread only).
+  Move::Joints stopStillRef_{};
+  bool stopStillRefValid_ = false;
+  Safety::SteadyClock::time_point stopStillSince_{};
+  // Incremented by every RequestMoveStop() while a move is active; the move thread compares it
+  // with the value at the start of its goal, so no request is ever lost.
+  std::atomic<std::uint64_t> moveStopSeq_{0};
+  std::atomic<bool> peerFaulted_{false};
+  // Between on_activate() and on_deactivate()/on_error(): read()/write() are being called.
+  std::atomic<bool> activated_{false};
+  std::atomic<int> kinstateValue_{0};
+  std::atomic<int> moveCommandCounter_{-1};
+  std::mutex moveEventLock_;
+  MoveEvents moveEvents_;
+  std::mutex moveThreadLock_;
+  std::thread moveThread_;
+  // Velocity command interfaces of this arm that are claimed by an active controller (bit i =
+  // joint i), tracked through perform_command_mode_switch(). claimLock_ makes "accept a goal"
+  // and "prepare a claim" mutually exclusive; the pending deadline covers prepare -> perform.
+  std::mutex claimLock_;
+  std::atomic<unsigned> velocityClaimMask_{0};
+  // A controller claimed a velocity interface while a move was active (set under claimLock_ by
+  // perform_command_mode_switch, which cannot refuse the switch: Humble still activates the
+  // controllers). The move thread aborts and latches on it; cleared when a move starts.
+  std::atomic<bool> claimDuringMove_{false};
+  // Serializes the actual CMD Move Stop send (ALIVEJOG thread, Stop()) with the CMD Move Joint
+  // send, and makes "may this move still go out?" atomic with the send.
+  // Lock order (outer -> inner), never the reverse:
+  //   claimLock_ -> moveEventLock_
+  //   moveSendLock_ -> moveEventLock_ (short, never held across a send)
+  //   moveSendLock_ -> startupLock_ (try_lock only) / commandsLock / the socket write lock
+  // moveEventLock_ is a leaf for everything else. LatchHardwareError()/RequestMoveStop() take no
+  // lock that is held while moveSendLock_ or moveEventLock_ is taken (atomics, a leaf string lock
+  // and the fault group), and are never called with moveSendLock_ or moveEventLock_ held.
+  std::mutex moveSendLock_;
+  std::atomic<bool> failNextMoveSend_{false};
+  std::shared_ptr<std::function<void()>> beforeStopSendHook_;
+  std::shared_ptr<std::function<void()>> beforeMoveSendHook_;
+  std::shared_ptr<std::function<void()>> beforeHandleMessageHook_;
+  std::shared_ptr<std::function<void()>> beforeMoveFinishHook_;
+  // STATUS showed joint motion since the current/last CMD Move Joint was sent (see
+  // ExecuteMoveGoal): standstill only confirms a Move Stop for a robot that was moving.
+  std::atomic<bool> moveMotionSeen_{false};
+  bool stopDrivesOff_ = false;  // ALIVEJOG thread only: all drives disabled since stopDrivesOffSince_
+  Safety::SteadyClock::time_point stopDrivesOffSince_{};
+  bool stopMotionSeen_ = false;  // ALIVEJOG thread only: motion observed while a stop is pending
+  std::atomic<std::int64_t> claimPendingUntilNs_{0};
+  double moveMaxVelocityPercent_ = Move::kDefaultMaxVelocityPercent;
+  double moveMaxAccelerationPercent_ = Move::kDefaultMaxAccelerationPercent;
+  std::array<std::array<double, 2>, 6> jointLimits_ = Move::HardwareJointLimits();
+  rclcpp::CallbackGroup::SharedPtr moveGroup_;
+  rclcpp_action::Server<MoveJointAction>::SharedPtr moveServer_;
+
+  // ---- Telemetry that survives a latch (see hardwareErrorLatched_) ----
+  // ~/robot_joint_states: published by the message thread once per NEW valid STATUS. The
+  // velocity estimate state below is message-thread only.
+  rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr robotJointStatePub_;
+  std::array<double, 6> pubLastPos_{};
+  std::int64_t pubLastStampNs_ = 0;  // steady ns of the sample pubLastPos_ belongs to; 0 = none
+  std::array<double, 6> pubVel_{};
+  bool pubVelValid_ = false;
+  // ~/hardware_state: a timer (own callback group, so reset_and_enable cannot stall it) polls
+  // every kTelemetryPollPeriod and publishes at 10 Hz and immediately when a flag changed.
+  rclcpp::Publisher<igus_rebel_msgs::msg::HardwareState>::SharedPtr hardwareStatePub_;
+  rclcpp::CallbackGroup::SharedPtr telemetryGroup_;
+  rclcpp::TimerBase::SharedPtr hardwareStateTimer_;
+  // Timer callback only.
+  std::uint64_t hwPubLastKey_ = 0;
+  std::int64_t hwPubLastNs_ = 0;
+  std::uint64_t hwPubLastVersion_ = 0;
+  void PublishRobotJointStates(const JointSnapshot & sample);
+  void PublishHardwareState();
+  void SetLatchReason(const std::string & reason);
+  void ClearLatchReason();
+
+  void RequestMoveStop();
+  bool SendMoveStopNow();
+  void ConsumeMoveStopRequest();
+  bool MoveStopDue() const;
+  rclcpp_action::GoalResponse OnMoveGoal(
+    const rclcpp_action::GoalUUID & uuid, std::shared_ptr<const MoveJointAction::Goal> goal);
+  rclcpp_action::CancelResponse OnMoveCancel(const std::shared_ptr<MoveGoalHandle> goalHandle);
+  void OnMoveAccepted(const std::shared_ptr<MoveGoalHandle> goalHandle);
+  void ExecuteMoveGoal(const std::shared_ptr<MoveGoalHandle> goalHandle);
+  // Returns 0 (SUCCESS) if the goal may be sent, otherwise the result error code; `reason` says
+  // why. Called with claimLock_ held. Fills the supervisor inputs.
+  std::uint8_t CheckMoveAcceptable(
+    const MoveJointAction::Goal & goal, Move::Joints & measured, Move::Joints & start,
+    Move::Joints & target, std::string & reason);
+  void RecordMoveEvent(const CriMessages::ExecEvent & event, CriMessages::MessageType type);
+
   // Thread functions
   void AliveThreadFunction();
   void MessageThreadFunction();
 
   // Other functions
   int Ccnt();
-  bool Command(const std::string &);
+  // quiet: no warning when the send fails (used by the repeated Move Stop retry).
+  bool Command(const std::string &, bool quiet = false);
   void OnConnected(bool reconnect);
   void ZeroJog();
   // Latches the hardware error. If it was not latched yet and this instance is in a fault group,
@@ -198,7 +363,10 @@ private:
   void CheckFaultGroupStatus(
     CriMessages::Kinstate kinstate, const std::array<int, 16> & errorJoints);
   std::string FaultGroupRecoveryHint() const;
-  void HandleMessage(const std::string &);
+  // `receivedAt`/`receivedSystemNs`: when the socket read the bytes (not when this thread gets
+  // to them); stamps the STATUS snapshot.
+  void HandleMessage(
+    const std::string &, Safety::SteadyClock::time_point receivedAt, std::int64_t receivedSystemNs);
 
   // on_init helper: exactly six joints in CRI order with the interfaces this driver exports.
   bool ValidateJoints(const HardwareInfo & hardware_info);
@@ -237,6 +405,47 @@ public:
   // Bit i set = joint i (0..5) reports "Motor not enabled" in the latest STATUS.
   unsigned DrivesDisabledMask() const {return drivesDisabledMask_.load();}
   bool StatusHoldActive() const {return statusHold_.load();}
+  // Joint move state for tests/diagnostics: 0 idle, 1 sending, 2 moving, 3 stopping.
+  int MoveStateValue() const {return moveState_.load();}
+  bool MoveGoalBusy() const {return moveGoalBusy_.load();}
+  // Bit i set = the velocity command interface of joint i is claimed by a controller.
+  unsigned VelocityClaimMask() const {return velocityClaimMask_.load();}
+  // Test seams (never used by the plugin): the next CMD Move Joint send reports failure; a hook the
+  // ALIVEJOG thread runs between the check and the send of a CMD Move Stop (nullptr clears it).
+  void FailNextMoveJointSendForTest() {failNextMoveSend_ = true;}
+  void SetBeforeStopSendHookForTest(std::function<void()> hook)
+  {
+    std::atomic_store(
+      &beforeStopSendHook_,
+      hook ? std::make_shared<std::function<void()>>(std::move(hook)) :
+      std::shared_ptr<std::function<void()>>());
+  }
+  // Runs under the move/stop send lock just before the CMD Move Joint is written (nullptr clears).
+  void SetBeforeMoveSendHookForTest(std::function<void()> hook)
+  {
+    std::atomic_store(
+      &beforeMoveSendHook_,
+      hook ? std::make_shared<std::function<void()>>(std::move(hook)) :
+      std::shared_ptr<std::function<void()>>());
+  }
+  // Runs on the message thread after a message was dequeued and before it is handled: a test can
+  // delay the processing (a slow consumer) to check receive-time stamps and dropped messages.
+  void SetBeforeHandleMessageHookForTest(std::function<void()> hook)
+  {
+    std::atomic_store(
+      &beforeHandleMessageHook_,
+      hook ? std::make_shared<std::function<void()>>(std::move(hook)) :
+      std::shared_ptr<std::function<void()>>());
+  }
+  // Runs in the move thread at the start of ending a goal that started a move, before the last
+  // look at the robot's events (a test can make a late MOVETOEXECERROR deterministic).
+  void SetBeforeMoveFinishHookForTest(std::function<void()> hook)
+  {
+    std::atomic_store(
+      &beforeMoveFinishHook_,
+      hook ? std::make_shared<std::function<void()>>(std::move(hook)) :
+      std::shared_ptr<std::function<void()>>());
+  }
   bool StatusCoastActive() const {return statusCoast_.load();}
   bool HardwareErrorLatched() const {return hardwareErrorLatched_.load();}
   // True after a recovery from a latched error until the controllers claiming this component's
@@ -257,21 +466,25 @@ public:
   CallbackReturn on_deactivate(const rclcpp_lifecycle::State & previous_state) override;
   CallbackReturn on_error(const rclcpp_lifecycle::State & previous_state) override;
 
-  std::vector<StateInterface> export_state_interfaces() override;
-  std::vector<CommandInterface> export_command_interfaces() override;
-  return_type read(const rclcpp::Time & time, const rclcpp::Duration & period) override;
-  return_type write(const rclcpp::Time & time, const rclcpp::Duration & period) override;
-
   // Humble's resource_manager passes the FULL start/stop command interface lists (of all
-  // components) to every system component. prepare accepts everything (as the default did);
-  // perform releases controllerRestartHold_ when this component's six velocity interfaces are
-  // in the start list. A deactivate-only switch or another component's interfaces never do.
+  // components) to every system component, so both functions only look at THIS component's
+  // velocity interfaces.
+  // The joint move needs this arm's velocity command interfaces unclaimed: these track the
+  // claims, and prepare refuses a claim while a move is active (so the JTC cannot be activated
+  // mid-move). perform also releases controllerRestartHold_ when this component's six velocity
+  // interfaces are in the start list (a deactivate-only switch or another component's
+  // interfaces never do).
   return_type prepare_command_mode_switch(
     const std::vector<std::string> & start_interfaces,
     const std::vector<std::string> & stop_interfaces) override;
   return_type perform_command_mode_switch(
     const std::vector<std::string> & start_interfaces,
     const std::vector<std::string> & stop_interfaces) override;
+
+  std::vector<StateInterface> export_state_interfaces() override;
+  std::vector<CommandInterface> export_command_interfaces() override;
+  return_type read(const rclcpp::Time & time, const rclcpp::Duration & period) override;
+  return_type write(const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
   void dio_callback(
     const std::shared_ptr<igus_rebel_msgs::srv::SetDigitalOutput::Request> request,

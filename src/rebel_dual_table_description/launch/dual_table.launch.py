@@ -4,7 +4,8 @@
 
 Starts ros2_control_node (robot_description from rebel_dual_table.urdf.xacro), robot_state_publisher,
 the controller spawners (strictly one after the other: joint_state_broadcaster, then
-arm_left_trajectory_controller, then arm_right_trajectory_controller) and, by default, a static
+arm_left_trajectory_controller, then arm_right_trajectory_controller, and in mock with mock_move_joint:=true then
+the two INACTIVE arm_<side>_mock_move_joint_controller) and, by default, a static
 transform world -> camera_link taken from the calibration YAML. In mock_hardware (no camera driver)
 it also publishes the static camera_link -> camera_color_optical_frame transform that the Orbbec
 driver provides on the real cell (publish_optical_tf:=auto), which camera_pole_collision.py needs.
@@ -15,9 +16,10 @@ import os
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction, RegisterEventHandler
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo, OpaqueFunction, RegisterEventHandler
 from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, FindExecutable, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
@@ -52,6 +54,8 @@ def launch_setup(context):
     hw = LaunchConfiguration("hardware_protocol").perform(context)
     left_ip = LaunchConfiguration("left_robot_ip").perform(context).strip()
     right_ip = LaunchConfiguration("right_robot_ip").perform(context).strip()
+    left_jog_scale = LaunchConfiguration("left_jog_velocity_scale").perform(context).strip()
+    right_jog_scale = LaunchConfiguration("right_jog_velocity_scale").perform(context).strip()
     calibration_file = os.path.expanduser(LaunchConfiguration("calibration_file").perform(context))
 
     if hw == "rebel" and left_ip == right_ip:
@@ -84,6 +88,8 @@ def launch_setup(context):
             " hardware_protocol:=", hw,
             " left_robot_ip:=", left_ip,
             " right_robot_ip:=", right_ip,
+            " left_jog_velocity_scale:=", left_jog_scale,
+            " right_jog_velocity_scale:=", right_jog_scale,
             " calibration_file:=", calibration_file,
         ]),
         value_type=str,
@@ -123,7 +129,35 @@ def launch_setup(context):
         RegisterEventHandler(OnProcessExit(target_action=left, on_exit=[right])),
     ]
 
-    actions = [*calibration_warning, ros2_control_node, robot_state_publisher, jsb, *chain]
+    # MOCK ONLY: the robot-side joint move (MoveJoint action + hardware_state + robot_joint_states) of each arm, served by
+    # igus_rebel's mock_move_joint_server under the node name the real driver has (node_name hardware parameter,
+    # igus_rebel_left / igus_rebel_right): /igus_rebel_<side>/{move_joint,hardware_state,robot_joint_states}. Never with
+    # hardware_protocol:=rebel (the real driver serves these itself).
+    mock_move_joint = LaunchConfiguration("mock_move_joint").perform(context).strip().lower()
+    if mock_move_joint not in ("true", "false"):
+        raise RuntimeError(f"mock_move_joint must be true|false, got '{mock_move_joint}'")
+    mock_servers = []
+    if mock_move_joint == "true" and hw == "mock_hardware":
+        ml = spawner("arm_left_mock_move_joint_controller", inactive=True)
+        mr = spawner("arm_right_mock_move_joint_controller", inactive=True)
+        chain += [
+            RegisterEventHandler(OnProcessExit(target_action=right, on_exit=[ml])),
+            RegisterEventHandler(OnProcessExit(target_action=ml, on_exit=[mr])),
+        ]
+        igus_rebel = get_package_share_directory("igus_rebel")
+        for side in ("left", "right"):
+            mock_servers.append(IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(os.path.join(igus_rebel, "launch", "mock_move_joint_arm.launch.py")),
+                launch_arguments={
+                    "node_name": f"igus_rebel_{side}", "joint_prefix": f"arm_{side}_",
+                    "controller_name": f"arm_{side}_mock_move_joint_controller",
+                    "trajectory_controller_name": f"arm_{side}_trajectory_controller",
+                    "component_name": f"arm_{side}_hw"}.items()))
+    elif mock_move_joint == "true" and hw == "rebel":
+        calibration_warning = [*calibration_warning, LogInfo(msg=(
+            "mock_move_joint is ignored with hardware_protocol:=rebel (the real driver serves move_joint itself)"))]
+
+    actions = [*calibration_warning, ros2_control_node, robot_state_publisher, jsb, *chain, *mock_servers]
 
     cam = calib["camera_link"]
     x, y, z = (float(v) for v in cam["xyz"])
@@ -165,6 +199,13 @@ def generate_launch_description():
         DeclareLaunchArgument("right_robot_ip", default_value="192.168.3.12",
                               description="CRI controller of arm_right (rebel only); must differ from left_robot_ip"),
         DeclareLaunchArgument(
+            "left_jog_velocity_scale", default_value="1.65",
+            description="arm_left joint jog scale: jog [%] = scale * velocity [deg/s] (rebel only). 1.65 since "
+                        "2026-10-31 (real left arm 0.600 deg/s per jog %, exact 1.667); controllers.yaml gains assume it"),
+        DeclareLaunchArgument(
+            "right_jog_velocity_scale", default_value="1.65",
+            description="arm_right joint jog scale (rebel only), see left_jog_velocity_scale"),
+        DeclareLaunchArgument(
             "calibration_file",
             default_value=os.path.join(share, "config", "dual_arm_calibration.yaml"),
             description="dual_arm_calibration YAML: arm_right_base and camera_link poses in world"),
@@ -177,5 +218,10 @@ def generate_launch_description():
             "publish_optical_tf", default_value="auto", choices=["auto", "true", "false"],
             description="static TF camera_link -> camera_color_optical_frame: auto = only with "
                         "mock_hardware (the real camera driver publishes it)"),
+        DeclareLaunchArgument(
+            "mock_move_joint", default_value="true", choices=["true", "false"],
+            description="mock_hardware only: serve the robot-side joint move (/igus_rebel_<side>/move_joint, hardware_state, "
+                        "robot_joint_states) with igus_rebel's mock server and spawn the two INACTIVE mock forward "
+                        "controllers. Ignored (never started) with hardware_protocol:=rebel."),
         OpaqueFunction(function=launch_setup),
     ])

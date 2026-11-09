@@ -42,6 +42,32 @@ def test_rebel_xacro_distinct_ips_nodes_and_fault_group():
     assert left["robot_port"] == right["robot_port"] == "3920"
 
 
+def test_rebel_xacro_jog_velocity_scale_1_65_per_arm_and_only_for_rebel():
+    # Real left arm 2026-10-31: 0.600 deg/s per jog % -> scale 1.65 (controllers.yaml gains assume it).
+    def scales(*args):
+        root = ET.fromstring(_xacro(*args))
+        return {r.get("name"): {p.get("name"): p.text for p in r.findall("hardware/param")}.get("jog_velocity_scale")
+                for r in root.findall("ros2_control")}
+    assert scales("hardware_protocol:=rebel") == {"arm_left_hw": "1.65", "arm_right_hw": "1.65"}
+    assert scales("hardware_protocol:=rebel", "left_jog_velocity_scale:=1.7", "right_jog_velocity_scale:=1.6") == \
+        {"arm_left_hw": "1.7", "arm_right_hw": "1.6"}
+    assert scales("hardware_protocol:=mock_hardware") == {"arm_left_hw": None, "arm_right_hw": None}
+
+
+def test_jtc_gains_are_the_real_ladder_gains_for_both_arms():
+    # 2026-10-31 real ladder (with jog_velocity_scale 1.65): p 3 / i 0 / d 0 / i_clamp 0 / ff 0.6 on every joint.
+    for path, prefixes in ((os.path.join(SINGLE_CFG, "controller.yaml"), ("",)),
+                           (os.path.join(SHARE, "config", "controllers.yaml"), ("arm_left_", "arm_right_"))):
+        doc = yaml.safe_load(open(path))
+        for key, body in doc.items():
+            if key == "controller_manager":
+                continue
+            gains = body["ros__parameters"]["gains"]
+            assert len(gains) == 6, (path, key)
+            for joint, g in gains.items():
+                assert g == {"p": 3.0, "i": 0.0, "d": 0.0, "i_clamp": 0.0, "ff_velocity_scale": 0.6}, (path, joint)
+
+
 def test_calibration_drives_arm_right_pose():
     path = os.path.join(SHARE, "config", "dual_arm_calibration.yaml")
     d = yaml.safe_load(open(path))["dual_arm_calibration"]
@@ -362,3 +388,80 @@ def test_blade_handpiece_overlap_is_rigid_and_holder_is_clear():
         h = ConvexHull(trimesh.load(f, force="mesh").vertices)
         inside = ((pts_t @ h.equations[:, :3].T + h.equations[:, 3]).max(axis=1) < 0).any()
         assert not inside, f"blade box overlaps {os.path.basename(f)}"
+
+
+# ---- mock robot-side joint move wiring (igus_rebel mock_move_joint_server), mock_hardware only ----
+
+def _launch_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("dual_table_launch", os.path.join(SHARE, "launch", "dual_table.launch.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_mock_move_joint_controllers_are_forward_position_controllers_of_each_arm():
+    d = yaml.safe_load(open(os.path.join(SHARE, "config", "controllers_mock.yaml")))
+    cm = d["controller_manager"]["ros__parameters"]
+    for side in ("left", "right"):
+        name = f"arm_{side}_mock_move_joint_controller"
+        assert cm[name]["type"] == "forward_command_controller/ForwardCommandController"
+        p = d[name]["ros__parameters"]
+        assert p["interface_name"] == "position"
+        assert p["joints"] == [f"arm_{side}_joint{i}" for i in range(1, 7)]
+    # the real-hardware controller file never mentions them
+    real = yaml.safe_load(open(os.path.join(SHARE, "config", "controllers.yaml")))
+    assert not [k for k in real["controller_manager"]["ros__parameters"] if "mock" in k]
+
+
+def _setup(hw, mock_move_joint):
+    from launch import LaunchContext
+    mod = _launch_module()
+    ctx = LaunchContext()
+    for k, v in {"hardware_protocol": hw, "left_robot_ip": "192.168.3.11", "right_robot_ip": "192.168.3.12",
+                 "left_jog_velocity_scale": "1.65", "right_jog_velocity_scale": "1.65",
+                 "calibration_file": os.path.join(SHARE, "config", "dual_arm_calibration.yaml"),
+                 "activate_controllers": "auto", "publish_camera_tf": "true", "publish_optical_tf": "auto",
+                 "mock_move_joint": mock_move_joint}.items():
+        ctx.launch_configurations[k] = v
+    return mod.launch_setup(ctx)
+
+
+def _txt(v):
+    return v if isinstance(v, str) else v[0].text
+
+
+def _includes(actions):
+    from launch.actions import IncludeLaunchDescription
+    return [a for a in actions if isinstance(a, IncludeLaunchDescription)]
+
+
+def _spawned(actions):
+    from launch.actions import RegisterEventHandler
+    return [h for h in actions if isinstance(h, RegisterEventHandler)]
+
+
+def test_mock_move_joint_argument_defaults_true_and_serves_both_arms_in_mock_only():
+    mod = _launch_module()
+    args = {e.name: e for e in mod.generate_launch_description().entities if hasattr(e, "default_value") and hasattr(e, "name")}
+    assert args["mock_move_joint"].default_value[0].text == "true"
+    mock_on = _setup("mock_hardware", "true")
+    inc = _includes(mock_on)
+    assert len(inc) == 2
+    shown = sorted(_txt(dict((k, v) for k, v in i.launch_arguments)["node_name"]) for i in inc)
+    assert shown == ["igus_rebel_left", "igus_rebel_right"]
+    for i in inc:
+        a = {k: _txt(v) for k, v in i.launch_arguments}
+        side = a["node_name"].split("_")[-1]
+        assert a["joint_prefix"] == f"arm_{side}_" and a["component_name"] == f"arm_{side}_hw"
+        assert a["controller_name"] == f"arm_{side}_mock_move_joint_controller"
+        assert a["trajectory_controller_name"] == f"arm_{side}_trajectory_controller"
+    # two extra spawner links in the chain (right -> mock left -> mock right)
+    assert len(_spawned(mock_on)) == len(_spawned(_setup("mock_hardware", "false"))) + 2
+
+
+def test_mock_move_joint_off_or_rebel_starts_nothing():
+    assert _includes(_setup("mock_hardware", "false")) == []
+    assert _includes(_setup("rebel", "true")) == []
+    assert _includes(_setup("rebel", "false")) == []
+    assert len(_spawned(_setup("rebel", "true"))) == len(_spawned(_setup("rebel", "false")))

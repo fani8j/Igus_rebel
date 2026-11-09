@@ -2,12 +2,12 @@
 # "HD USB Camera" 05a3:9230. Published as /arm_right/gripper_camera/...
 #
 # Both gripper cameras are the same model with no USB serial number, so they
-# are told apart by USB port (/dev/v4l/by-path), not by-id: 3.2 = right,
-# 3.3 = left (2026-10-26, see left_gripper_camera.yaml). Swapping the cables
+# are told apart by USB port (/dev/v4l/by-path), not by-id: 2 (PC port) = right,
+# 1.1 = left (2026-11-09, see left_gripper_camera.yaml). Swapping the cables
 # swaps the topics.
 /**:
   ros__parameters:
-    video_device: "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:3.2:1.0-video-index0"
+    video_device: "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:2:1.0-video-index0"
     camera_name: "arm_right_gripper_camera"
     frame_id: "arm_right_gripper_camera_optical_frame"
     camera_info_url: ""   # uncalibrated

@@ -691,3 +691,91 @@ TEST_F(WorldCheckTest, PenetrationToleranceIgnoresOnlyShallowGrazes)
   tight.penetration_tolerance_m = r0.depth_m * 0.5;
   EXPECT_EQ(makeWorld(tight)->check(path, {0, 0}).code, WorldCode::Collision);
 }
+
+
+// ---- table clearance gate ----------------------------------------------------------------------------------
+// Synthetic cell: the table box top is at z = -0.001. Left base box 0..0.1 m (1 mm above the table), link1 box
+// z 0.08..0.12 (81 mm above), tool sphere centre z 0.1 radius 0.03 (71 mm above); right arm is 13 mm higher.
+
+TEST_F(WorldCheckTest, TableClearanceGateMeasuresTheClosestNonExemptLink)
+{
+  scene->getWorldNonConst()->removeObject("obs");
+  WorldCheckConfig cfg;
+  cfg.table_link_name = "table";
+  cfg.table_exempt_links = {"arm_left_base_link"};
+  cfg.table_min_clearance_m = 0.05;
+  auto w = makeWorld(cfg);
+  ASSERT_NE(w, nullptr);
+  const WorldCheckResult ok = w->check(pathOf(left, {{0, 0}, {0.3, 0.1}}), {0, 0});
+  EXPECT_TRUE(ok.safe()) << ok.message;
+  ASSERT_TRUE(ok.table_measured);
+  EXPECT_NEAR(ok.table_min_distance_m, 0.071, 1e-4);          // the tool sphere
+  EXPECT_EQ(ok.table_min_link, "arm_left_tool");
+
+  cfg.table_min_clearance_m = 0.08;                            // tool (71 mm) is closer than that
+  auto w2 = makeWorld(cfg);
+  const WorldCheckResult bad = w2->check(pathOf(left, {{0, 0}, {0.3, 0.1}}), {0, 0});
+  EXPECT_EQ(bad.code, WorldCode::TableClearance) << bad.message;
+  EXPECT_FALSE(bad.safe());
+  EXPECT_EQ(bad.link, "arm_left_tool");
+  EXPECT_EQ(bad.object, "table");
+  EXPECT_EQ(bad.sample_index, 0u);
+  EXPECT_NE(bad.message.find("table clearance: arm_left_tool is 71."), std::string::npos) << bad.message;
+  EXPECT_NE(bad.message.find("required >= 80.0 mm"), std::string::npos) << bad.message;
+}
+
+TEST_F(WorldCheckTest, TableClearanceGateExemptsOnlyTheListedLinks)
+{
+  scene->getWorldNonConst()->removeObject("obs");
+  WorldCheckConfig cfg;
+  cfg.table_link_name = "table";
+  cfg.table_min_clearance_m = 0.005;
+  // no exemption: the base box is 1 mm above the table
+  auto strict = makeWorld(cfg);
+  const WorldCheckResult r = strict->check(pathOf(left, {{0, 0}}), {0, 0});
+  EXPECT_EQ(r.code, WorldCode::TableClearance) << r.message;
+  EXPECT_EQ(r.link, "arm_left_base_link");
+  EXPECT_NEAR(r.table_min_distance_m, 0.001, 1e-4);
+
+  // exempt base: passes at 5 mm, but the other links are still gated at a larger clearance
+  cfg.table_exempt_links = {"arm_left_base_link"};
+  EXPECT_TRUE(makeWorld(cfg)->check(pathOf(left, {{0, 0}}), {0, 0}).safe());
+  cfg.table_min_clearance_m = 0.075;
+  const WorldCheckResult tool = makeWorld(cfg)->check(pathOf(left, {{0, 0}}), {0, 0});
+  EXPECT_EQ(tool.code, WorldCode::TableClearance);
+  EXPECT_EQ(tool.link, "arm_left_tool");
+}
+
+TEST_F(WorldCheckTest, TableClearanceGateIsOffByDefaultAndDoesNotRelaxTheCollisionCheck)
+{
+  WorldCheckConfig off;                                        // default: no gate, no measurement
+  auto w = makeWorld(off);
+  const WorldCheckResult r = w->check(pathOf(left, {{0, 0}}), {0, 0});
+  EXPECT_TRUE(r.safe());
+  EXPECT_FALSE(r.table_measured);
+  // the strict collision check still runs first when the gate is on (obstacle at sample 3)
+  WorldCheckConfig on;
+  on.table_link_name = "table";
+  on.table_exempt_links = {"arm_left_base_link"};
+  on.table_min_clearance_m = 0.005;
+  const WorldCheckResult c = makeWorld(on)->check(pathOf(left, sweep()), {0, 0});
+  EXPECT_EQ(c.code, WorldCode::Collision) << c.message;
+  EXPECT_EQ(c.sample_index, 3u);
+}
+
+TEST_F(WorldCheckTest, TableClearanceGateFailsClosedOnBadConfiguration)
+{
+  std::unique_ptr<WorldChecker> w;
+  WorldCheckConfig cfg;
+  cfg.table_min_clearance_m = 0.005;
+  cfg.table_link_name = "no_such_table";
+  EXPECT_FALSE(WorldChecker::create(scene, left, right, cfg, w));
+  cfg.table_link_name = "table";
+  cfg.table_exempt_links = {"arm_right_base_link"};          // not a link of the left arm
+  EXPECT_FALSE(WorldChecker::create(scene, left, right, cfg, w));
+  cfg.table_exempt_links = {};
+  cfg.table_min_clearance_m = NAN;
+  EXPECT_FALSE(WorldChecker::create(scene, left, right, cfg, w));
+  cfg.table_min_clearance_m = -0.001;
+  EXPECT_FALSE(WorldChecker::create(scene, left, right, cfg, w));
+}

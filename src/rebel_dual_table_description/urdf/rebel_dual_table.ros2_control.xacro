@@ -6,7 +6,9 @@
                     velocity command interface, like igus_rebel2.control.xacro.
      The driver parameters are those introduced in igus_rebel commit 374935a (robot_ip, robot_port,
      node_name, trajectory_controller_name) plus fault_group (one arm faulting stops the others in
-     the group; ignored by drivers that do not know it yet). -->
+     the group; ignored by drivers that do not know it yet) and jog_velocity_scale (jog [%] =
+     scale * velocity [deg/s]; 1.65 since 2026-10-31, real left arm 0.600 deg/s per jog %, exact 1.667;
+     the driver's C++ fallback stays 2.0; controllers.yaml gains assume 1.65). -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
   <xacro:macro name="rebel_dual_table_joint_control" params="joint hardware_protocol">
     <joint name="${joint}">
@@ -22,7 +24,7 @@
   </xacro:macro>
 
   <xacro:macro name="rebel_dual_table_control"
-               params="arm_id prefix hardware_protocol robot_ip robot_port node_name trajectory_controller_name fault_group">
+               params="arm_id prefix hardware_protocol robot_ip robot_port node_name trajectory_controller_name fault_group jog_velocity_scale:=1.65">
     <ros2_control name="${arm_id}_hw" type="system">
       <hardware>
         <xacro:if value="${hardware_protocol == 'mock_hardware'}">
@@ -35,6 +37,7 @@
           <param name="node_name">${node_name}</param>
           <param name="trajectory_controller_name">${trajectory_controller_name}</param>
           <param name="fault_group">${fault_group}</param>
+          <param name="jog_velocity_scale">${jog_velocity_scale}</param>
         </xacro:if>
       </hardware>
       <xacro:rebel_dual_table_joint_control joint="${prefix}joint1" hardware_protocol="${hardware_protocol}"/>

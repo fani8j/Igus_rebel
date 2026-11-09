@@ -13,7 +13,7 @@ Cameras are **not** part of this launch. Start them separately, as today
 |---|---|---|
 | Dual driver | `rebel_dual_table_description dual_table.launch.py` | one `controller_manager`, hardware `arm_left_hw` / `arm_right_hw` in fault group `dual_arm_table`, `joint_state_broadcaster`, `arm_left_trajectory_controller`, `arm_right_trajectory_controller`, TF `world -> camera_link` |
 | Dual move_group | `rebel_dual_table_moveit_config move_group.launch.py` (+ camera pole, RViz if `use_rviz:=true`) | scene of the whole cell; the coordinator reads its robot model |
-| Per-arm planners | `both_arms_planning.launch.py` | plan-only `move_group` + `box_h_cut_executor` + camera pole + joint-state relay in `/arm_left` and `/arm_right`; they never execute |
+| Per-arm planners | `both_arms_planning.launch.py` | plan-only `move_group` + `box_h_cut_executor` + camera pole + table + joint-state relay in `/arm_left` and `/arm_right`; they never execute |
 | Coordinator | `dual_cut_coordinator coordinator.launch.py` | `/dual_cut_coordinator/{plan,execute,stop,rearm}`, topic `/dual_cut_coordinator/status` |
 
 Start order and delays: driver at 0 s, dual move_group at 2 s, per-arm planners at 4 s, coordinator at 10 s
@@ -61,6 +61,13 @@ launch prints an operator checklist. The trajectory controllers stay **inactive*
 
 `activate_controllers:=true` skips step 2's identity check. Do not use it on real hardware.
 
+`left_robot_ip` / `right_robot_ip` may be omitted: the driver then uses its own defaults (192.168.3.11 / 192.168.3.12;
+the checklist prints them). Equal addresses are refused. `allow_move_group_execution` (default `false`): the dual
+`/move_group` is plan-only, so the RViz MotionPlanning "Plan & Execute" button and `/execute_trajectory` cannot move the
+arms around the coordinator's checks (planning, `/compute_ik`, `/check_state_validity` and the scene still work; only
+the coordinator, which sends its own checked `FollowJointTrajectory` goals, moves the arms). `true` restores MoveIt
+execution on the trajectory controllers (not for cutting sessions).
+
 Other arguments: `calibration_file` (passed to the driver **and** the dual move_group), `use_rviz`,
 `run_camera_pole`, `executor_config`, `executor_overrides_left|right`, `coordinator_config` (a file that sets
 any execution enable to true is refused), `blade_collision` (default `false`; `true`: the per-arm planner models carry the
@@ -68,6 +75,24 @@ any execution enable to true is refused), `blade_collision` (default `false`; `t
 gets `carton_contact_links [xeg32_tool_tip, knife_c_blade]`, so the blade is checked against the carton in every
 free-space transit and may touch it only while a cut stage's scoped allowance is installed; needs an executor build
 that knows `carton_contact_links`, otherwise every cut plan fails on blade/carton contact).
+
+## Automatic cut recording (`record_cut_video`, `cut_recorder_backend`)
+
+The launch starts a **read-only** recorder next to the coordinator (it only subscribes). `record_cut_video`: `true` (default) =
+real hardware (`rebel`) only, `always` = also with `mock_hardware` (tests), `false` = off.
+
+| `cut_recorder_backend` | what runs | output |
+| --- | --- | --- |
+| `raw` (default) | robot_remote's `recording/record_raw_cut.py --trigger dual-cut`: **one rosbag2 (sqlite3) per `~/execute`** (all phases) with the cameras as published (full-resolution JPEG, no decode / resize), `/joint_states`, both controller states, coordinator status / exec_report / plan_report, `/tf`, `/tf_static`, the side-cut overlays and measurements; 2 s pre-roll and post-roll. Finished, stopped and aborted runs are all **kept** and marked in `clip.json` | `<cut_video_dir>/<YYYYmmdd_HHMMSS>/` (`clip.json`, snapshot copy, `bag/`) = the folder side_cut_vision's probe looks for (its files land in it), plus `<cut_video_dir>/index.jsonl` (one line per episode). Empty `cut_video_dir` = the external drive's `igus_nvidia/cut_videos` if mounted (the recorder warns loudly if not) |
+| `video` | the old passive `tools/cut_recorder/cut_recorder.py` (mp4 per camera, `clip.json`, snapshot copy) | `cut_video_dir` (same default) |
+
+A missing `~/robot_remote` (`robot_remote_dir`) or a `python3` that cannot import `rosbag2_py` is not an error: the launch prints a
+`LogInfo` and starts the `video` backend. Arguments: `cut_video_cameras` (empty = all; the keys `head,knife,wrist_left_knife,
+wrist_right_knife,wrist_left_gripper,wrist_right_gripper,left_vision,right_vision` or the old names `scene,wrist,right_wrist,...`, which
+are mapped for either backend; a camera that is not publishing is simply absent from the bag and listed in `clip.json`),
+`cut_video_dir`, `camera_domain_id` (the cameras are read in a second rclpy context in that domain and written into the same bag; `auto` =
+11 with `rebel`, the stack's own domain in mock). Ctrl-C of the launch closes an open bag within seconds (outcome `shutdown`, kept,
+`clip.json` `recording: false`). Details: robot_remote `README.md` "Record cutting runs".
 
 ## Topics and services: single arm vs dual cell
 
@@ -84,8 +109,45 @@ that knows `carton_contact_links`, otherwise every cut plan fails on blade/carto
 | Emergency stop of a plan | cancel the goal / `execution_enabled` off | `/dual_cut_coordinator/stop` (latches), `/dual_cut_coordinator/rearm` |
 | Status | executor log | `/dual_cut_coordinator/status` (`dual_cut_msgs/CoordinatorStatus`) |
 | Camera pole | one object in `/move_group` | in `/move_group` and in both per-arm scenes |
+| Table | none | link `table` of the dual URDF (dual scene); collision object `table` in both per-arm scenes (`table_in_arm_scene`, see below) |
 
 A latched driver fault has no topic or service: see below.
+
+## The table in the per-arm scenes
+
+The dual URDF has the table as a link (`table`, 650 x 650 x 40 mm, top at world z -0.001), so the coordinator's final
+world check refuses any plan whose arm touches it. A per-arm planner used to know only the carton and the camera pole
+and could plan straight into it (e.g. the right holder at the table edge on the approach to the right face).
+`table_collision.py` (one node per arm, `table_in_arm_scene`, default **true**; pass-through in `dual_cut_system`,
+`dual_cut_full_mock`, `both_arms_planning`) applies the table as collision object `table` through that arm's
+`apply_planning_scene` (checked every 5 s and after a move_group restart; only what is missing is applied):
+
+- same geometry as the xacro: size/thickness/setback = `table_size`/`table_thickness`/`table_base_setback` (defaults equal
+  the xacro defaults, pinned by a test), centre `(setback - size/2, arm_right_base.y / 2, -0.001 - thickness/2)` in
+  `world`, y from the SAME `calibration_file` as the dual driver;
+- published in the arm's planning frame `base_link`: identity for the left arm, `T(world->arm_right_base)^-1 *
+  T(world->table)` for the right arm (a unit test compares both with the xacro-processed dual URDF);
+- padding `table_padding_m`, default **10 mm** (2026-10-22; 5 mm left 4 plans at 5.4-6.9 mm, 10 mm kept all of them at >= 10.5 mm, scan_results/table_margin_20261022/compare_p10.md): with 0 the planners found poses 0.4-3 mm from the table (6 of the
+  newly planned detections), inside the calibration and tracking error. Only the arm's own `base_link` would collide with
+  a padded table (it sits 0.7 mm (left) / 3.5 mm (right) above the table by design; the dual SRDF has the same adjacency
+  exception), so `table_collision.py` writes the ACM entry `table x base_link = allowed` into move_group's scene (it reads
+  the full matrix with `get_planning_scene` and sends it back whole; the object is never re-added while it is present).
+  Every other link keeps the margin: motor1/link1/motor2 are 100-205 mm from the table at every joint state, so they need
+  no exemption, and everything from link2 on (forearm, wrist, holder, blade, handpiece, wrist camera) can approach the
+  table. The executor's probe scenes copy the object AND its ACM entries against robot links from move_group's scene
+  (never anything about the carton, whose scoped contact allowance is untouched);
+- the coordinator's world check has the matching gate `table_min_clearance_m` (default 0.010, `coordinator.yaml`): any
+  sample where a non-exempt link of the checked arm is closer than that to the table link (exact FCL distance) refuses the
+  plan, with the link and the distance in the message and in the report (`table_min_m`, `table_min_link`);
+- `base_link` vs the table is the only exemption, in the per-arm scene and in the gate; the home state of both arms is valid
+  with the 10 mm table (`check_state_validity`, whole robot).
+
+`table_in_arm_scene:=false` restores the previous stack. A `--symlink-install` tree whose install lacks
+`table_collision.py` (package not rebuilt) logs a WARNING per arm and starts without the table instead of aborting.
+The executor's orientation-search probe scenes (adaptive/parallel/varying left orientation) are throwaway scenes; they
+copy every world object of move_group's scene (the table, camera_head) and the objects' ACM exemptions
+(`probe_scene_include_world_objects`, default true), so the search and the MTC tasks (which start from move_group's
+scene) judge a pose the same way.
 
 ## The right arm: snapshot frame, relabel, half seam
 
@@ -199,6 +261,87 @@ ros2 service call /dual_cut_coordinator/execute std_srvs/srv/Trigger '{}'
 
 Do this on real hardware only with explicit operator approval, after the identity check, a fresh snapshot and
 a plan you have looked at in RViz. Set the enables back to false afterwards.
+
+## Speed profile (`speed_profile:=default|fast`, opt-in)
+
+`default` (the default) changes nothing: the executors run with `box_h_cut_executor.yaml` (contact 0.1376 / 0.0763, transit 0.20 / 0.0763 of
+`joint_limits.yaml`, i.e. 0.108 / 0.157 rad/s and 0.40 / 0.40 rad/s^2 since 2026-10-31). `fast` loads
+`igus_rebel_moveit_config/config/speed_profile_fast.yaml` AFTER the executor YAML and the per-arm overrides, so it wins (the overrides files
+set no scaling today; if one does, the launch prints a WARNING and the profile wins):
+
+| | default | fast |
+|---|---|---|
+| transit velocity / acceleration scaling | 0.20 / 0.0763 (0.157 rad/s, 0.400 rad/s^2) | 0.40 / 0.0763 (0.314 rad/s, 0.400 rad/s^2) |
+| contact velocity / acceleration scaling | 0.1376 / 0.0763 (0.108 rad/s, 0.400 rad/s^2) | 0.2064 / 0.0763 (0.162 rad/s, 0.400 rad/s^2) |
+| coordinator `cri_subchord_velocity_rad_s` / `_acceleration_rad_s2` (only with `cri_transit_enabled`) | 0.157 / 0.524 | 0.314 / 0.400 |
+
+```bash
+ros2 launch dual_cut_bringup dual_cut_system.launch.py hardware_protocol:=mock_hardware speed_profile:=fast
+ros2 launch igus_rebel_moveit_config move_group.launch.py hardware_protocol:=mock_hardware run_box_h_cut_executor:=true speed_profile:=fast  # single arm
+```
+
+The launch logs `speed_profile=<name>` and the effective scalings in rad/s and rad/s^2 (once per arm and once by the system launch).
+Every planned acceleration is <= 0.4 rad/s^2 (the new JTC gains need that cap; the robot's jog acceleration limit is ~0.5). Dwells, collision
+gates, the wrist-winding gate, `min_fraction` 1.0 and every tolerance are untouched. NOT validated on the real arms: the real JTC lags ~0.4 s x v
+with today's gains (0.126 rad at 0.314 rad/s, above the coordinator's `tracking_warn_rad` 0.1, below `tracking_stop_rad` 0.2 and the JTC path tolerance
+0.25). With CRI MoveJoint on, the robot-side leg stays at `cri_transit_velocity_percent` (<= 25 %, 0.196 rad/s), slower than a fast JTC transit.
+Evidence and mock measurements: `scan_results/speed_profile_20261026/README.md`.
+
+## Robot-side joint move for transit legs (CRI MoveJoint, opt-in, stage 1)
+
+`cri_transit_enabled` (coordinator parameter, default **false**) lets the coordinator send an eligible free-space transit
+leg of a **serial phase** (phases mode) to the robot controller as one `igus_rebel_msgs/action/MoveJoint` goal instead of
+the JTC trajectory. Parallel phases and the sequence schedule stay 100 % on the JTC (the plan report says so per arm-phase).
+With the switch false the coordinator behaves exactly as without this feature: no gate changes, one FJT goal per arm-phase.
+
+```bash
+# plan-time analysis + execution; runtime parameters, never set at launch (the launch refuses a config that sets it true)
+ros2 param set /dual_cut_coordinator cri_transit_enabled true
+ros2 param set /dual_cut_coordinator cri_assume_driver_cap_ok true   # ONLY until HardwareState reports the effective caps
+```
+
+* **Eligible** (plan time, geometry only): `SegmentKind::Transit`, exactly the 6 arm joints, every exported waypoint and
+  every sampled spline point within 1 mrad of the straight chord first->last, monotone progress, length >=
+  `cri_transit_min_length_rad`, chord ends equal the neighbouring segments' ends within `cri_transit_goal_tolerance_rad`.
+* **Certificate** (lead decision 2026-10-24): the chord is re-sampled (<= 0.01 rad) and re-checked against the world, the table, the
+  scene objects (new object clearance) and the other arm PARKED (serial rule) with `padding = cri_transit_path_tolerance_rad *
+  reach` added to the cross-arm padding and to the table and object clearances. **No stop travel is in the padding:** a Move Stop
+  decelerates ALONG the robot-side joint-linear path, which is the certified chord itself, and a lost link makes the robot complete
+  the same chord; the extra deviation of an emergency stop applies to JTC legs just the same, so it is not CRI-specific. `reach`
+  defaults to the rigorous model-derived bound (`cri_transit_reach_m: 0`, ~3.6 m for the real arm: the sum over the six joints of
+  the largest distance joint-origin -> geometry); `cri_transit_path_tolerance_rad` defaults to 0.005 (measured real deviation
+  <= 0.9 mrad), so the padding is ~18 mm. The tip-on-line gate has no CUT sample on a Transit leg, so there is nothing to re-run.
+* **Partial chord:** when the full chord fails only near its ends (close to the carton, the camera head, the table or the parked arm),
+  the maximal contiguous middle stretch of samples that pass (and, re-checked as a chord, still pass) goes to the robot if it
+  changes the leading joint by >= `cri_transit_min_length_rad`; the two ends stay on the JTC as rest-to-rest quintic sub-chords
+  on the same chord (zero padding, like every JTC leg), limited to `cri_subchord_velocity_rad_s` 0.157 and
+  `cri_subchord_acceleration_rad_s2` 0.524 = the executor's `transit_velocity_scaling` 0.20 * 0.785 rad/s and
+  `transit_acceleration_scaling` 0.10 * 5.24 rad/s^2 (fractions of `joint_limits.yaml`, applied to the leading joint). A failing
+  leg stays on the JTC and the plan is **not** refused because of it. `~/plan_report` -> `cri_transit` lists every Transit segment:
+  eligible, certified, selected, why not, padding, s0 / s1, the CRI chord points and the clearances.
+* **Run split** of a serial arm-phase: `[JTC run | CRI run | JTC run]` (a partial leg is `[JTC head | CRI | JTC tail]` inside it), at most
+  `cri_transit_max_runs_per_arm_phase` CRI runs per arm-phase (the leg with the longest CRI stretch).
+* **Execution of a CRI run:** pre-dispatch gate (arm at rest on the driver's live `robot_joint_states`, `hardware_state`
+  fresh/not latched/no Move Stop pending/idle/activated, driver caps ok, start within tolerance) -> STRICT deactivation of
+  that arm's JTC, confirmed by `list_controllers` -> MoveJoint (velocity `cri_transit_velocity_percent` <= 25, acceleration
+  <= 40) -> supervision at 20 Hz (geometric deviation from the chord > `cri_transit_path_tolerance_rad`, cross-arm
+  distance on the live state, `hardware_state` latched/stale, timeout 2 x model + 10 s, the arm's JTC must stay inactive)
+  -> result: success only if SUCCESS, end reason PLAN, at the goal on live state and not latched; a robot ERROR or a latched
+  driver is a FAULT whatever `error_code` says -> wait for `move_active=false` -> STRICT reactivation (a failure is a STOP,
+  not a retry) -> hold check -> next run. The second arm of the serial phase starts only after every run of the first arm.
+* **Stop:** `doStop` cancels every MoveJoint goal FIRST (CMD Move Stop), then the JTC holds (not for an arm in a CRI run,
+  nothing there depends on `/joint_states`), then the FJT cancels. A stop in or around a CRI run leaves that arm's JTC
+  deactivated: `~/rearm` reactivates it (STRICT) once both drivers are idle and not latched. A **latched** driver is never
+  safe: recover it first (`dual_arm_recover.py`), then rearm.
+* **Why `/joint_states` is not used:** while a driver is latched `/joint_states` is FROZEN with fresh stamps. With the
+  switch on, rest, barriers, rearm and the monitor use the live `robot_joint_states` per arm and require both arms'
+  `hardware_state` (a missing one refuses `~/execute`).
+* **Danger to know:** once a MoveJoint is sent the robot completes it even after a driver death or a cable pull; only
+  `Move Stop` (the cancel) stops it.
+* **Wiring (confirmed by the driver merge):** `/igus_rebel_left|right/move_joint`, `/hardware_state`, `/robot_joint_states`
+  (`node_name` in `rebel_dual_table.urdf.xacro`, the same for real and mock); parameters `cri_left_*` / `cri_right_*` in `coordinator.yaml`.
+  In mock, `dual_table.launch.py` (`mock_move_joint:=true`, the default, mock_hardware only) serves them with igus_rebel's
+  `mock_move_joint_server` and two inactive mock forward controllers; set `cri_assume_driver_cap_ok` true at runtime in mock only.
 
 ## Verified in mock, and what is not
 

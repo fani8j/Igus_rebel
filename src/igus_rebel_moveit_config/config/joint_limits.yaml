@@ -38,7 +38,7 @@ joint_limits:
     has_acceleration_limits: true
     max_acceleration: 5.24
 
-# Pilz LIN/CIRC limits. Scaled with the executor scalings (0.1376 vel / 0.0954 acc) so
+# Pilz LIN/CIRC limits. Scaled with the executor scalings (0.1376 vel / 0.0954 acc at that time; the executor acceleration scalings are 0.0763 since 2026-10-31, these Pilz limits are unchanged) so
 # the physical Cartesian speed equals the pre-2026-09-27 values (0.05 m/s at 0.05 scaling).
 cartesian_limits:
   max_trans_vel: 0.01817

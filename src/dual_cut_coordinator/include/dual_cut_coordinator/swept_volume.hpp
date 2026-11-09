@@ -248,6 +248,22 @@ struct WorldCheckConfig
   /// For model-coverage mismatches only: e.g. the dual model's blade box is not in the per-arm planner's model,
   /// so approach poses planned for the TCP can graze the carton by a fraction of a millimetre.
   double penetration_tolerance_m = 0.0;
+  /// Table clearance gate (2026-10-22): the robot link `table_link_name` (the table of the dual URDF) is a plain
+  /// box, so a path that is collision free may still pass within millimetres of it, which is inside the table's
+  /// calibration and the controller's tracking error. With table_min_clearance_m > 0 every sample is also
+  /// required to keep every link of the checked arm, except `table_exempt_links`, at least that far from the
+  /// table (exact FCL distance, unpadded environment). Empty name or 0 = gate off (the strict collision check
+  /// above is unchanged either way).
+  std::string table_link_name;
+  double table_min_clearance_m = 0.0;
+  /// Full names of arm links that cannot get closer than their mounting allows (the base link sits 1 mm /
+  /// 3.9 mm above the table by design); every other link of the arm must keep the clearance.
+  std::vector<std::string> table_exempt_links;
+  /// Clearance gate against the SCENE OBJECTS (carton, camera pole, head ...), used by the certificate of a robot-side
+  /// joint move (cri_transit.hpp): every sample must also keep every link of the checked arm at least this far from every
+  /// world object it may not touch (exact FCL distance, unpadded environment, same ACM as the collision check, so the
+  /// allowed tool/carton contact and the other arm stay exempt). 0 = off: the check is then unchanged.
+  double object_clearance_m = 0.0;
 };
 
 enum class WorldCode
@@ -256,7 +272,9 @@ enum class WorldCode
   Collision,
   InvalidInput,
   TooManySamples,
-  QueryFailed
+  QueryFailed,
+  TableClearance,
+  ObjectClearance
 };
 
 struct WorldCheckResult
@@ -277,6 +295,18 @@ struct WorldCheckResult
   double max_tolerated_depth_m = 0.0;
   size_t tolerated_samples = 0;
   size_t max_tolerated_sample = 0;
+  /// Table clearance gate (only when it is on): smallest arm-link/table distance over all samples checked and
+  /// where it was; reported on success too. table_measured is false when the gate is off.
+  bool table_measured = false;
+  double table_min_distance_m = 0.0;
+  std::string table_min_link;
+  size_t table_min_sample = 0;
+  double table_min_time_s = 0.0;
+  /// Object clearance gate (only when object_clearance_m > 0): smallest arm-link/world-object distance over all samples.
+  bool object_measured = false;
+  double object_min_distance_m = 0.0;
+  std::string object_min_link, object_min_object;
+  size_t object_min_sample = 0;
 
   bool safe() const { return code == WorldCode::Ok; }
 };
@@ -306,6 +336,7 @@ private:
   ArmSpec arm_, other_;
   WorldCheckConfig config_;
   std::vector<std::string> arm_links_, other_links_;
+  collision_detection::AllowedCollisionMatrix table_acm_;   // allowed everywhere except (gated arm link, table)
 };
 
 }  // namespace dual_cut

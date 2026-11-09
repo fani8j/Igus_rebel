@@ -111,11 +111,17 @@ install(
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
+  find_package(ament_cmake_pytest REQUIRED)
   find_package(kdl_parser QUIET)
   find_package(orocos_kdl QUIET)
   find_package(urdf QUIET)
   find_package(ament_index_cpp REQUIRED)
   find_package(igus_rebel_description QUIET)
+
+  # launch/move_group.launch.py: the automatic cut recorder (backends, fallback, camera names); no process is started.
+  ament_add_pytest_test(test_move_group_cut_recorder_launch test/test_move_group_cut_recorder_launch.py)
+  # launch/move_group.launch.py speed_profile + config/speed_profile_fast.yaml (no process is started).
+  ament_add_pytest_test(test_speed_profile test/test_speed_profile.py)
 
   # Eigen-only / std-only pure helpers of box_h_cut_executor (snapshot frame, plan export).
   ament_add_gtest(test_snapshot_frame test/test_snapshot_frame.cpp)
@@ -133,6 +139,59 @@ if(BUILD_TESTING)
   target_include_directories(test_left_varying_chain PRIVATE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
   target_compile_features(test_left_varying_chain PUBLIC cxx_std_17)
+
+  ament_add_gtest(test_left_contact_travel test/test_left_contact_travel.cpp)
+  target_include_directories(test_left_contact_travel PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+  target_link_libraries(test_left_contact_travel rebel_analytic_ik Eigen3::Eigen)
+  target_compile_features(test_left_contact_travel PUBLIC cxx_std_17)
+
+  ament_add_gtest(test_left_blade_cap test/test_left_blade_cap.cpp)
+  target_include_directories(test_left_blade_cap PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+  target_link_libraries(test_left_blade_cap Eigen3::Eigen)
+  target_compile_features(test_left_blade_cap PUBLIC cxx_std_17)
+
+  ament_add_gtest(test_left_cut_patch test/test_left_cut_patch.cpp)
+  target_include_directories(test_left_cut_patch PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+  target_link_libraries(test_left_cut_patch Eigen3::Eigen)
+  target_compile_features(test_left_cut_patch PUBLIC cxx_std_17)
+
+  ament_add_gtest(test_left_cut_direction test/test_left_cut_direction.cpp)
+  target_include_directories(test_left_cut_direction PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+  target_link_libraries(test_left_cut_direction Eigen3::Eigen)
+  target_compile_features(test_left_cut_direction PUBLIC cxx_std_17)
+
+  ament_add_gtest(test_middle_cut_sag test/test_middle_cut_sag.cpp)
+  target_include_directories(test_middle_cut_sag PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+  target_link_libraries(test_middle_cut_sag Eigen3::Eigen)
+  target_compile_features(test_middle_cut_sag PUBLIC cxx_std_17)
+
+  ament_add_gtest(test_transit_unwind test/test_transit_unwind.cpp)
+  target_include_directories(test_transit_unwind PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+  target_link_libraries(test_transit_unwind Eigen3::Eigen)
+  target_compile_features(test_transit_unwind PUBLIC cxx_std_17)
+
+  ament_add_gtest(test_top_cut_descent test/test_top_cut_descent.cpp)
+  target_include_directories(test_top_cut_descent PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+  target_compile_features(test_top_cut_descent PUBLIC cxx_std_17)
+
+  ament_add_gtest(test_snapshot_top_face test/test_snapshot_top_face.cpp)
+  target_include_directories(test_snapshot_top_face PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+  target_link_libraries(test_snapshot_top_face Eigen3::Eigen)
+  target_compile_features(test_snapshot_top_face PUBLIC cxx_std_17)
+
+  ament_add_gtest(test_probe_scene_objects test/test_probe_scene_objects.cpp)
+  target_include_directories(test_probe_scene_objects PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+  ament_target_dependencies(test_probe_scene_objects moveit_core moveit_msgs shape_msgs geometry_msgs)
+  target_compile_features(test_probe_scene_objects PUBLIC cxx_std_17)
 
   ament_add_gtest(test_rebel_analytic_ik test/test_rebel_analytic_ik.cpp)
   target_link_libraries(test_rebel_analytic_ik rebel_analytic_ik)

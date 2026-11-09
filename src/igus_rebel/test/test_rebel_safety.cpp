@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -26,6 +27,49 @@ TEST(JogClamp, ScalesVelocityLikeTheOriginalDriver)
   EXPECT_NEAR(negative.percent, -2.0 * 0.1 / Igus::Safety::kDegToRad, 1e-3);
 
   EXPECT_EQ(Igus::Safety::JogPercentFromVelocity(0.0).percent, 0.0f);
+}
+
+TEST(JogScale, DefaultKeepsTodaysJogValues)
+{
+  // The optional jog_velocity_scale defaults to the historic 2.0: passing nothing, passing the
+  // constant and the 2-argument call must give bit-identical results for any velocity.
+  EXPECT_EQ(Igus::JOINT_VELOCITY_SCALE, 2.0);
+  for (double v : {-0.785, -0.3054, -0.05, -1e-4, 0.0, 1e-4, 0.0611, 0.3054, 0.6, 0.785, 1.2}) {
+    const auto implicit = Igus::Safety::JogPercentFromVelocity(v);
+    const auto explicitScale = Igus::Safety::JogPercentFromVelocity(v, Igus::JOINT_VELOCITY_SCALE);
+    const auto literal = Igus::Safety::JogPercentFromVelocity(v, 2.0);
+    EXPECT_EQ(implicit.percent, explicitScale.percent) << v;
+    EXPECT_EQ(implicit.percent, literal.percent) << v;
+    EXPECT_EQ(implicit.saturated, literal.saturated) << v;
+    const double expected = std::clamp(2.0 * v / Igus::Safety::kDegToRad, -100.0, 100.0);
+    EXPECT_NEAR(implicit.percent, expected, 1e-3) << v;
+  }
+}
+
+TEST(JogScale, CustomScaleChangesJogProportionally)
+{
+  const double v = 0.3054;  // rad/s
+  const auto base = Igus::Safety::JogPercentFromVelocity(v);
+  const auto fitted = Igus::Safety::JogPercentFromVelocity(v, 1.65);
+  EXPECT_NEAR(fitted.percent, base.percent * 1.65 / 2.0, 1e-3);
+  // The +-100 % clamp still applies with a larger scale.
+  const auto big = Igus::Safety::JogPercentFromVelocity(0.7, Igus::kMaxJogVelocityScale);
+  EXPECT_EQ(big.percent, 100.0f);
+  EXPECT_TRUE(big.saturated);
+}
+
+TEST(JogScale, ParseAcceptsOnlySaneNumbers)
+{
+  double scale = 2.0;
+  EXPECT_TRUE(Igus::Safety::ParseJogVelocityScale("1.65", scale));
+  EXPECT_DOUBLE_EQ(scale, 1.65);
+  EXPECT_TRUE(Igus::Safety::ParseJogVelocityScale("2", scale));
+  EXPECT_DOUBLE_EQ(scale, 2.0);
+  scale = 2.0;
+  for (const char * bad : {"", "abc", "1.5x", "nan", "inf", "-1", "0", "0.4", "4.01", "100"}) {
+    EXPECT_FALSE(Igus::Safety::ParseJogVelocityScale(bad, scale)) << bad;
+    EXPECT_DOUBLE_EQ(scale, 2.0) << bad;  // untouched on failure
+  }
 }
 
 TEST(JogClamp, ClampsToPlusMinusHundredPercent)
@@ -285,4 +329,84 @@ TEST(StartsAllCommandInterfaces, RequiresEverySixVelocityInterfaceOfThisComponen
   EXPECT_FALSE(StartsAllCommandInterfaces(lookalike, left, "velocity"));
   // Unset joint names never match.
   EXPECT_FALSE(StartsAllCommandInterfaces(all, std::array<std::string, 6>{}, "velocity"));
+}
+
+TEST(Formatting, MoveJointMatchesTheRecordedRealRobotCommand)
+{
+  // From raw_messages.log of the real-robot characterization (degrees, 3 decimals, e1..e3 = 0).
+  EXPECT_EQ(
+    Igus::Safety::FormatMoveJoint(82, {5.0, 0.01, 0.0, 0.02, 0.0, 0.0}, 10, 20),
+    "CRISTART 82 CMD Move Joint 5.000 0.010 0.000 0.020 0.000 0.000 0 0 0 10 20 CRIEND\n");
+  EXPECT_EQ(
+    Igus::Safety::MoveJointCommandText({-0.0004, 0.01, 0.0, 0.02, 0.0, 0.0}, 30, 40),
+    "Move Joint -0.000 0.010 0.000 0.020 0.000 0.000 0 0 0 30 40");
+  EXPECT_EQ(
+    Igus::Safety::MoveJointCommandText({1.23456, -179.9996, 90.0, 0.0, 0.0, 12.0005}, 25, 40),
+    "Move Joint 1.235 -180.000 90.000 0.000 0.000 12.001 0 0 0 25 40");
+  // Non-integral percentages keep 3 decimals.
+  EXPECT_EQ(
+    Igus::Safety::MoveJointCommandText({0, 0, 0, 0, 0, 0}, 12.5, 7.25),
+    "Move Joint 0.000 0.000 0.000 0.000 0.000 0.000 0 0 0 12.500 7.250");
+}
+
+TEST(Formatting, MoveJointRejectsNonFiniteValues)
+{
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  const double inf = std::numeric_limits<double>::infinity();
+  EXPECT_TRUE(Igus::Safety::FormatMoveJoint(1, {nan, 0, 0, 0, 0, 0}, 10, 20).empty());
+  EXPECT_TRUE(Igus::Safety::FormatMoveJoint(1, {0, 0, 0, 0, 0, inf}, 10, 20).empty());
+  EXPECT_TRUE(Igus::Safety::FormatMoveJoint(1, {0, 0, 0, 0, 0, 0}, nan, 20).empty());
+  EXPECT_TRUE(Igus::Safety::FormatMoveJoint(1, {0, 0, 0, 0, 0, 0}, 10, -inf).empty());
+  EXPECT_TRUE(Igus::Safety::MoveJointCommandText({0, 0, 0, 0, 0, nan}, 10, 20).empty());
+}
+
+// A robot-owned joint move uses the tighter STATUS-gap tier than the jog hold tier.
+TEST(MoveStatusGap, AbortThresholdIsTheStaleLimitNotTheHoldTier)
+{
+  EXPECT_EQ(Igus::Safety::kMoveStatusAbortTimeout, Igus::Safety::kStatusStaleTimeout);
+  EXPECT_EQ(Igus::Safety::kMoveStatusAbortTimeout.count(), 200);
+  EXPECT_LT(Igus::Safety::kMoveStatusAbortTimeout, Igus::Safety::kStatusCoastTimeout);
+}
+
+TEST(MoveStop, ResendPeriodIsBoundedAndStillWindowCoversTheStopResends)
+{
+  EXPECT_EQ(Igus::Safety::kMoveStopResendPeriod.count(), 100);
+  EXPECT_GT(Igus::Safety::kMoveStopStillWindow, Igus::Safety::kMoveStopResendPeriod);
+}
+
+// ---- ResendTimer: a new request ("send now") is never overwritten by a slower sender ----
+TEST(ResendTimer, StartsDueAndDefersToTheDeadline)
+{
+  Igus::Safety::ResendTimer timer;
+  EXPECT_TRUE(timer.Due(1000));
+  const auto token = timer.Observe();
+  EXPECT_TRUE(timer.Defer(token, 5000));
+  EXPECT_FALSE(timer.Due(4999));
+  EXPECT_TRUE(timer.Due(5000));
+}
+
+TEST(ResendTimer, ArmNowWhileASendIsInFlightSurvivesTheDeferral)
+{
+  Igus::Safety::ResendTimer timer;
+  ASSERT_TRUE(timer.Defer(timer.Observe(), 9000000000LL));  // previous deadline far in the future
+  EXPECT_FALSE(timer.Due(1000));
+
+  // The sender observes, starts sending ...
+  const auto token = timer.Observe();
+  // ... meanwhile a new request arrives (false -> true transition) ...
+  timer.ArmNow();
+  EXPECT_TRUE(timer.Due(1000));
+  // ... and the sender's deferral must NOT overwrite the "send now".
+  EXPECT_FALSE(timer.Defer(token, 9000000000LL));
+  EXPECT_TRUE(timer.Due(1000));
+}
+
+TEST(ResendTimer, ArmNowTwiceInARowIsStillDetectedByTheSender)
+{
+  Igus::Safety::ResendTimer timer;
+  timer.ArmNow();
+  const auto token = timer.Observe();  // "send now" #1 observed
+  timer.ArmNow();                      // "send now" #2 while sending (same logical state, new value)
+  EXPECT_FALSE(timer.Defer(token, 9000000000LL));
+  EXPECT_TRUE(timer.Due(0));
 }

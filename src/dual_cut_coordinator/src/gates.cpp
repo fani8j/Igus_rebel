@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <sstream>
 
 namespace dual_cut
@@ -93,6 +94,51 @@ Status cutLinesFromTargets(
   return Status::Ok();
 }
 
+Eigen::Vector3d topSagOffset(const CutSag & sag, const Eigen::Vector3d & p)
+{
+  if (!sag.active) return Eigen::Vector3d::Zero();
+  const double d = std::abs((p - sag.center).dot(sag.u));
+  const double q = d / sag.half_length_m;
+  return sag.sag_m * std::max(0.0, 1.0 - q * q) * sag.down;
+}
+
+std::vector<Eigen::Vector3d> saggedPolyline(const CutLine & line, size_t n)
+{
+  std::vector<Eigen::Vector3d> poly;
+  n = std::max<size_t>(n, 1);
+  for (size_t i = 0; i <= n; ++i)
+  {
+    const Eigen::Vector3d p = line.start + (line.end - line.start) * (static_cast<double>(i) / static_cast<double>(n));
+    poly.push_back(p + topSagOffset(line.sag, p));
+  }
+  return poly;
+}
+
+double distancePointToPolyline(const Eigen::Vector3d & p, const std::vector<Eigen::Vector3d> & poly)
+{
+  if (poly.empty()) return std::numeric_limits<double>::infinity();
+  if (poly.size() == 1) return (p - poly[0]).norm();
+  double best = std::numeric_limits<double>::infinity();
+  for (size_t i = 0; i + 1 < poly.size(); ++i) best = std::min(best, distancePointToSegment(p, poly[i], poly[i + 1]));
+  return best;
+}
+
+void applyTopSag(const ArmPhase & arm, std::vector<CutLine> & lines, const CutSag & sag)
+{
+  if (!sag.active) return;
+  size_t cuts = 0;
+  for (const auto & seg : arm.segments) cuts += seg.kind == SegmentKind::Cut;
+  if (cuts != lines.size()) return;
+  size_t ci = 0;
+  for (const auto & seg : arm.segments)
+  {
+    if (seg.kind != SegmentKind::Cut) continue;
+    const bool top = seg.cut_id == "middle" || seg.physical_cut == "middle" || seg.stage_name.find("middle seam") != std::string::npos;
+    if (top) lines[ci].sag = sag;
+    ++ci;
+  }
+}
+
 TipGateResult checkTipOnLine(
   const ArmPhase & arm, const std::vector<CutLine> & lines, const TipFk & fk, double tol_m,
   const SampleOptions & sample)
@@ -112,6 +158,11 @@ TipGateResult checkTipOnLine(
   {
     if (seg.kind != SegmentKind::Cut) continue;
     const CutLine & line = lines[ci];
+    // sagged top cut: the expected tip curve (polyline); otherwise exactly the straight segment as always
+    std::vector<Eigen::Vector3d> poly;
+    if (line.sag.active) poly = saggedPolyline(line);
+    const Eigen::Vector3d & line_start = line.sag.active ? poly.front() : line.start;
+    const Eigen::Vector3d & line_end = line.sag.active ? poly.back() : line.end;
     std::vector<TrajPoint> samples;
     Status s = sampleTrajectory(seg.trajectory, sample, samples);
     if (!s)
@@ -129,10 +180,10 @@ TipGateResult checkTipOnLine(
         return r;
       }
       ++r.samples;
-      const double dev = distancePointToSegment(tip, line.start, line.end);
+      const double dev = line.sag.active ? distancePointToPolyline(tip, poly) : distancePointToSegment(tip, line.start, line.end);
       r.max_deviation_m = std::max(r.max_deviation_m, dev);
-      if (k == 0) r.max_endpoint_error_m = std::max(r.max_endpoint_error_m, (tip - line.start).norm());
-      if (k + 1 == samples.size()) r.max_endpoint_error_m = std::max(r.max_endpoint_error_m, (tip - line.end).norm());
+      if (k == 0) r.max_endpoint_error_m = std::max(r.max_endpoint_error_m, (tip - line_start).norm());
+      if (k + 1 == samples.size()) r.max_endpoint_error_m = std::max(r.max_endpoint_error_m, (tip - line_end).norm());
       if (!(dev <= tol_m))
       {
         std::ostringstream os;
@@ -202,6 +253,7 @@ Status evaluateBarriers(const BarrierInputs & in, const BarrierLimits & l, std::
     f.push_back("snapshot is " + std::to_string(in.snapshot_age_s) + " s old (limit " + std::to_string(l.snapshot_max_age_s) + ")");
   if (!(in.monitor_age_s <= l.monitor_max_age_s)) f.push_back("monitor is not running (last tick " + std::to_string(in.monitor_age_s) + " s ago)");
   if (!in.monitor_healthy) f.push_back("monitor reports an unhealthy state");
+  if (in.arm_health_required && !in.arm_health_ok) f.push_back(in.arm_health_text.empty() ? std::string("an arm's driver telemetry is not healthy") : in.arm_health_text);
   if (failures) *failures = f;
   if (f.empty()) return Status::Ok();
   std::string msg = "barrier failed: ";

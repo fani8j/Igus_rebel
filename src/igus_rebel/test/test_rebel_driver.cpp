@@ -18,7 +18,9 @@
 #include <cstdarg>
 #include <cstdio>
 #include <functional>
+#include <future>
 #include <limits>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <sstream>
@@ -28,10 +30,16 @@
 #include <vector>
 
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
+#include "igus_rebel_msgs/action/move_joint.hpp"
+#include "igus_rebel_msgs/msg/hardware_state.hpp"
+#include "sensor_msgs/msg/joint_state.hpp"
+#include "rclcpp_action/rclcpp_action.hpp"
+#include "std_srvs/srv/trigger.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "rcutils/logging.h"
 
 #include "igus_rebel/CriFraming.hpp"
+#include "igus_rebel/MoveSupervisor.hpp"
 #include "igus_rebel/Rebel.hpp"
 #include "igus_rebel/RebelSocket.hpp"
 
@@ -60,6 +68,7 @@ class FakeCriServer
 public:
   explicit FakeCriServer(bool listen = true)
   {
+    currentDeg_ = baseJointsDeg;
     listenFd_ = ::socket(AF_INET, SOCK_STREAM, 0);
     const int enable = 1;
     ::setsockopt(listenFd_, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable));
@@ -118,6 +127,83 @@ public:
   // Value reported in the STATUS ESTOP field (0 in all captured/fake traffic).
   void SetEStopField(int value) {eStopField_ = value;}
   std::size_t Connections() const {return connections_.load();}
+
+  // ---- Robot-side "CMD Move Joint" emulation (measured behaviour of the real controller) ----
+  // Joint-space linear move at a constant speed after a start latency; MOVETOEXECACK + CMDACK on
+  // receipt, MOVETOEXECEND -1 0 MoveTo PLAN on arrival, END 0 0 MoveTo USER on Move Stop. The move
+  // belongs to the robot: it continues when the client drops.
+  void SetMoveSpeedDegS(double speed) {moveSpeedDegS_ = speed;}
+  void SetMoveCmdError(bool error) {moveCmdError_ = error;}       // CMDERROR instead of ACK
+  void SetSuppressMoveAck(bool suppress) {suppressMoveAck_ = suppress;}
+  void SetCmdAckFirst(bool first) {cmdAckFirst_ = first;}         // CMDACK before MOVETOEXECACK
+  void SetMoveStall(bool stall) {moveStall_ = stall;}             // position freezes, no END
+  void SetMoveDeviationDeg(double deg) {moveDeviationDeg_ = deg;} // joint 5 drifts off the line
+  void SetIgnoreMoveStop(bool ignore) {ignoreMoveStop_ = ignore;}
+  // Delay between receiving a Move Joint and the first motion (default 120 ms, measured).
+  void SetMoveStartLatencyMs(int ms) {startLatencyMs_ = ms;}
+  // A Move Stop that arrives before the motion started is acknowledged but has no effect and no
+  // END (a controller that only stops a running motion).
+  void SetStopIgnoredBeforeStart(bool ignore) {stopIgnoredBeforeStart_ = ignore;}
+  // The robot ends the move by itself (pendant stop) this long after it started: END ... USER.
+  void SetMoveAbortAfterS(double seconds) {moveAbortAfterS_ = seconds;}
+  // The robot reports PLAN but joint 1 stops this many degrees short of the target.
+  void SetMoveEndShortDeg(double deg) {moveEndShortDeg_ = deg;}
+  // Sends "<counter> <body>" to the connected client on the next loop iteration (about 2 ms),
+  // e.g. "MOVETOEXECERROR 0 0 MoveTo Hardware error _ESTOP". Messages go out in call order.
+  void InjectMessage(const std::string & body)
+  {
+    std::lock_guard<std::mutex> lock(injectMutex_);
+    injected_.push_back(body);
+  }
+  // Shifts the standing arm (a settle of a few mrad) without any move.
+  void NudgeJointDeg(int joint, float deg)
+  {
+    std::lock_guard<std::mutex> lock(moveMutex_);
+    currentDeg_[joint] += deg;
+  }
+  bool MoveActive()
+  {
+    std::lock_guard<std::mutex> lock(moveMutex_);
+    return moveActive_;
+  }
+  std::array<float, 6> CurrentDeg()
+  {
+    std::lock_guard<std::mutex> lock(moveMutex_);
+    AdvanceMoveLocked();
+    return CurrentLocked();
+  }
+  struct MoveCommand
+  {
+    std::array<double, 6> targetDeg;
+    double velocity;
+    double acceleration;
+    Clock::time_point stamp;
+  };
+  std::vector<MoveCommand> MoveCommands()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return moveCommands_;
+  }
+  std::size_t CountCommands(const std::string & command, Clock::time_point after = {})
+  {
+    std::size_t count = 0;
+    for (const auto & frame : Frames()) {
+      if (frame.body == "CMD " + command && frame.stamp >= after) {
+        ++count;
+      }
+    }
+    return count;
+  }
+  // Time of the first "CMD <command>" frame at or after `after`; time_point{} if none.
+  Clock::time_point FirstCommandAfter(const std::string & command, Clock::time_point after)
+  {
+    for (const auto & frame : Frames()) {
+      if (frame.body == "CMD " + command && frame.stamp >= after) {
+        return frame.stamp;
+      }
+    }
+    return {};
+  }
 
   std::vector<ReceivedFrame> Frames()
   {
@@ -181,11 +267,133 @@ private:
     ::send(fd, data.data(), data.size(), MSG_NOSIGNAL);
   }
 
+  // ---- move emulation; *Locked functions need moveMutex_ ----
+  std::array<float, 6> CurrentLocked() const
+  {
+    return currentDeg_;
+  }
+
+  void AdvanceMoveLocked()
+  {
+    if (!moveActive_) {
+      return;
+    }
+    const auto now = Clock::now();
+    if (now < moveT0_) {
+      return;  // start latency
+    }
+    if (moveStall_) {
+      return;
+    }
+    double maxDelta = 0.0;
+    for (int i = 0; i < 6; ++i) {
+      maxDelta =
+        std::max(maxDelta, std::fabs(static_cast<double>(moveTargetDeg_[i] - moveStartDeg_[i])));
+    }
+    const double sinceStart = std::chrono::duration<double>(now - moveT0_).count();
+    if (moveAbortAfterS_.load() > 0.0 && sinceStart > moveAbortAfterS_.load()) {
+      moveActive_ = false;
+      pendingEnd_ = "0 0 MoveTo USER";
+      return;
+    }
+    const double travelled = sinceStart * moveSpeedDegS_.load();
+    const double s = maxDelta <= 0.0 ? 1.0 : std::min(1.0, travelled / maxDelta);
+    for (int i = 0; i < 6; ++i) {
+      currentDeg_[i] = moveStartDeg_[i] + static_cast<float>(s) *
+        (moveTargetDeg_[i] - moveStartDeg_[i]);
+    }
+    currentDeg_[4] += static_cast<float>(moveDeviationDeg_.load() * s);
+    if (s >= 1.0) {
+      const float direction = moveTargetDeg_[0] >= moveStartDeg_[0] ? 1.0f : -1.0f;
+      currentDeg_[0] -= direction * static_cast<float>(moveEndShortDeg_.load());
+      moveActive_ = false;
+      pendingEnd_ = "-1 0 MoveTo PLAN";
+    }
+  }
+
+  void StartMove(const std::array<double, 6> & targetDeg, bool replace)
+  {
+    std::lock_guard<std::mutex> lock(moveMutex_);
+    AdvanceMoveLocked();
+    moveStartDeg_ = currentDeg_;
+    // Without the deviation offset the line starts where the arm is.
+    moveStartDeg_[4] = currentDeg_[4] - static_cast<float>(0.0);
+    for (int i = 0; i < 6; ++i) {
+      moveTargetDeg_[i] = static_cast<float>(targetDeg[i]);
+    }
+    moveT0_ = Clock::now() + (replace ? 0ms : std::chrono::milliseconds(startLatencyMs_.load()));
+    moveActive_ = true;
+    pendingEnd_.clear();
+  }
+
+  // Returns true if a move was running (END USER is then sent by the caller).
+  bool StopMove()
+  {
+    std::lock_guard<std::mutex> lock(moveMutex_);
+    AdvanceMoveLocked();
+    if (stopIgnoredBeforeStart_ && moveActive_ && Clock::now() < moveT0_) {
+      return false;  // not started yet: nothing is stopped, the move still begins later
+    }
+    const bool wasActive = moveActive_;
+    moveActive_ = false;
+    return wasActive;
+  }
+
+  void HandleMoveJoint(
+    int client, const std::string & stripped, const std::string & counterText,
+    int & counter)
+  {
+    std::istringstream stream(stripped);
+    std::string cmd;
+    std::string move;
+    std::string joint;
+    stream >> cmd >> move >> joint;
+    MoveCommand command{};
+    for (double & value : command.targetDeg) {
+      stream >> value;
+    }
+    double external = 0.0;
+    stream >> external >> external >> external >> command.velocity >> command.acceleration;
+    command.stamp = Clock::now();
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      moveCommands_.push_back(command);
+    }
+    if (moveCmdError_) {
+      SendAll(
+        client, "CRISTART " + std::to_string(counter++) + " CMDERROR " + counterText +
+        " Move not possible CRIEND\n");
+      return;
+    }
+    bool replace;
+    {
+      std::lock_guard<std::mutex> lock(moveMutex_);
+      replace = moveActive_;
+    }
+    StartMove(command.targetDeg, replace);
+    const std::string moveAck =
+      "CRISTART " + std::to_string(counter++) + " MOVETOEXECACK 0 0 MoveTo CRIEND\n";
+    const std::string cmdAck =
+      "CRISTART " + std::to_string(counter++) + " CMDACK " + counterText + " CRIEND\n";
+    if (cmdAckFirst_) {
+      SendAll(client, cmdAck);
+    }
+    if (!suppressMoveAck_) {
+      SendAll(client, moveAck);
+    }
+    if (!cmdAckFirst_) {
+      SendAll(client, cmdAck);
+    }
+  }
+
   void Run()
   {
     while (running_) {
       pollfd listenPoll{listenFd_, POLLIN, 0};
       if (::poll(&listenPoll, 1, 20) <= 0) {
+        std::lock_guard<std::mutex> lock(moveMutex_);
+        AdvanceMoveLocked();
+        pendingEnd_.clear();  // nobody is connected to hear it
         continue;
       }
       const int client = ::accept(listenFd_, nullptr, nullptr);
@@ -194,6 +402,10 @@ private:
       }
       const std::size_t connection = ++connections_;
       dropClient_ = false;
+      {
+        std::lock_guard<std::mutex> lock(moveMutex_);
+        pendingEnd_.clear();
+      }
       Igus::CriFrameParser parser;
       int counter = 1;
       int statusCount = 0;
@@ -216,7 +428,19 @@ private:
             if (stripped == "CMD Enable" && !ignoreEnable_) {
               disabledMask_ = 0;
             }
-            if (stripped.rfind("CMD ", 0) == 0) {
+            if (stripped.rfind("CMD Move Joint", 0) == 0) {
+              HandleMoveJoint(client, stripped, body.substr(0, body.find(' ')), counter);
+            } else if (stripped == "CMD Move Stop") {
+              const bool wasMoving = !ignoreMoveStop_ && StopMove();
+              if (wasMoving) {
+                SendAll(
+                  client, "CRISTART " + std::to_string(counter++) +
+                  " MOVETOEXECEND 0 0 MoveTo USER CRIEND\n");
+              }
+              SendAll(
+                client, "CRISTART " + std::to_string(counter++) + " CMDACK " +
+                body.substr(0, body.find(' ')) + " CRIEND\n");
+            } else if (stripped.rfind("CMD ", 0) == 0) {
               const std::string counterText = body.substr(0, body.find(' '));
               SendAll(
                 client, "CRISTART " + std::to_string(counter++) + " CMDACK " + counterText +
@@ -224,9 +448,37 @@ private:
             }
           }
         }
+        {
+          std::vector<std::string> injected;
+          {
+            std::lock_guard<std::mutex> lock(injectMutex_);
+            injected.swap(injected_);
+          }
+          for (const auto & body : injected) {
+            SendAll(client, "CRISTART " + std::to_string(counter++) + " " + body + " CRIEND\n");
+          }
+        }
+        {
+          std::string end;
+          {
+            std::lock_guard<std::mutex> lock(moveMutex_);
+            AdvanceMoveLocked();
+            end.swap(pendingEnd_);
+          }
+          if (!end.empty()) {
+            SendAll(
+              client, "CRISTART " + std::to_string(
+                counter++) + " MOVETOEXECEND " + end + " CRIEND\n");
+          }
+        }
         if (sendStatus_ && Clock::now() >= nextStatus) {
           nextStatus += 20ms;
-          std::array<float, 6> joints = baseJointsDeg;
+          std::array<float, 6> joints;
+          {
+            std::lock_guard<std::mutex> lock(moveMutex_);
+            AdvanceMoveLocked();
+            joints = currentDeg_;
+          }
           joints[0] += jointStepDeg_.load() * static_cast<float>(statusCount++);
           const std::string status = MakeStatus(counter++, joints);
           // Split every STATUS across two writes to exercise the framing.
@@ -255,6 +507,29 @@ private:
   std::thread thread_;
   std::mutex mutex_;
   std::vector<ReceivedFrame> frames_;
+  std::vector<MoveCommand> moveCommands_;  // guarded by mutex_
+
+  std::mutex injectMutex_;
+  std::vector<std::string> injected_;  // guarded by injectMutex_
+
+  std::mutex moveMutex_;
+  std::array<float, 6> currentDeg_{};  // set from baseJointsDeg when the server starts
+  std::array<float, 6> moveStartDeg_{};
+  std::array<float, 6> moveTargetDeg_{};
+  Clock::time_point moveT0_{};
+  bool moveActive_ = false;
+  std::string pendingEnd_;
+  std::atomic<double> moveSpeedDegS_{40.0};
+  std::atomic<bool> moveCmdError_{false};
+  std::atomic<bool> suppressMoveAck_{false};
+  std::atomic<bool> cmdAckFirst_{false};
+  std::atomic<bool> moveStall_{false};
+  std::atomic<double> moveDeviationDeg_{0.0};
+  std::atomic<bool> ignoreMoveStop_{false};
+  std::atomic<int> startLatencyMs_{120};
+  std::atomic<bool> stopIgnoredBeforeStart_{false};
+  std::atomic<double> moveAbortAfterS_{0.0};
+  std::atomic<double> moveEndShortDeg_{0.0};
 };
 
 template<class Predicate>
@@ -306,7 +581,127 @@ hardware_interface::HardwareInfo MakeInfo(
 }
 
 const std::vector<std::string> kStartupSequence = {
-  "SetActive true", "Reset", "Enable", "MotionTypeJoint", "Override 100.0"};
+  "Move Stop", "SetActive true", "Reset", "Enable", "MotionTypeJoint", "Override 100.0"};
+
+std::int64_t SystemNowNs()
+{
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+// Subscribes to the driver's own telemetry (~/robot_joint_states, ~/hardware_state) from a
+// separate node spun on its own thread, and keeps every message with its arrival time.
+class TelemetryListener
+{
+public:
+  using JointState = sensor_msgs::msg::JointState;
+  using HardwareState = igus_rebel_msgs::msg::HardwareState;
+  struct JointSample
+  {
+    JointState msg;
+    Clock::time_point received{};
+    std::int64_t receivedSystemNs = 0;
+  };
+  struct StateSample
+  {
+    HardwareState msg;
+    Clock::time_point received{};
+  };
+
+  explicit TelemetryListener(const std::string & driverNode = "igus_rebel")
+  {
+    node_ = std::make_shared<rclcpp::Node>("telemetry_listener_" + std::to_string(counter_++));
+    jointSub_ = node_->create_subscription<JointState>(
+      "/" + driverNode + "/robot_joint_states", rclcpp::SensorDataQoS().keep_last(10),
+      [this](JointState::ConstSharedPtr msg) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        joints_.push_back({*msg, Clock::now(), SystemNowNs()});
+      });
+    stateSub_ = node_->create_subscription<HardwareState>(
+      "/" + driverNode + "/hardware_state", rclcpp::QoS(rclcpp::KeepLast(10)).reliable(),
+      [this](HardwareState::ConstSharedPtr msg) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        states_.push_back({*msg, Clock::now()});
+      });
+    executor_.add_node(node_);
+    thread_ = std::thread([this]() {executor_.spin(); finished_ = true;});
+  }
+  ~TelemetryListener()
+  {
+    while (!finished_) {
+      executor_.cancel();
+      std::this_thread::sleep_for(2ms);
+    }
+    if (thread_.joinable()) {
+      thread_.join();
+    }
+  }
+
+  std::size_t JointCount()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return joints_.size();
+  }
+  std::size_t StateCount()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return states_.size();
+  }
+  std::vector<JointSample> Joints()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return joints_;
+  }
+  std::vector<StateSample> States()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return states_;
+  }
+  JointSample LastJoint()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return joints_.empty() ? JointSample() : joints_.back();
+  }
+  HardwareState LastState()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return states_.empty() ? HardwareState() : states_.back().msg;
+  }
+  // Waits until the newest hardware_state satisfies `predicate`.
+  template<class Predicate>
+  bool WaitState(Predicate predicate, std::chrono::milliseconds timeout)
+  {
+    return WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return !states_.empty() && predicate(states_.back().msg);
+      }, timeout);
+  }
+  // Waits until the newest robot_joint_states satisfies `predicate`.
+  template<class Predicate>
+  bool WaitJoint(Predicate predicate, std::chrono::milliseconds timeout)
+  {
+    return WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return !joints_.empty() && predicate(joints_.back());
+      }, timeout);
+  }
+
+private:
+  static inline std::atomic<int> counter_{0};
+  std::atomic<bool> finished_{false};
+  rclcpp::Node::SharedPtr node_;
+  rclcpp::Subscription<JointState>::SharedPtr jointSub_;
+  rclcpp::Subscription<HardwareState>::SharedPtr stateSub_;
+  rclcpp::executors::SingleThreadedExecutor executor_;
+  std::thread thread_;
+  std::mutex mutex_;
+  std::vector<JointSample> joints_;
+  std::vector<StateSample> states_;
+};
+
+constexpr double kDegToRad = Igus::Safety::kDegToRad;
 
 class RebelDriverTest : public ::testing::Test
 {
@@ -343,7 +738,7 @@ TEST_F(RebelDriverTest, StartupSequenceSeedsStateAndStopDisables)
     EXPECT_EQ(Velocity(i), 0.0);
   }
 
-  ASSERT_TRUE(WaitFor([&]() {return server.Commands().size() >= 5;}, 2000ms));
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands().size() >= 6;}, 2000ms));
   EXPECT_EQ(server.Commands(), kStartupSequence);
 
   // ALIVEJOG starts after Enable and is zero while write() was never called.
@@ -369,9 +764,9 @@ TEST_F(RebelDriverTest, StartupSequenceSeedsStateAndStopDisables)
   EXPECT_EQ(rebel->read(now, period), return_type::OK);
 
   rebel->Stop();
-  ASSERT_TRUE(WaitFor([&]() {return server.Commands().size() >= 7;}, 1000ms));
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands().size() >= 8;}, 1000ms));
   const auto commandsAfterStop = server.Commands();
-  ASSERT_GE(commandsAfterStop.size(), 7u);
+  ASSERT_GE(commandsAfterStop.size(), 8u);
   EXPECT_EQ(commandsAfterStop[commandsAfterStop.size() - 2], "Disable");
   EXPECT_EQ(commandsAfterStop.back(), "QUIT");
 }
@@ -380,7 +775,7 @@ TEST_F(RebelDriverTest, WriteForwardsClampedJogAndWatchdogZeroesIt)
 {
   FakeCriServer server;
   StartDriver(server);
-  ASSERT_TRUE(WaitFor([&]() {return server.Commands().size() >= 5;}, 2000ms));
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands().size() >= 6;}, 2000ms));
 
   commands.at(0).set_value(0.1);  // 11.459 %
   commands.at(1).set_value(std::numeric_limits<double>::quiet_NaN());
@@ -416,7 +811,7 @@ TEST_F(RebelDriverTest, OnErrorAndOnDeactivateZeroTheJogImmediately)
 {
   FakeCriServer server;
   StartDriver(server);
-  ASSERT_TRUE(WaitFor([&]() {return server.Commands().size() >= 5;}, 2000ms));
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands().size() >= 6;}, 2000ms));
 
   commands.at(0).set_value(0.2);
   for (int i = 0; i < 10; ++i) {
@@ -500,11 +895,11 @@ TEST_F(RebelDriverTest, ReconnectResendsStartupSequence)
 {
   FakeCriServer server;
   StartDriver(server);
-  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 5;}, 2000ms));
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 6;}, 2000ms));
 
   server.DropClient();
   ASSERT_TRUE(WaitFor([&]() {return server.Connections() >= 2;}, 3000ms));
-  ASSERT_TRUE(WaitFor([&]() {return server.Commands(2).size() >= 5;}, 3000ms));
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(2).size() >= 6;}, 3000ms));
   EXPECT_EQ(server.Commands(2), kStartupSequence);
   // Motion must not resume on its own after a reconnect: read() fails closed. ros2_control
   // then calls on_error() and stops calling read()/write(), so the jog stays zero.
@@ -526,7 +921,7 @@ TEST_F(RebelDriverTest, LatchedErrorRecoversOnlyViaLifecycleResetWithFreshStatus
 {
   FakeCriServer server;
   StartDriver(server);
-  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 5;}, 2000ms));
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 6;}, 2000ms));
   EXPECT_EQ(server.Commands(1), kStartupSequence);
 
   // STATUS stops: read() eventually returns ERROR and on_error() (as ros2_control would
@@ -557,10 +952,10 @@ TEST_F(RebelDriverTest, LatchedErrorRecoversOnlyViaLifecycleResetWithFreshStatus
   // `ros2 control set_hardware_component_state <component> active`: STATUS is fresh, so the
   // latch clears and the connect sequence is re-sent on the same (still-connected) socket.
   EXPECT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
-  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 10;}, 2000ms));
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 12;}, 2000ms));
   const auto allCommandsConn1 = server.Commands(1);
   const std::vector<std::string> resent(
-    allCommandsConn1.end() - 5, allCommandsConn1.end());
+    allCommandsConn1.end() - 6, allCommandsConn1.end());
   EXPECT_EQ(resent, kStartupSequence);
   EXPECT_EQ(server.Connections(), 1u);  // no socket reconnect happened
 
@@ -571,7 +966,7 @@ TEST_F(RebelDriverTest, ActivateRefusesWhileStatusStillStale)
 {
   FakeCriServer server;
   StartDriver(server);
-  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 5;}, 2000ms));
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 6;}, 2000ms));
 
   server.SetSendStatus(false);
   ASSERT_TRUE(
@@ -591,7 +986,7 @@ TEST_F(RebelDriverTest, ResetAndEnableResendsSequenceWithJogHeldAtZero)
 {
   FakeCriServer server;
   StartDriver(server);
-  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 5;}, 2000ms));
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 6;}, 2000ms));
   ASSERT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
 
   // Robot-side disable while STATUS stays fresh and NoError: read() keeps returning OK.
@@ -628,9 +1023,9 @@ TEST_F(RebelDriverTest, ResetAndEnableResendsSequenceWithJogHeldAtZero)
   run = false;
   writer.join();
 
-  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 10;}, 2000ms));
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 12;}, 2000ms));
   const auto all = server.Commands(1);
-  const std::vector<std::string> resent(all.end() - 5, all.end());
+  const std::vector<std::string> resent(all.end() - 6, all.end());
   EXPECT_EQ(resent, kStartupSequence);
   EXPECT_EQ(server.Connections(), 1u);
   EXPECT_EQ(rebel->DrivesDisabledMask(), 0u);
@@ -719,7 +1114,7 @@ TEST_F(RebelDriverTest, CoastKeepsSendingFrozenJogThroughShortGapAndResumes)
 {
   FakeCriServer server;
   StartDriver(server);
-  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 5;}, 2000ms));
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 6;}, 2000ms));
   ASSERT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
 
   ControllerLoop loop(*rebel, commands, 0.1);  // 0.1 rad/s -> ~11.46 % jog
@@ -768,7 +1163,7 @@ TEST_F(RebelDriverTest, HoldTierWhileMovingZeroesJogAndLatchesOnResume)
 {
   FakeCriServer server;
   StartDriver(server);
-  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 5;}, 2000ms));
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 6;}, 2000ms));
   ASSERT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
 
   ControllerLoop loop(*rebel, commands, 0.1);
@@ -802,7 +1197,7 @@ TEST_F(RebelDriverTest, HoldTierWhileIdleZeroesJogAndResumes)
 {
   FakeCriServer server;
   StartDriver(server);
-  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 5;}, 2000ms));
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 6;}, 2000ms));
   ASSERT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
 
   ControllerLoop loop(*rebel, commands, 0.005);  // idle JTC hold level (< 0.02 rad/s)
@@ -833,7 +1228,7 @@ TEST_F(RebelDriverTest, LongStatusGapLatches)
 {
   FakeCriServer server;
   StartDriver(server);
-  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 5;}, 2000ms));
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 6;}, 2000ms));
 
   server.SetSendStatus(false);
   bool sawHold = false;
@@ -857,11 +1252,201 @@ TEST_F(RebelDriverTest, LongStatusGapLatches)
   EXPECT_EQ(rebel->read(now, period), return_type::OK);
 }
 
+// ---- Telemetry that survives a latch: ~/robot_joint_states and ~/hardware_state ----
+// These tests drive the plugin directly (no controller_manager), as the tests above do: a
+// ControllerLoop emulates read()/write(), and on_error()/on_configure()/on_activate() are called
+// the way ros2_control calls them. They therefore verify what the driver publishes, not what
+// joint_state_broadcaster does with the frozen state interfaces.
+
+TEST_F(RebelDriverTest, TelemetryFlowsWhileInactiveAndAtTenHertz)
+{
+  FakeCriServer server;
+  StartDriver(server);
+  TelemetryListener telemetry;
+  // Never activated: the component is INACTIVE, read() is not called, telemetry still flows.
+  ASSERT_TRUE(WaitFor([&]() {return telemetry.JointCount() >= 5 && telemetry.StateCount() >= 3;}, 4000ms));
+
+  const auto joint = telemetry.LastJoint();
+  ASSERT_EQ(joint.msg.name.size(), 6u);
+  ASSERT_EQ(joint.msg.position.size(), 6u);
+  for (std::size_t i = 0; i < 6; ++i) {
+    EXPECT_EQ(joint.msg.name[i], rebel->JointNames()[i]);
+    EXPECT_NEAR(joint.msg.position[i], server.baseJointsDeg[i] * kDegToRad, 1e-5);
+  }
+  // Stamp = acquisition time of the sample: shortly before it arrived, never after.
+  const std::int64_t stampNs = rclcpp::Time(joint.msg.header.stamp).nanoseconds();
+  EXPECT_LE(stampNs, joint.receivedSystemNs);
+  EXPECT_LT(joint.receivedSystemNs - stampNs, 100'000'000);
+
+  const auto hw = telemetry.LastState();
+  EXPECT_EQ(hw.component, "rebel_arm_controller");
+  EXPECT_TRUE(hw.connected);
+  EXPECT_GE(hw.connection_count, 1u);
+  EXPECT_GT(hw.status_sequence, 0u);
+  EXPECT_TRUE(hw.status_fresh);
+  EXPECT_GE(hw.status_age_s, 0.0);
+  EXPECT_LT(hw.status_age_s, 0.2);
+  EXPECT_FALSE(hw.latched);
+  EXPECT_TRUE(hw.latch_reason.empty());
+  EXPECT_FALSE(hw.activated);
+  EXPECT_FALSE(hw.move_active);
+  EXPECT_FALSE(hw.move_stop_pending);
+  EXPECT_EQ(hw.drives_disabled_mask, 0u);
+  EXPECT_EQ(hw.kinstate, 0);
+  EXPECT_GT(rclcpp::Time(hw.status_stamp).nanoseconds(), 0);
+
+  // hardware_state at 10 Hz while nothing changes; robot_joint_states once per STATUS (20 ms).
+  const std::size_t states0 = telemetry.StateCount();
+  const std::size_t joints0 = telemetry.JointCount();
+  std::this_thread::sleep_for(1000ms);
+  const std::size_t states = telemetry.StateCount() - states0;
+  const std::size_t joints = telemetry.JointCount() - joints0;
+  EXPECT_GE(states, 8u);
+  EXPECT_LE(states, 13u);
+  EXPECT_GE(joints, 35u);
+  EXPECT_LE(joints, 55u);
+
+  // Activation shows up (immediately, not only at the next 10 Hz tick).
+  ASSERT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_TRUE(telemetry.WaitState([](const auto & msg) {return msg.activated;}, 60ms));
+}
+
+TEST_F(RebelDriverTest, RobotJointStatesTrackTheRobotWhileLatchedAndInterfacesStayFrozen)
+{
+  FakeCriServer server;
+  StartDriver(server);
+  ASSERT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  TelemetryListener telemetry;
+  ControllerLoop loop(*rebel, commands, 0.0);
+  ASSERT_TRUE(WaitFor([&]() {return telemetry.JointCount() >= 5 && telemetry.StateCount() >= 2;}, 4000ms));
+  EXPECT_TRUE(telemetry.WaitState([](const auto & msg) {return msg.activated;}, 500ms));
+  EXPECT_FALSE(telemetry.LastState().latched);
+
+  // Latch through a connection drop: read() returns ERROR, the loop stops (as ros2_control
+  // stops calling read()) and on_error() follows.
+  server.DropClient();
+  ASSERT_TRUE(WaitFor([&]() {return loop.errors.load() > 0;}, 4000ms));
+  ASSERT_TRUE(rebel->HardwareErrorLatched());
+  const auto latchedAt = Clock::now();
+  EXPECT_EQ(rebel->on_error(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+
+  // hardware_state reports the latch immediately (poll period 10 ms), with the reason.
+  ASSERT_TRUE(telemetry.WaitState([](const auto & msg) {return msg.latched;}, 200ms));
+  const auto hw = telemetry.LastState();
+  EXPECT_TRUE(hw.latched);
+  EXPECT_NE(hw.latch_reason.find("re-established"), std::string::npos) << hw.latch_reason;
+  EXPECT_TRUE(hw.connected);
+  EXPECT_LT(Clock::now() - latchedAt, 400ms);
+  // on_error() deactivates the component: also reported at once.
+  EXPECT_TRUE(telemetry.WaitState([](const auto & msg) {return !msg.activated;}, 100ms));
+
+  // The state interfaces are frozen at their last values ...
+  const double frozen = Position(0);
+  EXPECT_NEAR(frozen, server.baseJointsDeg[0] * kDegToRad, 1e-5);
+  // ... while the robot moves on (the fake server keeps sending STATUS): robot_joint_states
+  // tracks it, stamped with the samples' receive time.
+  for (const float delta : {5.0f, 3.0f}) {
+    server.NudgeJointDeg(0, delta);
+    const double expected = (server.CurrentDeg()[0]) * kDegToRad;
+    ASSERT_TRUE(
+      telemetry.WaitJoint(
+        [&](const auto & sample) {
+          return std::fabs(sample.msg.position[0] - expected) < 1e-4;
+        }, 500ms)) << "robot_joint_states did not follow the robot while latched";
+    const auto sample = telemetry.LastJoint();
+    const std::int64_t stampNs = rclcpp::Time(sample.msg.header.stamp).nanoseconds();
+    EXPECT_LE(stampNs, sample.receivedSystemNs);
+    EXPECT_LT(sample.receivedSystemNs - stampNs, 100'000'000);
+  }
+  EXPECT_EQ(Position(0), frozen);  // nothing wrote the state interfaces from another thread
+  EXPECT_NEAR((server.CurrentDeg()[0] - server.baseJointsDeg[0]) * kDegToRad, 8.0 * kDegToRad, 1e-5);
+
+  // Samples keep coming at the STATUS rate with strictly increasing stamps, and every one
+  // carries a velocity estimate once a baseline exists.
+  const std::size_t from = telemetry.JointCount();
+  std::this_thread::sleep_for(500ms);
+  const auto joints = telemetry.Joints();
+  ASSERT_GT(joints.size(), from + 10);
+  for (std::size_t i = from + 1; i < joints.size(); ++i) {
+    EXPECT_GT(
+      rclcpp::Time(joints[i].msg.header.stamp).nanoseconds(),
+      rclcpp::Time(joints[i - 1].msg.header.stamp).nanoseconds());
+    EXPECT_EQ(joints[i].msg.velocity.size(), 6u);
+  }
+  EXPECT_TRUE(telemetry.LastState().latched);
+}
+
+TEST_F(RebelDriverTest, DeadLinkShowsAsAgeingStampsAndRecoveryClearsTheLatchReport)
+{
+  FakeCriServer server;
+  StartDriver(server);
+  ASSERT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  TelemetryListener telemetry;
+  ControllerLoop loop(*rebel, commands, 0.0);
+  ASSERT_TRUE(WaitFor([&]() {return telemetry.JointCount() >= 5 && telemetry.StateCount() >= 2;}, 4000ms));
+
+  // STATUS stops: read() goes through hold and latches after about 1 s.
+  server.SetSendStatus(false);
+  const auto silentAt = Clock::now();
+  bool sawStale = false;
+  ASSERT_TRUE(
+    WaitFor(
+      [&]() {
+        sawStale = sawStale || !telemetry.LastState().status_fresh;
+        return rebel->HardwareErrorLatched();
+      }, 2500ms));
+  EXPECT_TRUE(sawStale) << "status_fresh never went false before the latch";
+  EXPECT_EQ(rebel->on_error(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  ASSERT_TRUE(telemetry.WaitState([](const auto & msg) {return msg.latched;}, 200ms));
+  EXPECT_NE(telemetry.LastState().latch_reason.find("no valid STATUS"), std::string::npos)
+    << telemetry.LastState().latch_reason;
+
+  // No stale republish: robot_joint_states stops (at most the in-flight sample), its last stamp
+  // ages, and hardware_state keeps reporting a growing status age.
+  std::this_thread::sleep_for(100ms);
+  const std::size_t joints0 = telemetry.JointCount();
+  const auto lastJoint = telemetry.LastJoint();
+  const std::int64_t lastStampNs = rclcpp::Time(lastJoint.msg.header.stamp).nanoseconds();
+  const std::size_t states0 = telemetry.StateCount();
+  const double age0 = telemetry.LastState().status_age_s;
+  std::this_thread::sleep_for(600ms);
+  EXPECT_EQ(telemetry.JointCount(), joints0) << "an old sample was republished";
+  EXPECT_EQ(rclcpp::Time(telemetry.LastJoint().msg.header.stamp).nanoseconds(), lastStampNs);
+  EXPECT_GE(SystemNowNs() - lastStampNs, 600'000'000);
+  EXPECT_GE(telemetry.StateCount() - states0, 4u);
+  const auto hw = telemetry.LastState();
+  EXPECT_GE(hw.status_age_s - age0, 0.5);
+  EXPECT_GE(hw.status_age_s, 1.0);  // the latch itself needs > 1 s without STATUS
+  EXPECT_GE(Clock::now() - silentAt, 1600ms);
+  EXPECT_FALSE(hw.status_fresh);
+  EXPECT_TRUE(hw.latched);
+  EXPECT_GT(hw.status_sequence, 0u);
+  // status_stamp is the receive time of the latest STATUS: that of the last published sample
+  // (a best-effort sample may have been dropped, never a newer one).
+  EXPECT_GE(rclcpp::Time(hw.status_stamp).nanoseconds(), lastStampNs);
+  EXPECT_LT(rclcpp::Time(hw.status_stamp).nanoseconds() - lastStampNs, 100'000'000);
+
+  // Recovery: STATUS back, inactive -> active. The latch report clears, samples resume.
+  server.SetSendStatus(true);
+  ASSERT_TRUE(telemetry.WaitJoint([&](const auto & sample) {
+        return sample.received > Clock::now() - 100ms;
+      }, 1000ms));
+  EXPECT_EQ(rebel->on_configure(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_TRUE(telemetry.LastState().latched);  // still latched until on_activate()
+  EXPECT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  ASSERT_TRUE(telemetry.WaitState([](const auto & msg) {return !msg.latched;}, 100ms));
+  const auto recovered = telemetry.LastState();
+  EXPECT_TRUE(recovered.latch_reason.empty());
+  EXPECT_TRUE(recovered.activated);
+  EXPECT_TRUE(recovered.status_fresh);
+  EXPECT_LT(recovered.status_age_s, 0.2);
+}
+
 TEST_F(RebelDriverTest, ResetAndEnableRefusesWhenStatusStale)
 {
   FakeCriServer server;
   StartDriver(server);
-  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 5;}, 2000ms));
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 6;}, 2000ms));
 
   server.SetSendStatus(false);
   std::this_thread::sleep_for(300ms);
@@ -875,7 +1460,7 @@ TEST_F(RebelDriverTest, ResetAndEnableRefusesWhenLatched)
 {
   FakeCriServer server;
   StartDriver(server);
-  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 5;}, 2000ms));
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 6;}, 2000ms));
 
   server.SetSendStatus(false);
   ASSERT_TRUE(
@@ -892,7 +1477,7 @@ TEST_F(RebelDriverTest, DigitalOutputReportsConnectionState)
 {
   FakeCriServer server;
   StartDriver(server);
-  ASSERT_TRUE(WaitFor([&]() {return server.Commands().size() >= 5;}, 2000ms));
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands().size() >= 6;}, 2000ms));
 
   auto request = std::make_shared<igus_rebel_msgs::srv::SetDigitalOutput::Request>();
   auto response = std::make_shared<igus_rebel_msgs::srv::SetDigitalOutput::Response>();
@@ -982,6 +1567,44 @@ TEST(RebelDriverInit, RejectsInvalidTargetParameters)
   }
 }
 
+TEST(RebelDriverInit, RejectsInvalidJogVelocityScaleBeforeConnecting)
+{
+  for (const char * bad : {"abc", "1.5x", "nan", "inf", "0", "-1", "0.4", "4.01"}) {
+    Igus::Rebel rebel("127.0.0.1", 1);
+    auto info = MakeInfo();
+    info.hardware_parameters["jog_velocity_scale"] = bad;
+    const auto start = Clock::now();
+    EXPECT_EQ(rebel.on_init(info), CallbackReturn::ERROR) << bad;
+    EXPECT_LT(Clock::now() - start, 500ms) << "must fail before connecting";
+  }
+}
+
+TEST(RebelDriverInit, JogVelocityScaleParameterChangesTheSentJogPercent)
+{
+  FakeCriServer server;
+  Igus::Rebel rebel("127.0.0.1", server.port());
+  auto info = MakeInfo("rebel_arm_controller");
+  info.hardware_parameters["jog_velocity_scale"] = "1.65";
+  ASSERT_EQ(rebel.on_init(info), CallbackReturn::SUCCESS);
+  auto commands = rebel.export_command_interfaces();
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands().size() >= 6;}, 2000ms));
+
+  commands.at(0).set_value(0.1);  // 1.65 * 0.1 / kDegToRad = 9.454 % (2.0 would be 11.459 %)
+  commands.at(1).set_value(10.0);  // still saturates at the +-100 % clamp
+  rclcpp::Time now{0, 0, RCL_STEADY_TIME};
+  rclcpp::Duration period{0, 10000000};
+  for (int i = 0; i < 20; ++i) {
+    ASSERT_EQ(rebel.write(now, period), return_type::OK);
+    std::this_thread::sleep_for(10ms);
+  }
+  const auto whileWriting = server.AliveJogs(Clock::now() - 60ms);
+  ASSERT_FALSE(whileWriting.empty());
+  const auto jog = ParseJog(whileWriting.back().body);
+  EXPECT_NEAR(jog[0], 1.65 * 0.1 / Igus::Safety::kDegToRad, 1e-4);
+  EXPECT_EQ(jog[1], 100.0);
+  rebel.Stop();
+}
+
 TEST(RebelDriverInit, FailsWhenConnectionIsRefused)
 {
   FakeCriServer closedPort(false);
@@ -1056,6 +1679,15 @@ TEST(RebelDriverInit, RejectsWrongJointDescriptionBeforeConnecting)
   expectRejected(
     "invalid digital output service",
     [](auto & info) {info.hardware_parameters["digital_output_service"] = "bad service";});
+  expectRejected(
+    "non-numeric move velocity cap",
+    [](auto & info) {info.hardware_parameters["move_joint_max_velocity_percent"] = "fast";});
+  expectRejected(
+    "zero move acceleration cap",
+    [](auto & info) {info.hardware_parameters["move_joint_max_acceleration_percent"] = "0";});
+  expectRejected(
+    "negative move velocity cap",
+    [](auto & info) {info.hardware_parameters["move_joint_max_velocity_percent"] = "-5";});
 }
 
 // Two Igus/Rebel instances in one controller_manager (dual-arm cell): prefixed joints, one fake
@@ -1117,8 +1749,8 @@ TEST_F(RebelDualArmTest, TwoPrefixedInstancesRunIndependently)
   }
 
   // Both ran their own start-up sequence against their own server.
-  ASSERT_TRUE(WaitFor([&]() {return left.server->Commands().size() >= 5;}, 2000ms));
-  ASSERT_TRUE(WaitFor([&]() {return right.server->Commands().size() >= 5;}, 2000ms));
+  ASSERT_TRUE(WaitFor([&]() {return left.server->Commands().size() >= 6;}, 2000ms));
+  ASSERT_TRUE(WaitFor([&]() {return right.server->Commands().size() >= 6;}, 2000ms));
   EXPECT_EQ(left.server->Commands(), kStartupSequence);
   EXPECT_EQ(right.server->Commands(), kStartupSequence);
   EXPECT_EQ(left.rebel->read(now, period), return_type::OK);
@@ -1209,6 +1841,52 @@ TEST_F(RebelDualArmTest, ServiceAndNodeNamesFollowParameters)
   right.rebel->Stop();
 }
 
+// Each arm publishes its own telemetry in its own namespace, with its prefixed joint names; one
+// arm's latch is not reported by the other.
+TEST_F(RebelDualArmTest, TelemetryIsPerArmWithPrefixedJointNames)
+{
+  Arm left;
+  Arm right;
+  StartArm(left, "left");
+  ASSERT_NE(left.rebel, nullptr);
+  StartArm(right, "right");
+  ASSERT_NE(right.rebel, nullptr);
+  right.server->NudgeJointDeg(0, 7.0f);  // distinguishable from the left arm
+  TelemetryListener leftTelemetry("igus_rebel_left");
+  TelemetryListener rightTelemetry("igus_rebel_right");
+  ASSERT_TRUE(
+    WaitFor(
+      [&]() {
+        return leftTelemetry.JointCount() >= 3 && rightTelemetry.JointCount() >= 3 &&
+        leftTelemetry.StateCount() >= 1 && rightTelemetry.StateCount() >= 1;
+      }, 4000ms));
+  const auto leftJoint = leftTelemetry.LastJoint();
+  const auto rightJoint = rightTelemetry.LastJoint();
+  ASSERT_EQ(leftJoint.msg.name.size(), 6u);
+  ASSERT_EQ(rightJoint.msg.name.size(), 6u);
+  for (std::size_t i = 0; i < 6; ++i) {
+    EXPECT_EQ(leftJoint.msg.name[i], "arm_left_joint" + std::to_string(i + 1));
+    EXPECT_EQ(rightJoint.msg.name[i], "arm_right_joint" + std::to_string(i + 1));
+  }
+  EXPECT_NEAR(leftJoint.msg.position[0], left.server->baseJointsDeg[0] * kDegToRad, 1e-5);
+  EXPECT_TRUE(
+    rightTelemetry.WaitJoint(
+      [&](const auto & sample) {
+        return std::fabs(
+          sample.msg.position[0] - (right.server->baseJointsDeg[0] + 7.0f) * kDegToRad) < 1e-4;
+      }, 500ms));
+  EXPECT_EQ(leftTelemetry.LastState().component, "arm_left_controller");
+  EXPECT_EQ(rightTelemetry.LastState().component, "arm_right_controller");
+
+  // Latch only the left arm (no fault group here): only its report changes.
+  left.rebel->on_error(rclcpp_lifecycle::State());
+  ASSERT_TRUE(leftTelemetry.WaitState([](const auto & msg) {return msg.latched;}, 200ms));
+  std::this_thread::sleep_for(150ms);
+  EXPECT_FALSE(rightTelemetry.LastState().latched);
+  left.rebel->Stop();
+  right.rebel->Stop();
+}
+
 TEST_F(RebelDualArmTest, RenamedNodesDefaultToPrivateDigitalOutputService)
 {
   Arm left;
@@ -1278,6 +1956,35 @@ TEST(RebelSocketTest, ReceivesSplitFramesInOrderAndCallsBackOnConnect)
 
   server.DropClient();
   EXPECT_TRUE(WaitFor([&]() {return callbacks.load() == 2;}, 3000ms));
+  socket.Stop();
+}
+
+TEST(RebelSocketTest, StampsTheReceiveTimeAndCountsDroppedMessages)
+{
+  FakeCriServer server;
+  Igus::RebelSocket socket("127.0.0.1", server.port());
+  socket.Start();
+  ASSERT_TRUE(WaitFor([&]() {return socket.IsConnected();}, 2000ms));
+  EXPECT_EQ(socket.DroppedMessageCount(), 0u);
+  // Nobody consumes: the 20 ms STATUS stream overflows the 25-message queue.
+  ASSERT_TRUE(WaitFor([&]() {return socket.DroppedMessageCount() > 0;}, 3000ms));
+  server.SetSendStatus(false);
+  std::this_thread::sleep_for(400ms);
+  const auto popAt = Clock::now();
+  const std::int64_t popSystemNs = SystemNowNs();
+
+  Igus::RebelSocket::ReceivedMessage message;
+  std::size_t count = 0;
+  auto previous = Clock::time_point{};
+  while (socket.WaitForMessage(message, 10ms)) {
+    ++count;
+    EXPECT_GE(message.received, previous);
+    previous = message.received;
+    // Stamped by the receive thread, not when it is popped: all were read >= ~400 ms ago.
+    EXPECT_LT(message.received, popAt - 300ms);
+    EXPECT_LT(message.systemNs, popSystemNs - 300'000'000);
+  }
+  EXPECT_EQ(count, Igus::RebelSocket::kMaxUnprocessedMessages);
   socket.Stop();
 }
 
@@ -1365,7 +2072,7 @@ TEST_F(RebelDriverTest, WriteKeepsJogZeroWhileLatchedWithoutFaultGroup)
 {
   FakeCriServer server;
   StartDriver(server);
-  ASSERT_TRUE(WaitFor([&]() {return server.Commands().size() >= 5;}, 2000ms));
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands().size() >= 6;}, 2000ms));
 
   commands.at(0).set_value(0.2);
   for (int i = 0; i < 10; ++i) {
@@ -1393,7 +2100,7 @@ TEST_F(RebelDriverTest, NonZeroWriteWhileLatchingNeverReachesTheRobot)
 {
   FakeCriServer server;
   StartDriver(server);
-  ASSERT_TRUE(WaitFor([&]() {return server.Commands().size() >= 5;}, 2000ms));
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands().size() >= 6;}, 2000ms));
 
   std::atomic<bool> run{true};
   std::thread hammer([&]() {
@@ -2132,7 +2839,7 @@ TEST_F(RebelFaultGroupTest, RecoveryIsRefusedUntilTheRootCauseMemberRecovered)
   ASSERT_TRUE(
     WaitFor(
       [&]() {
-        return right.server->Commands(1).size() >= rightCommands + 5;
+        return right.server->Commands(1).size() >= rightCommands + 6;
       }, 2000ms));
   EXPECT_EQ(right.rebel->read(now, period), return_type::OK);
   EXPECT_EQ(left.rebel->read(now, period), return_type::OK);
@@ -2521,6 +3228,2378 @@ TEST(FaultGroupRegistry, ConcurrentFaultsAndOwnerDestructionDoNotTouchFreedOwner
   EXPECT_EQ(bad.load(), 0);
   Igus::LeaveFaultGroup(root);
   EXPECT_EQ(Igus::FaultGroupSize("stress"), 0u);
+}
+
+// ===========================================================================================
+// Robot-side joint move (move_joint action, CRI "CMD Move Joint")
+// ===========================================================================================
+namespace
+{
+using MoveJoint = igus_rebel_msgs::action::MoveJoint;
+using MoveResult = MoveJoint::Result;
+using MoveGoalHandle = rclcpp_action::ClientGoalHandle<MoveJoint>;
+
+// Action client on its own node, spun on its own thread.
+class MoveClient
+{
+public:
+  explicit MoveClient(const std::string & actionName = "/igus_rebel/move_joint")
+  {
+    node_ = std::make_shared<rclcpp::Node>(
+      "move_test_client_" + std::to_string(counter_++));
+    client_ = rclcpp_action::create_client<MoveJoint>(node_, actionName);
+    executor_.add_node(node_);
+    thread_ = std::thread([this]() {executor_.spin(); finished_ = true;});
+  }
+  ~MoveClient()
+  {
+    // cancel() before the thread entered spin() is lost (spin() then never returns): repeat it.
+    while (!finished_) {
+      executor_.cancel();
+      std::this_thread::sleep_for(2ms);
+    }
+    if (thread_.joinable()) {
+      thread_.join();
+    }
+  }
+
+  bool WaitForServer() {return client_->wait_for_action_server(5s);}
+
+  // Returns nullptr if the goal was rejected (or not answered).
+  MoveGoalHandle::SharedPtr Send(const MoveJoint::Goal & goal)
+  {
+    feedbackCount_ = 0;
+    rclcpp_action::Client<MoveJoint>::SendGoalOptions options;
+    options.feedback_callback =
+      [this](MoveGoalHandle::SharedPtr, const std::shared_ptr<const MoveJoint::Feedback> feedback) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        ++feedbackCount_;
+        lastFeedback_ = *feedback;
+      };
+    auto future = client_->async_send_goal(goal, options);
+    if (future.wait_for(5s) != std::future_status::ready) {
+      return nullptr;
+    }
+    return future.get();
+  }
+
+  // Waits for the result; code UNKNOWN + empty result if it did not arrive in time.
+  rclcpp_action::ClientGoalHandle<MoveJoint>::WrappedResult Result(
+    const MoveGoalHandle::SharedPtr & handle, std::chrono::milliseconds timeout = 15000ms)
+  {
+    auto future = client_->async_get_result(handle);
+    rclcpp_action::ClientGoalHandle<MoveJoint>::WrappedResult wrapped;
+    wrapped.code = rclcpp_action::ResultCode::UNKNOWN;
+    wrapped.result = std::make_shared<MoveResult>();
+    wrapped.result->error_code = 255;
+    if (future.wait_for(timeout) == std::future_status::ready) {
+      wrapped = future.get();
+    }
+    return wrapped;
+  }
+
+  void Cancel(const MoveGoalHandle::SharedPtr & handle) {client_->async_cancel_goal(handle);}
+
+  std::size_t FeedbackCount()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return feedbackCount_;
+  }
+  MoveJoint::Feedback LastFeedback()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return lastFeedback_;
+  }
+
+private:
+  static inline std::atomic<int> counter_{0};
+  std::atomic<bool> finished_{false};
+  rclcpp::Node::SharedPtr node_;
+  rclcpp_action::Client<MoveJoint>::SharedPtr client_;
+  rclcpp::executors::SingleThreadedExecutor executor_;
+  std::thread thread_;
+  std::mutex mutex_;
+  std::size_t feedbackCount_ = 0;
+  MoveJoint::Feedback lastFeedback_;
+};
+
+MoveJoint::Goal MakeMoveGoal(
+  const std::array<std::string, 6> & names, const std::array<float, 6> & currentDeg,
+  const std::array<double, 6> & deltaDeg, double velocity = 25.0, double acceleration = 40.0)
+{
+  MoveJoint::Goal goal;
+  for (std::size_t i = 0; i < 6; ++i) {
+    goal.joint_names.push_back(names[i]);
+    goal.start_positions.push_back(currentDeg[i] * Igus::Safety::kDegToRad);
+    goal.goal_positions.push_back((currentDeg[i] + deltaDeg[i]) * Igus::Safety::kDegToRad);
+  }
+  goal.velocity_percent = velocity;
+  goal.acceleration_percent = acceleration;
+  goal.start_tolerance = 0.05;
+  goal.path_tolerance = 0.03;
+  goal.goal_tolerance = 0.02;
+  goal.timeout_s = 0.0;
+  return goal;
+}
+
+std::size_t MoveStopCount(FakeCriServer & server, Clock::time_point after = {})
+{
+  return server.CountCommands("Move Stop", after);
+}
+}  // namespace
+
+class RebelMoveTest : public ::testing::Test
+{
+protected:
+  // Starts the driver against `server`, activates it (as the controller manager does) and
+  // connects the action client.
+  void Begin(
+    const std::map<std::string, std::string> & hardwareParameters = {}, bool activate = true)
+  {
+    server.SetOverride(100.0f);
+    rebel = std::make_unique<Igus::Rebel>("127.0.0.1", server.port());
+    auto info = MakeInfo("rebel_arm_controller");
+    for (const auto & entry : hardwareParameters) {
+      info.hardware_parameters[entry.first] = entry.second;
+    }
+    ASSERT_EQ(rebel->on_init(info), CallbackReturn::SUCCESS);
+    states = rebel->export_state_interfaces();
+    commands = rebel->export_command_interfaces();
+    if (activate) {
+      ASSERT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+    }
+    ASSERT_TRUE(WaitFor([&]() {return server.Commands().size() >= 6;}, 3000ms));
+    // The override STATUS must have reached the driver.
+    std::this_thread::sleep_for(100ms);
+    client = std::make_unique<MoveClient>();
+    ASSERT_TRUE(client->WaitForServer());
+  }
+
+  void TearDown() override
+  {
+    loop.reset();
+    client.reset();
+    rebel.reset();
+  }
+
+  void StartLoop(double velocity = 0.0)
+  {
+    loop = std::make_unique<ControllerLoop>(*rebel, commands, velocity);
+  }
+
+  // The controller manager re-starts the (recovered) trajectory controller: it claims this arm's
+  // six velocity interfaces, which releases controllerRestartHold_ ...
+  void RestartController()
+  {
+    ASSERT_EQ(
+      rebel->perform_command_mode_switch(VelocityInterfaces(""), {}), return_type::OK);
+    ASSERT_FALSE(rebel->ControllerRestartHoldActive());
+  }
+
+  // ... and deactivating it again hands the interfaces back, as a move_joint needs.
+  void ReleaseController()
+  {
+    ASSERT_EQ(
+      rebel->perform_command_mode_switch({}, VelocityInterfaces("")), return_type::OK);
+  }
+
+  MoveJoint::Goal Goal(
+    const std::array<double, 6> & deltaDeg, double velocity = 25.0, double acceleration = 40.0)
+  {
+    return MakeMoveGoal(rebel->JointNames(), server.CurrentDeg(), deltaDeg, velocity, acceleration);
+  }
+
+  // Sends the goal and expects it to be accepted.
+  MoveGoalHandle::SharedPtr SendAccepted(const MoveJoint::Goal & goal)
+  {
+    auto handle = client->Send(goal);
+    EXPECT_NE(handle, nullptr);
+    return handle;
+  }
+
+  bool WaitMoving(double minDegTravelled = 1.0)
+  {
+    const auto start = server.CurrentDeg();
+    return WaitFor(
+      [&]() {
+        const auto now = server.CurrentDeg();
+        double travelled = 0.0;
+        for (int i = 0; i < 6; ++i) {
+          travelled = std::max(travelled, static_cast<double>(std::fabs(now[i] - start[i])));
+        }
+        return travelled >= minDegTravelled;
+      }, 5000ms);
+  }
+
+  void ExpectNoMoveJointSent()
+  {
+    EXPECT_TRUE(server.MoveCommands().empty());
+  }
+
+  FakeCriServer server;
+  std::unique_ptr<Igus::Rebel> rebel;
+  std::vector<hardware_interface::StateInterface> states;
+  std::vector<hardware_interface::CommandInterface> commands;
+  std::unique_ptr<ControllerLoop> loop;
+  std::unique_ptr<MoveClient> client;
+  rclcpp::Time now{0, 0, RCL_STEADY_TIME};
+  rclcpp::Duration period{0, 10000000};
+};
+
+TEST_F(RebelMoveTest, HappyPathSendsOneMoveJointAndKeepsEveryAliveJogZero)
+{
+  Begin();
+  server.SetMoveSpeedDegS(60.0);
+  // A stale controller command (what an active JTC would hold) must not reach the robot.
+  StartLoop(0.2);
+  ASSERT_TRUE(WaitFor([&]() {return AnyNonZeroJog(server, Clock::now() - 60ms);}, 2000ms));
+
+  const auto startDeg = server.CurrentDeg();
+  const auto goal = Goal({8.0, 0.0, 0.0, -5.0, 0.0, 6.0});
+  const auto handle = SendAccepted(goal);
+  ASSERT_NE(handle, nullptr);
+  const auto result = client->Result(handle);
+
+  EXPECT_EQ(result.code, rclcpp_action::ResultCode::SUCCEEDED);
+  EXPECT_EQ(result.result->error_code, MoveResult::SUCCESS) << result.result->message;
+  EXPECT_EQ(result.result->end_reason, "PLAN");
+  EXPECT_FALSE(result.result->stop_sent);
+  ASSERT_EQ(result.result->final_positions.size(), 6u);
+  for (std::size_t i = 0; i < 6; ++i) {
+    EXPECT_NEAR(result.result->final_positions[i], goal.goal_positions[i], 0.002);
+  }
+  EXPECT_EQ(rebel->MoveStateValue(), 0);
+
+  // Exactly one Move Joint in the documented format: degrees, vel/acc.
+  const auto moves = server.MoveCommands();
+  ASSERT_EQ(moves.size(), 1u);
+  EXPECT_NEAR(moves[0].targetDeg[0], startDeg[0] + 8.0, 1e-2);
+  EXPECT_NEAR(moves[0].targetDeg[3], startDeg[3] - 5.0, 1e-2);
+  EXPECT_NEAR(moves[0].targetDeg[5], startDeg[5] + 6.0, 1e-2);
+  EXPECT_EQ(moves[0].velocity, 25.0);
+  EXPECT_EQ(moves[0].acceleration, 40.0);
+
+  // Every ALIVEJOG from the moment the command was sent is zero although write() kept
+  // delivering a non-zero velocity command the whole time.
+  std::size_t frames = 0;
+  EXPECT_TRUE(AllJogsZero(server, moves[0].stamp, &frames));
+  EXPECT_GE(frames, 5u);
+  EXPECT_EQ(MoveStopCount(server), 1u);  // only the one at connect
+  EXPECT_GT(client->FeedbackCount(), 0u);
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  EXPECT_EQ(loop->errors.load(), 0);
+
+  // After the move the jog path is live again.
+  std::this_thread::sleep_for(100ms);
+  EXPECT_TRUE(AnyNonZeroJog(server, Clock::now() - 60ms));
+}
+
+TEST_F(RebelMoveTest, AcceptsCmdAckBeforeMoveAck)
+{
+  Begin();
+  server.SetMoveSpeedDegS(60.0);
+  server.SetCmdAckFirst(true);
+  StartLoop();
+  const auto handle = SendAccepted(Goal({6.0, 0.0, 0.0, 0.0, 0.0, 0.0}));
+  ASSERT_NE(handle, nullptr);
+  EXPECT_EQ(client->Result(handle).result->error_code, MoveResult::SUCCESS);
+}
+
+TEST_F(RebelMoveTest, ParametersLowerTheCapsAndTheHardCapsCannotBeExceeded)
+{
+  Begin({{"move_joint_max_velocity_percent", "150"}, {"move_joint_max_acceleration_percent", "10"}});
+  server.SetMoveSpeedDegS(80.0);
+  StartLoop();
+  // 150 % is clamped to the 100 % hard cap: 101 is refused (never clamped), 100 is fine.
+  auto handle = SendAccepted(Goal({4.0, 0, 0, 0, 0, 0}, 101.0, 10.0));
+  ASSERT_NE(handle, nullptr);
+  EXPECT_EQ(client->Result(handle).result->error_code, MoveResult::REJECTED);
+  // Acceleration cap lowered to 10 %.
+  handle = SendAccepted(Goal({4.0, 0, 0, 0, 0, 0}, 20.0, 11.0));
+  ASSERT_NE(handle, nullptr);
+  EXPECT_EQ(client->Result(handle).result->error_code, MoveResult::REJECTED);
+  ExpectNoMoveJointSent();
+  handle = SendAccepted(Goal({4.0, 0, 0, 0, 0, 0}, 100.0, 10.0));
+  ASSERT_NE(handle, nullptr);
+  EXPECT_EQ(client->Result(handle).result->error_code, MoveResult::SUCCESS);
+  ASSERT_EQ(server.MoveCommands().size(), 1u);
+  EXPECT_EQ(server.MoveCommands()[0].velocity, 100.0);
+}
+
+TEST_F(RebelMoveTest, DefaultCapsRejectAboveTwentyFivePercentVelocity)
+{
+  Begin();
+  StartLoop();
+  auto handle = SendAccepted(Goal({4.0, 0, 0, 0, 0, 0}, 26.0, 40.0));
+  ASSERT_NE(handle, nullptr);
+  EXPECT_EQ(client->Result(handle).result->error_code, MoveResult::REJECTED);
+  handle = SendAccepted(Goal({4.0, 0, 0, 0, 0, 0}, 25.0, 41.0));
+  ASSERT_NE(handle, nullptr);
+  EXPECT_EQ(client->Result(handle).result->error_code, MoveResult::REJECTED);
+  ExpectNoMoveJointSent();
+}
+
+TEST_F(RebelMoveTest, InvalidGoalsAreRefusedWithoutSendingAnything)
+{
+  Begin();
+  StartLoop();
+  const auto expectCode = [&](MoveJoint::Goal goal, std::uint8_t code, const char * what) {
+      const auto handle = client->Send(goal);
+      ASSERT_NE(handle, nullptr) << what;
+      const auto result = client->Result(handle);
+      EXPECT_EQ(result.result->error_code, code) << what << ": " << result.result->message;
+      EXPECT_FALSE(result.result->stop_sent) << what;
+    };
+  auto base = Goal({4.0, 0, 0, 0, 0, 0});
+
+  auto wrongNames = base;
+  std::swap(wrongNames.joint_names[0], wrongNames.joint_names[1]);
+  expectCode(wrongNames, MoveResult::REJECTED, "joint names swapped");
+
+  auto prefixed = base;
+  for (auto & name : prefixed.joint_names) {
+    name = "arm_left_" + name;
+  }
+  expectCode(prefixed, MoveResult::REJECTED, "joint names of another arm");
+
+  auto nan = base;
+  nan.goal_positions[2] = std::numeric_limits<double>::quiet_NaN();
+  expectCode(nan, MoveResult::REJECTED, "NaN goal");
+
+  auto beyondLimit = base;
+  beyondLimit.goal_positions[4] = 2.0;  // joint 5 limit is +-1.64 rad
+  expectCode(beyondLimit, MoveResult::REJECTED, "beyond joint limit");
+
+  auto sizes = base;
+  sizes.goal_positions.pop_back();
+  expectCode(sizes, MoveResult::REJECTED, "short goal vector");
+
+  auto startOff = base;
+  startOff.start_positions[0] += 0.3;
+  expectCode(startOff, MoveResult::START_DEVIATION, "start differs from the measured joints");
+
+  auto zeroTolerance = base;
+  zeroTolerance.path_tolerance = 0.0;
+  expectCode(zeroTolerance, MoveResult::REJECTED, "zero path tolerance");
+
+  auto huge = base;
+  huge.goal_tolerance = 1.0;
+  expectCode(huge, MoveResult::REJECTED, "oversized goal tolerance");
+
+  auto nothing = Goal({0.0, 0, 0, 0, 0, 0});
+  expectCode(nothing, MoveResult::REJECTED, "zero-length move");
+
+  ExpectNoMoveJointSent();
+  EXPECT_EQ(MoveStopCount(server), 1u);
+}
+
+TEST_F(RebelMoveTest, RefusedWhileOverrideDrivesOrKinematicsAreNotOk)
+{
+  Begin();
+  StartLoop();
+  const auto goal = Goal({4.0, 0, 0, 0, 0, 0});
+
+  server.SetOverride(40.0f);
+  std::this_thread::sleep_for(150ms);
+  auto handle = SendAccepted(goal);
+  ASSERT_NE(handle, nullptr);
+  EXPECT_EQ(client->Result(handle).result->error_code, MoveResult::REJECTED);
+  server.SetOverride(100.0f);
+  std::this_thread::sleep_for(150ms);
+
+  server.SetKinstate(99);
+  std::this_thread::sleep_for(150ms);
+  handle = SendAccepted(goal);
+  ASSERT_NE(handle, nullptr);
+  const auto kin = client->Result(handle);
+  // kinstate != NO_ERROR trips the move check (the driver is not in a fault group here).
+  EXPECT_EQ(kin.result->error_code, MoveResult::FAULT) << kin.result->message;
+  server.SetKinstate(0);
+  std::this_thread::sleep_for(150ms);
+
+  ExpectNoMoveJointSent();
+}
+
+TEST_F(RebelMoveTest, RefusedWhenDrivesAreDisabledOrStatusIsStaleOrNotActivated)
+{
+  Begin();
+  StartLoop();
+  const auto goal = Goal({4.0, 0, 0, 0, 0, 0});
+  server.SetDisabledMask(0x3F);
+  server.SetIgnoreEnable(true);
+  std::this_thread::sleep_for(150ms);
+  auto handle = SendAccepted(goal);
+  ASSERT_NE(handle, nullptr);
+  EXPECT_EQ(client->Result(handle).result->error_code, MoveResult::REJECTED);
+  server.SetDisabledMask(0);
+  std::this_thread::sleep_for(150ms);
+  ExpectNoMoveJointSent();
+
+  // Deactivated (what the controller manager does before on_deactivate): refused.
+  EXPECT_EQ(rebel->on_deactivate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  handle = SendAccepted(goal);
+  ASSERT_NE(handle, nullptr);
+  EXPECT_EQ(client->Result(handle).result->error_code, MoveResult::REJECTED);
+  ExpectNoMoveJointSent();
+}
+
+TEST_F(RebelMoveTest, RefusedWhenNeverActivated)
+{
+  Begin({}, false);
+  const auto handle = SendAccepted(Goal({4.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  EXPECT_EQ(client->Result(handle).result->error_code, MoveResult::REJECTED);
+  ExpectNoMoveJointSent();
+}
+
+TEST_F(RebelMoveTest, RefusedWhileLatched)
+{
+  Begin();
+  StartLoop();
+  const auto goal = Goal({4.0, 0, 0, 0, 0, 0});
+  rebel->on_error(rclcpp_lifecycle::State());
+  const auto handle = SendAccepted(goal);
+  ASSERT_NE(handle, nullptr);
+  EXPECT_EQ(client->Result(handle).result->error_code, MoveResult::LATCHED);
+  ExpectNoMoveJointSent();
+  // No stray stop is sent for a latch while idle: idle behaviour is unchanged.
+  EXPECT_EQ(MoveStopCount(server), 1u);
+}
+
+TEST_F(RebelMoveTest, RefusedWhileAControllerClaimsTheVelocityInterfaces)
+{
+  Begin();
+  server.SetMoveSpeedDegS(60.0);
+  StartLoop();
+  const auto joint = [&](int i) {return rebel->JointNames()[i] + "/velocity";};
+  const std::vector<std::string> all = {joint(0), joint(1), joint(2), joint(3), joint(4), joint(5)};
+
+  // A controller (the JTC) claims them.
+  EXPECT_EQ(rebel->prepare_command_mode_switch(all, {}), return_type::OK);
+  EXPECT_EQ(rebel->perform_command_mode_switch(all, {}), return_type::OK);
+  EXPECT_EQ(rebel->VelocityClaimMask(), 0x3Fu);
+  auto handle = SendAccepted(Goal({4.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  const auto refused = client->Result(handle);
+  EXPECT_EQ(refused.result->error_code, MoveResult::CONTROLLER_ACTIVE) << refused.result->message;
+  ExpectNoMoveJointSent();
+
+  // One interface still claimed is enough to refuse.
+  EXPECT_EQ(
+    rebel->perform_command_mode_switch({}, {joint(0), joint(1), joint(2), joint(3), joint(4)}),
+    return_type::OK);
+  EXPECT_EQ(rebel->VelocityClaimMask(), 0x20u);
+  handle = SendAccepted(Goal({4.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  EXPECT_EQ(client->Result(handle).result->error_code, MoveResult::CONTROLLER_ACTIVE);
+  ExpectNoMoveJointSent();
+
+  // Released: accepted.
+  EXPECT_EQ(rebel->perform_command_mode_switch({}, {joint(5)}), return_type::OK);
+  EXPECT_EQ(rebel->VelocityClaimMask(), 0u);
+  handle = SendAccepted(Goal({4.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  EXPECT_EQ(client->Result(handle).result->error_code, MoveResult::SUCCESS);
+}
+
+TEST_F(RebelMoveTest, ClaimPreparedButNotYetPerformedAlsoBlocksAGoal)
+{
+  Begin();
+  StartLoop();
+  const std::vector<std::string> one = {rebel->JointNames()[2] + "/velocity"};
+  EXPECT_EQ(rebel->prepare_command_mode_switch(one, {}), return_type::OK);
+  const auto handle = SendAccepted(Goal({4.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  EXPECT_EQ(client->Result(handle).result->error_code, MoveResult::CONTROLLER_ACTIVE);
+  ExpectNoMoveJointSent();
+}
+
+TEST_F(RebelMoveTest, PrepareRejectsAClaimMidMoveButNotOtherInterfaces)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  StartLoop();
+  const auto handle = SendAccepted(Goal({20.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving());
+  ASSERT_NE(rebel->MoveStateValue(), 0);
+
+  const std::vector<std::string> ours = {rebel->JointNames()[0] + "/velocity"};
+  EXPECT_EQ(rebel->prepare_command_mode_switch(ours, {}), return_type::ERROR);
+  EXPECT_EQ(rebel->VelocityClaimMask(), 0u);
+  // Releasing and interfaces of other hardware are not affected.
+  EXPECT_EQ(
+    rebel->prepare_command_mode_switch({"other_joint1/velocity", "joint1/position"}, ours),
+    return_type::OK);
+  EXPECT_EQ(rebel->prepare_command_mode_switch({}, {}), return_type::OK);
+
+  client->Cancel(handle);
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::CANCELED);
+  // Idle again: the claim is allowed.
+  EXPECT_EQ(rebel->prepare_command_mode_switch(ours, {}), return_type::OK);
+}
+
+TEST_F(RebelMoveTest, SecondGoalIsRejectedWhileOneIsActive)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  StartLoop();
+  const auto first = SendAccepted(Goal({20.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(first, nullptr);
+  ASSERT_TRUE(WaitMoving());
+  EXPECT_EQ(client->Send(Goal({0.0, 5.0, 0, 0, 0, 0})), nullptr);
+  EXPECT_EQ(server.MoveCommands().size(), 1u);
+  client->Cancel(first);
+  EXPECT_EQ(client->Result(first).result->error_code, MoveResult::CANCELED);
+}
+
+TEST_F(RebelMoveTest, CancelSendsMoveStopPromptlyAndReportsIt)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+
+  const auto cancelAt = Clock::now();
+  client->Cancel(handle);
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.code, rclcpp_action::ResultCode::CANCELED);
+  EXPECT_EQ(result.result->error_code, MoveResult::CANCELED);
+  EXPECT_TRUE(result.result->stop_sent);
+  EXPECT_TRUE(result.result->stop_confirmed);
+  EXPECT_EQ(result.result->end_reason, "USER");
+
+  const auto stopAt = server.FirstCommandAfter("Move Stop", cancelAt);
+  ASSERT_NE(stopAt, Clock::time_point{});
+  EXPECT_LT(stopAt - cancelAt, 150ms);
+  EXPECT_FALSE(server.MoveActive());
+  EXPECT_LT(server.CurrentDeg()[0], server.baseJointsDeg[0] + 29.0f);
+  EXPECT_EQ(rebel->MoveStateValue(), 0);
+  // Cancel is an operator action, not a hardware fault.
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  // Zero jog all the time.
+  EXPECT_TRUE(AllJogsZero(server, server.MoveCommands()[0].stamp));
+}
+
+TEST_F(RebelMoveTest, CancelIsNotBlockedBehindResetAndEnable)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  // Occupy the service thread: reset_and_enable via ROS (refused quickly during a move, but the
+  // important part is that the action keeps working while services are served).
+  auto probe = std::make_shared<rclcpp::Node>("reset_probe");
+  auto reset = probe->create_client<std_srvs::srv::Trigger>("/igus_rebel/reset_and_enable");
+  ASSERT_TRUE(reset->wait_for_service(3s));
+  auto future = reset->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(probe);
+  ASSERT_EQ(executor.spin_until_future_complete(future, 3s), rclcpp::FutureReturnCode::SUCCESS);
+  EXPECT_FALSE(future.get()->success);  // refused: a move is active
+  EXPECT_EQ(MoveStopCount(server), 1u);  // and nothing was re-sent
+
+  std::string message;
+  EXPECT_FALSE(rebel->ResetAndEnable(message));
+  EXPECT_NE(message.find("joint move"), std::string::npos) << message;
+
+  client->Cancel(handle);
+  EXPECT_EQ(client->Result(handle).result->error_code, MoveResult::CANCELED);
+}
+
+TEST_F(RebelMoveTest, CmdErrorFailsTheGoalAndSendsMoveStop)
+{
+  Begin();
+  server.SetMoveCmdError(true);
+  StartLoop();
+  const auto handle = SendAccepted(Goal({10.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.code, rclcpp_action::ResultCode::ABORTED);
+  EXPECT_EQ(result.result->error_code, MoveResult::CMD_ERROR) << result.result->message;
+  EXPECT_TRUE(result.result->stop_sent);
+  EXPECT_GE(MoveStopCount(server), 2u);
+  EXPECT_EQ(rebel->MoveStateValue(), 0);
+}
+
+TEST_F(RebelMoveTest, MissingMoveAckStopsAfterHalfASecond)
+{
+  Begin();
+  server.SetSuppressMoveAck(true);
+  server.SetMoveSpeedDegS(10.0);
+  StartLoop();
+  const auto sent = Clock::now();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::ACK_TIMEOUT) << result.result->message;
+  EXPECT_TRUE(result.result->stop_sent);
+  EXPECT_TRUE(result.result->stop_confirmed);  // by standstill: the robot's END has no ACK to match
+  const auto stopAt = server.FirstCommandAfter("Move Stop", sent);
+  ASSERT_NE(stopAt, Clock::time_point{});
+  EXPECT_GE(stopAt - sent, 450ms);
+  EXPECT_LT(stopAt - sent, 900ms);
+  EXPECT_FALSE(server.MoveActive());
+}
+
+TEST_F(RebelMoveTest, MotionTimeoutStopsTheMove)
+{
+  Begin();
+  server.SetMoveStall(true);  // the robot acknowledges but never moves and never ends
+  StartLoop();
+  auto goal = Goal({10.0, 0, 0, 0, 0, 0});
+  goal.timeout_s = 0.8;
+  const auto sent = Clock::now();
+  const auto handle = SendAccepted(goal);
+  ASSERT_NE(handle, nullptr);
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::MOTION_TIMEOUT) << result.result->message;
+  EXPECT_TRUE(result.result->stop_sent);
+  EXPECT_TRUE(result.result->stop_confirmed);
+  const auto stopAt = server.FirstCommandAfter("Move Stop", sent);
+  ASSERT_NE(stopAt, Clock::time_point{});
+  EXPECT_GE(stopAt - sent, 750ms);
+  EXPECT_LT(stopAt - sent, 1300ms);
+}
+
+TEST_F(RebelMoveTest, DefaultTimeoutComesFromTheDurationModel)
+{
+  Begin();
+  server.SetMoveStall(true);
+  StartLoop();
+  // timeout_s = 0: 2 x model + 1 s.
+  const double expected =
+    2.0 * Igus::Move::ModelDurationS(3.0 * Igus::Safety::kDegToRad, 25.0, 40.0) + 1.0;
+  const auto sent = Clock::now();
+  const auto handle = SendAccepted(Goal({3.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::MOTION_TIMEOUT);
+  const auto stopAt = server.FirstCommandAfter("Move Stop", sent);
+  ASSERT_NE(stopAt, Clock::time_point{});
+  const double seen = std::chrono::duration<double>(stopAt - sent).count();
+  EXPECT_GT(seen, expected - 0.1);
+  EXPECT_LT(seen, expected + 0.6);
+}
+
+TEST_F(RebelMoveTest, PathDeviationStopsTheMove)
+{
+  Begin();
+  server.SetMoveSpeedDegS(20.0);
+  server.SetMoveDeviationDeg(5.0);  // joint 5 drifts 5 deg off the line; tolerance is 0.03 rad
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::PATH_DEVIATION) << result.result->message;
+  EXPECT_TRUE(result.result->stop_sent);
+  EXPECT_TRUE(result.result->stop_confirmed);
+  EXPECT_GE(MoveStopCount(server), 2u);
+  EXPECT_FALSE(server.MoveActive());
+  EXPECT_LT(server.CurrentDeg()[0], server.baseJointsDeg[0] + 29.0f);
+}
+
+TEST_F(RebelMoveTest, RobotEndingTheMoveItselfIsReportedAndNeedsNoStop)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  server.SetMoveAbortAfterS(0.4);  // e.g. the operator pressed stop on the pendant
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::ROBOT_ENDED) << result.result->message;
+  EXPECT_EQ(result.result->end_reason, "USER");
+  EXPECT_FALSE(result.result->stop_sent);
+  EXPECT_EQ(MoveStopCount(server), 1u);
+  EXPECT_EQ(rebel->MoveStateValue(), 0);
+}
+
+TEST_F(RebelMoveTest, EndingShortOfTheGoalIsAGoalDeviation)
+{
+  Begin();
+  server.SetMoveSpeedDegS(60.0);
+  server.SetMoveEndShortDeg(1.0);  // reports PLAN, but joint 1 is 1 deg (0.017 rad) short
+  StartLoop();
+  auto goal = Goal({10.0, 0, 0, 0, 0, 0});
+  goal.goal_tolerance = 0.005;
+  const auto handle = SendAccepted(goal);
+  ASSERT_NE(handle, nullptr);
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::GOAL_DEVIATION) << result.result->message;
+  EXPECT_EQ(result.result->end_reason, "PLAN");
+  EXPECT_FALSE(result.result->stop_sent);
+}
+
+TEST_F(RebelMoveTest, HoldTierDuringAMoveStopsAndLatchesWithoutAutoResume)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  StartLoop(0.2);
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  const auto movesAt = server.MoveCommands()[0].stamp;
+
+  // STATUS stops for 700 ms: a robot-owned move is aborted as soon as STATUS is stale (200 ms),
+  // before the jog hold tier (400 ms); STATUS then comes back.
+  const auto gapStart = Clock::now();
+  server.SetSendStatus(false);
+  ASSERT_TRUE(
+    WaitFor([&]() {return MoveStopCount(server, gapStart) >= 1;}, 1500ms));
+  const auto stopAt = server.FirstCommandAfter("Move Stop", gapStart);
+  EXPECT_GE(stopAt - gapStart, 150ms);  // not before STATUS was stale
+  EXPECT_LT(stopAt - gapStart, 380ms);  // and well before the 400 ms jog hold tier
+  std::this_thread::sleep_for(
+    std::max<std::chrono::milliseconds>(
+      0ms, 700ms - std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - gapStart)));
+  server.SetSendStatus(true);
+
+  const auto result = client->Result(handle);
+  EXPECT_NE(result.result->error_code, MoveResult::SUCCESS);
+  EXPECT_TRUE(result.result->stop_sent);
+  EXPECT_TRUE(
+    result.result->error_code == MoveResult::STATUS_GAP ||
+    result.result->error_code == MoveResult::FAULT) << result.result->message;
+  EXPECT_TRUE(WaitFor([&]() {return rebel->HardwareErrorLatched();}, 2000ms));
+  EXPECT_TRUE(WaitFor([&]() {return loop->errors.load() > 0;}, 2000ms));  // read() reports ERROR
+  EXPECT_FALSE(server.MoveActive());
+
+  // Never auto-resumed: with the (stale) velocity command still non-zero, every ALIVEJOG since
+  // the move was sent is zero.
+  std::this_thread::sleep_for(200ms);
+  EXPECT_TRUE(AllJogsZero(server, movesAt));
+}
+
+TEST_F(RebelMoveTest, ShortStatusGapDuringAMoveDoesNotStopIt)
+{
+  Begin();
+  server.SetMoveSpeedDegS(20.0);
+  StartLoop();
+  const auto handle = SendAccepted(Goal({12.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  // 120 ms without STATUS is below the 200 ms stale limit: the robot owns the move, it continues.
+  server.SetSendStatus(false);
+  std::this_thread::sleep_for(120ms);
+  server.SetSendStatus(true);
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::SUCCESS) << result.result->message;
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  EXPECT_EQ(MoveStopCount(server), 1u);
+}
+
+TEST_F(RebelMoveTest, ReconnectDuringAMoveSendsMoveStopBeforeSetActive)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  const float before = server.CurrentDeg()[0];
+
+  server.DropClient();
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(2).size() >= 6;}, 3000ms));
+  const auto second = server.Commands(2);
+  ASSERT_GE(second.size(), 6u);
+  EXPECT_EQ(second[0], "Move Stop");
+  EXPECT_EQ(second[1], "SetActive true");
+  // The robot kept moving while nobody was connected, and stopped on the reconnect.
+  EXPECT_GT(server.CurrentDeg()[0], before);
+  EXPECT_TRUE(WaitFor([&]() {return !server.MoveActive();}, 1000ms));
+
+  const auto result = client->Result(handle);
+  EXPECT_NE(result.result->error_code, MoveResult::SUCCESS) << result.result->message;
+  EXPECT_TRUE(WaitFor([&]() {return rebel->HardwareErrorLatched();}, 2000ms));
+}
+
+TEST_F(RebelMoveTest, UnconfirmedStopRepeatsAndLatches)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  server.SetIgnoreMoveStop(true);  // a robot that does not react
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  const auto cancelAt = Clock::now();
+  client->Cancel(handle);
+  const auto result = client->Result(handle);
+  EXPECT_FALSE(result.result->stop_confirmed);
+  EXPECT_TRUE(result.result->stop_sent);
+  EXPECT_NE(result.result->message.find("NOT confirmed"), std::string::npos)
+    << result.result->message;
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+  // First stop plus a repeat every 100 ms during the 1 s confirmation window.
+  EXPECT_GE(MoveStopCount(server, cancelAt), 6u);
+  EXPECT_LE(MoveStopCount(server, cancelAt), 14u);
+  // The goal has ended, but the robot is still moving: the stop request stays pending and the
+  // alive thread keeps re-sending it (the robot ACKed every one with CMDACK; a successful write
+  // or an ACK is not a confirmation).
+  const auto afterGoal = Clock::now();
+  std::this_thread::sleep_for(500ms);
+  EXPECT_GE(MoveStopCount(server, afterGoal), 3u);
+  EXPECT_LE(MoveStopCount(server, afterGoal), 7u);
+  EXPECT_TRUE(server.MoveActive());
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+
+  server.SetIgnoreMoveStop(false);
+  // The next repeat stops the robot ...
+  EXPECT_TRUE(WaitFor([&]() {return !server.MoveActive();}, 500ms));
+  // ... and once STATUS shows standstill the request is dropped: no more Move Stop.
+  std::this_thread::sleep_for(700ms);
+  const auto settled = Clock::now();
+  const std::size_t before = MoveStopCount(server, settled);
+  std::this_thread::sleep_for(500ms);
+  EXPECT_EQ(MoveStopCount(server, settled), before);
+  EXPECT_LE(before, 0u);
+  EXPECT_TRUE(rebel->HardwareErrorLatched());  // still latched: recovery is inactive -> active
+}
+
+TEST_F(RebelMoveTest, StatusGapOfTwoHundredFiftyMillisecondsAbortsAndLatches)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  const auto gapStart = Clock::now();
+  server.SetSendStatus(false);
+  ASSERT_TRUE(WaitFor([&]() {return MoveStopCount(server, gapStart) >= 1;}, 1000ms));
+  const auto stopAt = server.FirstCommandAfter("Move Stop", gapStart);
+  EXPECT_GE(stopAt - gapStart, 150ms);
+  EXPECT_LT(stopAt - gapStart, 380ms);  // the old threshold was 400 ms
+  std::this_thread::sleep_for(100ms);
+  server.SetSendStatus(true);
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::STATUS_GAP) << result.result->message;
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+}
+
+TEST_F(RebelMoveTest, EverySupervisorAbortLeavesTheDriverLatched)
+{
+  Begin();
+  server.SetMoveSpeedDegS(20.0);
+  server.SetMoveDeviationDeg(5.0);
+  StartLoop();
+  auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::PATH_DEVIATION) << result.result->message;
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+  // Not silently ready for the next move.
+  handle = SendAccepted(Goal({-5.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  EXPECT_EQ(client->Result(handle).result->error_code, MoveResult::LATCHED);
+  ASSERT_TRUE(WaitFor([&]() {return loop->errors.load() > 0;}, 2000ms));  // read() reports ERROR
+}
+
+TEST_F(RebelMoveTest, MotionTimeoutLeavesTheDriverLatchedAndRecoversByLifecycleReset)
+{
+  Begin();
+  server.SetMoveStall(true);
+  auto goal = Goal({10.0, 0, 0, 0, 0, 0});
+  goal.timeout_s = 0.8;
+  const auto handle = SendAccepted(goal);
+  ASSERT_NE(handle, nullptr);
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::MOTION_TIMEOUT) << result.result->message;
+  EXPECT_TRUE(result.result->stop_confirmed);
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+  // inactive -> active clears it like every other latch.
+  server.SetMoveStall(false);
+  EXPECT_EQ(rebel->on_deactivate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+}
+
+TEST_F(RebelMoveTest, ReleasingAVelocityInterfaceZeroesItsCommand)
+{
+  Begin();
+  const auto joint = [&](int i) {return rebel->JointNames()[i] + "/velocity";};
+  commands[0].set_value(0.3);
+  commands[1].set_value(0.2);
+  EXPECT_EQ(rebel->prepare_command_mode_switch({}, {joint(0)}), return_type::OK);
+  EXPECT_EQ(rebel->perform_command_mode_switch({}, {joint(0)}), return_type::OK);
+  EXPECT_EQ(commands[0].get_value(), 0.0);
+  EXPECT_EQ(commands[1].get_value(), 0.2);  // not released: untouched
+}
+
+// An unconfirmed Move Stop (the fake robot ignores it) that latched the driver. The goal is long
+// enough to outlast the follow-up checks.
+#define MAKE_UNCONFIRMED_STOP() \
+  do { \
+    server.SetMoveSpeedDegS(10.0); \
+    server.SetIgnoreMoveStop(true); \
+    const auto handle = SendAccepted(Goal({50.0, 0, 0, 0, 0, 0})); \
+    ASSERT_NE(handle, nullptr); \
+    ASSERT_TRUE(WaitMoving(1.0)); \
+    client->Cancel(handle); \
+    const auto result = client->Result(handle); \
+    ASSERT_FALSE(result.result->stop_confirmed); \
+    ASSERT_TRUE(rebel->HardwareErrorLatched()); \
+  } while (0)
+
+std::size_t MoveStopsOnConnection(FakeCriServer & server, std::size_t connection)
+{
+  std::size_t count = 0;
+  for (const auto & command : server.Commands(connection)) {
+    count += command == "Move Stop" ? 1 : 0;
+  }
+  return count;
+}
+
+TEST_F(RebelMoveTest, PendingStopSurvivesAReconnectUntilStandstill)
+{
+  Begin();
+  MAKE_UNCONFIRMED_STOP();
+
+  server.DropClient();
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(2).size() >= 6;}, 3000ms));
+  // The reconnect sends Move Stop first (still ignored by the fake robot) and the request stays
+  // pending: the ALIVEJOG thread keeps re-sending on the new connection.
+  EXPECT_EQ(server.Commands(2)[0], "Move Stop");
+  EXPECT_EQ(server.Commands(2)[1], "SetActive true");  // not interleaved with the start-up
+  ASSERT_TRUE(WaitFor([&]() {return MoveStopsOnConnection(server, 2) >= 4;}, 2000ms));
+  EXPECT_TRUE(server.MoveActive());
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+
+  server.SetIgnoreMoveStop(false);  // the robot now obeys: the next repeat stops it
+  EXPECT_TRUE(WaitFor([&]() {return !server.MoveActive();}, 500ms));
+  // Standstill is confirmed by STATUS: the repeats end.
+  std::this_thread::sleep_for(800ms);
+  const std::size_t settled = MoveStopsOnConnection(server, 2);
+  std::this_thread::sleep_for(500ms);
+  EXPECT_EQ(MoveStopsOnConnection(server, 2), settled);
+}
+
+TEST_F(RebelMoveTest, PendingStopSurvivesLifecycleRecoveryAndBlocksANewMove)
+{
+  Begin();
+  MAKE_UNCONFIRMED_STOP();
+
+  // Operator recovery while the robot is still moving: inactive -> active clears the latch ...
+  EXPECT_EQ(rebel->on_deactivate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  const auto at = Clock::now();
+  // ... the controller keeps commanding velocity (the recovered JTC) ...
+  StartLoop(0.2);
+  // ... but not the stop request: it is still re-sent, and jog stays zero on the wire while it
+  // is pending (the robot is still running the old move).
+  ASSERT_TRUE(WaitFor([&]() {return MoveStopCount(server, at) >= 3;}, 2000ms));
+  EXPECT_TRUE(server.MoveActive());
+  std::size_t frames = 0;
+  EXPECT_TRUE(AllJogsZero(server, at, &frames));
+  EXPECT_GE(frames, 10u);
+
+  // A new move is refused until the previous stop is confirmed.
+  server.SetMoveSpeedDegS(10.0);
+  const std::size_t movesBefore = server.MoveCommands().size();
+  auto refused = SendAccepted(Goal({-5.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(refused, nullptr);
+  const auto refusedResult = client->Result(refused);
+  EXPECT_EQ(refusedResult.result->error_code, MoveResult::REJECTED);
+  EXPECT_NE(refusedResult.result->message.find("Move Stop is not confirmed"), std::string::npos)
+    << refusedResult.result->message;
+  EXPECT_EQ(server.MoveCommands().size(), movesBefore);
+
+  // The controller is re-started (releases the post-recovery hold; the pending stop alone still
+  // keeps the jog at zero) ...
+  RestartController();
+  server.SetIgnoreMoveStop(false);
+  ASSERT_TRUE(WaitFor([&]() {return !server.MoveActive();}, 500ms));
+  // Standstill confirmed -> the request is dropped -> jog resumes ...
+  EXPECT_TRUE(WaitFor([&]() {return AnyNonZeroJog(server, Clock::now() - 60ms);}, 2000ms));
+  std::this_thread::sleep_for(300ms);
+  // ... and a move is accepted again (the controller is deactivated for it).
+  ReleaseController();
+  auto accepted = SendAccepted(Goal({-4.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(accepted, nullptr);
+  server.SetMoveSpeedDegS(60.0);
+  EXPECT_EQ(client->Result(accepted).result->error_code, MoveResult::SUCCESS);
+}
+
+TEST_F(RebelMoveTest, ControllerClaimAfterTheReservationExpiredAbortsAndLatches)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  StartLoop();
+  const std::vector<std::string> all = {
+    rebel->JointNames()[0] + "/velocity", rebel->JointNames()[1] + "/velocity"};
+  // prepare ... the 2 s reservation expires before perform is called ...
+  EXPECT_EQ(rebel->prepare_command_mode_switch(all, {}), return_type::OK);
+  std::this_thread::sleep_for(2200ms);
+  // ... a goal is accepted (nothing claims the joints yet) ...
+  const auto handle = SendAccepted(Goal({40.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  ASSERT_EQ(rebel->VelocityClaimMask(), 0u);
+  // ... and then the (late) perform arrives; Humble activates the controller regardless.
+  const auto at = Clock::now();
+  EXPECT_EQ(rebel->perform_command_mode_switch(all, {}), return_type::OK);
+  EXPECT_EQ(rebel->VelocityClaimMask(), 0x3u);  // recorded truthfully
+
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::CONTROLLER_ACTIVE) << result.result->message;
+  EXPECT_TRUE(result.result->stop_sent);
+  EXPECT_TRUE(result.result->stop_confirmed);
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+  EXPECT_GE(MoveStopCount(server, at), 1u);
+  EXPECT_LT(server.FirstCommandAfter("Move Stop", at) - at, 100ms);
+  EXPECT_FALSE(server.MoveActive());
+}
+
+// The arm settles by ~2 mrad between the validation snapshot and the send. That is not motion of
+// the commanded move: standstill must still not confirm a stop before the robot started.
+TEST_F(RebelMoveTest, SettleBetweenValidationAndSendIsNotMotion)
+{
+  Begin();
+  StartLoop();
+  server.SetMoveStartLatencyMs(600);
+  server.SetStopIgnoredBeforeStart(true);
+  server.SetMoveSpeedDegS(10.0);
+  const auto settle = [this]() {
+      server.NudgeJointDeg(1, 0.115f);  // ~2 mrad
+      std::this_thread::sleep_for(100ms);  // the new STATUS is in before the send
+    };
+  rebel->SetBeforeMoveSendHookForTest(settle);
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitFor([&]() {return server.MoveCommands().size() == 1;}, 2000ms));
+  const auto cancelAt = Clock::now();
+  client->Cancel(handle);
+  const auto result = client->Result(handle);
+  const auto took = Clock::now() - cancelAt;
+  EXPECT_EQ(result.result->error_code, MoveResult::CANCELED) << result.result->message;
+  EXPECT_GT(took, 500ms);  // the settle must not count as motion (~300 ms confirmation)
+  EXPECT_TRUE(result.result->stop_confirmed);
+  EXPECT_EQ(result.result->end_reason, "USER");
+  EXPECT_FALSE(server.MoveActive());
+  rebel->SetBeforeMoveSendHookForTest(nullptr);
+}
+
+// A stop that never saw motion or an END (the robot ignores it, starts late) has one way out:
+// every drive disabled (e-stop). Here inside the stopping phase of the goal.
+TEST_F(RebelMoveTest, DrivesDisabledConfirmAStopThatNeverSawMotion)
+{
+  Begin();
+  StartLoop();
+  server.SetMoveStartLatencyMs(5000);
+  server.SetIgnoreMoveStop(true);
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitFor([&]() {return server.MoveCommands().size() == 1;}, 2000ms));
+  client->Cancel(handle);
+  std::this_thread::sleep_for(100ms);
+  server.SetIgnoreEnable(true);
+  server.SetDisabledMask(0x3F);  // e-stop: all six drives report 'Motor not enabled'
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::CANCELED) << result.result->message;
+  EXPECT_TRUE(result.result->stop_confirmed);  // by the drives, well before the 1 s limit
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+}
+
+// Only ALL six drives count: one disabled drive is no e-stop.
+TEST_F(RebelMoveTest, OneDisabledDriveDoesNotConfirmAStop)
+{
+  Begin();
+  StartLoop();
+  server.SetMoveStartLatencyMs(5000);
+  server.SetIgnoreMoveStop(true);
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitFor([&]() {return server.MoveCommands().size() == 1;}, 2000ms));
+  client->Cancel(handle);
+  std::this_thread::sleep_for(100ms);
+  server.SetIgnoreEnable(true);
+  server.SetDisabledMask(0x01);
+  const auto result = client->Result(handle);
+  EXPECT_FALSE(result.result->stop_confirmed) << result.result->message;
+  EXPECT_NE(result.result->message.find("Recovery: e-stop"), std::string::npos);
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+}
+
+// The documented recovery of a never-confirmed stop: e-stop -> confirmed -> inactive -> active ->
+// jog flows again after the re-enable.
+TEST_F(RebelMoveTest, NeverMovedPendingStopIsReleasedByEstopAndRecoveryResumesJog)
+{
+  Begin();
+  server.SetMoveStartLatencyMs(8000);
+  server.SetIgnoreMoveStop(true);
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitFor([&]() {return server.MoveCommands().size() == 1;}, 2000ms));
+  client->Cancel(handle);
+  const auto result = client->Result(handle);
+  EXPECT_FALSE(result.result->stop_confirmed);
+  ASSERT_TRUE(rebel->HardwareErrorLatched());
+
+  // Nothing but the e-stop releases it: neither time nor recovery does.
+  std::this_thread::sleep_for(700ms);
+  EXPECT_EQ(rebel->on_deactivate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  StartLoop(0.2);
+  const auto pendingFrom = Clock::now();
+  std::this_thread::sleep_for(500ms);
+  EXPECT_TRUE(AllJogsZero(server, pendingFrom));  // still pending: jog held
+  loop.reset();
+
+  server.SetIgnoreEnable(true);
+  server.SetDisabledMask(0x3F);  // e-stop
+  const auto estopAt = Clock::now();
+  ASSERT_TRUE(
+    WaitFor(
+      [&]() {
+        const auto before = MoveStopCount(server, estopAt);
+        std::this_thread::sleep_for(450ms);
+        return MoveStopCount(server, estopAt) == before;  // the repeats ended: confirmed
+      }, 3000ms));
+  // Recovery: the re-enable clears the e-stop on the fake robot.
+  server.SetIgnoreEnable(false);
+  EXPECT_EQ(rebel->on_deactivate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  StartLoop(0.2);
+  RestartController();  // the recovered controller is re-started: releases the restart hold
+  EXPECT_TRUE(WaitFor([&]() {return AnyNonZeroJog(server, Clock::now() - 60ms);}, 2000ms));
+}
+
+TEST_F(RebelMoveTest, ClaimWhileStoppingLatchesEvenWhenTheStopIsConfirmed)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  server.SetIgnoreMoveStop(true);  // keeps the goal in the stopping phase for a while
+  StartLoop();
+  const std::vector<std::string> all = {
+    rebel->JointNames()[0] + "/velocity", rebel->JointNames()[1] + "/velocity"};
+  const auto handle = SendAccepted(Goal({40.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  client->Cancel(handle);
+  ASSERT_TRUE(WaitFor([&]() {return rebel->MoveStateValue() == 3;}, 500ms));  // stopping
+  // The late perform arrives while stopping (the abort checks no longer run) ...
+  EXPECT_EQ(rebel->perform_command_mode_switch(all, {}), return_type::OK);
+  EXPECT_FALSE(rebel->HardwareErrorLatched());  // not yet: nothing has latched in this phase
+  // ... then the robot obeys and the stop is confirmed well inside the 1 s limit.
+  server.SetIgnoreMoveStop(false);
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::CANCELED) << result.result->message;
+  EXPECT_TRUE(result.result->stop_confirmed);  // not the unconfirmed-stop latch
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+  EXPECT_FALSE(server.MoveActive());
+}
+
+TEST_F(RebelMoveTest, SendFailureOfMoveJointStopsAndLatches)
+{
+  Begin();
+  StartLoop();
+  rebel->FailNextMoveJointSendForTest();
+  const auto handle = SendAccepted(Goal({10.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::CMD_ERROR) << result.result->message;
+  EXPECT_TRUE(result.result->stop_sent);
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+  EXPECT_TRUE(server.MoveCommands().empty());
+}
+
+// The ALIVEJOG thread passed its check of a pending stop and is paused before the send. Meanwhile
+// the goal finishes (here: the robot reaches its target by itself, MOVETOEXECEND confirms), a new
+// goal is accepted and its Move Joint is sent. The old stop must not be sent behind it.
+TEST_F(RebelMoveTest, OldStopRequestIsNotSentBehindTheNextMoveJoint)
+{
+  Begin();
+  StartLoop();
+  server.SetMoveSpeedDegS(20.0);
+  const auto first = SendAccepted(Goal({6.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(first, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+
+  std::promise<void> entered;
+  std::promise<void> release;
+  auto released = release.get_future().share();
+  std::atomic<bool> once{true};
+  const auto pauseOnce = [&]() {
+      if (once.exchange(false)) {
+        entered.set_value();
+        released.wait();
+      }
+    };
+  rebel->SetBeforeStopSendHookForTest(pauseOnce);
+  client->Cancel(first);
+  ASSERT_EQ(entered.get_future().wait_for(2s), std::future_status::ready);  // paused pre-send
+  // The goal ends while the stop is withheld: the robot arrives (END) -> confirmed -> cleared.
+  const auto firstResult = client->Result(first);
+  EXPECT_TRUE(firstResult.result->stop_confirmed) << firstResult.result->message;
+  EXPECT_EQ(firstResult.result->end_reason, "PLAN");
+  EXPECT_EQ(MoveStopCount(server), 1u);  // only the one at connect: the paused send never went out
+
+  server.SetMoveSpeedDegS(60.0);
+  const auto second = SendAccepted(Goal({6.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(second, nullptr);
+  ASSERT_TRUE(WaitFor([&]() {return server.MoveCommands().size() == 2;}, 2000ms));
+  release.set_value();  // the paused thread now resumes with its stale request
+  const auto secondResult = client->Result(second);
+  // It re-checked under the send lock: no Move Stop behind the new Move Joint.
+  EXPECT_EQ(secondResult.result->error_code, MoveResult::SUCCESS) << secondResult.result->message;
+  EXPECT_EQ(MoveStopCount(server), 1u);
+  rebel->SetBeforeStopSendHookForTest(nullptr);
+}
+
+// A slow send (here: 700 ms inside the send lock) must not eat the 0.5 s MOVETOEXECACK window.
+TEST_F(RebelMoveTest, SlowMoveJointSendDoesNotCauseAnAckTimeout)
+{
+  Begin();
+  StartLoop();
+  server.SetMoveSpeedDegS(60.0);
+  const auto slow = []() {std::this_thread::sleep_for(700ms);};
+  rebel->SetBeforeMoveSendHookForTest(slow);
+  const auto handle = SendAccepted(Goal({6.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::SUCCESS) << result.result->message;
+  EXPECT_FALSE(result.result->stop_sent);
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  rebel->SetBeforeMoveSendHookForTest(nullptr);
+}
+
+// Cancel right after the send, before the robot started. The robot only acts on a stop while it
+// moves (the stop is acknowledged and dropped), and starts the move 600 ms later. Standstill at
+// the start is NOT a confirmation: the stop is confirmed only after the robot moved and a repeat
+// of the stop stopped it (MOVETOEXECEND).
+TEST_F(RebelMoveTest, StopBeforeTheRobotStartedIsNotConfirmedByStandstill)
+{
+  Begin();
+  StartLoop();
+  server.SetMoveStartLatencyMs(600);
+  server.SetStopIgnoredBeforeStart(true);
+  server.SetMoveSpeedDegS(10.0);
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitFor([&]() {return server.MoveCommands().size() == 1;}, 2000ms));
+  const auto cancelAt = Clock::now();
+  client->Cancel(handle);
+  const auto result = client->Result(handle);
+  const auto took = Clock::now() - cancelAt;
+  EXPECT_EQ(result.result->error_code, MoveResult::CANCELED) << result.result->message;
+  EXPECT_GT(took, 500ms);  // standstill alone would have "confirmed" after ~300 ms
+  EXPECT_TRUE(result.result->stop_confirmed);
+  EXPECT_EQ(result.result->end_reason, "USER");
+  EXPECT_FALSE(server.MoveActive());
+  EXPECT_LT(server.CurrentDeg()[0], server.baseJointsDeg[0] + 3.0f);
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+}
+
+// Same, but the robot never acts on the stop: unconfirmed -> latched, the request stays pending
+// (jog held, new moves refused) and keeps being sent, also after the robot starts late; it ends
+// once the robot obeys and stands still after having moved.
+TEST_F(RebelMoveTest, IgnoredStopOfARobotThatStartsLateStaysPending)
+{
+  Begin();
+  StartLoop(0.2);
+  server.SetMoveStartLatencyMs(800);
+  server.SetIgnoreMoveStop(true);
+  server.SetMoveSpeedDegS(10.0);
+  const auto handle = SendAccepted(Goal({40.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitFor([&]() {return server.MoveCommands().size() == 1;}, 2000ms));
+  const auto cancelAt = Clock::now();
+  client->Cancel(handle);
+  const auto result = client->Result(handle);
+  EXPECT_FALSE(result.result->stop_confirmed) << result.result->message;
+  EXPECT_NE(result.result->message.find("NOT confirmed"), std::string::npos);
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+  // The robot starts moving after the goal ended; the stop is still being re-sent.
+  ASSERT_TRUE(
+    WaitFor(
+      [&]() {
+        return server.CurrentDeg()[0] > server.baseJointsDeg[0] + 0.5f;
+      }, 3000ms));
+  const auto lateAt = Clock::now();
+  std::this_thread::sleep_for(500ms);
+  EXPECT_GE(MoveStopCount(server, lateAt), 3u);
+  EXPECT_TRUE(server.MoveActive());
+  EXPECT_TRUE(AllJogsZero(server, cancelAt));
+
+  server.SetIgnoreMoveStop(false);
+  EXPECT_TRUE(WaitFor([&]() {return !server.MoveActive();}, 500ms));
+  std::this_thread::sleep_for(800ms);
+  const auto settled = Clock::now();
+  const std::size_t before = MoveStopCount(server, settled);
+  std::this_thread::sleep_for(400ms);
+  EXPECT_EQ(MoveStopCount(server, settled), before);  // confirmed: no more repeats
+}
+
+TEST_F(RebelMoveTest, ReleaseOnlyAndUnrelatedSwitchesDuringAMoveDoNotAbortIt)
+{
+  Begin();
+  server.SetMoveSpeedDegS(40.0);
+  StartLoop();
+  const auto handle = SendAccepted(Goal({20.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  const std::vector<std::string> ours = {rebel->JointNames()[0] + "/velocity"};
+  EXPECT_EQ(rebel->perform_command_mode_switch({}, ours), return_type::OK);  // release only
+  EXPECT_EQ(
+    rebel->perform_command_mode_switch({"other_joint1/velocity", "joint1/position"}, {}),
+    return_type::OK);  // other hardware
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::SUCCESS) << result.result->message;
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+}
+
+TEST_F(RebelMoveTest, OnErrorSendsMoveStopWithinTwentyMilliseconds)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  const auto at = Clock::now();
+  rebel->on_error(rclcpp_lifecycle::State());
+  ASSERT_TRUE(WaitFor([&]() {return MoveStopCount(server, at) >= 1;}, 500ms));
+  EXPECT_LT(server.FirstCommandAfter("Move Stop", at) - at, 20ms);
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::LATCHED) << result.result->message;
+  EXPECT_FALSE(server.MoveActive());
+}
+
+TEST_F(RebelMoveTest, OnDeactivateSendsMoveStopWithinTwentyMilliseconds)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  const auto at = Clock::now();
+  rebel->on_deactivate(rclcpp_lifecycle::State());
+  ASSERT_TRUE(WaitFor([&]() {return MoveStopCount(server, at) >= 1;}, 500ms));
+  EXPECT_LT(server.FirstCommandAfter("Move Stop", at) - at, 20ms);
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  EXPECT_FALSE(server.MoveActive());
+}
+
+TEST_F(RebelMoveTest, StopSendsMoveStopBeforeDisableWithinTwentyMilliseconds)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  // The result has to be requested while the driver's executor still runs.
+  auto pendingResult = std::async(
+    std::launch::async, [&]() {return client->Result(handle, 5000ms);});
+  std::this_thread::sleep_for(100ms);
+  const auto at = Clock::now();
+  rebel->Stop();
+  ASSERT_GE(MoveStopCount(server, at), 1u);
+  EXPECT_LT(server.FirstCommandAfter("Move Stop", at) - at, 20ms);
+  const auto commandsAfter = server.Commands();
+  ASSERT_GE(commandsAfter.size(), 3u);
+  EXPECT_EQ(commandsAfter[commandsAfter.size() - 3], "Move Stop");
+  EXPECT_EQ(commandsAfter[commandsAfter.size() - 2], "Disable");
+  EXPECT_EQ(commandsAfter.back(), "QUIT");
+  EXPECT_FALSE(server.MoveActive());
+  const auto result = pendingResult.get();
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  EXPECT_TRUE(result.result->stop_sent);
+}
+
+TEST_F(RebelMoveTest, DestructorWithAMoveActiveStopsTheRobot)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  const auto at = Clock::now();
+  client.reset();
+  rebel.reset();  // ~Rebel -> Stop()
+  EXPECT_GE(MoveStopCount(server, at), 1u);
+  EXPECT_FALSE(server.MoveActive());
+}
+
+TEST_F(RebelMoveTest, ReconnectOfAnIdleDriverStillSendsMoveStopFirst)
+{
+  Begin();
+  StartLoop();
+  server.DropClient();
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(2).size() >= 6;}, 3000ms));
+  EXPECT_EQ(server.Commands(2), kStartupSequence);
+}
+
+// ---- MOVETOEXECERROR / EXECERROR (e-stop during CMD Move Joint, real robot 2026-10-24) ----
+
+constexpr const char * kEstopError = "MOVETOEXECERROR 0 0 MoveTo Hardware error _ESTOP";
+
+namespace
+{
+bool HasText(const std::string & text, const std::string & part)
+{
+  return text.find(part) != std::string::npos;
+}
+}  // namespace
+
+// The robot reports the error while the drives are still enabled and the (ignored) Move Stop does
+// not end the motion: the error faults the goal at once and sends Move Stop, but does NOT confirm
+// it. Variant: confirmed by standstill after the motion was seen.
+TEST_F(RebelMoveTest, RobotErrorFaultsSendsMoveStopAndStopIsConfirmedByStandstill)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  server.SetIgnoreMoveStop(true);  // the robot's motion goes on; no END
+  TelemetryListener telemetry;
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  ASSERT_TRUE(telemetry.WaitState([](const auto & msg) {return msg.move_active;}, 500ms));
+
+  const auto errorAt = Clock::now();
+  server.InjectMessage(kEstopError);
+  ASSERT_TRUE(WaitFor([&]() {return MoveStopCount(server, errorAt) >= 1;}, 500ms));
+  const auto stopAt = server.FirstCommandAfter("Move Stop", errorAt);
+  const auto stopDelay = stopAt - errorAt;
+  std::printf(
+    "[   INFO   ] MOVETOEXECERROR -> CMD Move Stop at the server: %lld ms\n",
+    static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(stopDelay).count()));
+  EXPECT_LT(stopDelay, 100ms);
+  EXPECT_TRUE(WaitFor([&]() {return rebel->HardwareErrorLatched();}, 100ms));
+  EXPECT_TRUE(
+    telemetry.WaitState(
+      [](const auto & msg) {
+        return msg.latched && HasText(msg.latch_reason, "Hardware error _ESTOP") &&
+        msg.move_stop_pending && msg.move_active;
+      }, 300ms));
+
+  // The error alone is no confirmation: 300 ms later the robot still moves and the stop is pending.
+  std::this_thread::sleep_for(300ms);
+  EXPECT_EQ(rebel->MoveStateValue(), 3);
+  EXPECT_TRUE(server.MoveActive());
+  EXPECT_TRUE(telemetry.LastState().move_stop_pending);
+
+  server.SetMoveStall(true);  // the arm comes to rest: standstill after motion
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.code, rclcpp_action::ResultCode::ABORTED);
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  EXPECT_TRUE(HasText(result.result->message, "MOVETOEXECERROR")) << result.result->message;
+  EXPECT_TRUE(HasText(result.result->message, "Hardware error _ESTOP")) << result.result->message;
+  EXPECT_EQ(result.result->end_reason, "ERROR");
+  EXPECT_TRUE(result.result->stop_sent);
+  EXPECT_TRUE(result.result->stop_confirmed) << result.result->message;
+  EXPECT_FALSE(HasText(result.result->message, "NOT confirmed"));
+  EXPECT_LT(Clock::now() - errorAt, 1500ms);
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+  EXPECT_EQ(rebel->MoveStateValue(), 0);
+  EXPECT_TRUE(
+    telemetry.WaitState(
+      [](const auto & msg) {return msg.latched && !msg.move_active && !msg.move_stop_pending;},
+      300ms));
+  EXPECT_TRUE(HasText(telemetry.LastState().latch_reason, "Hardware error _ESTOP"));
+}
+
+// Variant: confirmed by all six drives disabled (the e-stop itself), not by the error.
+TEST_F(RebelMoveTest, RobotErrorStopIsConfirmedByDrivesDisabled)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  server.SetIgnoreMoveStop(true);
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+
+  const auto errorAt = Clock::now();
+  server.InjectMessage(kEstopError);
+  ASSERT_TRUE(WaitFor([&]() {return rebel->HardwareErrorLatched();}, 300ms));
+  std::this_thread::sleep_for(300ms);
+  EXPECT_EQ(rebel->MoveStateValue(), 3);  // still stopping: the error did not confirm
+  server.SetIgnoreEnable(true);
+  server.SetDisabledMask(0x3F);  // e-stop: all six drives report 'Motor not enabled'
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  EXPECT_TRUE(HasText(result.result->message, "Hardware error _ESTOP")) << result.result->message;
+  EXPECT_EQ(result.result->end_reason, "ERROR");
+  EXPECT_TRUE(result.result->stop_confirmed) << result.result->message;
+  EXPECT_LT(Clock::now() - errorAt, 1500ms);
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+}
+
+// Nothing confirms the stop: the goal ends after the 1 s limit, NOT confirmed, stop stays pending.
+TEST_F(RebelMoveTest, RobotErrorAloneNeverConfirmsTheStop)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  server.SetIgnoreMoveStop(true);
+  TelemetryListener telemetry;
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  const auto errorAt = Clock::now();
+  server.InjectMessage(kEstopError);
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  EXPECT_FALSE(result.result->stop_confirmed);
+  EXPECT_TRUE(HasText(result.result->message, "NOT confirmed")) << result.result->message;
+  EXPECT_TRUE(HasText(result.result->message, "Hardware error _ESTOP")) << result.result->message;
+  EXPECT_GE(Clock::now() - errorAt, 950ms);
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+  // Still pending after the goal: Move Stop keeps being re-sent.
+  const auto afterGoal = Clock::now();
+  std::this_thread::sleep_for(400ms);
+  EXPECT_GE(MoveStopCount(server, afterGoal), 2u);
+  EXPECT_TRUE(
+    telemetry.WaitState([](const auto & msg) {return msg.latched && msg.move_stop_pending;}, 200ms));
+}
+
+// A robot that stops by itself and ends the move right after the error (the normal e-stop
+// sequence on a real robot) confirms through the END, and the error still decides the result.
+TEST_F(RebelMoveTest, RobotErrorFollowedByEndIsAFaultNotASuccess)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  server.InjectMessage(kEstopError);
+  server.InjectMessage("MOVETOEXECEND -1 0 MoveTo PLAN");
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  EXPECT_NE(result.result->error_code, MoveResult::SUCCESS);
+  EXPECT_NE(result.result->error_code, MoveResult::ROBOT_ENDED);
+  EXPECT_EQ(result.result->end_reason, "ERROR");
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+}
+
+// The robot stands still at (what looks like) the goal when it reports END PLAN after an error:
+// without the error taking precedence this would be a SUCCESS.
+TEST_F(RebelMoveTest, RobotErrorOverridesEndPlanOfAStandingRobot)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  server.SetMoveStall(true);  // never moves: standstill from the start
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitFor([&]() {return rebel->MoveStateValue() == 2;}, 2000ms));
+  std::this_thread::sleep_for(300ms);  // STATUS has shown no motion for the still window
+  server.InjectMessage(kEstopError);
+  server.InjectMessage("MOVETOEXECEND -1 0 MoveTo PLAN");
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+}
+
+TEST_F(RebelMoveTest, RobotErrorBeforeTheAckAbortsTheMove)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  server.SetSuppressMoveAck(true);
+  StartLoop();
+  const auto sent = Clock::now();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitFor([&]() {return server.MoveCommands().size() == 1;}, 2000ms));
+  server.InjectMessage(kEstopError);
+  const auto result = client->Result(handle);
+  // Not an ACK timeout (that needs 500 ms of silence): the error decided.
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  EXPECT_TRUE(HasText(result.result->message, "Hardware error _ESTOP")) << result.result->message;
+  EXPECT_TRUE(result.result->stop_sent);
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+  const auto stopAt = server.FirstCommandAfter("Move Stop", sent);
+  ASSERT_NE(stopAt, Clock::time_point{});
+  EXPECT_LT(stopAt - sent, 450ms);
+}
+
+// The error of a finished goal is not carried into the next one: after the lifecycle recovery a
+// new goal runs to SUCCESS.
+TEST_F(RebelMoveTest, RobotErrorOfAnEarlierGoalDoesNotLeakIntoTheNextGoal)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  server.InjectMessage(kEstopError);
+  const auto result = client->Result(handle);
+  ASSERT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  ASSERT_TRUE(result.result->stop_confirmed) << result.result->message;
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+
+  loop.reset();
+  EXPECT_EQ(rebel->on_error(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_EQ(rebel->on_configure(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  ASSERT_FALSE(rebel->HardwareErrorLatched());
+  std::this_thread::sleep_for(300ms);  // the start-up sequence and its override STATUS
+  server.SetMoveSpeedDegS(60.0);
+  StartLoop();
+  // The recovered controller is re-started (releases the restart hold) and deactivated again.
+  RestartController();
+  ReleaseController();
+  const auto second = SendAccepted(Goal({6.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(second, nullptr);
+  const auto secondResult = client->Result(second);
+  EXPECT_EQ(secondResult.result->error_code, MoveResult::SUCCESS) << secondResult.result->message;
+  EXPECT_EQ(secondResult.result->end_reason, "PLAN");
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+}
+
+// A move_joint goal is refused (driver side, nothing sent) while the post-recovery controller
+// restart hold is set; it is accepted once the controller was re-started and deactivated again.
+TEST_F(RebelMoveTest, MoveGoalIsRefusedWhileTheControllerRestartHoldIsSet)
+{
+  Begin();
+  server.SetMoveSpeedDegS(60.0);
+  StartLoop();
+  // Latch (hardware error), then the lifecycle recovery sets the hold.
+  loop.reset();
+  EXPECT_EQ(rebel->on_error(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  ASSERT_TRUE(rebel->HardwareErrorLatched());
+  EXPECT_EQ(rebel->on_configure(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  ASSERT_FALSE(rebel->HardwareErrorLatched());
+  ASSERT_TRUE(rebel->ControllerRestartHoldActive());
+  std::this_thread::sleep_for(300ms);  // the start-up sequence and its override STATUS
+  StartLoop();
+
+  const std::size_t movesBefore = server.MoveCommands().size();
+  const auto refused = SendAccepted(Goal({6.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(refused, nullptr);
+  const auto refusedResult = client->Result(refused);
+  EXPECT_EQ(refusedResult.result->error_code, MoveResult::REJECTED)
+    << refusedResult.result->message;
+  EXPECT_TRUE(HasText(refusedResult.result->message, "controller restart hold"))
+    << refusedResult.result->message;
+  EXPECT_FALSE(refusedResult.result->stop_sent);
+  EXPECT_EQ(server.MoveCommands().size(), movesBefore);  // nothing was sent to the robot
+  EXPECT_TRUE(rebel->ControllerRestartHoldActive());     // a refused goal does not release it
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+
+  RestartController();
+  ReleaseController();
+  const auto accepted = SendAccepted(Goal({6.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(accepted, nullptr);
+  const auto acceptedResult = client->Result(accepted);
+  EXPECT_EQ(acceptedResult.result->error_code, MoveResult::SUCCESS)
+    << acceptedResult.result->message;
+}
+
+// An EXECERROR (program, not MoveTo) while a joint move is active is handled like a
+// MOVETOEXECERROR.
+TEST_F(RebelMoveTest, ExecErrorWhileAMoveIsActiveFaultsTheGoal)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  server.InjectMessage("EXECERROR 0 0 Prog Program aborted by error");
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  EXPECT_TRUE(HasText(result.result->message, "EXECERROR")) << result.result->message;
+  EXPECT_TRUE(HasText(result.result->message, "Program aborted by error"));
+  EXPECT_EQ(result.result->end_reason, "ERROR");
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+}
+
+// An unsolicited error with no move of ours only logs: no latch, no Move Stop, and it does not
+// leak into the next goal.
+TEST_F(RebelMoveTest, RobotErrorWhileIdleOnlyLogsAndDoesNotAffectTheNextGoal)
+{
+  Begin();
+  server.SetMoveSpeedDegS(60.0);
+  TelemetryListener telemetry;
+  StartLoop();
+  const auto before = Clock::now();
+  server.InjectMessage(kEstopError);
+  server.InjectMessage("EXECERROR 0 0 Prog Program aborted by error");
+  std::this_thread::sleep_for(300ms);
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  EXPECT_EQ(MoveStopCount(server, before), 0u);
+  EXPECT_TRUE(telemetry.WaitState([](const auto & msg) {return msg.activated;}, 300ms));
+  EXPECT_FALSE(telemetry.LastState().latched);
+  EXPECT_FALSE(telemetry.LastState().move_stop_pending);
+
+  const auto handle = SendAccepted(Goal({6.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::SUCCESS) << result.result->message;
+  EXPECT_EQ(result.result->end_reason, "PLAN");
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+}
+
+// An error that arrives while a stop is already in progress latches (the cancel alone does not)
+// but does not restart the stop deadline.
+TEST_F(RebelMoveTest, RobotErrorWhileStoppingLatchesWithoutRestartingTheStopDeadline)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  server.SetIgnoreMoveStop(true);
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  const auto cancelAt = Clock::now();
+  client->Cancel(handle);
+  ASSERT_TRUE(WaitFor([&]() {return rebel->MoveStateValue() == 3;}, 500ms));
+  std::this_thread::sleep_for(300ms);
+  EXPECT_FALSE(rebel->HardwareErrorLatched());  // a cancel in progress is not a fault
+  server.InjectMessage(kEstopError);
+  EXPECT_TRUE(WaitFor([&]() {return rebel->HardwareErrorLatched();}, 300ms));
+  const auto result = client->Result(handle);
+  // The 1 s limit still counts from the start of the stop (a restart would end it at ~1.3 s).
+  EXPECT_LT(Clock::now() - cancelAt, 1250ms);
+  // A robot error during a client cancel makes the goal a FAULT, never a benign CANCELED.
+  EXPECT_EQ(result.code, rclcpp_action::ResultCode::ABORTED);
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  EXPECT_EQ(result.result->end_reason, "ERROR");
+  EXPECT_FALSE(result.result->stop_confirmed);
+  EXPECT_TRUE(HasText(result.result->message, "canceled by the client")) << result.result->message;
+  EXPECT_TRUE(HasText(result.result->message, "Hardware error _ESTOP")) << result.result->message;
+  EXPECT_TRUE(HasText(result.result->message, "NOT confirmed")) << result.result->message;
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+}
+
+// Client cancel, then the operator hits the e-stop during the deceleration: the stop IS confirmed
+// (all drives disabled) but the goal is a FAULT with end_reason ERROR and the driver is latched.
+TEST_F(RebelMoveTest, RobotErrorDuringCancelConfirmedByDrivesOffIsAFaultNotACancel)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  server.SetIgnoreMoveStop(true);
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  client->Cancel(handle);
+  ASSERT_TRUE(WaitFor([&]() {return rebel->MoveStateValue() == 3;}, 500ms));
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  server.InjectMessage(kEstopError);
+  ASSERT_TRUE(WaitFor([&]() {return rebel->HardwareErrorLatched();}, 300ms));
+  EXPECT_EQ(rebel->MoveStateValue(), 3);  // the error alone confirmed nothing
+  server.SetIgnoreEnable(true);
+  server.SetDisabledMask(0x3F);  // e-stop: all six drives report 'Motor not enabled'
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.code, rclcpp_action::ResultCode::ABORTED);
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  EXPECT_TRUE(result.result->stop_confirmed) << result.result->message;
+  EXPECT_EQ(result.result->end_reason, "ERROR");
+  EXPECT_TRUE(HasText(result.result->message, "Hardware error _ESTOP")) << result.result->message;
+  EXPECT_FALSE(HasText(result.result->message, "NOT confirmed"));
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+}
+
+// Same, confirmed by standstill after the motion was seen.
+TEST_F(RebelMoveTest, RobotErrorDuringCancelConfirmedByStandstillIsAFaultNotACancel)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  server.SetIgnoreMoveStop(true);
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  client->Cancel(handle);
+  ASSERT_TRUE(WaitFor([&]() {return rebel->MoveStateValue() == 3;}, 500ms));
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  server.InjectMessage(kEstopError);
+  ASSERT_TRUE(WaitFor([&]() {return rebel->HardwareErrorLatched();}, 300ms));
+  EXPECT_EQ(rebel->MoveStateValue(), 3);
+  server.SetMoveStall(true);  // the arm comes to rest: standstill after motion
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.code, rclcpp_action::ResultCode::ABORTED);
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  EXPECT_TRUE(result.result->stop_confirmed) << result.result->message;
+  EXPECT_EQ(result.result->end_reason, "ERROR");
+  EXPECT_FALSE(HasText(result.result->message, "NOT confirmed"));
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+}
+
+// The move-abort latch is visible in hardware_state while /joint_states would be frozen, and
+// robot_joint_states follows the arm that coasts on.
+TEST_F(RebelMoveTest, TelemetryTracksTheCoastingArmAfterAMoveAbortLatch)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  server.SetIgnoreMoveStop(true);  // the arm keeps moving after the abort
+  TelemetryListener telemetry;
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  server.InjectMessage(kEstopError);
+  ASSERT_TRUE(
+    telemetry.WaitState([](const auto & msg) {return msg.latched && msg.move_stop_pending;}, 500ms));
+  const double atLatch = telemetry.LastJoint().msg.position[0];
+  // While latched and stopping, the arm keeps moving: the published position keeps changing.
+  std::this_thread::sleep_for(250ms);
+  const double later = telemetry.LastJoint().msg.position[0];
+  EXPECT_GT(later - atLatch, 0.5 * kDegToRad);
+  EXPECT_NEAR(later, server.CurrentDeg()[0] * kDegToRad, 0.5 * kDegToRad);
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+}
+
+// hardware_state shows the configured MoveJoint caps (after the 100 % hard-cap clamp).
+TEST_F(RebelMoveTest, HardwareStateCarriesTheConfiguredMoveJointCaps)
+{
+  Begin({{"move_joint_max_velocity_percent", "60"}, {"move_joint_max_acceleration_percent", "10"}});
+  TelemetryListener telemetry;
+  StartLoop();
+  ASSERT_TRUE(telemetry.WaitState([](const auto & msg) {return msg.activated;}, 2000ms));
+  EXPECT_DOUBLE_EQ(telemetry.LastState().move_joint_max_velocity_percent, 60.0);
+  EXPECT_DOUBLE_EQ(telemetry.LastState().move_joint_max_acceleration_percent, 10.0);
+}
+
+TEST_F(RebelMoveTest, HardwareStateCarriesTheDefaultMoveJointCaps)
+{
+  Begin();
+  TelemetryListener telemetry;
+  StartLoop();
+  ASSERT_TRUE(telemetry.WaitState([](const auto & msg) {return msg.activated;}, 2000ms));
+  EXPECT_DOUBLE_EQ(telemetry.LastState().move_joint_max_velocity_percent, 25.0);
+  EXPECT_DOUBLE_EQ(telemetry.LastState().move_joint_max_acceleration_percent, 40.0);
+}
+
+TEST_F(RebelMoveTest, HardwareStateCapsAboveTheHardCapsAreClamped)
+{
+  Begin({{"move_joint_max_velocity_percent", "150"}, {"move_joint_max_acceleration_percent", "150"}});
+  TelemetryListener telemetry;
+  StartLoop();
+  ASSERT_TRUE(telemetry.WaitState([](const auto & msg) {return msg.activated;}, 2000ms));
+  EXPECT_DOUBLE_EQ(telemetry.LastState().move_joint_max_velocity_percent, 100.0);
+  EXPECT_DOUBLE_EQ(telemetry.LastState().move_joint_max_acceleration_percent, 40.0);  // hard cap
+}
+
+// ---- Dispatch authorization, late errors, receive-time stamps, dropped messages ----
+
+// A robot-reported error recorded after the goal was accepted, with no other flag set, must stop
+// the dispatch: nothing is sent, the goal is a FAULT with the robot's reason, the driver latches.
+TEST_F(RebelMoveTest, RobotErrorRecordedBeforeTheSendWithNoOtherFlagIsNeverDispatched)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  StartLoop();
+  const auto errorInTheSendWindow = [this]() {
+      server.InjectMessage(kEstopError);
+      std::this_thread::sleep_for(200ms);  // the message thread records it (state is Sending)
+    };
+  rebel->SetBeforeMoveSendHookForTest(errorInTheSendWindow);
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  const auto result = client->Result(handle);
+  rebel->SetBeforeMoveSendHookForTest(nullptr);
+  EXPECT_EQ(result.code, rclcpp_action::ResultCode::ABORTED);
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  EXPECT_EQ(result.result->end_reason, "ERROR");
+  EXPECT_TRUE(HasText(result.result->message, "Hardware error _ESTOP")) << result.result->message;
+  EXPECT_TRUE(HasText(result.result->message, "before sending")) << result.result->message;
+  EXPECT_FALSE(result.result->stop_sent);  // no stop "sent" for a move the robot never got
+  EXPECT_FALSE(result.result->stop_confirmed);
+  ExpectNoMoveJointSent();
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+  EXPECT_EQ(rebel->MoveStateValue(), 0);
+  EXPECT_FALSE(server.MoveActive());
+}
+
+// A latch that arrives inside the send window (after the early abort check, while the send lock
+// is held) blocks the dispatch.
+TEST_F(RebelMoveTest, LatchInsideTheSendWindowBlocksTheMoveJoint)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  StartLoop();
+  rebel->SetBeforeMoveSendHookForTest(
+    [this]() {rebel->on_error(rclcpp_lifecycle::State());});  // latches, deactivates
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  const auto result = client->Result(handle);
+  rebel->SetBeforeMoveSendHookForTest(nullptr);
+  EXPECT_EQ(result.result->error_code, MoveResult::LATCHED) << result.result->message;
+  EXPECT_FALSE(result.result->stop_sent);
+  ExpectNoMoveJointSent();
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+  EXPECT_EQ(rebel->MoveStateValue(), 0);
+  EXPECT_FALSE(server.MoveActive());
+}
+
+// A client cancel that arrives inside the send window blocks the dispatch: CANCELED, nothing sent.
+TEST_F(RebelMoveTest, CancelInsideTheSendWindowBlocksTheMoveJoint)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  StartLoop();
+  std::atomic<bool> entered{false};
+  std::atomic<bool> release{false};
+  rebel->SetBeforeMoveSendHookForTest(
+    [&]() {
+      entered = true;
+      WaitFor([&]() {return release.load();}, 3000ms);
+    });
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitFor([&]() {return entered.load();}, 2000ms));
+  client->Cancel(handle);
+  std::this_thread::sleep_for(200ms);  // the cancel callback has run
+  release = true;
+  const auto result = client->Result(handle);
+  rebel->SetBeforeMoveSendHookForTest(nullptr);
+  EXPECT_EQ(result.code, rclcpp_action::ResultCode::CANCELED);
+  EXPECT_EQ(result.result->error_code, MoveResult::CANCELED) << result.result->message;
+  EXPECT_FALSE(result.result->stop_sent);
+  ExpectNoMoveJointSent();
+  EXPECT_FALSE(rebel->HardwareErrorLatched());  // a cancel before the send is not a fault
+  EXPECT_EQ(rebel->MoveStateValue(), 0);
+}
+
+// MOVETOEXECERROR after the supervision loop decided SUCCESS (the robot's END PLAN, standing at
+// the goal) but before the result is reported: the goal is a FAULT, never a SUCCESS.
+TEST_F(RebelMoveTest, RobotErrorArrivingAfterTheSuccessDecisionBeforeTheResultIsAFault)
+{
+  Begin();
+  server.SetMoveSpeedDegS(60.0);
+  StartLoop();
+  std::atomic<bool> once{true};
+  rebel->SetBeforeMoveFinishHookForTest(
+    [&]() {
+      if (once.exchange(false)) {
+        server.InjectMessage(kEstopError);
+        std::this_thread::sleep_for(200ms);  // recorded; the move is not idle yet
+      }
+    });
+  const auto handle = SendAccepted(Goal({6.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  const auto result = client->Result(handle);
+  rebel->SetBeforeMoveFinishHookForTest(nullptr);
+  EXPECT_FALSE(once.load());  // the hook ran: the SUCCESS path was taken
+  EXPECT_EQ(result.code, rclcpp_action::ResultCode::ABORTED);
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  EXPECT_NE(result.result->error_code, MoveResult::SUCCESS);
+  EXPECT_EQ(result.result->end_reason, "ERROR");
+  EXPECT_TRUE(HasText(result.result->message, "Hardware error _ESTOP")) << result.result->message;
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+  EXPECT_EQ(rebel->MoveStateValue(), 0);
+}
+
+// An error that arrives after the goal ended (idle) is only logged: not latched, not recorded
+// into the next goal.
+TEST_F(RebelMoveTest, RobotErrorWhileIdleAfterAGoalIsNotRecordedIntoTheNextGoal)
+{
+  Begin();
+  server.SetMoveSpeedDegS(60.0);
+  StartLoop();
+  auto handle = SendAccepted(Goal({5.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_EQ(client->Result(handle).result->error_code, MoveResult::SUCCESS);
+  const auto idleAt = Clock::now();
+  server.InjectMessage(kEstopError);
+  std::this_thread::sleep_for(300ms);
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+  EXPECT_EQ(MoveStopCount(server, idleAt), 0u);
+  handle = SendAccepted(Goal({-5.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::SUCCESS) << result.result->message;
+  EXPECT_EQ(result.result->end_reason, "PLAN");
+  EXPECT_FALSE(rebel->HardwareErrorLatched());
+}
+
+// The STATUS stamp (snapshot, robot_joint_states, and with it the age tiers) is the time the
+// socket read the bytes. A message thread that is 300 ms late must not make those samples look
+// 300 ms younger than they are.
+TEST_F(RebelMoveTest, StatusStampIsTheReceiveTimeWhenTheMessageThreadIsDelayed)
+{
+  Begin();
+  TelemetryListener telemetry;
+  StartLoop();
+  ASSERT_TRUE(telemetry.WaitJoint([](const auto &) {return true;}, 1000ms));
+  std::atomic<bool> once{true};
+  std::atomic<std::int64_t> delayedAtNs{0};
+  rebel->SetBeforeHandleMessageHookForTest(
+    [&]() {
+      if (once.exchange(false)) {
+        delayedAtNs = SystemNowNs();
+        std::this_thread::sleep_for(300ms);
+      }
+    });
+  ASSERT_TRUE(WaitFor([&]() {return !once.load();}, 1000ms));
+  std::this_thread::sleep_for(500ms);  // the backlog is processed
+  rebel->SetBeforeHandleMessageHookForTest(nullptr);
+
+  const std::int64_t delayedAt = delayedAtNs.load();
+  ASSERT_NE(delayedAt, 0);
+  std::int64_t earliestStampOfBacklog = std::numeric_limits<std::int64_t>::max();
+  std::size_t backlogSamples = 0;
+  for (const auto & sample : telemetry.Joints()) {
+    // Published (and received here) only after the delay ended.
+    if (sample.receivedSystemNs >= delayedAt + 290'000'000 &&
+      sample.receivedSystemNs <= delayedAt + 340'000'000)
+    {
+      ++backlogSamples;
+      earliestStampOfBacklog = std::min(
+        earliestStampOfBacklog,
+        static_cast<std::int64_t>(rclcpp::Time(sample.msg.header.stamp).nanoseconds()));
+    }
+  }
+  ASSERT_GE(backlogSamples, 3u);
+  // Stamped at processing time the backlog would start at ~delayedAt + 300 ms.
+  EXPECT_LT(earliestStampOfBacklog - delayedAt, 200'000'000) <<
+    "stamp lag " << (earliestStampOfBacklog - delayedAt) / 1'000'000 << " ms";
+}
+
+// Messages discarded because the consumer fell behind during a joint move may include the robot's
+// MOVETOEXECERROR: the goal faults and the driver latches.
+TEST_F(RebelMoveTest, DroppedMessagesDuringAMoveFaultAndLatch)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  std::atomic<bool> stalled{false};
+  std::atomic<bool> once{true};
+  rebel->SetBeforeHandleMessageHookForTest(
+    [&]() {
+      if (once.exchange(false)) {
+        stalled = true;
+        std::this_thread::sleep_for(120ms);  // < the 200 ms STATUS abort tier
+      }
+    });
+  ASSERT_TRUE(WaitFor([&]() {return stalled.load();}, 1000ms));
+  for (int i = 0; i < 40; ++i) {
+    server.InjectMessage("INFO filler " + std::to_string(i));
+  }
+  const auto result = client->Result(handle);
+  rebel->SetBeforeHandleMessageHookForTest(nullptr);
+  EXPECT_EQ(result.code, rclcpp_action::ResultCode::ABORTED);
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  EXPECT_TRUE(HasText(result.result->message, "robot messages were dropped"))
+    << result.result->message;
+  EXPECT_TRUE(result.result->stop_sent);
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+  EXPECT_GE(MoveStopCount(server, Clock::now() - 3s), 1u);
+}
+
+// Same before the send: messages dropped after the goal was accepted stop the dispatch.
+TEST_F(RebelMoveTest, DroppedMessagesBeforeTheSendBlockTheMoveJoint)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  StartLoop();
+  const auto dropInTheSendWindow = [this]() {
+      rebel->SetBeforeHandleMessageHookForTest([]() {std::this_thread::sleep_for(300ms);});
+      std::this_thread::sleep_for(60ms);  // the message thread is inside the delay
+      for (int i = 0; i < 40; ++i) {
+        server.InjectMessage("INFO filler " + std::to_string(i));
+      }
+      std::this_thread::sleep_for(100ms);  // the socket queue overflowed
+    };
+  rebel->SetBeforeMoveSendHookForTest(dropInTheSendWindow);
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  const auto result = client->Result(handle);
+  rebel->SetBeforeMoveSendHookForTest(nullptr);
+  rebel->SetBeforeHandleMessageHookForTest(nullptr);
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  EXPECT_TRUE(HasText(result.result->message, "robot messages were dropped"))
+    << result.result->message;
+  EXPECT_TRUE(HasText(result.result->message, "before sending")) << result.result->message;
+  EXPECT_FALSE(result.result->stop_sent);
+  ExpectNoMoveJointSent();
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+}
+
+// A cancel whose Move Stop is not confirmed within the limit is a FAULT, not a CANCELED (the
+// robot may still be moving), with the stop still pending and the driver latched.
+TEST_F(RebelMoveTest, UnconfirmedStopAfterAClientCancelIsAFaultNotACancel)
+{
+  Begin();
+  server.SetMoveSpeedDegS(10.0);
+  server.SetIgnoreMoveStop(true);
+  StartLoop();
+  const auto handle = SendAccepted(Goal({30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitMoving(1.0));
+  client->Cancel(handle);
+  const auto result = client->Result(handle);
+  EXPECT_EQ(result.code, rclcpp_action::ResultCode::ABORTED);
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  EXPECT_NE(result.result->error_code, MoveResult::CANCELED);
+  EXPECT_FALSE(result.result->stop_confirmed);
+  EXPECT_TRUE(result.result->stop_sent);
+  EXPECT_TRUE(HasText(result.result->message, "canceled by the client")) << result.result->message;
+  EXPECT_TRUE(HasText(result.result->message, "NOT confirmed")) << result.result->message;
+  EXPECT_TRUE(rebel->HardwareErrorLatched());
+}
+
+TEST_F(RebelMoveTest, ServerStaysIdleAndUnusedByDefault)
+{
+  // Behaviour without any goal is the old behaviour (apart from the Move Stop at connect).
+  Begin();
+  StartLoop(0.1);
+  std::this_thread::sleep_for(300ms);
+  EXPECT_EQ(server.Commands(), kStartupSequence);
+  EXPECT_TRUE(AnyNonZeroJog(server, Clock::now() - 100ms));
+  EXPECT_EQ(rebel->MoveStateValue(), 0);
+}
+
+// ---- peer fault: the other arm of a fault group moves ----
+TEST_F(RebelFaultGroupTest, PeerFaultSendsMoveStopWithinTwentyMilliseconds)
+{
+  Arm left;
+  Arm right;
+  StartArmedPair(left, right, "movegroup");
+  left.server->SetOverride(100.0f);
+  right.server->SetOverride(100.0f);
+  std::this_thread::sleep_for(150ms);
+  ASSERT_EQ(left.rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  left.server->SetMoveSpeedDegS(10.0);
+
+  MoveClient client("/igus_rebel_left/move_joint");
+  ASSERT_TRUE(client.WaitForServer());
+  const auto goal = MakeMoveGoal(
+    left.rebel->JointNames(), left.server->CurrentDeg(), {30.0, 0, 0, 0, 0, 0});
+  const auto handle = client.Send(goal);
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(
+    WaitFor(
+      [&]() {
+        return left.server->MoveActive() && left.server->CurrentDeg()[0] > 11.0f;
+      }, 3000ms));
+
+  const auto at = Clock::now();
+  right.rebel->on_error(rclcpp_lifecycle::State());  // root-cause fault of the other arm
+  ASSERT_TRUE(WaitFor([&]() {return MoveStopCount(*left.server, at) >= 1;}, 500ms));
+  EXPECT_LT(left.server->FirstCommandAfter("Move Stop", at) - at, 20ms);
+  const auto result = client.Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::FAULT) << result.result->message;
+  EXPECT_TRUE(result.result->stop_sent);
+  EXPECT_FALSE(left.server->MoveActive());
+  EXPECT_TRUE(left.rebel->HardwareErrorLatched());
+}
+
+// A supervisor abort (here: path deviation) is a fault of the group: the other arm is stopped.
+TEST_F(RebelFaultGroupTest, SupervisorPathDeviationStopsTheOtherArm)
+{
+  Arm left;
+  Arm right;
+  StartArmedPair(left, right, "supgroup");
+  left.server->SetOverride(100.0f);
+  right.server->SetOverride(100.0f);
+  std::this_thread::sleep_for(150ms);
+  ASSERT_EQ(left.rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  left.server->SetMoveSpeedDegS(20.0);
+  left.server->SetMoveDeviationDeg(5.0);
+
+  MoveClient client("/igus_rebel_left/move_joint");
+  ASSERT_TRUE(client.WaitForServer());
+  const auto goal = MakeMoveGoal(
+    left.rebel->JointNames(), left.server->CurrentDeg(), {30.0, 0, 0, 0, 0, 0});
+  const auto handle = client.Send(goal);
+  ASSERT_NE(handle, nullptr);
+  const auto result = client.Result(handle);
+  EXPECT_EQ(result.result->error_code, MoveResult::PATH_DEVIATION) << result.result->message;
+  EXPECT_TRUE(left.rebel->HardwareErrorLatched());
+  EXPECT_TRUE(right.rebel->HardwareErrorLatched());
+  EXPECT_FALSE(left.server->MoveActive());
+}
+
+// Every abort after CMD Move Joint was sent is a fault of the group, also while the group monitor
+// is not armed yet (the first 500 ms after connect): the move thread latches and reports it.
+class RebelPostSendAbortTest : public RebelFaultGroupTest
+{
+protected:
+  enum class Abort
+  {
+    kAckTimeout, kCmdError, kKinematics, kDrivesDisabled, kSendFailure, kRobotError
+  };
+
+  void RunAbort(Abort abort, std::uint8_t expectedCode)
+  {
+    Arm left;
+    Arm right;
+    StartArm(left, "left", "postsend");
+    StartArm(right, "right", "postsend");
+    ASSERT_NE(left.rebel, nullptr);
+    ASSERT_NE(right.rebel, nullptr);
+    left.server->SetOverride(100.0f);
+    right.server->SetOverride(100.0f);
+    ASSERT_TRUE(WaitFor([&]() {return left.server->Commands().size() >= 6;}, 3000ms));
+    std::this_thread::sleep_for(100ms);  // the override STATUS reaches the driver
+    ASSERT_EQ(left.rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+    left.server->SetMoveSpeedDegS(10.0);
+    if (abort == Abort::kAckTimeout) {
+      left.server->SetSuppressMoveAck(true);
+    } else if (abort == Abort::kCmdError) {
+      left.server->SetMoveCmdError(true);
+    } else if (abort == Abort::kSendFailure) {
+      left.rebel->FailNextMoveJointSendForTest();
+    }
+
+    MoveClient client("/igus_rebel_left/move_joint");
+    ASSERT_TRUE(client.WaitForServer());
+    const auto handle = client.Send(
+      MakeMoveGoal(left.rebel->JointNames(), left.server->CurrentDeg(), {30.0, 0, 0, 0, 0, 0}));
+    ASSERT_NE(handle, nullptr);
+    if (abort == Abort::kKinematics || abort == Abort::kDrivesDisabled) {
+      ASSERT_TRUE(WaitFor([&]() {return left.server->MoveActive();}, 2000ms));
+      // The grace window: the group monitor (CheckFaultGroupStatus) is not armed, so only the
+      // move thread can report this.
+      ASSERT_FALSE(left.rebel->FaultMonitorArmed());
+      if (abort == Abort::kKinematics) {
+        left.server->SetKinstate(99);
+      } else {
+        left.server->SetDisabledMask(0x01);
+        left.server->SetIgnoreEnable(true);
+      }
+    }
+    if (abort == Abort::kRobotError) {
+      ASSERT_TRUE(WaitFor([&]() {return left.server->MoveActive();}, 2000ms));
+      left.server->InjectMessage("MOVETOEXECERROR 0 0 MoveTo Hardware error _ESTOP");
+    }
+    const auto result = client.Result(handle);
+    EXPECT_EQ(result.result->error_code, expectedCode) << result.result->message;
+    EXPECT_TRUE(result.result->stop_sent);
+    EXPECT_TRUE(left.rebel->HardwareErrorLatched());
+    EXPECT_TRUE(WaitFor([&]() {return right.rebel->HardwareErrorLatched();}, 1000ms))
+      << "the peer arm was not stopped";
+    EXPECT_FALSE(left.server->MoveActive());
+  }
+};
+
+TEST_F(RebelPostSendAbortTest, AckTimeoutStopsTheOtherArm)
+{
+  RunAbort(Abort::kAckTimeout, MoveResult::ACK_TIMEOUT);
+}
+
+TEST_F(RebelPostSendAbortTest, CmdErrorStopsTheOtherArm)
+{
+  RunAbort(Abort::kCmdError, MoveResult::CMD_ERROR);
+}
+
+TEST_F(RebelPostSendAbortTest, MoveJointSendFailureStopsTheOtherArm)
+{
+  RunAbort(Abort::kSendFailure, MoveResult::CMD_ERROR);
+}
+
+TEST_F(RebelPostSendAbortTest, RobotReportedErrorStopsTheOtherArm)
+{
+  RunAbort(Abort::kRobotError, MoveResult::FAULT);
+}
+
+TEST_F(RebelPostSendAbortTest, KinematicsErrorBeforeTheMonitorIsArmedStopsTheOtherArm)
+{
+  RunAbort(Abort::kKinematics, MoveResult::FAULT);
+}
+
+TEST_F(RebelPostSendAbortTest, DrivesDisabledBeforeTheMonitorIsArmedStopsTheOtherArm)
+{
+  RunAbort(Abort::kDrivesDisabled, MoveResult::FAULT);
+}
+
+// Pre-send refusals and an operator cancel are not faults of the group.
+TEST_F(RebelFaultGroupTest, CancelAndRefusalDoNotStopTheOtherArm)
+{
+  Arm left;
+  Arm right;
+  StartArmedPair(left, right, "cancelgroup");
+  left.server->SetOverride(100.0f);
+  right.server->SetOverride(100.0f);
+  std::this_thread::sleep_for(150ms);
+  ASSERT_EQ(left.rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  left.server->SetMoveSpeedDegS(10.0);
+  MoveClient client("/igus_rebel_left/move_joint");
+  ASSERT_TRUE(client.WaitForServer());
+  auto bad = MakeMoveGoal(
+    left.rebel->JointNames(), left.server->CurrentDeg(), {30.0, 0, 0, 0, 0, 0});
+  bad.start_positions[0] += 0.5;  // START_DEVIATION: refused before anything is sent
+  auto refused = client.Send(bad);
+  ASSERT_NE(refused, nullptr);
+  EXPECT_EQ(client.Result(refused).result->error_code, MoveResult::START_DEVIATION);
+
+  const auto handle = client.Send(
+    MakeMoveGoal(left.rebel->JointNames(), left.server->CurrentDeg(), {30.0, 0, 0, 0, 0, 0}));
+  ASSERT_NE(handle, nullptr);
+  ASSERT_TRUE(WaitFor([&]() {return left.server->MoveActive();}, 2000ms));
+  std::this_thread::sleep_for(300ms);
+  client.Cancel(handle);
+  EXPECT_EQ(client.Result(handle).result->error_code, MoveResult::CANCELED);
+  std::this_thread::sleep_for(200ms);
+  EXPECT_FALSE(left.rebel->HardwareErrorLatched());
+  EXPECT_FALSE(right.rebel->HardwareErrorLatched());
+}
+
+// The emulated robot keeps moving when its client goes away (matches the real controller).
+TEST(FakeCriServerMove, MoveContinuesWithoutAClientAndStopsOnMoveStop)
+{
+  FakeCriServer server;
+  server.SetMoveSpeedDegS(40.0);
+  const auto connect = [&]() {
+      const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+      sockaddr_in address{};
+      address.sin_family = AF_INET;
+      address.sin_port = htons(server.port());
+      address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+      EXPECT_EQ(::connect(fd, reinterpret_cast<sockaddr *>(&address), sizeof(address)), 0);
+      return fd;
+    };
+  const auto sendFrame = [](int fd, const std::string & text) {
+      ::send(fd, text.data(), text.size(), MSG_NOSIGNAL);
+    };
+  const auto readAll = [](int fd, std::chrono::milliseconds duration) {
+      std::string data;
+      const auto end = Clock::now() + duration;
+      while (Clock::now() < end) {
+        pollfd p{fd, POLLIN, 0};
+        if (::poll(&p, 1, 20) > 0) {
+          char buffer[8192];
+          const ssize_t n = ::recv(fd, buffer, sizeof(buffer), 0);
+          if (n <= 0) {break;}
+          data.append(buffer, static_cast<std::size_t>(n));
+        }
+      }
+      return data;
+    };
+
+  int fd = connect();
+  sendFrame(
+    fd,
+    "CRISTART 5 CMD Move Joint 40.000 20.000 -30.000 40.000 50.000 -60.000 0 0 0 25 40 CRIEND\n");
+  const std::string first = readAll(fd, 300ms);
+  EXPECT_NE(first.find("MOVETOEXECACK 0 0 MoveTo"), std::string::npos);
+  EXPECT_NE(first.find("CMDACK 5"), std::string::npos);
+  ::close(fd);  // client gone: the move goes on
+  std::this_thread::sleep_for(300ms);
+  EXPECT_GT(server.CurrentDeg()[0], 10.0f);
+  EXPECT_TRUE(server.MoveActive() || server.CurrentDeg()[0] >= 39.9f);
+
+  fd = connect();
+  sendFrame(
+    fd,
+    "CRISTART 1 CMD Move Joint 10.000 20.000 -30.000 40.000 50.000 -60.000 0 0 0 25 40 CRIEND\n");
+  readAll(fd, 100ms);
+  // A second Move Joint replaces the target (and the first never reaches 40).
+  sendFrame(fd, "CRISTART 2 CMD Move Stop CRIEND\n");
+  const std::string stopped = readAll(fd, 200ms);
+  EXPECT_NE(stopped.find("MOVETOEXECEND 0 0 MoveTo USER"), std::string::npos) << stopped;
+  EXPECT_FALSE(server.MoveActive());
+  ::close(fd);
 }
 
 int main(int argc, char ** argv)

@@ -6,6 +6,7 @@
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/vector3_stamped.hpp>
 #include <moveit/collision_detection/collision_matrix.h>
+#include <moveit/kinematic_constraints/kinematic_constraint.h>
 #include <moveit/planning_scene/planning_scene.h>
 #include <moveit/robot_state/cartesian_interpolator.h>
 #include <moveit/robot_state/robot_state.h>
@@ -38,9 +39,18 @@
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include "igus_rebel_moveit_config/rebel_analytic_ik.hpp"
+#include "igus_rebel_moveit_config/left_blade_cap.hpp"
+#include "igus_rebel_moveit_config/left_contact_travel.hpp"
+#include "igus_rebel_moveit_config/left_cut_direction.hpp"
+#include "igus_rebel_moveit_config/left_cut_patch.hpp"
 #include "igus_rebel_moveit_config/left_varying_chain.hpp"
+#include "igus_rebel_moveit_config/middle_cut_sag.hpp"
 #include "igus_rebel_moveit_config/snapshot_frame.hpp"
+#include "igus_rebel_moveit_config/snapshot_top_face.hpp"
+#include "igus_rebel_moveit_config/top_cut_descent.hpp"
 #include "igus_rebel_moveit_config/plan_export.hpp"
+#include "igus_rebel_moveit_config/probe_scene_objects.hpp"
+#include "igus_rebel_moveit_config/transit_unwind.hpp"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -51,6 +61,7 @@
 #include <fstream>
 #include <functional>
 #include <iomanip>
+#include <iostream>
 #include <limits>
 #include <map>
 #include <memory>
@@ -114,15 +125,42 @@ private:
 // min(stage timeout, max_total_s). The target pose is never altered and the trajectory
 // is still produced by the wrapped planner; the solution-level wrist guard remains
 // authoritative.
+//
+// Safe unwind detour (transit_unwind_detour_enabled, transit_unwind.hpp). With the flag false nothing below runs and
+// the planner is the old code, bit for bit. With the flag true the direct attempts are the SAME attempts in the same
+// order (candidate branches, then the one retry of the original pose goal); the only differences are (a) a direct
+// result whose path winds joint6 by more than pi is not returned at once (the wrist gate would refuse it) but held,
+// and (b) after ALL of them failed, ONE detour is tried as the last resort, within the caller's REMAINING budget: a
+// straight Cartesian lift along +Z, the wrist rotated in joint space at the lifted pose, then joint interpolation to
+// the goal branch. Refused when the start scene allows any tool/carton contact or the start state is not collision
+// free in a STRICT scene (carton pairs forced to "not allowed"); every leg is planned and validated in that strict
+// scene. The legs are stitched at full stops (zero velocity and acceleration) into ONE trajectory of the same MoveTo
+// stage, which is then validated densely along the controller's quintic spline (collision, joint bounds, 5 mm of
+// clearance on the wrist leg, total joint6 travel <= pi, path constraints, straight +Z lift). If the detour fails
+// the held direct result (if any) is returned unchanged, so the solution-level wrist gate refuses it as before.
+struct TransitDetourConfig
+{
+  bool enabled{false};
+  double max_lift_m{transit_unwind::kDefaultMaxLiftM};
+  mtc::solvers::PlannerInterfacePtr joint;  // leg 2 / leg 3: joint interpolation at the transit scalings
+  mtc::solvers::PlannerInterfacePtr lift;   // leg 1: straight Cartesian lift at the transit scalings, min_fraction 1.0
+  std::string carton_collision_id;          // the detour is refused when tool/carton contact is allowed for this object
+  // Called with the final trajectory and a one-line description when a detour was used.
+  std::function<void(const robot_trajectory::RobotTrajectory*, const std::string&)> report;
+};
+
 class NearestBranchTransitPlanner : public mtc::solvers::PlannerInterface
 {
 public:
-  NearestBranchTransitPlanner(mtc::solvers::PlannerInterfacePtr inner, double max_total_s)
-  : inner_(std::move(inner)), max_total_s_(max_total_s) {}
+  NearestBranchTransitPlanner(
+    mtc::solvers::PlannerInterfacePtr inner, double max_total_s, TransitDetourConfig detour = {})
+  : inner_(std::move(inner)), max_total_s_(max_total_s), detour_(std::move(detour)) {}
 
   void init(const moveit::core::RobotModelConstPtr& robot_model) override
   {
     inner_->init(robot_model);
+    if (detour_.joint) detour_.joint->init(robot_model);
+    if (detour_.lift) detour_.lift->init(robot_model);
   }
 
   Result plan(
@@ -176,7 +214,7 @@ private:
   {
     const auto logger = rclcpp::get_logger("box_h_cut_executor.transit_ik");
     constexpr double kPi = 3.14159265358979323846;
-    const auto started = std::chrono::steady_clock::now();
+    auto started = std::chrono::steady_clock::now();
     const double budget_s = std::min(timeout, max_total_s_);
     const auto remaining_s = [&]() {
       return budget_s -
@@ -334,6 +372,8 @@ private:
     RCLCPP_INFO(logger, "transit goal %s", summary.str().c_str());
 
     Result last{false, "no IK branch could be planned"};
+    const bool detour_on = detour_.enabled && detour_.joint && detour_.lift;
+    if (!detour_on) {
     for (const auto& candidate : candidates) {
       const double left_s = remaining_s();
       if (left_s <= 0.0) {
@@ -351,6 +391,97 @@ private:
         return last;
       }
     }
+    } else {
+      // ---- detour ON: the same attempts in the same order as the old code above (see the class comment) ----
+      const auto path_travel6 = [&](const robot_trajectory::RobotTrajectory& trajectory) {
+        double travel = 0.0;
+        for (std::size_t index = 1U; index < trajectory.getWayPointCount(); ++index) {
+          travel += std::abs(
+            trajectory.getWayPoint(index).getVariablePosition(variables[*j6]) -
+            trajectory.getWayPoint(index - 1U).getVariablePosition(variables[*j6]));
+        }
+        return travel;
+      };
+      robot_trajectory::RobotTrajectoryPtr held_trajectory;
+      Result held_result{false, ""};
+      std::vector<std::string> reasons;
+      const auto add_reason = [&](const std::string& text) {
+        if (std::find(reasons.begin(), reasons.end(), text) == reasons.end()) reasons.push_back(text);
+      };
+      // A successful direct result whose path winds joint6 by more than pi would be refused by the wrist gate:
+      // hold the first one (returned unchanged if the detour fails too) and report true.
+      const auto hold_if_winding = [&](const Result& outcome) {
+        if (!outcome || !result || result->empty()) return false;
+        const double travel6 = path_travel6(*result);
+        if (travel6 <= transit_unwind::kMaxWristTravelRad) return false;
+        std::ostringstream text;
+        text << std::fixed << std::setprecision(3) << "planned path winds joint6 by " << travel6 << " rad (> pi)";
+        add_reason(text.str());
+        if (!held_trajectory) {
+          held_trajectory = std::make_shared<robot_trajectory::RobotTrajectory>(*result, true);
+          held_result = outcome;
+        }
+        return true;
+      };
+      for (const auto& candidate : candidates) {
+        const double left_s = remaining_s();
+        if (left_s <= 0.0) {
+          last = Result{false, "transit planning budget exhausted"};
+          break;
+        }
+        auto goal_scene = from->diff();
+        goal_scene->getCurrentStateNonConst().setJointGroupPositions(jmg, candidate);
+        goal_scene->getCurrentStateNonConst().update();
+        last = inner_->plan(from, goal_scene, jmg, left_s, result, path_constraints);
+        if (last) {
+          if (hold_if_winding(last)) {
+            last = Result{false, "planned path winds joint6 by more than pi"};
+            continue;
+          }
+          RCLCPP_INFO(
+            logger, "transit planned to IK branch joint6=%.4f (joint6 change %.4f rad)",
+            candidate[*j6], wrist_travel(candidate));
+          return last;
+        }
+        add_reason(wrist_travel(candidate) > kPi ? last.message + " (joint6 change > pi)" : last.message);
+      }
+      RCLCPP_WARN(
+        logger, "every seeded IK branch failed (%s); retrying the original pose goal once",
+        last.message.c_str());
+      const Result retry = plan_original_pose();
+      if (retry && !hold_if_winding(retry)) return retry;
+      if (!retry) add_reason("original pose goal: " + retry.message);
+      // Last resort: the detour, toward the branches whose NET joint6 change is within pi.
+      std::vector<std::vector<double>> reachable;
+      for (const auto& candidate : candidates) {
+        if (wrist_travel(candidate) <= kPi) reachable.push_back(candidate);
+      }
+      std::string detour_message = "no IK branch within pi of joint6 change";
+      if (!reachable.empty()) {
+        std::string joined;
+        for (const auto& reason : reasons) joined += (joined.empty() ? "" : "; ") + reason;
+        if (joined.size() > 400U) joined = joined.substr(0U, 400U) + "...";
+        // The detour's deadline is the documented per-transit budget (planning_timeout_s, max_total_s_) counted
+        // from the START of this planner call, so the direct attempts above have already been charged to it (never
+        // a fresh budget). The MTC stage timeout (default 1 s) is the direct-phase cap above and is far too short
+        // to plan AND densely validate a detour.
+        const auto deadline = started + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+          std::chrono::duration<double>(max_total_s_));
+        const Result detour = planDetour(
+          from, link, offset, jmg, reachable, start, start_values, j4, j5, *j6, near_limit, joined, result,
+          path_constraints, deadline);
+        if (detour) return detour;
+        detour_message = detour.message;
+        RCLCPP_WARN(logger, "transit detour via unwind waypoint not possible (%s)", detour_message.c_str());
+      }
+      if (held_trajectory) {
+        // as without the detour: the solution-level wrist gate refuses this path
+        result = held_trajectory;
+        return held_result;
+      }
+      return Result{
+        false, last.message + "; original pose goal retry: " + retry.message + "; detour: " + detour_message};
+    }
     RCLCPP_WARN(
       logger, "every seeded IK branch failed (%s); retrying the original pose goal once",
       last.message.c_str());
@@ -359,8 +490,377 @@ private:
     return Result{false, last.message + "; original pose goal retry: " + retry.message};
   }
 
+  // The unwind detour (see the class comment and TransitDetourConfig). `goals` are the exact-pose, collision-free
+  // IK branches whose NET joint6 change is within pi. Everything is planned and validated in a STRICT scene (a copy
+  // of the start scene with every robot link vs the carton forced to "contact not allowed"), and the detour is
+  // refused outright when the start scene allows any tool/carton contact or the start state collides in the strict
+  // scene. Search: lift heights 0.05 m .. transit_unwind_max_lift_m (ascending), each a straight +Z Cartesian lift
+  // (orientation held, fraction 1.0); the lifted pose and the wrist waypoint must keep transit_unwind::kClearanceFloorM
+  // (robot vs world AND robot vs robot, SRDF-disabled pairs ignored); at the lifted pose the wrist (joint6;
+  // joint4+6; joint4/5/6) is set to the goal branch's values by joint interpolation, then joint interpolation to the
+  // goal branch. Candidates (waypoint-level joint6 travel <= pi) are ranked by total joint travel; in that order each
+  // is stitched at full stops and validated DENSELY along the controller's quintic spline (collision, joint bounds,
+  // 5 mm clearance on the wrist leg, total joint6 travel <= pi, path constraints, straight +Z lift); the first that
+  // passes everything before the deadline is returned. The deadline is the caller's remaining budget: when it
+  // passes, planning and validation stop and nothing that was not fully validated before it is returned.
+  Result planDetour(
+    const planning_scene::PlanningSceneConstPtr& from, const moveit::core::LinkModel& link,
+    const Eigen::Isometry3d& offset, const moveit::core::JointModelGroup* jmg,
+    const std::vector<std::vector<double>>& goals, const moveit::core::RobotState& start,
+    const std::vector<double>& start_values, std::optional<std::size_t> j4,
+    std::optional<std::size_t> j5, std::size_t j6,
+    const std::function<bool(const std::vector<double>&)>& near_limit, const std::string& direct_reason,
+    robot_trajectory::RobotTrajectoryPtr& result, const moveit_msgs::msg::Constraints& path_constraints,
+    const std::chrono::steady_clock::time_point& deadline)
+  {
+    using Clock = std::chrono::steady_clock;
+    const auto logger = rclcpp::get_logger("box_h_cut_executor.transit_ik");
+    const auto expired = [&]() { return Clock::now() >= deadline; };
+    const auto left_s = [&]() { return std::chrono::duration<double>(deadline - Clock::now()).count(); };
+    if (expired()) {
+      return Result{false, "no planning budget left for the detour (the direct attempts used it)"};
+    }
+    const auto lifts = transit_unwind::liftCandidates(detour_.max_lift_m);
+    if (lifts.empty()) return Result{false, "transit_unwind_max_lift_m is outside [0.05, 0.30] m"};
+    const std::string& carton = detour_.carton_collision_id;
+    if (carton.empty()) return Result{false, "detour refused: the carton collision id is unknown"};
+    const moveit::core::RobotModelConstPtr model = start.getRobotModel();
+    const std::string group_name = jmg->getName();
+
+    // ---- finding 2: refuse when the start scene allows ANY tool/carton contact ----
+    {
+      const auto& acm = from->getAllowedCollisionMatrix();
+      std::vector<std::pair<std::string, bool>> entries;
+      collision_detection::AllowedCollision::Type type;
+      const bool carton_default_allowed =
+        acm.getDefaultEntry(carton, type) && type != collision_detection::AllowedCollision::NEVER;
+      for (const auto& link_name : model->getLinkModelNames()) {
+        bool allowed = carton_default_allowed;
+        if (acm.getEntry(link_name, carton, type) && type != collision_detection::AllowedCollision::NEVER) {
+          allowed = true;
+        }
+        entries.emplace_back(link_name, allowed);
+      }
+      const std::string refusal = transit_unwind::contactAllowanceRefusal(entries, carton);
+      if (!refusal.empty()) return Result{false, refusal};
+    }
+    // STRICT scene: every link vs the carton forced to NOT allowed.
+    auto strict = from->diff();
+    {
+      auto& strict_acm = strict->getAllowedCollisionMatrixNonConst();
+      for (const auto& link_name : model->getLinkModelNames()) strict_acm.setEntry(link_name, carton, false);
+    }
+    moveit::core::RobotState start_state(start);
+    start_state.update();
+    if (strict->isStateColliding(start_state, group_name)) {
+      return Result{false, "detour refused: the start state is not collision free in the strict scene "
+        "(tool still in contact with / inside the carton?)"};
+    }
+    // clearance (m): robot vs world AND robot vs robot (self), SRDF-disabled pairs ignored, carton pairs strict
+    const auto clearance = [&](const moveit::core::RobotState& state) {
+      collision_detection::DistanceRequest request;
+      request.group_name = group_name;
+      request.enableGroup(model);
+      request.acm = &strict->getAllowedCollisionMatrix();
+      request.enable_signed_distance = true;
+      collision_detection::DistanceResult world_result, self_result;
+      strict->getCollisionEnv()->distanceRobot(request, world_result, state);
+      strict->getCollisionEnv()->distanceSelf(request, self_result, state);
+      return std::min(world_result.minimum_distance.distance, self_result.minimum_distance.distance);
+    };
+
+    moveit::core::RobotState start_probe(start);
+    start_probe.update();
+    const Eigen::Isometry3d start_frame = start_probe.getGlobalLinkTransform(&link) * offset;
+    const auto scene_at = [&](const std::vector<double>& q) {
+      auto scene = strict->diff();
+      scene->getCurrentStateNonConst().setJointGroupPositions(jmg, q);
+      scene->getCurrentStateNonConst().update();
+      return scene;
+    };
+    const auto rows = [&](const robot_trajectory::RobotTrajectory& trajectory) {
+      transit_unwind::Path path;
+      for (std::size_t index = 0U; index < trajectory.getWayPointCount(); ++index) {
+        std::vector<double> q;
+        trajectory.getWayPoint(index).copyJointGroupPositions(jmg, q);
+        path.push_back(std::move(q));
+      }
+      return path;
+    };
+    const auto max_diff = [](const std::vector<double>& a, const std::vector<double>& b) {
+      double m = 0.0;
+      for (std::size_t i = 0U; i < a.size() && i < b.size(); ++i) m = std::max(m, std::abs(a[i] - b[i]));
+      return m;
+    };
+    constexpr double kSkipLegRad = 1e-4;  // legs shorter than this are not planned (state already there)
+    // planning-time prefilter of one leg: every sample (kDenseJointStepRad of joint distance) collision free
+    const auto leg_clear = [&](const robot_trajectory::RobotTrajectory& leg) {
+      moveit::core::RobotState probe(leg.getWayPoint(0));
+      for (std::size_t index = 0U; index < leg.getWayPointCount(); ++index) {
+        const auto& to = leg.getWayPoint(index);
+        if (index > 0U) {
+          const auto& previous = leg.getWayPoint(index - 1U);
+          const auto steps = std::max<std::size_t>(
+            1U, static_cast<std::size_t>(std::ceil(previous.distance(to, jmg) / transit_unwind::kDenseJointStepRad)));
+          for (std::size_t k = 1U; k < steps; ++k) {
+            previous.interpolate(to, static_cast<double>(k) / static_cast<double>(steps), probe);
+            probe.update();
+            if (strict->isStateColliding(probe, group_name)) return false;
+          }
+        }
+        probe = to;
+        probe.update();
+        if (strict->isStateColliding(probe, group_name)) return false;
+      }
+      return true;
+    };
+
+    struct Planned
+    {
+      transit_unwind::Candidate candidate;
+      robot_trajectory::RobotTrajectoryPtr leg1, leg2, leg3;
+      double waypoint6{0.0}, goal6{0.0};
+    };
+    std::vector<Planned> planned;
+    std::vector<transit_unwind::Candidate> summary;
+    std::string why = "no lift height gave a collision-free, wrist-limited unwind with " +
+      std::to_string(static_cast<int>(std::lround(transit_unwind::kClearanceFloorM * 1000.0))) + " mm clearance";
+    std::size_t planned_legs = 0U;
+    bool out_of_time = false;
+    for (const double lift : lifts) {
+      if (expired()) {
+        out_of_time = true;
+        break;
+      }
+      Eigen::Isometry3d lift_target = start_frame;
+      lift_target.translation().z() += lift;
+      robot_trajectory::RobotTrajectoryPtr leg1;
+      const Result r1 = detour_.lift->plan(
+        strict, link, offset, lift_target, jmg, std::max(0.0, left_s()), leg1, path_constraints);
+      ++planned_legs;
+      const int lift_mm = static_cast<int>(std::lround(lift * 1000.0));
+      if (!r1 || !leg1 || leg1->getWayPointCount() < 2U) {
+        // a higher lift retraces the same straight line: it cannot succeed where this one failed
+        why = "straight lift of " + std::to_string(lift_mm) + " mm failed (" + r1.message + ")";
+        break;
+      }
+      if (!leg_clear(*leg1)) {
+        why = "straight lift of " + std::to_string(lift_mm) + " mm collides between the planner's samples";
+        break;
+      }
+      std::vector<double> lifted;
+      leg1->getLastWayPoint().copyJointGroupPositions(jmg, lifted);
+      moveit::core::RobotState lifted_state(start);
+      lifted_state.setJointGroupPositions(jmg, lifted);
+      lifted_state.update();
+      const double lifted_clearance = clearance(lifted_state);
+      if (!transit_unwind::clearanceOk(lifted_clearance)) {
+        // finding 1: a lift height whose lifted pose is too close is rejected, the floor is never lowered
+        why = "lifted pose at " + std::to_string(lift_mm) + " mm has only " +
+          std::to_string(lifted_clearance * 1000.0) + " mm of clearance";
+        RCLCPP_INFO(logger, "detour: %s", why.c_str());
+        continue;
+      }
+      const auto lifted_scene = scene_at(lifted);
+      const transit_unwind::Path leg1_rows = rows(*leg1);
+      for (std::size_t goal_index = 0U; goal_index < goals.size(); ++goal_index) {
+        const auto& goal = goals[goal_index];
+        std::vector<std::vector<double>> tried_waypoints;
+        for (int option = 0; option < transit_unwind::kWristOptionCount; ++option) {
+          if (expired()) {
+            out_of_time = true;
+            break;
+          }
+          const auto waypoint = transit_unwind::wristWaypoint(
+            lifted, goal, j4, j5, j6, static_cast<transit_unwind::WristOption>(option));
+          bool duplicate = false;
+          for (const auto& earlier : tried_waypoints) duplicate = duplicate || max_diff(earlier, waypoint) < 1e-6;
+          if (duplicate) continue;
+          tried_waypoints.push_back(waypoint);
+          if (near_limit(waypoint) && !near_limit(goal)) continue;
+          moveit::core::RobotState waypoint_state(start);
+          waypoint_state.setJointGroupPositions(jmg, waypoint);
+          waypoint_state.update();
+          if (!waypoint_state.satisfiesBounds(jmg) || strict->isStateColliding(waypoint_state, group_name) ||
+              !transit_unwind::clearanceOk(clearance(waypoint_state))) {
+            continue;
+          }
+          const auto waypoint_scene = scene_at(waypoint);
+          robot_trajectory::RobotTrajectoryPtr leg2, leg3;
+          if (max_diff(lifted, waypoint) > kSkipLegRad) {
+            const Result r2 = detour_.joint->plan(
+              lifted_scene, waypoint_scene, jmg, std::max(0.0, left_s()), leg2, path_constraints);
+            ++planned_legs;
+            if (!r2 || !leg2 || leg2->getWayPointCount() < 2U || !leg_clear(*leg2)) continue;
+          }
+          if (max_diff(waypoint, goal) > kSkipLegRad) {
+            const Result r3 = detour_.joint->plan(
+              waypoint_scene, scene_at(goal), jmg, std::max(0.0, left_s()), leg3, path_constraints);
+            ++planned_legs;
+            if (!r3 || !leg3 || leg3->getWayPointCount() < 2U || !leg_clear(*leg3)) continue;
+          }
+          const transit_unwind::Path path = transit_unwind::concatenateLegs(
+            {leg1_rows, leg2 ? rows(*leg2) : transit_unwind::Path{},
+             leg3 ? rows(*leg3) : transit_unwind::Path{}});
+          Planned entry;
+          entry.candidate.lift_m = lift;
+          entry.candidate.goal_index = goal_index;
+          entry.candidate.option = option;
+          entry.candidate.joint_travel = transit_unwind::totalJointTravel(path);
+          entry.candidate.joint6_travel = transit_unwind::jointTravel(path, j6);
+          entry.leg1 = leg1;
+          entry.leg2 = leg2;
+          entry.leg3 = leg3;
+          entry.waypoint6 = waypoint[j6];
+          entry.goal6 = goal[j6];
+          RCLCPP_INFO(
+            logger, "detour candidate: lift %.0f mm, goal branch %zu (joint6 %.4f), wrist option %d, "
+            "joint travel %.3f rad, joint6 travel %.3f rad%s", lift * 1000.0, goal_index, goal[j6], option,
+            entry.candidate.joint_travel, entry.candidate.joint6_travel,
+            transit_unwind::acceptable(entry.candidate) ? "" : " (refused: joint6 travel > pi)");
+          if (!transit_unwind::acceptable(entry.candidate)) {
+            why = "every unwind candidate winds joint6 by more than pi (best " +
+              std::to_string(entry.candidate.joint6_travel) + " rad)";
+            continue;
+          }
+          summary.push_back(entry.candidate);
+          planned.push_back(std::move(entry));
+        }
+        if (out_of_time) break;
+      }
+      if (out_of_time) break;
+    }
+
+    // ---- stitch + dense validation, best candidate first ----
+    const std::vector<std::size_t> order = transit_unwind::rankCandidates(summary);
+    std::size_t validated_tries = 0U;
+    for (const std::size_t rank : order) {
+      if (expired()) {
+        out_of_time = true;
+        break;
+      }
+      const Planned& entry = planned[rank];
+      ++validated_tries;
+      // -- stitch at FULL STOPS: copy every waypoint (never alias the planners' trajectories), then zero velocity
+      // and acceleration at the two joins (the first waypoint of a later leg is dropped; its time is the join's).
+      auto combined = std::make_shared<robot_trajectory::RobotTrajectory>(model, jmg);
+      const auto append_copy = [&](const robot_trajectory::RobotTrajectory& leg, std::size_t first) {
+        for (std::size_t index = first; index < leg.getWayPointCount(); ++index) {
+          const double dt = combined->getWayPointCount() == 0U ? 0.0 : leg.getWayPointDurationFromPrevious(index);
+          combined->addSuffixWayPoint(leg.getWayPoint(index), dt);
+        }
+      };
+      append_copy(*entry.leg1, 0U);
+      const std::size_t join1 = combined->getWayPointCount() - 1U;
+      if (entry.leg2) append_copy(*entry.leg2, 1U);
+      const std::size_t join2 = combined->getWayPointCount() - 1U;
+      if (entry.leg3) append_copy(*entry.leg3, 1U);
+      for (const std::size_t join : {join1, join2}) {
+        if (join == 0U || join + 1U >= combined->getWayPointCount()) continue;
+        auto& state = combined->getWayPointPtr(join);
+        const std::vector<double> zero(state->getVariableCount(), 0.0);
+        state->setVariableVelocities(zero);
+        state->setVariableAccelerations(zero);
+      }
+      // -- the spline the controller will follow
+      std::vector<transit_unwind::SplinePoint> points;
+      double time_s = 0.0;
+      for (std::size_t index = 0U; index < combined->getWayPointCount(); ++index) {
+        const auto& state = combined->getWayPoint(index);
+        time_s += index == 0U ? 0.0 : combined->getWayPointDurationFromPrevious(index);
+        transit_unwind::SplinePoint point;
+        point.time_s = time_s;
+        state.copyJointGroupPositions(jmg, point.q);
+        if (state.hasVelocities()) state.copyJointGroupVelocities(jmg, point.v);
+        if (state.hasAccelerations()) state.copyJointGroupAccelerations(jmg, point.a);
+        points.push_back(std::move(point));
+      }
+      std::string failure;
+      for (const std::size_t join : {join1, join2}) {
+        if (join == 0U || join + 1U >= points.size()) continue;
+        if (points[join].v.size() != points[join].q.size() || points[join].a.size() != points[join].q.size() ||
+            !transit_unwind::isFullStop(points[join].v, points[join].a, 0.0)) {
+          failure = "a join waypoint is not a full stop";
+        }
+      }
+      const transit_unwind::DenseSamples dense = failure.empty() ? transit_unwind::sampleDense(points) :
+        transit_unwind::DenseSamples{};
+      if (failure.empty()) {
+        if (max_diff(dense.q.front(), start_values) > 1e-6 ||
+            max_diff(dense.q.back(), goals[entry.candidate.goal_index]) > 1e-6) {
+          failure = "the stitched trajectory does not run from the start state to the goal branch";
+        } else if (transit_unwind::jointTravel(dense.q, j6) > transit_unwind::kMaxWristTravelRad) {
+          failure = "dense joint6 travel " + std::to_string(transit_unwind::jointTravel(dense.q, j6)) +
+            " rad exceeds pi";
+        } else if (transit_unwind::maxJointJump(dense.q) > transit_unwind::kMaxJointJumpRad) {
+          failure = "a joint jumps more than 0.05 rad between dense samples";
+        }
+      }
+      std::unique_ptr<kinematic_constraints::KinematicConstraintSet> constraint_set;
+      if (failure.empty() &&
+          !(path_constraints.joint_constraints.empty() && path_constraints.position_constraints.empty() &&
+            path_constraints.orientation_constraints.empty() && path_constraints.visibility_constraints.empty())) {
+        constraint_set = std::make_unique<kinematic_constraints::KinematicConstraintSet>(model);
+        if (!constraint_set->add(path_constraints, strict->getTransforms())) {
+          failure = "the path constraints cannot be evaluated";
+        }
+      }
+      std::vector<Eigen::Isometry3d> lift_poses;
+      moveit::core::RobotState probe(start);
+      for (std::size_t i = 0U; failure.empty() && i < dense.q.size(); ++i) {
+        if ((i % 32U) == 0U && expired()) {
+          out_of_time = true;
+          failure = "deadline reached during validation";
+          break;
+        }
+        probe.setJointGroupPositions(jmg, dense.q[i]);
+        probe.update();
+        if (!probe.satisfiesBounds(jmg)) {
+          failure = "joint bounds violated at dense sample " + std::to_string(i);
+        } else if (strict->isStateColliding(probe, group_name)) {
+          failure = "collision at dense sample " + std::to_string(i) + " (strict scene)";
+        } else if (dense.interval_end[i] >= join1 && dense.interval_end[i] <= join2 && join2 > join1 &&
+                   !transit_unwind::clearanceOk(clearance(probe))) {
+          failure = "wrist leg clearance below " +
+            std::to_string(static_cast<int>(transit_unwind::kClearanceFloorM * 1000.0)) + " mm at dense sample " +
+            std::to_string(i);
+        } else if (constraint_set && !constraint_set->decide(probe).satisfied) {
+          failure = "path constraints violated at dense sample " + std::to_string(i);
+        }
+        if (failure.empty() && dense.interval_end[i] <= join1) {
+          lift_poses.push_back(probe.getGlobalLinkTransform(&link) * offset);
+        }
+      }
+      if (failure.empty()) {
+        const auto lift_check =
+          transit_unwind::checkLiftLine(lift_poses, Eigen::Vector3d::UnitZ(), entry.candidate.lift_m);
+        if (!lift_check.ok) failure = lift_check.message;
+      }
+      if (!failure.empty()) {
+        why = "candidate (lift " + std::to_string(static_cast<int>(std::lround(entry.candidate.lift_m * 1000.0))) +
+          " mm, option " + std::to_string(entry.candidate.option) + ") rejected by the dense validation: " + failure;
+        RCLCPP_INFO(logger, "detour: %s", why.c_str());
+        if (out_of_time) break;
+        continue;
+      }
+      const std::string note = transit_unwind::describe(
+        entry.candidate.lift_m, start_values[j6], entry.waypoint6, entry.goal6,
+        transit_unwind::jointTravel(dense.q, j6), direct_reason);
+      RCLCPP_WARN(
+        logger, "%s [joint travel %.3f rad, %zu candidate(s), validated densely %zu samples]", note.c_str(),
+        entry.candidate.joint_travel, summary.size(), dense.q.size());
+      result = combined;
+      if (detour_.report) detour_.report(combined.get(), note);
+      return Result{true, ""};
+    }
+    if (out_of_time) why = "detour deadline reached (" + why + ")";
+    return Result{false, why + " [" + std::to_string(planned_legs) + " legs planned, " +
+      std::to_string(summary.size()) + " candidates, " + std::to_string(validated_tries) + " validated]"};
+  }
+
   mtc::solvers::PlannerInterfacePtr inner_;
   double max_total_s_;
+  TransitDetourConfig detour_;
 };
 
 // Varying-orientation left cut: ONE contact stroke through a list of knot poses. Behaves like
@@ -574,6 +1074,9 @@ struct SegmentPlanOptions {
   // plan_h_cut only (return_home_after_cut): end the task with a free-space transit to the SRDF
   // "home" state (recorded for the wrist guard; collision-gated like every stage).
   bool return_home{false};
+  // Non-empty: do NOT add the left reverse patch even when the forward plan carries one (the retry
+  // after a patch-related planning failure); the text is the reason reported in the plan message.
+  std::string drop_patch_reason;
 };
 // The candidate the left_parallel search last selected (angles relative to F0).
 struct LeftParallelSelection {
@@ -603,21 +1106,78 @@ struct LeftVaryingPlan {
   bool extended{false};
   double trim_back_mm{0.0}, trim_front_mm{0.0};
   double max_theta_p_deg{0.0}, max_blade_deviation_deg{0.0};
+  // True blade-angle gate (left_varying_max_theta_p_deg ...): everything
+  // validateLeftVaryingRetainedStroke needs to re-evaluate the SAME check on the final retained
+  // trajectory (set by the search; blade_gate_valid false = refuse). Travel coordinates: s = 0 at
+  // `span_origin`, along `travel_dir` (unit), on the extended span.
+  bool blade_gate_valid{false};
+  left_blade_cap::Profile blade_cap;
+  bool has_seam_band{false};
+  double band_lo_m{0.0}, band_hi_m{0.0};  // seam band in travel coordinates (has_seam_band)
+  double blade_tolerance_deg{0.0};
+  Eigen::Vector3d span_origin{Eigen::Vector3d::Zero()}, travel_dir{Eigen::Vector3d::UnitX()},
+    blade_normal{Eigen::Vector3d::UnitZ()}, blade_along{Eigen::Vector3d::UnitX()};
   // left_varying_start_extra_inward_m: horizontal inward offset (mm) applied to the first and
   // the last kept station (already contained in LeftVaryingStation::position).
   double inward_start_mm{0.0}, inward_finish_mm{0.0};
   std::vector<double> hover_start_joints;  // transit goal (group order): verified hover state
+  // Joint state of the replayed finish (lateral withdrawal) leg's last waypoint: where the arm is
+  // after this stroke's finish; the left reverse patch uses it as the start of its approach transit.
+  std::vector<double> end_hover_joints;
+  // Left reverse patch (left_cut_patch.hpp), set on the FORWARD plan only and cached with it (so a
+  // retry that reuses the forward search does not re-search the patch). patch_attempted false = the
+  // patch was never evaluated (left_cut_patch_enabled off).
+  bool patch_attempted{false};
+  std::shared_ptr<LeftVaryingPlan> patch;      // non-null = a verified patch plan
+  std::string patch_status;                    // "not needed (...)" | "planned" | "dropped: <reason>"
+  left_cut_patch::Coverage patch_coverage;     // forward + (planned) patch coverage
+  double patch_from_back_middle_mm{0.0}, patch_to_back_middle_mm{0.0};  // physical, valid when patch
+  double forward_from_back_middle_mm{0.0}, forward_to_back_middle_mm{0.0};
   std::string summary;  // one line for the plan response
 };
 // left_cut_extend_to_corners geometry handed to searchLeftVaryingOrientation. Arc positions are
-// metres along the candidate line measured from its START (the back end of the extended span);
-// the nominal segment starts nominal_start_m along it and is nominal_length_m long.
+// metres along the candidate line measured from its START (the first point the blade reaches:
+// the back end of the extended span for forward travel, the front end for left_cut_direction
+// reverse - the geometry is mapped with left_cut_direction::toTravel); the nominal segment starts
+// nominal_start_m along it and is nominal_length_m long.
 struct LeftExtension {
   double nominal_length_m{0.0};
   double nominal_start_m{0.0};     // arc position of back_middle_left on the extended line
   double seam_m{0.0};              // arc position of the seam crossing
   double band_lo_m{0.0}, band_hi_m{0.0};  // required seam band, clamped to the span
   double corner_margin_m{0.0}, seam_cover_m{0.0};
+  double span_length_m{0.0};
+  // left_cut_direction reverse: all arc positions above are TRAVEL coordinates (front -> back).
+  bool reverse{false};
+  left_cut_direction::Convention convention{left_cut_direction::Convention::kStandard};
+  // Reverse patch search (left_cut_patch.hpp). The geometry above stays that of the FULL reverse
+  // span (travel coordinates, 0 = front end of the span); the search line is its sub-span that starts
+  // patch_origin_m along it and runs to the back end. The chain must start at or before station
+  // patch_first_max and end at or after station patch_last_min (stations of the sub-span).
+  bool patch{false};
+  double patch_origin_m{0.0};
+  std::size_t patch_first_max{0}, patch_last_min{0};
+  left_cut_direction::SpanGeometry travelGeometry() const
+  {
+    left_cut_direction::SpanGeometry g;
+    g.span_length_m = span_length_m;
+    g.nominal_start_m = nominal_start_m;
+    g.nominal_length_m = nominal_length_m;
+    g.seam_m = seam_m;
+    g.band_lo_m = band_lo_m;
+    g.band_hi_m = band_hi_m;
+    return g;
+  }
+  // Metres from back_middle_left along back -> front (physical) of a travel coordinate.
+  double fromBackMiddleM(double s_travel_m) const
+  {
+    return left_cut_direction::physicalFromBackMiddle(travelGeometry(), reverse, s_travel_m);
+  }
+  // Same for a coordinate measured from the start of the (patch) search line.
+  double fromBackMiddleLocalM(double s_local_m) const
+  {
+    return fromBackMiddleM(s_local_m + (patch ? patch_origin_m : 0.0));
+  }
 };
 struct Snapshot {
   std::string snapshot_id;
@@ -636,6 +1196,10 @@ struct Snapshot {
   geometry_msgs::msg::Point back_middle_right;
   geometry_msgs::msg::Point front_middle_right;
   geometry_msgs::msg::Vector3 surface_normal;
+  // Coordinator-derived top-split marker (dual_cut_coordinator_top_split), see snapshot_top_face.hpp.
+  // Set by parseSnapshotFromDocument AFTER the snapshot frame handling, so `extended` names the labelled
+  // seam point (post relabel) that the coordinator moved past the seam end.
+  snapshot_top_face::Marker top_split_marker{};
 };
 // Staged cut-debug session: start planned -> start executed (explicit dispatch) ->
 // start observation saved (teleop to the endpoint, then save completes the record).
@@ -740,7 +1304,13 @@ struct PlannerSettings {
     debug_motion_clearance_m{0.0}, cartesian_step_m{0.0}, planning_timeout_s{0.0},
     velocity_scaling{0.0}, acceleration_scaling{0.0}, transit_velocity_scaling{0.0},
     transit_acceleration_scaling{0.0};
+  // Top-cut sag profile (middle_cut_sag.hpp): extra depth at the seam centre / polyline spacing.
+  double middle_cut_sag_m{0.0}, middle_cut_sag_step_m{0.01};
   bool allow_tool_carton_contact{false}, camera_pole_required{true};
+  // The orientation-search probe scenes also hold every other world object of move_group's scene (the dual
+  // cell's table, camera_head ...), fetched with get_planning_scene; the scene unreadable = the probe fails.
+  // false = the former probe scenes (carton + camera pole only).
+  bool probe_scene_include_world_objects{true};
   // Links that get the scoped carton contact allowance during cut strokes (read-only). Empty (the
   // default) means {tool_link}: today's behaviour. A blade collision link of a per-arm model is listed
   // here so the exposed blade may touch the carton ONLY while a cut stage's allowance is installed.
@@ -785,6 +1355,9 @@ struct PlannerSettings {
   double side_tape_withdraw_min_clearance_m{0.001};
   double top_cut_pre_transit_lift_min_fraction{0.5};
   double top_cut_min_cut_fraction{0.5};
+  // middle_only fraction descent (plan_h_cut): a failure BEFORE the cut stroke whose inputs do not depend on the cut
+  // length (approach/align transit, its wrist gate) ends the 5 % descent early (top_cut_descent.hpp).
+  bool top_cut_fraction_descent_stop_on_fraction_independent_failure{true};
   std::string top_cut_staged_output_file;
   // Phase 1 speed-up (see rebel_analytic_ik.hpp): "analytic" replaces the left parallel
   // search's per-candidate KDL seed/wristVariants/random-restart IK with a closed-form
@@ -792,6 +1365,19 @@ struct PlannerSettings {
   // solver's own startup self-check against MoveIt FK does not pass). "kdl" keeps the
   // original behaviour byte-for-byte and is the documented fallback.
   std::string left_search_ik_backend{"analytic"};
+  // Varying + left_cut_extend_to_corners left cut only: travel direction (forward = back -> front,
+  // reverse = front -> back) and, for reverse, the reference-frame variant (left_cut_direction.hpp).
+  std::string left_cut_direction{"forward"}, left_reverse_frame{"about_normal"};
+  // Left side cut reverse patch (left_cut_patch.hpp): after the forward corner-to-corner stroke, a
+  // short REVERSE stroke covers an uncut back end larger than left_cut_patch_min_gap_m.
+  bool left_cut_patch_enabled{false};
+  double left_cut_patch_min_gap_m{0.015}, left_cut_patch_overlap_m{0.015};
+  // Left contact-stroke joint-travel gate (left_contact_travel.hpp): aggregate (default, 1.0 rad on
+  // every joint) or split (j4/j5/j6 1.0 rad, joint5 sign, constant sampled IK branch label, margins to
+  // the joint5 / elbow / shoulder boundaries, j1-3 arm cap).
+  std::string left_contact_travel_mode{"aggregate"};
+  double left_contact_arm_travel_max_rad{0.0}, left_contact_min_abs_joint5_deg{0.0},
+    left_contact_min_elbow_margin_deg{0.0}, left_contact_min_shoulder_margin_m{0.0};
   // Runtime-settable planning inputs.
   std::string motion_profile, cut_pattern, cut_debug_cut, cut_debug_left_correction_file,
     cut_debug_middle_correction_file, cut_debug_right_correction_file, cut_debug_output_dir,
@@ -814,15 +1400,22 @@ struct PlannerSettings {
     left_parallel_search_timeout_s{0.0}, left_varying_station_spacing_m{0.0},
     left_varying_max_step_deg{0.0}, left_varying_min_cut_fraction{0.0},
     left_cut_corner_margin_m{0.0}, left_cut_seam_cover_m{0.0},
-    left_varying_start_extra_inward_m{0.0}, left_cut_inward_m{0.0};
+    left_varying_start_extra_inward_m{0.0}, left_cut_inward_m{0.0},
+    left_varying_max_theta_p_deg{0.0}, left_varying_end_max_theta_p_deg{0.0},
+    left_varying_start_max_theta_p_deg{0.0}, left_varying_start_ramp_m{0.0},
+    left_varying_theta_p_tolerance_deg{0.0};
   bool debug_fixed_orientation{false}, debug_allow_stale_snapshot{false},
     cut_debug_correction_enabled{false}, left_adaptive_orientation_enabled{true},
     left_parallel_orientation_enabled{false}, left_cut_reverse_travel{false},
     left_parallel_varying_orientation_enabled{false}, left_cut_extend_to_corners{false},
     left_debug_stop_at_approach{false}, middle_cut_reverse_travel{false},
-    return_home_after_cut{false};
+    return_home_after_cut{false}, left_varying_diagnostics{false};
   double middle_cut_tilt_deg{0.0};
   double middle_transit_extra_lift_m{0.0};
+  // Safe unwind detour of a free-space transit (transit_unwind.hpp): used only when no direct branch plans or
+  // every one would wind joint6 by more than pi. Planning scope.
+  bool transit_unwind_detour_enabled{false};
+  double transit_unwind_max_lift_m{transit_unwind::kDefaultMaxLiftM};
   // Dual-arm planning stack (all default to today's single-arm behaviour; see CONTEXT.md).
   // snapshot_frame_*: how the perception snapshot is brought into planning_frame (read-only).
   // middle_seam_stop / middle_seam_center_overlap_m: half-seam top cut (planning, middle_only).
@@ -1229,6 +1822,8 @@ private:
       field<std::vector<std::string>>(
         "carton_contact_links", kRO, std::vector<std::string>{}, &S::carton_contact_links),
       field<bool>("camera_pole_required", kRO, true, &S::camera_pole_required),
+      field<bool>(
+        "probe_scene_include_world_objects", kRO, true, &S::probe_scene_include_world_objects),
       field<str>(
         "camera_pole_topic", kRO, "/box_motion/camera_pole_collision", &S::camera_pole_topic),
       field<double>("carton_height_m", kRO, 0.20, &S::carton_height_m),
@@ -1238,6 +1833,12 @@ private:
       // Default follows cut_clearance_m (substituted at declaration).
       field<double>("middle_cut_clearance_m", kRO, 0.05, &S::middle_cut_clearance_m),
       field<double>("middle_entry_alignment_m", kRO, 0.010, &S::middle_entry_alignment_m),
+      // Top-cut lid sag (2026-10-20, middle_cut_sag.hpp): extra depth along -surface_normal, 0 at the
+      // carton ends, this value at the seam centre ([0, 0.006] m). 0 (default) = the unchanged
+      // straight stroke, bit-identical plans; > 0 plans the middle stroke as a waypoint polyline
+      // (spacing middle_cut_sag_step_m, [0.003, 0.05] m) with min_fraction 1.0.
+      field<double>("middle_cut_sag_m", kPlan, 0.0, &S::middle_cut_sag_m),
+      field<double>("middle_cut_sag_step_m", kPlan, 0.01, &S::middle_cut_sag_step_m),
       field<double>(
         "pre_cut_stabilization_duration_s", kPlan, 1.0, &S::pre_cut_stabilization_duration_s),
       field<double>("left_side_cut_tilt_deg", kPlan, 0.0, &S::left_side_cut_tilt_deg),
@@ -1285,6 +1886,14 @@ private:
       // before the free-space transit, so the transit starts away from the carton and base.
       field<double>(
         "middle_transit_extra_lift_m", kPlan, 0.0, &S::middle_transit_extra_lift_m),
+      // Safe unwind detour of a free-space transit (2026-10-22, default OFF): when no direct IK branch gives an acceptable
+      // transit (collision, or joint6 travel > pi), try ONE detour: straight lift along +Z (0.05 m steps up to
+      // transit_unwind_max_lift_m, [0.05, 0.30]), wrist rotated in joint space at the lifted pose, then the
+      // transit to the goal branch. All legs collision-checked; TOTAL joint6 travel must stay <= pi.
+      field<bool>("transit_unwind_detour_enabled", kPlan, false, &S::transit_unwind_detour_enabled),  // OFF until the 2026-10-22 review fixes land
+      field<double>(
+        "transit_unwind_max_lift_m", kPlan, transit_unwind::kDefaultMaxLiftM,
+        &S::transit_unwind_max_lift_m),
       field<str>(
         "side_cut_orientation_mode", kRO, "edge_aligned", &S::side_cut_orientation_mode),
       field<bool>(
@@ -1317,6 +1926,36 @@ private:
       field<double>("left_varying_max_step_deg", kPlan, 5.0, &S::left_varying_max_step_deg),
       field<double>(
         "left_varying_min_cut_fraction", kPlan, 0.5, &S::left_varying_min_cut_fraction),
+      // True blade-angle gate (varying left cut only): theta_p = acos(|tool X . surface normal|)
+      // may not exceed this from the stroke start through the end of the seam band (the tape
+      // band; operator 2026-10-16: a steep blade at the start did not cut the tape). [5, 45].
+      // Applied to the per-station candidate set and to the final retained stroke
+      // (validateLeftVaryingRetainedStroke). Default 15.
+      field<double>(
+        "left_varying_max_theta_p_deg", kPlan, 15.0, &S::left_varying_max_theta_p_deg),
+      // Graded cap toward the END of the travel: after the seam band the cap rises linearly to
+      // this value at the end of the extended span. [left_varying_max_theta_p_deg, 45]; default
+      // 15 = no ramp. A ramp needs left_cut_extend_to_corners (the seam band is only known
+      // there). The candidate grid extent stays left_parallel_max_tilt_deg (tilt and pitch each,
+      // combined up to ~1.41x): an end cap above what the grid can produce needs a larger
+      // left_parallel_max_tilt_deg too.
+      field<double>(
+        "left_varying_end_max_theta_p_deg", kPlan, 15.0, &S::left_varying_end_max_theta_p_deg),
+      // Steeper cap at the START of the travel: 0 = off (default, plans unchanged); else
+      // [left_varying_max_theta_p_deg, 45]. The cap is this value from the stroke start until
+      // left_varying_start_ramp_m before the seam band, ramps linearly down to the band cap and
+      // reaches it exactly at the band entry: the tape band itself never exceeds the band cap
+      // (a steep blade at the tape did not cut it). Needs left_cut_extend_to_corners (the band
+      // is only known there); planning is refused otherwise.
+      field<double>(
+        "left_varying_start_max_theta_p_deg", kPlan, 0.0, &S::left_varying_start_max_theta_p_deg),
+      // Length of that ramp, ending at the band entry. [0, 0.2] m; 0 = a step at the band entry.
+      field<double>(
+        "left_varying_start_ramp_m", kPlan, 0.05, &S::left_varying_start_ramp_m),
+      // Tolerance of the final-stroke theta_p check over the station cap, covering the
+      // interpolation between stations (the report states the measured overshoot). [0, 3] deg.
+      field<double>(
+        "left_varying_theta_p_tolerance_deg", kRO, 1.0, &S::left_varying_theta_p_tolerance_deg),
       // Operator-approved: push the blade this far further INTO the box (horizontally inward,
       // opposite to the lateral standoff direction) at the START of the kept varying left
       // stroke, tapering linearly to 0 at its finish. [0, 0.005] m; > 0 needs
@@ -1335,6 +1974,55 @@ private:
       // left_parallel_varying_orientation_enabled. Default off: plans are unchanged.
       field<bool>(
         "left_cut_extend_to_corners", kPlan, false, &S::left_cut_extend_to_corners),
+      // Diagnostics only (default off; planning is unchanged either way): the varying search logs
+      // one machine-readable "LEFTDIAG" line per station (per-station breakdown of why the
+      // station/candidate pairs fail: wrist centre out of reach, joint limits, joint margin,
+      // collision, survivors, hover/exit gates) and the plan message gains the max blade deviation
+      // inside the seam band. Costs extra collision checks; not for normal use.
+      field<bool>("left_varying_diagnostics", kPlan, false, &S::left_varying_diagnostics),
+      // Varying + left_cut_extend_to_corners only (operator-approved design 2026-10-16, explicit,
+      // no auto selection): forward = back_middle_left -> front_middle_left (today), reverse =
+      // front -> back with the stations searched in travel order. Default forward: plans are
+      // unchanged. Refused with corrections, cut-debug, side-tape hand-off, continue_side_cut,
+      // side_cut_penetrate, plan_t_cut, t_cut_handoff, h/combined (not verified), the fixed-mode
+      // left_cut_reverse_travel and left_debug_stop_at_approach.
+      field<str>("left_cut_direction", kPlan, "forward", &S::left_cut_direction),
+      // Reverse only: how the tool frame is rotated for the flipped travel. about_normal = the
+      // forward frame rotated 180 deg about the surface normal (X = -normal, Y reverses, the knife
+      // axis Z flips to the other side of the cut line); about_edge = rotated 180 deg about tool Z
+      // (knife axis keeps its side, X = +normal, blade plate upside down). See left_cut_direction.hpp.
+      field<str>("left_reverse_frame", kPlan, "about_normal", &S::left_reverse_frame),
+      // Left reverse patch (operator-approved design 2026-11-06, default off = plans bit-identical):
+      // when the forward varying corner-to-corner left cut leaves a back-end gap larger than
+      // left_cut_patch_min_gap_m, the SAME plan gets a free-space transit to a patch approach pose,
+      // a lateral entry, a short REVERSE stroke (front -> back, frame per left_reverse_frame) that
+      // contains the point forward_kept_start + left_cut_patch_overlap_m and runs as far toward the
+      // back corner as reachable, and a lateral finish. Requires the forward varying
+      // corner-to-corner mode (refused with left_cut_direction reverse, left_cut_reverse_travel,
+      // corrections, cut-debug, side-tape hand-off, t_cut_handoff, left_debug_stop_at_approach,
+      // left_varying_start_extra_inward_m > 0). A patch that cannot be planned is DROPPED (forward-only
+      // plan, reason in the plan message); it never fails the plan.
+      field<bool>("left_cut_patch_enabled", kPlan, false, &S::left_cut_patch_enabled),
+      field<double>("left_cut_patch_min_gap_m", kPlan, 0.015, &S::left_cut_patch_min_gap_m),
+      field<double>("left_cut_patch_overlap_m", kPlan, 0.015, &S::left_cut_patch_overlap_m),
+      // Left contact-stroke joint-travel gate (search replay AND validateLeftContactJointTravel,
+      // every entry / cut / finish / lift stroke). aggregate (default, today's behaviour): every
+      // joint's aggregate travel <= 1.0 rad. split (needs left_parallel_orientation_enabled):
+      // joint4/joint5/joint6 aggregate travel <= 1.0 rad, joint5 keeps its sign, the Pieper IK
+      // branch label (shoulder x elbow x wrist) is constant over the sampled waypoints, every
+      // waypoint keeps margins to the joint5 / elbow (straight arm) / shoulder (joint1 axis)
+      // boundaries (the shoulder one is also proven between waypoints), joints 1-3 aggregate
+      // travel <= left_contact_arm_travel_max_rad. The long corner-to-corner stroke moves the
+      // elbow 1.0-1.7 rad legitimately. See left_contact_travel.hpp for what is and is not guaranteed.
+      field<str>("left_contact_travel_mode", kPlan, "aggregate", &S::left_contact_travel_mode),
+      field<double>(
+        "left_contact_arm_travel_max_rad", kPlan, 2.0, &S::left_contact_arm_travel_max_rad),
+      field<double>(
+        "left_contact_min_abs_joint5_deg", kPlan, 15.0, &S::left_contact_min_abs_joint5_deg),
+      field<double>(
+        "left_contact_min_elbow_margin_deg", kPlan, 5.0, &S::left_contact_min_elbow_margin_deg),
+      field<double>(
+        "left_contact_min_shoulder_margin_m", kPlan, 0.05, &S::left_contact_min_shoulder_margin_m),
       field<double>("left_cut_corner_margin_m", kPlan, 0.020, &S::left_cut_corner_margin_m),
       field<double>("left_cut_seam_cover_m", kPlan, 0.030, &S::left_cut_seam_cover_m),
       // Debug (operator-approved): with cut_pattern left_only, plan the full left cut as usual
@@ -1361,10 +2049,10 @@ private:
       field<double>("cartesian_step_m", kRO, 0.003, &S::cartesian_step_m),
       field<double>("planning_timeout_s", kRO, 15.0, &S::planning_timeout_s),
       field<double>("velocity_scaling", kRO, 0.1376, &S::velocity_scaling),
-      field<double>("acceleration_scaling", kRO, 0.0954, &S::acceleration_scaling),
+      field<double>("acceleration_scaling", kRO, 0.0763, &S::acceleration_scaling),  // 0.4 rad/s^2
       field<double>("transit_velocity_scaling", kRO, 0.1376, &S::transit_velocity_scaling),
       field<double>(
-        "transit_acceleration_scaling", kRO, 0.0954, &S::transit_acceleration_scaling),
+        "transit_acceleration_scaling", kRO, 0.0763, &S::transit_acceleration_scaling),  // 0.4 rad/s^2
       runtime("execution_enabled", rclcpp::ParameterValue(false)),
       runtime("debug_motion_execution_enabled", rclcpp::ParameterValue(false)),
       field<str>("cut_debug_cut", kPlan, "middle", &S::cut_debug_cut),
@@ -1487,6 +2175,10 @@ private:
       // Planning parameter (was read-only) [0.05, 1.0]: operator 2026-10-15, the right arm's top cut
       // (tools/right_arm_single) keeps whatever it reaches from the right end, down to 5 %.
       field<double>("top_cut_min_cut_fraction", kPlan, 0.5, &S::top_cut_min_cut_fraction),
+      // Planning parameter (2026-10-24, search reduction only): see top_cut_descent.hpp. false = the plain 5 % descent.
+      field<bool>(
+        "top_cut_fraction_descent_stop_on_fraction_independent_failure", kPlan, true,
+        &S::top_cut_fraction_descent_stop_on_fraction_independent_failure),
       field<bool>(
         "top_cut_continue_check_snapshot_age", kRO, true,
         &S::top_cut_continue_check_snapshot_age),
@@ -1505,8 +2197,17 @@ private:
   // Shared by startup and every runtime change: returns the first violated rule.
   static std::optional<std::string> validateSettings(const PlannerSettings& s)
   {
-    const std::array<std::pair<const char*, double>, 33> doubles{{
+    const std::array<std::pair<const char*, double>, 42> doubles{{
+      {"left_contact_min_elbow_margin_deg", s.left_contact_min_elbow_margin_deg},
+      {"left_contact_min_shoulder_margin_m", s.left_contact_min_shoulder_margin_m},
+      {"left_contact_arm_travel_max_rad", s.left_contact_arm_travel_max_rad},
+      {"left_contact_min_abs_joint5_deg", s.left_contact_min_abs_joint5_deg},
       {"left_varying_start_extra_inward_m", s.left_varying_start_extra_inward_m},
+      {"left_varying_max_theta_p_deg", s.left_varying_max_theta_p_deg},
+      {"left_varying_end_max_theta_p_deg", s.left_varying_end_max_theta_p_deg},
+      {"left_varying_start_max_theta_p_deg", s.left_varying_start_max_theta_p_deg},
+      {"left_varying_start_ramp_m", s.left_varying_start_ramp_m},
+      {"left_varying_theta_p_tolerance_deg", s.left_varying_theta_p_tolerance_deg},
       {"left_cut_inward_m", s.left_cut_inward_m},
       {"left_cut_corner_margin_m", s.left_cut_corner_margin_m},
       {"left_cut_seam_cover_m", s.left_cut_seam_cover_m},
@@ -1570,9 +2271,11 @@ private:
     if (!within(s.left_lateral_standoff_m, 0.005, 0.025)) {
       return std::string("left_lateral_standoff_m must be within [0.005,0.025] m");
     }
-    if (s.cut_clearance_m < -0.003 || s.middle_cut_clearance_m < -0.005) {
+    // Caps raised by the operator 2026-10-22: side 3 -> 8 mm (left face 7.5 mm below the top), middle 5 -> 6 mm
+    // (top cut 1 mm deeper at its start/end).
+    if (s.cut_clearance_m < -0.008 || s.middle_cut_clearance_m < -0.006) {
       return std::string(
-        "cut penetration is capped at 3 mm (cut_clearance_m) and 5 mm (middle_cut_clearance_m)");
+        "cut penetration is capped at 8 mm (cut_clearance_m) and 6 mm (middle_cut_clearance_m)");
     }
     if ((s.cut_clearance_m < 0.0 || s.middle_cut_clearance_m < 0.0) &&
         !s.allow_tool_carton_contact) {
@@ -1584,6 +2287,12 @@ private:
     }
     if (!within(s.middle_entry_alignment_m, 0.0, 0.10)) {
       return std::string("middle_entry_alignment_m must be within [0,0.10] m");
+    }
+    if (!std::isfinite(s.middle_cut_sag_m) || !within(s.middle_cut_sag_m, 0.0, middle_cut_sag::kMaxSagM)) {
+      return std::string("middle_cut_sag_m must be finite and within [0,0.006] m");
+    }
+    if (!std::isfinite(s.middle_cut_sag_step_m) || !within(s.middle_cut_sag_step_m, 0.003, 0.05)) {
+      return std::string("middle_cut_sag_step_m must be finite and within [0.003,0.05] m");
     }
     if (!within(s.pre_cut_stabilization_duration_s, 0.0, 10.0)) {
       return std::string(
@@ -1601,6 +2310,9 @@ private:
         s.middle_transit_extra_lift_m > 0.25) {
       return std::string("middle_transit_extra_lift_m must be finite and within [0,0.25] m");
     }
+    if (!transit_unwind::maxLiftValid(s.transit_unwind_max_lift_m)) {
+      return std::string("transit_unwind_max_lift_m must be finite and within [0.05,0.30] m");
+    }
     if (!std::isfinite(s.middle_cut_tilt_deg) || std::abs(s.middle_cut_tilt_deg) > 30.0) {
       return std::string("middle_cut_tilt_deg must be finite and within [-30,30] degrees");
     }
@@ -1609,6 +2321,37 @@ private:
     }
     if (s.middle_seam_stop != "end" && s.middle_seam_stop != "center") {
       return std::string("middle_seam_stop must be end or center");
+    }
+    if (!left_contact_travel::modeFromString(s.left_contact_travel_mode)) {
+      return std::string("left_contact_travel_mode must be aggregate or split");
+    }
+    if (!within(s.left_contact_arm_travel_max_rad, 1.0, 4.0) ||
+        !within(s.left_contact_min_abs_joint5_deg, 5.0, 30.0) ||
+        !within(s.left_contact_min_elbow_margin_deg, 1.0, 30.0) ||
+        !within(s.left_contact_min_shoulder_margin_m, 0.01, 0.25)) {
+      return std::string(
+        "left contact split-gate bounds: left_contact_arm_travel_max_rad within [1,4] rad, "
+        "left_contact_min_abs_joint5_deg within [5,30] deg, left_contact_min_elbow_margin_deg "
+        "within [1,30] deg, left_contact_min_shoulder_margin_m within [0.01,0.25] m");
+    }
+    // The split gate runs inside validateLeftContactJointTravel, which planCutSegments only calls
+    // while left_parallel_orientation_enabled is true (the varying search, which also applies it,
+    // requires that flag too).
+    if (s.left_contact_travel_mode == "split" && !s.left_parallel_orientation_enabled) {
+      return std::string(
+        "left_contact_travel_mode split requires left_parallel_orientation_enabled=true (the gate "
+        "is part of the parallel-left validator)");
+    }
+    if (!left_cut_direction::directionFromString(s.left_cut_direction)) {
+      return std::string("left_cut_direction must be forward or reverse");
+    }
+    if (!left_cut_direction::reverseFrameFromString(s.left_reverse_frame)) {
+      return std::string("left_reverse_frame must be about_normal or about_edge");
+    }
+    {
+      const std::string patch_error =
+        left_cut_patch::validateParams(s.left_cut_patch_min_gap_m, s.left_cut_patch_overlap_m);
+      if (!patch_error.empty()) return patch_error;
     }
     if (!std::isfinite(s.middle_seam_center_overlap_m) || !within(s.middle_seam_center_overlap_m, 0.0, 0.03)) {
       return std::string("middle_seam_center_overlap_m must be finite and within [0,0.03] m");
@@ -1681,6 +2424,23 @@ private:
       return std::string(
         "left varying orientation bounds: station_spacing within [0.005,0.030] m, max_step "
         "within [1,15] deg, min_cut_fraction within [0.2,1.0]");
+    }
+    if (!within(s.left_varying_max_theta_p_deg, 5.0, 45.0) ||
+        !within(s.left_varying_theta_p_tolerance_deg, 0.0, 3.0)) {
+      return std::string(
+        "left varying blade-angle bounds: left_varying_max_theta_p_deg within [5,45] deg, "
+        "left_varying_theta_p_tolerance_deg within [0,3] deg");
+    }
+    if (!within(s.left_varying_end_max_theta_p_deg, s.left_varying_max_theta_p_deg, 45.0)) {
+      return std::string(
+        "left_varying_end_max_theta_p_deg must be within [left_varying_max_theta_p_deg, 45] deg "
+        "(the end cap may not be below the band cap)");
+    }
+    {
+      const std::string start_cap_error = left_blade_cap::validateStartCap(
+        s.left_varying_start_max_theta_p_deg, s.left_varying_max_theta_p_deg,
+        s.left_varying_start_ramp_m);
+      if (!start_cap_error.empty()) return start_cap_error;
     }
     if (!within(s.left_varying_start_extra_inward_m, 0.0, 0.005)) {
       return std::string("left_varying_start_extra_inward_m must be within [0,0.005] m");
@@ -2366,6 +3126,16 @@ private:
     }
     return segment;
   }
+  // left_cut_direction (varying corner-to-corner left cut). Validated by validateSettings.
+  bool leftCutReverse() const { return settings_.left_cut_direction == "reverse"; }
+  left_cut_direction::Convention leftCutConvention() const
+  {
+    const auto direction = left_cut_direction::directionFromString(settings_.left_cut_direction);
+    const auto frame = left_cut_direction::reverseFrameFromString(settings_.left_reverse_frame);
+    return left_cut_direction::conventionFor(
+      direction.value_or(left_cut_direction::Direction::kForward),
+      frame.value_or(left_cut_direction::ReverseFrame::kAboutNormal));
+  }
   // Empty when left_cut_reverse_travel can be combined with the current settings/state,
   // otherwise the reason it is refused. Every combination listed here assumes back -> front
   // left travel (or has not been reviewed for reversed travel).
@@ -2404,6 +3174,17 @@ private:
       "middle_seam_stop end first";
     return true;
   }
+  // middle_cut_sag_m > 0 plans the middle stroke as a polyline in planCutSegments; the staged top
+  // cut paths build their own straight strokes from the retained start/end, so they refuse.
+  bool refuseMiddleSag(const char* what, std::string& message) const
+  {
+    if (!(settings_.middle_cut_sag_m > 0.0)) return false;
+    message = std::string(what) + " refused: middle_cut_sag_m is " +
+      formatDouble(settings_.middle_cut_sag_m * 1000.0, 1) + " mm; the staged top cut is a straight "
+      "stroke and does not support the sag profile (use plan_h_cut middle_only/t_cut/h); set "
+      "middle_cut_sag_m 0";
+    return true;
+  }
   // For the staged / side-tape hand-off entry points, which are all back -> front only.
   bool refuseLeftReverseTravel(const char* what, std::string& message) const
   {
@@ -2424,6 +3205,11 @@ private:
         "(it extends the varying-orientation left search to the corners); set both or neither";
     }
     if (!settings_.left_parallel_varying_orientation_enabled) {
+      if (leftCutReverse()) {
+        return "left_cut_direction is reverse but left_parallel_varying_orientation_enabled is false "
+          "(reverse travel exists only for the varying-orientation corner-to-corner left cut); "
+          "enable it (and left_cut_extend_to_corners) or set left_cut_direction forward";
+      }
       if (settings_.left_varying_start_extra_inward_m > 0.0) {
         return "left_varying_start_extra_inward_m is " +
           formatDouble(settings_.left_varying_start_extra_inward_m * 1000.0, 1) +
@@ -2446,7 +3232,22 @@ private:
     if (settings_.left_cut_reverse_travel) {
       return "left_parallel_varying_orientation_enabled cannot be combined with "
         "left_cut_reverse_travel (the varying profile assumes back_middle_left -> "
-        "front_middle_left travel); set left_cut_reverse_travel false";
+        "front_middle_left travel; use left_cut_direction reverse for the varying reverse cut); "
+        "set left_cut_reverse_travel false";
+    }
+    if (leftCutReverse()) {
+      if (!settings_.left_cut_extend_to_corners) {
+        return "left_cut_direction reverse requires left_cut_extend_to_corners=true (the reverse "
+          "stations, seam band and blade-angle profile are defined on the extended span)";
+      }
+      if (settings_.left_debug_stop_at_approach) {
+        return "left_cut_direction reverse cannot be combined with left_debug_stop_at_approach "
+          "(the approach-only debug plan is not direction-aware)";
+      }
+      if (pattern != "left_only" && pattern != "t_cut") {
+        return "left_cut_direction reverse is verified for cut_pattern left_only and t_cut only "
+          "(current cut_pattern '" + pattern + "')";
+      }
     }
     if (settings_.cut_debug_correction_enabled &&
         !settings_.cut_debug_left_correction_file.empty()) {
@@ -2475,6 +3276,39 @@ private:
     if (pattern == "t_cut_handoff") {
       return "left_parallel_varying_orientation_enabled is not supported by cut_pattern "
         "t_cut_handoff (use left_only, t_cut, h or combined)";
+    }
+    return std::string();
+  }
+  // Empty when left_cut_patch_enabled can be planned for `pattern` with the current settings/state
+  // (or is off), otherwise the reason it is refused. The patch exists only in the forward varying
+  // corner-to-corner mode of planSnapshot; every other combination fails closed.
+  std::string leftPatchConflict(const std::string& pattern) const
+  {
+    if (!settings_.left_cut_patch_enabled) return std::string();
+    const std::string head = "left_cut_patch_enabled requires the forward varying corner-to-corner "
+      "left cut, but ";
+    if (!settings_.left_parallel_varying_orientation_enabled) {
+      return head + "left_parallel_varying_orientation_enabled is false";
+    }
+    if (!settings_.left_cut_extend_to_corners) return head + "left_cut_extend_to_corners is false";
+    if (leftCutReverse()) {
+      return head + "left_cut_direction is reverse (the patch is the reverse part of a forward cut)";
+    }
+    if (settings_.left_cut_reverse_travel) return head + "left_cut_reverse_travel is true";
+    if (settings_.left_debug_stop_at_approach) return head + "left_debug_stop_at_approach is true";
+    if (settings_.cut_debug_correction_enabled &&
+        !settings_.cut_debug_left_correction_file.empty()) {
+      return head + "a left correction record is active";
+    }
+    if (cut_debug_stage_ != CutDebugStage::kNone) return head + "a cut-debug session is active";
+    if (side_tape_handoff_info_.inProgress()) return head + "a side-tape hand-off is active";
+    if (settings_.left_varying_start_extra_inward_m > 0.0) {
+      return head + "left_varying_start_extra_inward_m is above 0 (the inward taper window is not "
+        "defined for the patch)";
+    }
+    if (pattern != "left_only" && pattern != "t_cut") {
+      return head + "it is verified for cut_pattern left_only and t_cut only (current cut_pattern '" +
+        pattern + "')";
     }
     return std::string();
   }
@@ -2530,6 +3364,7 @@ private:
     }
     extended_start_point = toPoint(origin + span.s_start * direction);
     extended_end_point = toPoint(origin + span.s_end * direction);
+    geometry.span_length_m = span.length_m;
     geometry.nominal_length_m = nominal_length;
     geometry.nominal_start_m = -span.s_start;
     geometry.seam_m = s_seam - span.s_start;
@@ -2543,6 +3378,18 @@ private:
   // orientation behaviour and must not be silently affected by the varying-orientation mode.
   bool refuseLeftVarying(const char* what, std::string& message) const
   {
+    if (settings_.left_cut_patch_enabled) {
+      message = std::string(what) + " refused: left_cut_patch_enabled is true and this path does "
+        "not plan the left reverse patch (only plan_h_cut with cut_pattern left_only/t_cut does); "
+        "set it false first";
+      return true;
+    }
+    if (leftCutReverse()) {
+      message = std::string(what) + " refused: left_cut_direction is reverse and this path keeps "
+        "the nominal back_middle_left -> front_middle_left segment; set left_cut_direction "
+        "forward first";
+      return true;
+    }
     if (settings_.left_cut_extend_to_corners) {
       message = std::string(what) + " refused: left_cut_extend_to_corners is true and this path "
         "keeps the nominal left cut segment; set it false first";
@@ -2959,6 +3806,7 @@ private:
         return false;
       }
     }
+    if (!addMonitoredWorldObjects(scene, "left orientation collision probe", error)) return false;
     std::vector<Eigen::Quaterniond> mapped;
     mapped.reserve(labeled_poses.size());
     for (const auto& labeled : labeled_poses) mapped.push_back(toEigen(labeled.first->pose.orientation));
@@ -3501,16 +4349,21 @@ private:
     double tilt, pitch, yaw, theta_p, blade_deviation, total, rotation;
     Eigen::Quaterniond orientation;
   };
+  // `basis` is the TRAVEL basis (along = travel direction): the canonical back -> front basis for
+  // forward travel, left_cut_direction::travelBasis for reverse. `convention` selects the
+  // zero-rotation reference frame and the sign of the X axis in the penetration gate
+  // (left_cut_direction.hpp); the default is today's frame.
   std::vector<LeftParallelCandidate> buildLeftParallelCandidates(
-    const CutBasis& basis, bool handoff_mode) const
+    const CutBasis& basis, bool handoff_mode,
+    left_cut_direction::Convention convention = left_cut_direction::Convention::kStandard) const
   {
     constexpr double kDeg = 3.14159265358979323846 / 180.0;
     using Candidate = LeftParallelCandidate;
-    const Eigen::Vector3d into_unit = -basis.normal;
-    Eigen::Matrix3d reference;
-    reference.col(0) = -basis.normal;
-    reference.col(1) = -basis.along;
-    reference.col(2) = reference.col(0).cross(reference.col(1));
+    left_cut_direction::Basis travel;
+    travel.along = basis.along;
+    travel.across = basis.across;
+    travel.normal = basis.normal;
+    const Eigen::Matrix3d reference = left_cut_direction::referenceFrame(travel, convention);
     const auto multiples = [&](double max_deg) {
       std::vector<double> values;
       const double step = settings_.left_parallel_step_deg;
@@ -3526,9 +4379,8 @@ private:
             (Eigen::AngleAxisd(yaw * kDeg, basis.normal) *
              Eigen::AngleAxisd(pitch * kDeg, basis.across) *
              Eigen::AngleAxisd(tilt * kDeg, basis.along)).toRotationMatrix() * reference;
-          const double dot_x = rotation.col(0).dot(into_unit);
-          const double dot_z = rotation.col(2).dot(into_unit);
-          if (dot_x < 0.7 && dot_z < 0.7) continue;  // existing left penetration gate
+          // existing left penetration gate (X sign-mapped for the edge-flipped reverse frame)
+          if (!left_cut_direction::penetrationGateOk(rotation, basis.normal, convention)) continue;
           const double rotation_deg = std::acos(std::clamp(
             (rotation * reference.transpose()).trace() * 0.5 - 0.5, -1.0, 1.0)) / kDeg;
           if (handoff_mode) {
@@ -3604,6 +4456,7 @@ private:
         return false;
       }
     }
+    if (!addMonitoredWorldObjects(scene, "left parallel orientation probe", error)) return false;
     // valid_state is defined per-scene inside evaluate_candidate below (each worker thread
     // gets its own PlanningScene, so it cannot be built once here against the shared
     // top-level `scene`).
@@ -3914,7 +4767,104 @@ private:
   }
   // Existing aggregate joint-travel bound for ONE left contact stroke (entry, cut, finish, lift);
   // the varying cut is a single stroke, so it applies unchanged (validateLeftContactJointTravel).
-  static constexpr double kMaxLeftContactJointTravelRad = 1.0;
+  static constexpr double kMaxLeftContactJointTravelRad = left_contact_travel::kMaxJointTravelRad;
+  // left_contact_travel_mode = split (validated by validateSettings). Shared by the varying search
+  // replay and validateLeftContactJointTravel.
+  bool leftContactSplitMode() const
+  {
+    return left_contact_travel::modeFromString(settings_.left_contact_travel_mode)
+             .value_or(left_contact_travel::Mode::kAggregate) == left_contact_travel::Mode::kSplit;
+  }
+  left_contact_travel::SplitLimits leftContactSplitLimits() const
+  {
+    left_contact_travel::SplitLimits limits;
+    limits.wrist_travel_max_rad = kMaxLeftContactJointTravelRad;
+    limits.arm_travel_max_rad = settings_.left_contact_arm_travel_max_rad;
+    constexpr double kRadPerDeg = 3.14159265358979323846 / 180.0;
+    limits.min_abs_joint5_rad = settings_.left_contact_min_abs_joint5_deg * kRadPerDeg;
+    limits.min_elbow_margin_rad = settings_.left_contact_min_elbow_margin_deg * kRadPerDeg;
+    limits.min_shoulder_margin_m = settings_.left_contact_min_shoulder_margin_m;
+    return limits;
+  }
+  // Split gate preconditions and the joint1..joint6 reordering. The classifier uses the ReBeL
+  // constants of rebel_analytic_ik; the startup self-check against the live model is what ties
+  // them to this robot, so split mode is refused without it. Fails closed (false, `error`) when
+  // the group lacks a jointN name, or when analyticVariableIndex disagrees with the name lookup.
+  bool leftContactSplitReady(
+    const moveit::core::JointModelGroup* group, std::array<std::size_t, 6>& index,
+    std::string& error) const
+  {
+    if (group == nullptr) {
+      error = "left_contact_travel_mode split: no planning group; refusing to guess";
+      return false;
+    }
+    if (!analytic_ik_available_.load()) {
+      error = "left_contact_travel_mode split needs the analytic IK self-check against the live "
+        "model to have passed (its branch classifier uses the ReBeL constants); it has not "
+        "(or failed); use left_contact_travel_mode aggregate";
+      return false;
+    }
+    const auto found = left_contact_travel::jointIndexByName(group->getVariableNames(), error);
+    if (!found) return false;
+    if (*found != analyticVariableIndex(group)) {
+      error = "left_contact_travel_mode split: joint order mismatch between the name lookup and "
+        "analyticVariableIndex; refusing to guess";
+      return false;
+    }
+    index = *found;
+    return true;
+  }
+  // One left contact stroke through the split gate: reorders the group-order waypoints to
+  // joint1..joint6 and runs checkSplitTravel. ok=false carries the refusal text in `text`
+  // (rule check -> describe(...), model/order problem -> its own message); `result` is only
+  // meaningful when `rule_failed`.
+  struct LeftSplitOutcome
+  {
+    bool ok{true};
+    bool rule_failed{false};
+    std::string text;
+    left_contact_travel::SplitResult result;
+  };
+  LeftSplitOutcome evaluateLeftContactSplit(
+    const moveit::core::JointModelGroup* group,
+    const std::vector<std::vector<double> >& group_waypoints) const
+  {
+    LeftSplitOutcome outcome;
+    std::array<std::size_t, 6> index{};
+    if (!leftContactSplitReady(group, index, outcome.text)) {
+      outcome.ok = false;
+      return outcome;
+    }
+    const auto ordered = left_contact_travel::orderWaypoints(
+      group_waypoints, index, group->getVariableCount(), outcome.text);
+    if (!ordered) {
+      outcome.ok = false;
+      return outcome;
+    }
+    const auto limits = leftContactSplitLimits();
+    outcome.result = left_contact_travel::checkSplitTravel(*ordered, limits);
+    if (!outcome.result.ok) {
+      outcome.ok = false;
+      outcome.rule_failed = true;
+      outcome.text = left_contact_travel::describe(outcome.result, limits);
+    }
+    return outcome;
+  }
+  // Measurements text for logs / plan summaries (joint1..joint6 order); a note when the group
+  // cannot be mapped.
+  std::string leftContactStatsText(
+    const moveit::core::JointModelGroup* group,
+    const std::vector<std::vector<double> >& group_waypoints) const
+  {
+    std::string error;
+    const auto index = left_contact_travel::jointIndexByName(
+      group != nullptr ? group->getVariableNames() : std::vector<std::string>(), error);
+    if (!index) return "stats unavailable (" + error + ")";
+    const auto ordered = left_contact_travel::orderWaypoints(
+      group_waypoints, *index, group->getVariableCount(), error);
+    if (!ordered) return "stats unavailable (" + error + ")";
+    return left_contact_travel::statsText(left_contact_travel::strokeStats(*ordered));
+  }
   // Grid points the varying search accepts (its neighbour table is quadratic in this).
   static constexpr std::size_t kMaxVaryingCandidates = 12000;
   // Opt-in (left_parallel_varying_orientation_enabled) LEFT side cut whose tool orientation
@@ -4039,8 +4989,20 @@ private:
           "; failing closed";
         return false;
       };
+    // `basis` is the TRAVEL basis of this search: the canonical back -> front basis (cutDebugBasis,
+    // also what corrections and the hand-off use) for forward travel, its negated along/across for
+    // left_cut_direction reverse. The candidate frames, the blade deviation and the blade-angle gate
+    // all follow the travel direction.
+    const bool reverse_travel = extension != nullptr && extension->reverse;
+    const bool patch_search = extension != nullptr && extension->patch;
+    const left_cut_direction::Convention convention =
+      extension != nullptr ? extension->convention : left_cut_direction::Convention::kStandard;
     CutBasis basis;
     if (!cutDebugBasis(snapshot, "left", basis, error)) return false;
+    if (reverse_travel) {
+      basis.along = -basis.along;
+      basis.across = -basis.across;
+    }
     const Eigen::Vector3d into_unit = -basis.normal;
     const auto* tool = seed_state.getRobotModel()->getLinkModel(settings_.tool_link);
     if (tool == nullptr) {
@@ -4052,6 +5014,10 @@ private:
       error = "left_parallel_varying_orientation_enabled requires left_search_ik_backend "
         "'analytic' with a passing analytic IK self-check (it enumerates every IK branch)";
       return false;
+    }
+    if (leftContactSplitMode()) {
+      std::array<std::size_t, 6> split_index{};
+      if (!leftContactSplitReady(joint_group, split_index, error)) return false;
     }
     // Two scenes: `free_scene` forbids tool/carton contact (hover poses, like the fixed
     // search's first pose), `contact_scene` applies the scoped allowance (cut strokes, finish
@@ -4074,6 +5040,7 @@ private:
             return nullptr;
           }
         }
+        if (!addMonitoredWorldObjects(*scene, "left varying orientation probe", error)) return nullptr;
         setCartonContactEntries(
           scene->getAllowedCollisionMatrixNonConst(), allow_contact && settings_.allow_tool_carton_contact);
         return scene;
@@ -4124,7 +5091,8 @@ private:
         return false;
       }
     }
-    const std::vector<LeftParallelCandidate> candidates = buildLeftParallelCandidates(basis, false);
+    const std::vector<LeftParallelCandidate> candidates =
+      buildLeftParallelCandidates(basis, false, convention);
     if (out_of_time()) return timeout_error("building the orientation candidates");
     if (candidates.empty()) {
       error = "left varying orientation search: no orientation candidate passes the penetration gate";
@@ -4195,6 +5163,55 @@ private:
     const Eigen::Vector3d lift_vector =
       (settings_.hover_clearance_m - settings_.cut_clearance_m) * normal;
 
+    // ---- true blade-angle cap (left_varying_max_theta_p_deg / left_varying_end_max_theta_p_deg).
+    // The cap is a function of the arc position along the TRAVEL direction on the extended span
+    // (fixed geometry, independent of trimming): band cap from the stroke start through the end
+    // of the seam band, then a linear ramp to the end cap at the end of the span. The extension
+    // geometry is already in TRAVEL coordinates (mapped for left_cut_direction reverse), so the
+    // forward formula applies: in reverse the ramp therefore lies toward the BACK corner.
+    left_blade_cap::Profile blade_cap;
+    blade_cap.band_cap_deg = settings_.left_varying_max_theta_p_deg;
+    blade_cap.end_cap_deg = settings_.left_varying_end_max_theta_p_deg;
+    blade_cap.span_length_m = full_length_m;
+    blade_cap.start_cap_deg = settings_.left_varying_start_max_theta_p_deg;
+    blade_cap.start_ramp_m = settings_.left_varying_start_ramp_m;
+    if (extension != nullptr) {
+      blade_cap.band_exit_m = left_blade_cap::bandExitTravel(
+        full_length_m, extension->band_lo_m, extension->band_hi_m, /*reverse=*/false);  // travel coords
+      blade_cap.band_entry_m = extension->band_lo_m;  // travel coords: where the start ramp ends
+      if (patch_search) {
+        // The search line is a sub-span of the full reverse travel: the profile keeps the FULL-span
+        // coordinates and the line's local coordinates are shifted by patch_origin_m.
+        blade_cap.span_length_m = extension->span_length_m;
+        blade_cap.origin_offset_m = extension->patch_origin_m;
+      }
+    } else {
+      if (blade_cap.startGraded()) {
+        error = "left_varying_start_max_theta_p_deg (" +
+          formatDouble(blade_cap.start_cap_deg, 1) + ") is above left_varying_max_theta_p_deg (" +
+          formatDouble(blade_cap.band_cap_deg, 1) + "): the start cap needs "
+          "left_cut_extend_to_corners (the tape band is only known on the extended span); set "
+          "left_varying_start_max_theta_p_deg to 0 or enable it";
+        return false;
+      }
+      if (blade_cap.graded()) {
+        error = "left_varying_end_max_theta_p_deg (" +
+          formatDouble(blade_cap.end_cap_deg, 1) + ") is above left_varying_max_theta_p_deg (" +
+          formatDouble(blade_cap.band_cap_deg, 1) + "): the graded end cap needs "
+          "left_cut_extend_to_corners (the tape band is only known on the extended span); set "
+          "left_varying_end_max_theta_p_deg equal to left_varying_max_theta_p_deg or enable it";
+        return false;
+      }
+      blade_cap.band_exit_m = full_length_m;
+    }
+    const Eigen::Vector3d travel_dir = (line_end - line_start).normalized();
+    const auto station_s = [&](std::size_t station) {
+        return full_length_m * (static_cast<double>(station) / static_cast<double>(intervals));
+      };
+    const auto station_cap = [&](std::size_t station) {
+        return blade_cap.capAtLocal(station_s(station));
+      };
+
     const auto pose_at = [&](std::size_t station, std::size_t candidate, const Eigen::Vector3d& offset) {
         Eigen::Isometry3d target = Eigen::Isometry3d::Identity();
         target.translation() = positions[station] + offset;
@@ -4210,36 +5227,79 @@ private:
         return diff;
       };
     moveit::core::RobotState probe_state(seed_state);
+    // Failure diagnostics of the per-station evaluation (counted only while count_ik_failures).
+    bool count_ik_failures = false;
+    std::size_t ik_bounds_or_pose_failures = 0, ik_collision_failures = 0;
+    std::map<std::string, std::size_t> ik_collision_pairs;  // first contact pair of each collision
     // Branch passes bounds, exact-pose check and (optionally) is collision-free in `scene`.
     const auto branch_valid = [&](
       const std::vector<double>& values, const Eigen::Isometry3d& target,
       planning_scene::PlanningScene& scene) {
         probe_state.setJointGroupPositions(joint_group, values);
         probe_state.update();
-        if (!probe_state.satisfiesBounds(joint_group)) return false;
+        if (!probe_state.satisfiesBounds(joint_group)) {
+          if (count_ik_failures) ++ik_bounds_or_pose_failures;
+          return false;
+        }
         const Eigen::Isometry3d& reached = probe_state.getGlobalLinkTransform(tool);
         if ((reached.translation() - target.translation()).norm() > 1e-5 ||
             Eigen::AngleAxisd(reached.linear().transpose() * target.linear()).angle() > 1e-4) {
+          if (count_ik_failures) ++ik_bounds_or_pose_failures;
           return false;
         }
-        return !scene.isStateColliding(probe_state, settings_.planning_group);
+        const bool collides = scene.isStateColliding(probe_state, settings_.planning_group);
+        if (collides && count_ik_failures) {
+          // diagnostics only (the decision above is unchanged): first contact pair of this collision
+          ++ik_collision_failures;
+          if (ik_collision_failures > 1500U) return false;  // pair statistics from the first 1500 only
+          collision_detection::CollisionRequest request;
+          request.group_name = settings_.planning_group;
+          request.contacts = true;
+          request.max_contacts = 1;
+          request.max_contacts_per_pair = 1;
+          collision_detection::CollisionResult result;
+          scene.checkCollision(request, result, probe_state);
+          if (!result.contacts.empty()) {
+            const auto& pair = result.contacts.begin()->first;
+            ++ik_collision_pairs[pair.first + " / " + pair.second];
+          }
+        }
+        return !collides;
       };
 
     // ---- per-(station, candidate) evaluation
-    std::size_t evaluated_pairs = 0;
+    std::size_t evaluated_pairs = 0, cap_filtered_pairs = 0;
+    // IK diagnostics for the failure message: analytic branches found / outside the joint margin /
+    // failing bounds, exact pose or collision in the contact scene (see branch_valid).
+    std::size_t ik_branches = 0, ik_outside_margin = 0, ik_invalid = 0;
     const auto evaluate_station = [&](
       std::size_t station, const std::vector<std::size_t>& candidate_ids,
       std::vector<left_varying::Node>& nodes) {
+        const double cap_deg = station_cap(station) + 1e-9;
+        count_ik_failures = true;
         for (const std::size_t c : candidate_ids) {
           if (out_of_time()) return false;
+          // True blade angle: only candidates within this station's theta_p cap are allowed.
+          if (candidates[c].theta_p > cap_deg) {
+            ++cap_filtered_pairs;
+            continue;
+          }
           ++evaluated_pairs;
           const Eigen::Isometry3d target = pose_at(station, c, Eigen::Vector3d::Zero());
           for (const auto& values : analyticIkBranches(joint_group, target)) {
-            if (!inside_margin(values)) continue;
-            if (!branch_valid(values, target, *contact_scene)) continue;
+            ++ik_branches;
+            if (!inside_margin(values)) {
+              ++ik_outside_margin;
+              continue;
+            }
+            if (!branch_valid(values, target, *contact_scene)) {
+              ++ik_invalid;
+              continue;
+            }
             nodes.push_back(left_varying::Node{c, values, candidate_score[c]});
           }
         }
+        count_ik_failures = false;
         return true;
       };
 
@@ -4323,6 +5383,379 @@ private:
     left_varying::ChainDp dp = make_dp();
     std::vector<std::size_t> all_candidates(candidates.size());
     for (std::size_t c = 0; c < all_candidates.size(); ++c) all_candidates[c] = c;
+    // ---- opt-in diagnostics (left_varying_diagnostics, default off): one "LEFTDIAG" JSON line per
+    // station breaking its station/candidate pairs down by the FURTHEST stage any IK branch of the
+    // pair reaches: wrist centre out of reach (too far / too close) < every branch outside the
+    // joint limits < every in-limit branch inside the joint margin < every margin-passing branch
+    // in collision (or bounds/exactness failure) < a surviving branch. Log-only: it uses its own
+    // copies of the checks, touches no search state and runs after evaluate_station.
+    const bool diag_on = settings_.left_varying_diagnostics;
+    const auto diag_json_escape = [](const std::string& text) {
+        std::string out;
+        for (const char ch : text) {
+          if (ch == '"' || ch == '\\') out.push_back('\\');
+          out.push_back(ch);
+        }
+        return out;
+      };
+    // Why does the hover / hover-end / lift pose of a node have no usable continuing branch? Mirrors
+    // hover_for / continuing_branch (branches within kMaxStationJointStepRad of `reference`, joint6
+    // within pi of the transit seed for the hover, joint margin, bounds + exact pose + collision) but
+    // names the furthest stage reached by any nearby branch (diagnostics only).
+    const auto classify_near = [&](const Eigen::Isometry3d& target, const std::vector<double>& reference,
+                                   planning_scene::PlanningScene& scene, bool check_j6) -> std::string {
+        std::array<rebel_analytic_ik::JointLimits, 6> alimits;
+        if (!analyticJointLimitsFor(joint_group, alimits)) return "no_limits";
+        const auto gindex = analyticVariableIndex(joint_group);
+        const auto diagnosis = rebel_analytic_ik::diagnose(target, analytic_tool_offset_, alimits);
+        if (!diagnosis.reach.reachable) return diagnosis.reach.excess_m > 0.0 ? "unreach_far" : "unreach_near";
+        int best_rank = -1;
+        std::string best_code = "no_near";
+        const auto consider = [&](int rank, const std::string& code) {
+            if (rank > best_rank) {
+              best_rank = rank;
+              best_code = code;
+            }
+          };
+        for (const auto& branch : diagnosis.branches) {
+          std::vector<double> values(variable_names.size());
+          for (std::size_t j = 0; j < 6U; ++j) values[gindex[j]] = branch.q[j];
+          if (max_diff(values, reference) > kMaxStationJointStepRad) continue;
+          if (!branch.within_limits) {
+            consider(1, "limit_j" + std::to_string(branch.worst_joint + 1U));
+            continue;
+          }
+          if (!inside_margin(values)) {
+            consider(2, "margin");
+            continue;
+          }
+          if (check_j6 && std::abs(values[j6] - transit_seed[j6]) > kPi) {
+            consider(3, "j6_transit");
+            continue;
+          }
+          probe_state.setJointGroupPositions(joint_group, values);
+          probe_state.update();
+          const Eigen::Isometry3d& reached = probe_state.getGlobalLinkTransform(tool);
+          if (!probe_state.satisfiesBounds(joint_group) ||
+              (reached.translation() - target.translation()).norm() > 1e-5 ||
+              Eigen::AngleAxisd(reached.linear().transpose() * target.linear()).angle() > 1e-4) {
+            consider(4, "inexact");
+            continue;
+          }
+          collision_detection::CollisionRequest request;
+          request.group_name = settings_.planning_group;
+          request.contacts = true;
+          request.max_contacts = 1;
+          request.max_contacts_per_pair = 1;
+          collision_detection::CollisionResult result;
+          scene.checkCollision(request, result, probe_state);
+          if (result.collision) {
+            std::string pair = "?";
+            if (!result.contacts.empty()) {
+              pair = result.contacts.begin()->first.first + " / " + result.contacts.begin()->first.second;
+            }
+            consider(5, "coll:" + pair);
+            continue;
+          }
+          consider(6, "ok");
+        }
+        return best_code;
+      };
+    const auto diagnose_station = [&](std::size_t station, std::size_t node_count) {
+        std::array<rebel_analytic_ik::JointLimits, 6> alimits;
+        if (!analyticJointLimitsFor(joint_group, alimits)) return;
+        const auto gindex = analyticVariableIndex(joint_group);
+        const double cap_deg = station_cap(station) + 1e-9;
+        const double required_margin_deg = settings_.left_parallel_min_joint_margin_deg;
+        std::size_t pairs = 0, capx = 0, st_far = 0, st_near = 0, st_limit = 0, st_margin = 0,
+          st_collision = 0, st_inexact = 0, st_ok = 0;
+        std::size_t br_total = 0, br_limit = 0, br_margin = 0, br_collision = 0, br_inexact = 0,
+          br_ok = 0;
+        std::array<std::size_t, 6> lim_joint{}, lim_viol_any{}, mar_joint{};
+        std::map<std::string, std::size_t> coll_pairs;
+        struct Best {
+          bool set{false};
+          double deficit{std::numeric_limits<double>::infinity()};
+          std::string json;
+        } best_reach, best_limit, best_margin, best_collision;
+        const auto joints_json = [&](const std::array<double, 6>& values, double scale) {
+            std::ostringstream o;
+            o << std::fixed << std::setprecision(1) << "[";
+            for (std::size_t j = 0; j < 6U; ++j) o << (j ? "," : "") << values[j] * scale;
+            o << "]";
+            return o.str();
+          };
+        const auto cand_json = [&](const LeftParallelCandidate& c) {
+            std::ostringstream o;
+            o << std::fixed << std::setprecision(1) << "\"tilt\":" << c.tilt << ",\"pitch\":" <<
+              c.pitch << ",\"yaw\":" << c.yaw << ",\"theta_p\":" << c.theta_p << ",\"dev\":" <<
+              c.blade_deviation;
+            return o.str();
+          };
+        for (std::size_t c = 0; c < candidates.size(); ++c) {
+          if (candidates[c].theta_p > cap_deg) {
+            ++capx;
+            continue;
+          }
+          ++pairs;
+          const Eigen::Isometry3d target = pose_at(station, c, Eigen::Vector3d::Zero());
+          const auto diagnosis = rebel_analytic_ik::diagnose(target, analytic_tool_offset_, alimits);
+          if (!diagnosis.reach.reachable) {
+            const bool far = diagnosis.reach.excess_m > 0.0;
+            ++(far ? st_far : st_near);
+            const double deficit = std::abs(diagnosis.reach.excess_m) * 1000.0;
+            if (deficit < best_reach.deficit) {
+              std::ostringstream o;
+              o << std::fixed << std::setprecision(1) << "{" << cand_json(candidates[c]) <<
+                ",\"far\":" << (far ? 1 : 0) << ",\"excess_mm\":" << deficit <<
+                ",\"radius_mm\":" << diagnosis.reach.radius_m * 1000.0 << ",\"envelope_mm\":[" <<
+                diagnosis.reach.reach_min_m * 1000.0 << "," << diagnosis.reach.reach_max_m * 1000.0 <<
+                "],\"deficit\":" << deficit << "}";
+              best_reach = {true, deficit, o.str()};
+            }
+            continue;
+          }
+          bool any_in_limits = false, any_margin_pass = false, any_collision = false,
+            any_inexact = false, any_ok = false, any_margin_fail = false;
+          // closest-to-feasible per stage within this pair
+          double pair_limit_deficit = std::numeric_limits<double>::infinity();
+          std::size_t pair_limit_joint = 0;
+          const rebel_analytic_ik::BranchDiagnosis* pair_limit_branch = nullptr;
+          double pair_margin_deficit = std::numeric_limits<double>::infinity();
+          std::size_t pair_margin_joint = 0;
+          const rebel_analytic_ik::BranchDiagnosis* pair_margin_branch = nullptr;
+          double pair_collision_depth = std::numeric_limits<double>::infinity();
+          std::string pair_collision_json;
+          for (const auto& branch : diagnosis.branches) {
+            ++br_total;
+            if (!branch.within_limits) {
+              ++br_limit;
+              for (std::size_t j = 0; j < 6U; ++j) {
+                if (branch.violation[j] > 0.0) ++lim_viol_any[j];
+              }
+              if (branch.max_violation < pair_limit_deficit) {
+                pair_limit_deficit = branch.max_violation;
+                pair_limit_joint = branch.worst_joint;
+                pair_limit_branch = &branch;
+              }
+              continue;
+            }
+            any_in_limits = true;
+            std::vector<double> values(variable_names.size());
+            for (std::size_t j = 0; j < 6U; ++j) values[gindex[j]] = branch.q[j];
+            // joint margin (inside_margin, but with the joint and the amount)
+            double worst_dist = std::numeric_limits<double>::infinity();
+            std::size_t worst_joint = 0;
+            for (std::size_t j = 0; j < values.size() && j < limits.size(); ++j) {
+              const double dist = std::min(values[j] - limits[j].first, limits[j].second - values[j]);
+              if (dist < worst_dist) {
+                worst_dist = dist;
+                worst_joint = j;
+              }
+            }
+            if (worst_dist < margin) {
+              ++br_margin;
+              any_margin_fail = true;
+              const double deficit = margin - worst_dist;
+              if (deficit < pair_margin_deficit) {
+                pair_margin_deficit = deficit;
+                pair_margin_joint = worst_joint;
+                pair_margin_branch = &branch;
+              }
+              continue;
+            }
+            any_margin_pass = true;
+            probe_state.setJointGroupPositions(joint_group, values);
+            probe_state.update();
+            const Eigen::Isometry3d& reached = probe_state.getGlobalLinkTransform(tool);
+            if (!probe_state.satisfiesBounds(joint_group) ||
+                (reached.translation() - target.translation()).norm() > 1e-5 ||
+                Eigen::AngleAxisd(reached.linear().transpose() * target.linear()).angle() > 1e-4) {
+              ++br_inexact;
+              any_inexact = true;
+              continue;
+            }
+            collision_detection::CollisionRequest request;
+            request.group_name = settings_.planning_group;
+            request.contacts = true;
+            request.max_contacts = 40;
+            request.max_contacts_per_pair = 1;
+            collision_detection::CollisionResult result;
+            contact_scene->checkCollision(request, result, probe_state);
+            if (!result.collision) {
+              ++br_ok;
+              any_ok = true;
+              continue;
+            }
+            ++br_collision;
+            any_collision = true;
+            double deepest = 0.0;
+            std::string deepest_pair;
+            std::string hand_json;
+            for (const auto& [names, contacts] : result.contacts) {
+              ++coll_pairs[names.first + " / " + names.second];
+              for (const auto& contact : contacts) {
+                if (contact.depth >= deepest) {
+                  deepest = contact.depth;
+                  deepest_pair = names.first + " / " + names.second;
+                  // contact point in the frame of the knife_c_handpiece link when it is involved
+                  const bool first_is_hand = names.first == "knife_c_handpiece";
+                  const bool second_is_hand = names.second == "knife_c_handpiece";
+                  hand_json.clear();
+                  if (first_is_hand || second_is_hand) {
+                    const Eigen::Vector3d local =
+                      probe_state.getGlobalLinkTransform("knife_c_handpiece").inverse() * contact.pos;
+                    std::ostringstream o;
+                    o << std::fixed << std::setprecision(1) << ",\"hp_xyz_mm\":[" << local.x() * 1000.0 <<
+                      "," << local.y() * 1000.0 << "," << local.z() * 1000.0 << "]";
+                    hand_json = o.str();
+                  }
+                }
+              }
+            }
+            if (deepest < pair_collision_depth) {
+              pair_collision_depth = deepest;
+              std::ostringstream o;
+              o << std::fixed << std::setprecision(1) << "{" << cand_json(candidates[c]) <<
+                ",\"pair\":\"" << diag_json_escape(deepest_pair) << "\",\"depth_mm\":" <<
+                deepest * 1000.0 << hand_json << ",\"q_deg\":" << joints_json(branch.q, 180.0 / kPi) <<
+                ",\"deficit\":" << deepest * 1000.0 << "}";
+              pair_collision_json = o.str();
+            }
+          }
+          if (any_ok) {
+            ++st_ok;
+          } else if (any_collision) {
+            ++st_collision;
+            if (pair_collision_depth < best_collision.deficit) {
+              best_collision = {true, pair_collision_depth, pair_collision_json};
+            }
+          } else if (any_inexact) {
+            ++st_inexact;
+          } else if (any_margin_fail) {
+            ++st_margin;
+            ++mar_joint[pair_margin_joint];
+            const double deficit_deg = pair_margin_deficit / kDeg;
+            if (deficit_deg < best_margin.deficit && pair_margin_branch != nullptr) {
+              std::ostringstream o;
+              o << std::fixed << std::setprecision(1) << "{" << cand_json(candidates[c]) <<
+                ",\"joint\":" << pair_margin_joint + 1U << ",\"deficit\":" << deficit_deg <<
+                ",\"required_deg\":" << required_margin_deg << ",\"q_deg\":" <<
+                joints_json(pair_margin_branch->q, 180.0 / kPi) << "}";
+              best_margin = {true, deficit_deg, o.str()};
+            }
+          } else {
+            ++st_limit;
+            ++lim_joint[pair_limit_joint];
+            const double deficit_deg = pair_limit_deficit / kDeg;
+            if (deficit_deg < best_limit.deficit && pair_limit_branch != nullptr) {
+              std::ostringstream o;
+              o << std::fixed << std::setprecision(1) << "{" << cand_json(candidates[c]) <<
+                ",\"joint\":" << pair_limit_joint + 1U << ",\"deficit\":" << deficit_deg <<
+                ",\"label\":\"" << (pair_limit_branch->shoulder > 0 ? "+" : "-") <<
+                (pair_limit_branch->elbow > 0 ? "+" : "-") << (pair_limit_branch->wrist > 0 ? "+" : "-") <<
+                "\",\"q_deg\":" << joints_json(pair_limit_branch->q, 180.0 / kPi) <<
+                ",\"viol_deg\":" << joints_json(pair_limit_branch->violation, 180.0 / kPi) << "}";
+              best_limit = {true, deficit_deg, o.str()};
+            }
+          }
+          (void)any_in_limits;
+          (void)any_margin_pass;
+        }
+        // hover (start) and exit (end) gates of the surviving nodes
+        std::size_t hover_ok = 0, end_good = 0;
+        const bool in_required = extension != nullptr &&
+          station >= left_varying::requiredStationRange(
+            extension->band_lo_m, extension->band_hi_m, full_length_m, intervals).first_max &&
+          station <= left_varying::requiredStationRange(
+            extension->band_lo_m, extension->band_hi_m, full_length_m, intervals).last_min;
+        std::map<std::string, std::size_t> hover_fail, end_fail;
+        for (std::size_t n = 0; n < station_nodes[station].size(); ++n) {
+          const auto& node = station_nodes[station][n];
+          if (hover_for(station, n, node).has_value()) {
+            ++hover_ok;
+          } else {
+            ++hover_fail[classify_near(pose_at(station, node.candidate, outward), node.q, *free_scene, true)];
+          }
+          if (end_ok(station, n)) {
+            ++end_good;
+          } else {
+            std::vector<double> hover_end_q;
+            if (!continuing_branch(pose_at(station, node.candidate, outward), node.q, *contact_scene, hover_end_q)) {
+              ++end_fail["hover_end:" + classify_near(
+                pose_at(station, node.candidate, outward), node.q, *contact_scene, false)];
+            } else {
+              ++end_fail["lift:" + classify_near(
+                pose_at(station, node.candidate, outward + lift_vector), hover_end_q, *contact_scene, false)];
+            }
+          }
+        }
+        std::ostringstream o;
+        o << std::fixed << std::setprecision(1) << "{\"st\":" << station << ",\"mm\":" <<
+          (extension != nullptr ? extension->fromBackMiddleLocalM(station_s(station)) * 1000.0 :
+          station_s(station) * 1000.0) << ",\"band\":" << (in_required ? 1 : 0) << ",\"cap\":" <<
+          station_cap(station) << ",\"cands\":" << candidates.size() << ",\"capx\":" << capx <<
+          ",\"pairs\":" << pairs << ",\"stage\":{\"reach_far\":" << st_far << ",\"reach_near\":" <<
+          st_near << ",\"limit\":" << st_limit << ",\"margin\":" << st_margin << ",\"collision\":" <<
+          st_collision << ",\"inexact\":" << st_inexact << ",\"ok\":" << st_ok << "},\"br\":{\"total\":" <<
+          br_total << ",\"limit\":" << br_limit << ",\"margin\":" << br_margin << ",\"collision\":" <<
+          br_collision << ",\"inexact\":" << br_inexact << ",\"ok\":" << br_ok << "},\"lim_joint\":[";
+        for (std::size_t j = 0; j < 6U; ++j) o << (j ? "," : "") << lim_joint[j];
+        o << "],\"lim_viol_any\":[";
+        for (std::size_t j = 0; j < 6U; ++j) o << (j ? "," : "") << lim_viol_any[j];
+        o << "],\"mar_joint\":[";
+        for (std::size_t j = 0; j < 6U; ++j) o << (j ? "," : "") << mar_joint[j];
+        o << "],\"coll\":{";
+        {
+          std::vector<std::pair<std::size_t, std::string> > ranked;
+          for (const auto& entry : coll_pairs) ranked.emplace_back(entry.second, entry.first);
+          std::sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) {
+              return a.first != b.first ? a.first > b.first : a.second < b.second;
+            });
+          for (std::size_t i = 0; i < ranked.size() && i < 3U; ++i) {
+            o << (i ? "," : "") << "\"" << diag_json_escape(ranked[i].second) << "\":" << ranked[i].first;
+          }
+        }
+        o << "},\"nodes\":" << node_count << ",\"hover_ok\":" << hover_ok << ",\"end_ok\":" << end_good <<
+          ",\"hover_fail\":{";
+        {
+          bool first_entry = true;
+          for (const auto& entry : hover_fail) {
+            o << (first_entry ? "" : ",") << "\"" << diag_json_escape(entry.first) << "\":" << entry.second;
+            first_entry = false;
+          }
+          o << "},\"end_fail\":{";
+          first_entry = true;
+          for (const auto& entry : end_fail) {
+            o << (first_entry ? "" : ",") << "\"" << diag_json_escape(entry.first) << "\":" << entry.second;
+            first_entry = false;
+          }
+        }
+        o << "},\"best\":{";
+        bool first_best = true;
+        const auto emit_best = [&](const char* key, const Best& best) {
+            if (!best.set) return;
+            o << (first_best ? "" : ",") << "\"" << key << "\":" << best.json;
+            first_best = false;
+          };
+        emit_best("reach", best_reach);
+        emit_best("limit", best_limit);
+        emit_best("margin", best_margin);
+        emit_best("collision", best_collision);
+        o << "}}";
+        RCLCPP_INFO(get_logger(), "LEFTDIAG %s", o.str().c_str());
+      };
+    if (diag_on) {
+      std::ostringstream header;
+      header << std::fixed << std::setprecision(1) << "{\"intervals\":" << intervals <<
+        ",\"spacing_mm\":" << full_length_m / static_cast<double>(intervals) * 1000.0 <<
+        ",\"candidates\":" << candidates.size() << ",\"max_tilt\":" <<
+        settings_.left_parallel_max_tilt_deg << ",\"max_yaw\":" << settings_.left_parallel_max_yaw_deg <<
+        ",\"step\":" << settings_.left_parallel_step_deg << ",\"margin_deg\":" <<
+        settings_.left_parallel_min_joint_margin_deg << ",\"band_cap\":" <<
+        settings_.left_varying_max_theta_p_deg << "}";
+      RCLCPP_INFO(get_logger(), "LEFTDIAG_HDR %s", header.str().c_str());
+    }
     for (std::size_t station = 0; station <= intervals; ++station) {
       std::vector<left_varying::Node> nodes;
       if (!evaluate_station(station, all_candidates, nodes)) {
@@ -4330,6 +5763,7 @@ private:
           std::to_string(intervals));
       }
       station_nodes[station] = nodes;
+      if (diag_on) diagnose_station(station, nodes.size());
       const std::size_t node_count = nodes.size();
       dp.addStation(std::move(nodes), true);
       RCLCPP_DEBUG(
@@ -4348,14 +5782,19 @@ private:
     // of the NOMINAL segment (back_middle_left -> front_middle_left), not of the extended span.
     const double min_kept_length_m = settings_.left_varying_min_cut_fraction *
       (extension != nullptr ? extension->nominal_length_m : full_length_m);
-    const std::size_t min_stations_needed = extension == nullptr ?
+    const std::size_t min_stations_needed = patch_search ? 2U : (extension == nullptr ?
       static_cast<std::size_t>(std::ceil(
         settings_.left_varying_min_cut_fraction * static_cast<double>(intervals) - 1e-9)) + 1U :
-      static_cast<std::size_t>(std::ceil(min_kept_length_m / spacing_step_m - 1e-9)) + 1U;
+      static_cast<std::size_t>(std::ceil(min_kept_length_m / spacing_step_m - 1e-9)) + 1U);
     // Extended mode: the kept interval must cover the seam band, i.e. start at or before
     // required.first_max and end at or after required.last_min.
     left_varying::RequiredStations required;
-    if (extension != nullptr) {
+    if (patch_search) {
+      // The patch does not need to cover the tape band (the forward stroke crosses it): the chain
+      // must contain the overlap point and reach beyond the forward stroke's start.
+      required.first_max = extension->patch_first_max;
+      required.last_min = extension->patch_last_min;
+    } else if (extension != nullptr) {
       required = left_varying::requiredStationRange(
         extension->band_lo_m, extension->band_hi_m, full_length_m, intervals);
     }
@@ -4366,16 +5805,69 @@ private:
           left_varying::bestVerifiedEndCovering(
             active_dp, end_ok, chosen, min_length, required.first_max, required.last_min);
       };
+    // Travel coordinate -> mm from back_middle_left along back -> front (physical), and the text that
+    // states the travel direction / frame variant in plan messages.
+    const auto physical_mm = [&](double s_travel_m) {
+        return (extension != nullptr ? extension->fromBackMiddleLocalM(s_travel_m) : s_travel_m) * 1000.0;
+      };
+    const auto bandPhysicalLoMm = [&]() {
+        return extension == nullptr ? 0.0 :
+          std::min(extension->fromBackMiddleM(extension->band_lo_m),
+          extension->fromBackMiddleM(extension->band_hi_m)) * 1000.0;
+      };
+    const auto bandPhysicalHiMm = [&]() {
+        return extension == nullptr ? 0.0 :
+          std::max(extension->fromBackMiddleM(extension->band_lo_m),
+          extension->fromBackMiddleM(extension->band_hi_m)) * 1000.0;
+      };
+    const auto directionText = [&]() {
+        return reverse_travel ?
+          std::string("left_cut_direction=reverse (travel front_middle_left -> back_middle_left), "
+            "left_reverse_frame=") + settings_.left_reverse_frame :
+          std::string("left_cut_direction=forward (travel back_middle_left -> front_middle_left)");
+      };
+    // Most frequent first-contact pairs of the colliding IK branches (failure diagnostics).
+    const auto collisionPairsText = [&]() {
+        std::vector<std::pair<std::size_t, std::string> > ranked;
+        for (const auto& entry : ik_collision_pairs) ranked.emplace_back(entry.second, entry.first);
+        std::sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) {
+            return a.first != b.first ? a.first > b.first : a.second < b.second;
+          });
+        std::string text;
+        for (std::size_t i = 0; i < ranked.size() && i < 6U; ++i) {
+          text += (i == 0U ? "; colliding pairs: " : ", ") + ranked[i].second + " x" +
+            std::to_string(ranked[i].first);
+        }
+        return text;
+      };
     const auto fraction_failure = [&](std::size_t stations_found) {
+        if (patch_search) {
+          error = "left reverse patch search failed closed (" + directionText() + "): " +
+            std::string(stations_found == 0U ?
+              "no feasible contiguous interval that is enterable and leavable" :
+              "the longest feasible interval is " + formatDouble(
+                static_cast<double>(stations_found - 1U) * spacing_step_m * 1000.0, 1) + " mm") +
+            ", but it must start at or before station " + std::to_string(required.first_max) +
+            " (the overlap point) and reach station " + std::to_string(required.last_min) +
+            " (beyond the forward stroke start) of 0.." + std::to_string(intervals) + " over " +
+            formatDouble(full_length_m * 1000.0, 1) + " mm (" + std::to_string(candidates.size()) +
+            " candidates, " + std::to_string(evaluated_pairs) + " station/candidate pairs evaluated, " +
+            std::to_string(ik_branches) + " IK branches: " + std::to_string(ik_outside_margin) +
+            " outside the joint margin, " + std::to_string(ik_collision_failures) + " in collision, " +
+            std::to_string(ik_bounds_or_pose_failures) + " out of bounds/inexact" + collisionPairsText() +
+            "), " + std::to_string(cap_filtered_pairs) + " excluded by the theta_p cap " +
+            blade_cap.rangeText() + " deg)";
+          return false;
+        }
         if (extension != nullptr) {
           const double kept_mm = static_cast<double>(stations_found > 0U ? stations_found - 1U : 0U) *
             spacing_step_m * 1000.0;
-          error = "left varying orientation search failed closed (left_cut_extend_to_corners): " +
+          error = "left varying orientation search failed closed (left_cut_extend_to_corners" +
+            (reverse_travel ? ", " + directionText() : std::string()) + "): " +
             std::string(stations_found == 0U ?
               "no feasible contiguous interval that covers the seam crossing +/- " +
               formatDouble(extension->seam_cover_m * 1000.0, 1) + " mm (band " +
-              formatDouble((extension->band_lo_m - extension->nominal_start_m) * 1000.0, 1) + ".." +
-              formatDouble((extension->band_hi_m - extension->nominal_start_m) * 1000.0, 1) +
+              formatDouble(bandPhysicalLoMm(), 1) + ".." + formatDouble(bandPhysicalHiMm(), 1) +
               " mm from back_middle_left) exists" :
               "the longest feasible interval covering the seam band is " + formatDouble(kept_mm, 1) +
               " mm") +
@@ -4386,7 +5878,13 @@ private:
             formatDouble(extension->corner_margin_m * 1000.0, 1) + " mm, " +
             std::to_string(candidates.size()) + " candidates, " + std::to_string(intervals + 1U) +
             " stations at " + formatDouble(spacing_step_m * 1000.0, 1) + " mm, " +
-            std::to_string(evaluated_pairs) + " station/candidate pairs evaluated)";
+            std::to_string(evaluated_pairs) + " station/candidate pairs evaluated (" +
+            std::to_string(ik_branches) + " IK branches: " + std::to_string(ik_outside_margin) +
+            " outside the joint margin, " + std::to_string(ik_collision_failures) +
+            " in collision, " + std::to_string(ik_bounds_or_pose_failures) +
+            " out of bounds/inexact" + collisionPairsText() + "), " +
+            std::to_string(cap_filtered_pairs) + " excluded by the theta_p cap " +
+            blade_cap.rangeText() + " deg)";
           return false;
         }
         const double fraction = static_cast<double>(stations_found > 0U ? stations_found - 1U : 0U) /
@@ -4399,7 +5897,9 @@ private:
           formatDouble(settings_.left_varying_min_cut_fraction * 100.0, 1) + "% (" +
           std::to_string(candidates.size()) + " candidates, " + std::to_string(intervals + 1U) +
           " stations at " + formatDouble(full_length_m / intervals * 1000.0, 1) + " mm, " +
-          std::to_string(evaluated_pairs) + " station/candidate pairs evaluated)";
+          std::to_string(evaluated_pairs) + " station/candidate pairs evaluated, " +
+            std::to_string(cap_filtered_pairs) + " excluded by the theta_p cap " +
+            blade_cap.rangeText() + " deg)";
         return false;
       };
     struct Failure {
@@ -4433,7 +5933,9 @@ private:
     std::vector<Eigen::Quaterniond> final_profile;
     std::vector<std::vector<double> > final_joints;
     std::vector<double> final_hover;
+    std::vector<double> final_end_hover;  // last waypoint of the replayed finish leg
     std::string last_repair_detail;
+    std::string final_travel_text;  // measurements of the accepted cut stroke (plan summary)
     bool found_profile = false;
     // Joint-travel repairs (kTravel): first try many other branches at the offending end before
     // shortening (keeps the longest cuts); if that strategy fails, retry from scratch shortening
@@ -4527,7 +6029,8 @@ private:
               const double theta_p = std::acos(std::min(1.0, std::abs(rotation.col(0).dot(basis.normal)))) / kDeg;
               const double deviation =
                 std::acos(std::clamp(rotation.col(1).dot(-basis.along), -1.0, 1.0)) / kDeg;
-              bool ok = (rotation.col(0).dot(into_unit) >= 0.7 || rotation.col(2).dot(into_unit) >= 0.7) &&
+              bool ok = left_cut_direction::penetrationGateOk(rotation, basis.normal, convention) &&
+                theta_p <= station_cap(first + t) + 1e-6 &&
                 theta_p <= dp_cand[t]->theta_p + settings_.left_varying_max_step_deg + 1e-6 &&
                 deviation <= dp_cand[t]->blade_deviation + settings_.left_varying_max_step_deg + 1e-6;
               std::vector<double> found;
@@ -4586,22 +6089,30 @@ private:
         // the aggregate contact joint travel the validators apply to the retained stroke.
         const auto& first_hover = hover_for(first, chain.nodes[0], *dp_node[0]);
         std::vector<std::vector<double> > replay_joints;
+        // entry / finish / lift legs of the same replay (split-gate checks and measurements)
+        std::vector<std::vector<double> > entry_joints, finish_joints, lift_joints;
         const auto replay = [&](const std::vector<bool>& knot_flags, Failure& failure) {
             failure = Failure{};
             replay_joints.clear();
+            entry_joints.clear();
+            finish_joints.clear();
+            lift_joints.clear();
             moveit::core::RobotState state(seed_state);
             state.setJointGroupPositions(joint_group, *first_hover);
             state.update();
             std::string detail;
-            const auto single_leg = [&](const Eigen::Isometry3d& target) {
+            const auto single_leg = [&](const Eigen::Isometry3d& target,
+                                        std::vector<std::vector<double> >& leg_joints) {
                 std::vector<moveit::core::RobotStatePtr> waypoints;
                 std::size_t failed_leg = 0;
+                leg_joints.clear();
                 return WaypointCartesianPath::computeLegs(
                   state, joint_group, tool, {target}, stroke_config, contact_valid, waypoints,
                   failed_leg, detail) && [&]() {
                     for (const auto& waypoint : waypoints) {
                       std::vector<double> q;
                       waypoint->copyJointGroupPositions(joint_group, q);
+                      leg_joints.push_back(q);
                       if (!waypoint->satisfiesBounds(joint_group)) {
                         detail = "joint bounds violated";
                         return false;
@@ -4615,9 +6126,20 @@ private:
                     return true;
                   }();
               };
-            if (!single_leg(pose_with(first, dp_quat[0].toRotationMatrix(), Eigen::Vector3d::Zero()))) {
+            if (!single_leg(
+                pose_with(first, dp_quat[0].toRotationMatrix(), Eigen::Vector3d::Zero()),
+                entry_joints)) {
               failure = {Failure::Kind::kEntry, first, chain.nodes[0], 0U, "lateral entry: " + detail};
               return false;
+            }
+            if (leftContactSplitMode()) {
+              // The validator applies the split gate to every left contact stroke.
+              const auto entry_check = evaluateLeftContactSplit(joint_group, entry_joints);
+              if (!entry_check.ok) {
+                failure = {Failure::Kind::kEntry, first, chain.nodes[0], 0U,
+                  "lateral entry: " + entry_check.text};
+                return false;
+              }
             }
             std::vector<Eigen::Isometry3d> targets;
             std::vector<std::size_t> target_t;
@@ -4636,53 +6158,114 @@ private:
                 chain.nodes[t_to], "contact stroke " + detail};
               return false;
             }
-            std::vector<double> previous;
-            std::vector<double> travel;
             for (const auto& waypoint : waypoints) {
               std::vector<double> q;
               waypoint->copyJointGroupPositions(joint_group, q);
-              if (travel.empty()) travel.assign(q.size(), 0.0);
-              for (std::size_t j = 0; j < q.size() && !previous.empty(); ++j) {
-                travel[j] += std::abs(q[j] - previous[j]);
-              }
               if (!waypoint->satisfiesBounds(joint_group) || !inside_margin(q)) {
                 failure = {Failure::Kind::kExit, last_station, chain.nodes.back(), 0U,
                   "contact stroke joint bounds/margin (" +
                   formatDouble(settings_.left_parallel_min_joint_margin_deg, 1) + " deg)"};
                 return false;
               }
-              previous = q;
               replay_joints.push_back(q);
             }
-            for (std::size_t j = 0; j < travel.size(); ++j) {
-              if (travel[j] > kMaxLeftContactJointTravelRad) {
+            if (leftContactSplitMode()) {
+              // Split mode: the SAME pure check validateLeftContactJointTravel applies to the
+              // retained stroke. Travel violations trim the end that moves the joint more; the
+              // joint5 / margin / IK-branch rules trim the end the first failing waypoint lies on.
+              const auto split_check = evaluateLeftContactSplit(joint_group, replay_joints);
+              if (!split_check.ok) {
+                const bool travel = split_check.rule_failed &&
+                  left_contact_travel::isTravelRule(split_check.result.rule);
+                const bool trim_start = travel ?
+                  left_contact_travel::headTailTravel(
+                    replay_joints, split_check.result.joint, count).trimStart() :
+                  (split_check.rule_failed ? left_contact_travel::trimStartFor(split_check.result) : false);
+                failure = {Failure::Kind::kTravel, trim_start ? first : last_station,
+                  trim_start ? chain.nodes.front() : chain.nodes.back(), 0U,
+                  "contact stroke refused: " + split_check.text, trim_start};
+                return false;
+              }
+            } else {
+              // The same pure check validateLeftContactJointTravel applies to the retained stroke.
+              const auto travel_check = left_contact_travel::checkJointTravel(
+                replay_joints, kMaxLeftContactJointTravelRad);
+              if (!travel_check.ok) {
                 // Trim the end whose last station-length of stroke moves joint j more.
-                const std::size_t n = replay_joints.size();
-                const std::size_t k = std::max<std::size_t>(1U, n / std::max<std::size_t>(count, 1U));
-                double head = 0.0, tail = 0.0;
-                for (std::size_t w = 1; w < n && w <= k; ++w) {
-                  head += std::abs(replay_joints[w][j] - replay_joints[w - 1U][j]);
-                }
-                for (std::size_t w = n > k ? n - k : 1U; w < n; ++w) {
-                  tail += std::abs(replay_joints[w][j] - replay_joints[w - 1U][j]);
-                }
-                failure = {Failure::Kind::kTravel, head > tail ? first : last_station,
-                  head > tail ? chain.nodes.front() : chain.nodes.back(), 0U,
-                  "contact stroke moves joint" + std::to_string(j + 1) + " " +
-                  formatDouble(travel[j], 3) + " rad (> " +
-                  formatDouble(kMaxLeftContactJointTravelRad, 1) + " rad aggregate)", head > tail};
+                const bool trim_start =
+                  left_contact_travel::headTailTravel(replay_joints, travel_check.joint, count)
+                  .trimStart();
+                failure = {Failure::Kind::kTravel, trim_start ? first : last_station,
+                  trim_start ? chain.nodes.front() : chain.nodes.back(), 0U,
+                  "contact stroke moves " + left_contact_travel::jointTravelText(travel_check) +
+                  " rad (> " + formatDouble(kMaxLeftContactJointTravelRad, 1) +
+                  " rad aggregate)", trim_start};
                 return false;
               }
             }
-            if (!single_leg(pose_with(last_station, dp_quat.back().toRotationMatrix(), outward))) {
+            {
+              // True blade angle on the replayed Cartesian stroke (waypoints incl. the slerp
+              // between stations): the SAME check validateLeftVaryingRetainedStroke applies to the
+              // retained trajectory, so the search never emits a stroke the validator refuses.
+              moveit::core::RobotState fk(seed_state);
+              std::vector<Eigen::Isometry3d> tool_poses;
+              for (const auto& q : replay_joints) {
+                fk.setJointGroupPositions(joint_group, q);
+                fk.update();
+                tool_poses.push_back(fk.getGlobalLinkTransform(tool));
+              }
+              const auto angles = left_blade_cap::evaluateStroke(
+                blade_cap, extension != nullptr,
+                extension != nullptr ? extension->band_lo_m : 0.0,
+                extension != nullptr ? extension->band_hi_m : 0.0, tool_poses, line_start,
+                travel_dir, basis.normal, basis.along, settings_.left_varying_theta_p_tolerance_deg);
+              if (!angles.ok) {
+                // Ban the station-to-station edge the offending waypoint lies on.
+                std::size_t t_from = 0;
+                if (std::isfinite(angles.violation_s_m) && count >= 2U) {
+                  const double k = std::floor(angles.violation_s_m / spacing_step_m);
+                  const double lo = static_cast<double>(first);
+                  const double hi = static_cast<double>(last_station - 1U);
+                  t_from = static_cast<std::size_t>(std::clamp(k, lo, hi)) - first;
+                }
+                failure = {Failure::Kind::kEdge, first + t_from, chain.nodes[t_from],
+                  chain.nodes[t_from + 1U],
+                  "true blade angle theta_p " + formatDouble(angles.violation_theta_p_deg, 2) +
+                  " deg at s=" + formatDouble(angles.violation_s_m * 1000.0, 1) +
+                  " mm exceeds the station cap " + formatDouble(angles.violation_cap_deg, 2) +
+                  " deg + tolerance " +
+                  formatDouble(settings_.left_varying_theta_p_tolerance_deg, 1) + " deg"};
+                return false;
+              }
+            }
+            if (!single_leg(
+                pose_with(last_station, dp_quat.back().toRotationMatrix(), outward), finish_joints)) {
               failure = {Failure::Kind::kExit, last_station, chain.nodes.back(), 0U,
                 "finish (lateral withdrawal): " + detail};
               return false;
             }
+            if (leftContactSplitMode()) {
+              const auto finish_check = evaluateLeftContactSplit(joint_group, finish_joints);
+              if (!finish_check.ok) {
+                failure = {Failure::Kind::kExit, last_station, chain.nodes.back(), 0U,
+                  "finish (lateral withdrawal): " + finish_check.text};
+                return false;
+              }
+            }
             if (lift_follows &&
-                !single_leg(pose_with(last_station, dp_quat.back().toRotationMatrix(), outward + lift_vector))) {
+                !single_leg(
+                  pose_with(last_station, dp_quat.back().toRotationMatrix(), outward + lift_vector),
+                  lift_joints)) {
               failure = {Failure::Kind::kExit, last_station, chain.nodes.back(), 0U, "lift: " + detail};
               return false;
+            }
+            if (lift_follows && leftContactSplitMode()) {
+              const auto lift_check = evaluateLeftContactSplit(joint_group, lift_joints);
+              if (!lift_check.ok) {
+                failure = {Failure::Kind::kExit, last_station, chain.nodes.back(), 0U,
+                  "lift: " + lift_check.text};
+                return false;
+              }
             }
             return true;
           };
@@ -4704,6 +6287,8 @@ private:
           final_knots = used_knots;
           final_profile = profile;
           final_hover = *first_hover;
+          final_end_hover = finish_joints.empty() ? std::vector<double>() : finish_joints.back();
+          final_travel_text = leftContactStatsText(joint_group, replay_joints);
           found_profile = true;
           // Station joints = the replayed stroke's own branch at each station.
           std::vector<Eigen::Vector3d> stroke_points;
@@ -4769,7 +6354,15 @@ private:
         last_repair_detail + ")";
       return false;
     }
-    if (extension != nullptr) {
+    if (patch_search) {
+      // Defence in depth: the constrained selection guarantees it; verify on the result.
+      const std::size_t kept_last = final_first + final_nodes.size() - 1U;
+      if (final_first > required.first_max || kept_last < required.last_min) {
+        error = "left reverse patch search failed closed: the kept interval does not contain the "
+          "overlap point / reach beyond the forward stroke start (internal consistency check)";
+        return false;
+      }
+    } else if (extension != nullptr) {
       // Defence in depth: the constrained selection above guarantees it; verify on the result.
       const double kept_lo_m = static_cast<double>(final_first) * spacing_step_m;
       const double kept_hi_m =
@@ -4785,6 +6378,17 @@ private:
     plan.full_station_count = intervals + 1U;
     plan.full_length_m = full_length_m;
     plan.hover_start_joints = final_hover;
+    plan.end_hover_joints = final_end_hover;
+    plan.blade_gate_valid = true;
+    plan.blade_cap = blade_cap;
+    plan.has_seam_band = extension != nullptr;
+    plan.band_lo_m = extension != nullptr ? extension->band_lo_m : 0.0;
+    plan.band_hi_m = extension != nullptr ? extension->band_hi_m : 0.0;
+    plan.blade_tolerance_deg = settings_.left_varying_theta_p_tolerance_deg;
+    plan.span_origin = line_start;
+    plan.travel_dir = travel_dir;
+    plan.blade_normal = basis.normal;
+    plan.blade_along = basis.along;
     const double spacing_m = full_length_m / static_cast<double>(intervals);
     std::size_t knot_count = 0;
     for (std::size_t t = 0; t < final_nodes.size(); ++t) {
@@ -4813,8 +6417,14 @@ private:
     }
     const std::size_t last_index = final_first + final_nodes.size() - 1U;
     plan.planned_length_m = static_cast<double>(final_nodes.size() - 1U) * spacing_m;
-    const double trim_back_mm = static_cast<double>(final_first) * spacing_m * 1000.0;
-    const double trim_front_mm = static_cast<double>(intervals - last_index) * spacing_m * 1000.0;
+    // Trims at the first / last end of the TRAVEL; reported as the PHYSICAL back / front trim (in
+    // reverse travel the first end is the front corner).
+    const double trim_start_mm = static_cast<double>(final_first) * spacing_m * 1000.0;
+    const double trim_end_mm = static_cast<double>(intervals - last_index) * spacing_m * 1000.0;
+    const auto physical_trims =
+      left_cut_direction::physicalTrims(trim_start_mm, trim_end_mm, reverse_travel);
+    const double trim_back_mm = physical_trims.back_mm;
+    const double trim_front_mm = physical_trims.front_mm;
     plan.extended = extension != nullptr;
     plan.trim_back_mm = trim_back_mm;
     plan.trim_front_mm = trim_front_mm;
@@ -4826,36 +6436,49 @@ private:
       trimmed << "full cut";
     } else {
       trimmed << "TRIMMED";
-      if (final_first > 0U) trimmed << " " << trim_back_mm << " mm at the start (back_middle_left) end";
+      if (final_first > 0U) trimmed << " " << trim_start_mm << " mm at the start (back_middle_left) end";
       if (final_first > 0U && last_index < intervals) trimmed << " and";
-      if (last_index < intervals) trimmed << " " << trim_front_mm << " mm at the end (front_middle_left) end";
+      if (last_index < intervals) trimmed << " " << trim_end_mm << " mm at the end (front_middle_left) end";
     }
     std::ostringstream summary;
     summary << std::fixed << std::setprecision(1);
-    if (extension != nullptr) {
+    if (patch_search) {
+      const double kept_a_mm = physical_mm(static_cast<double>(final_first) * spacing_m);
+      const double kept_b_mm = physical_mm(static_cast<double>(last_index) * spacing_m);
+      summary << "left reverse patch search: kept " << plan.planned_length_m * 1000.0 << " mm (stations "
+              << final_first << ".." << last_index << " of 0.." << intervals << " over "
+              << full_length_m * 1000.0 << " mm in travel order, " << std::min(kept_a_mm, kept_b_mm)
+              << " .. " << std::max(kept_a_mm, kept_b_mm) << " mm from back_middle_left), "
+              << trim_end_mm << " mm of the span still uncut at the back end; "
+              << knot_count << " orientation knots; max theta_p " << std::setprecision(2)
+              << plan.max_theta_p_deg << " deg, max blade deviation from cut line "
+              << plan.max_blade_deviation_deg << " deg; " << directionText();
+    } else if (extension != nullptr) {
       // Arc positions of the kept interval relative to back_middle_left (negative = beyond it
       // toward the back corner) and of the seam band.
-      const double kept_from_mm =
-        (static_cast<double>(final_first) * spacing_m - extension->nominal_start_m) * 1000.0;
-      const double kept_to_mm =
-        (static_cast<double>(last_index) * spacing_m - extension->nominal_start_m) * 1000.0;
+      // (physical back -> front positions: in reverse travel the kept interval runs last -> first.)
+      const double kept_a_mm = physical_mm(static_cast<double>(final_first) * spacing_m);
+      const double kept_b_mm = physical_mm(static_cast<double>(last_index) * spacing_m);
+      const double kept_from_mm = std::min(kept_a_mm, kept_b_mm);
+      const double kept_to_mm = std::max(kept_a_mm, kept_b_mm);
       summary << "left varying orientation (left_cut_extend_to_corners): extended span "
               << full_length_m * 1000.0 << " mm (corner margin "
               << extension->corner_margin_m * 1000.0 << " mm, nominal segment "
               << extension->nominal_length_m * 1000.0 << " mm), kept " << plan.planned_length_m * 1000.0
               << " mm (stations " << final_first << ".." << last_index << " of 0.." << intervals
-              << ", " << plan.planned_length_m / extension->nominal_length_m * 100.0
+              << " in travel order, " << plan.planned_length_m / extension->nominal_length_m * 100.0
               << "% of nominal, " << kept_from_mm << " .. " << kept_to_mm
               << " mm from back_middle_left), trim " << trim_back_mm
               << " mm at the back end and " << trim_front_mm
               << " mm at the front end of the span; seam band covered (seam "
-              << (extension->seam_m - extension->nominal_start_m) * 1000.0
+              << physical_mm(extension->seam_m)
               << " mm from back_middle_left +/- " << extension->seam_cover_m * 1000.0
-              << " mm, band " << (extension->band_lo_m - extension->nominal_start_m) * 1000.0
-              << " .. " << (extension->band_hi_m - extension->nominal_start_m) * 1000.0
+              << " mm, band " << bandPhysicalLoMm()
+              << " .. " << bandPhysicalHiMm()
               << " mm); one continuous stroke, " << knot_count << " orientation knots; max theta_p "
               << std::setprecision(2) << plan.max_theta_p_deg
-              << " deg, max blade deviation from cut line " << plan.max_blade_deviation_deg << " deg";
+              << " deg, max blade deviation from cut line " << plan.max_blade_deviation_deg << " deg; "
+              << directionText();
     } else {
       summary << "left varying orientation: planned " << plan.planned_length_m * 1000.0 << " mm of "
               << full_length_m * 1000.0 << " mm (" << plan.planned_length_m / full_length_m * 100.0
@@ -4866,6 +6489,8 @@ private:
               << plan.max_blade_deviation_deg << " deg";
     }
     plan.summary = summary.str();
+    plan.summary += "; left contact travel gate " + settings_.left_contact_travel_mode + " (cut stroke " +
+      final_travel_text + ")";
     if (settings_.left_cut_inward_m > 0.0) {
       plan.summary += "; whole left stroke " + formatDouble(settings_.left_cut_inward_m * 1000.0, 1) +
         " mm inside the detected face (left_cut_inward_m)";
@@ -4898,7 +6523,9 @@ private:
         static_cast<double>(station.station_index) * spacing_m * 1000.0, station.theta_p_deg,
         station.blade_deviation_deg, knot_text.str().c_str(), joints_deg.str().c_str());
     }
-    if (final_first > 0U || last_index < intervals) {
+    if (patch_search) {
+      RCLCPP_INFO(get_logger(), "%s", plan.summary.c_str());
+    } else if (final_first > 0U || last_index < intervals) {
       RCLCPP_WARN(
         get_logger(), "%s; planning the left cut over the trimmed interval only", plan.summary.c_str());
     } else {
@@ -4907,10 +6534,148 @@ private:
     RCLCPP_INFO(
       get_logger(),
       "Left varying orientation search done in %.1f s: %zu candidates, %zu stations, %zu "
-      "station/candidate pairs evaluated, %zu repairs, %zu knots",
+      "station/candidate pairs evaluated, %zu repairs, %zu knots; %zu IK branches: %zu outside the joint "
+      "margin, %zu in collision (first-contact pairs, first 1500 collisions)%s",
       elapsed_s(), candidates.size(), intervals + 1U, evaluated_pairs,
-      banned_starts.size() + banned_edges.size() + banned_ends.size(), knot_count);
+      banned_starts.size() + banned_edges.size() + banned_ends.size(), knot_count, ik_branches,
+      ik_outside_margin, ik_collision_failures, collisionPairsText().c_str());
     return true;
+  }
+  // ---- Left reverse patch (left_cut_patch.hpp) ------------------------------------------------
+  // Slack (m) the patch search line starts in front of the overlap point, so a patch whose very
+  // first station cannot be entered may start one station further front.
+  static constexpr double kLeftPatchStartSlackM = 0.010;
+  // One-line plan-message field of the patch (forward numbers, patch numbers, coverage, status).
+  std::string leftPatchSummaryText(
+    const LeftVaryingPlan& f, const std::string& status, bool include_patch = true) const
+  {
+    auto c = f.patch_coverage;
+    if (!include_patch && c.patched) {
+      c.patched = false;
+      c.total_covered_mm = c.forward_kept_mm;
+      c.percent_of_edge = c.edge_mm > 0.0 ? 100.0 * c.forward_kept_mm / c.edge_mm : 0.0;
+    }
+    const double forward_percent = c.edge_mm > 0.0 ? 100.0 * c.forward_kept_mm / c.edge_mm : 0.0;
+    std::string text = "left reverse patch: forward kept " + formatDouble(c.forward_kept_mm, 1) +
+      " mm (" + formatDouble(f.forward_from_back_middle_mm, 1) + " .. " +
+      formatDouble(f.forward_to_back_middle_mm, 1) + " mm from back_middle_left), back gap " +
+      formatDouble(c.gap_mm, 1) + " mm (left_cut_patch_min_gap_m " +
+      formatDouble(settings_.left_cut_patch_min_gap_m * 1000.0, 1) + " mm), patch kept " +
+      formatDouble(c.patched ? c.patch_kept_mm : 0.0, 1) + " mm";
+    if (c.patched) {
+      text += " (" + formatDouble(f.patch_from_back_middle_mm, 1) + " .. " +
+        formatDouble(f.patch_to_back_middle_mm, 1) + " mm from back_middle_left)";
+    }
+    text += ", overlap " + formatDouble(c.patched ? c.overlap_mm : 0.0, 1) + " mm (left_cut_patch_overlap_m " +
+      formatDouble(settings_.left_cut_patch_overlap_m * 1000.0, 1) + " mm), total covered " +
+      formatDouble(c.total_covered_mm, 1) + " mm = " + formatDouble(c.percent_of_edge, 1) +
+      " % of the " + formatDouble(c.edge_mm, 1) + " mm corner-to-corner edge (forward alone " +
+      formatDouble(forward_percent, 1) + " %), patch status: " + status;
+    return text;
+  }
+  // Plans the reverse patch behind a verified FORWARD varying plan and stores the outcome in
+  // `forward` (patch, patch_status, patch_coverage ...). Never fails the plan: every problem DROPS
+  // the patch (forward-only plan, reason in patch_status).
+  void planLeftPatch(
+    const Snapshot& snapshot, const CutSegment& segment,
+    const moveit::core::JointModelGroup* joint_group, const moveit::core::RobotState& seed_state,
+    const LeftExtension& forward_geometry, const geometry_msgs::msg::Point& span_start_point,
+    const geometry_msgs::msg::Point& span_end_point, double tilt_deg, double target_clearance_m,
+    bool lift_follows, LeftVaryingPlan& forward)
+  {
+    forward.patch_attempted = true;
+    forward.patch.reset();
+    const double span_m = forward_geometry.span_length_m;
+    const double fwd_start_m = forward.trim_back_mm / 1000.0;
+    const double fwd_end_m = span_m - forward.trim_front_mm / 1000.0;
+    const double edge_m = span_m + 2.0 * forward_geometry.corner_margin_m;
+    forward.forward_from_back_middle_mm = (fwd_start_m - forward_geometry.nominal_start_m) * 1000.0;
+    forward.forward_to_back_middle_mm = (fwd_end_m - forward_geometry.nominal_start_m) * 1000.0;
+    forward.patch_coverage = left_cut_patch::coverage(fwd_start_m, fwd_end_m, false, 0.0, 0.0, edge_m);
+    if (!left_cut_patch::needsPatch(fwd_start_m, settings_.left_cut_patch_min_gap_m)) {
+      forward.patch_status = "not needed (back gap " + formatDouble(fwd_start_m * 1000.0, 1) +
+        " mm <= left_cut_patch_min_gap_m " + formatDouble(settings_.left_cut_patch_min_gap_m * 1000.0, 1) +
+        " mm)";
+      return;
+    }
+    const auto drop = [&](const std::string& reason) {
+        std::string shortened = reason;
+        if (shortened.size() > 400U) shortened = shortened.substr(0, 400U) + "...";
+        if (reason.size() > 400U) {
+          RCLCPP_WARN(get_logger(), "left reverse patch drop reason (full): %s", reason.c_str());
+        }
+        forward.patch.reset();
+        forward.patch_coverage = left_cut_patch::coverage(fwd_start_m, fwd_end_m, false, 0.0, 0.0, edge_m);
+        forward.patch_status = "dropped: " + shortened;
+        RCLCPP_WARN(
+          get_logger(), "left reverse patch DROPPED (forward-only plan, back gap %.1f mm): %s",
+          fwd_start_m * 1000.0, shortened.c_str());
+      };
+    const auto line = left_cut_patch::patchLine(
+      span_m, fwd_start_m, fwd_end_m, settings_.left_cut_patch_overlap_m, kLeftPatchStartSlackM);
+    if (!line.ok) {
+      drop(line.error);
+      return;
+    }
+    if (forward.end_hover_joints.empty()) {
+      drop("the forward finish joint state is unavailable");
+      return;
+    }
+    const std::size_t intervals =
+      left_varying::stationIntervals(line.length_m, settings_.left_varying_station_spacing_m);
+    const auto required = left_cut_patch::requiredStations(line, intervals);
+    LeftExtension ext = forward_geometry;
+    const auto travel = left_cut_direction::toTravel(forward_geometry.travelGeometry(), true);
+    ext.nominal_start_m = travel.nominal_start_m;
+    ext.seam_m = travel.seam_m;
+    ext.band_lo_m = travel.band_lo_m;
+    ext.band_hi_m = travel.band_hi_m;
+    ext.reverse = true;
+    ext.convention = left_cut_direction::conventionFor(
+      left_cut_direction::Direction::kReverse,
+      left_cut_direction::reverseFrameFromString(settings_.left_reverse_frame)
+        .value_or(left_cut_direction::ReverseFrame::kAboutNormal));
+    ext.patch = true;
+    ext.patch_origin_m = span_m - line.start_arc_m;
+    ext.patch_first_max = required.first_max;
+    ext.patch_last_min = required.last_min;
+    const Eigen::Vector3d a = toEigen(span_start_point);
+    const Eigen::Vector3d b = toEigen(span_end_point);
+    const geometry_msgs::msg::Point patch_start_point =
+      toPoint(a + (b - a) * (line.start_arc_m / span_m));
+    const geometry_msgs::msg::Point patch_end_point = toPoint(a);
+    const auto targets = orientationTargets(
+      snapshot, false, segment.start, segment.end, patch_start_point, patch_end_point);
+    const auto cut_start = targetPose(snapshot, patch_start_point, targets.first, target_clearance_m, tilt_deg);
+    const auto cut_end = targetPose(snapshot, patch_end_point, targets.second, target_clearance_m, tilt_deg);
+    LeftVaryingPlan patch;
+    std::string error;
+    if (!searchLeftVaryingOrientation(
+        snapshot, joint_group, seed_state, cut_start, cut_end, forward.end_hover_joints,
+        lift_follows, patch, error, &ext)) {
+      drop(error);
+      return;
+    }
+    if (patch.stations.size() < 2U || patch.full_station_count < 2U) {
+      drop("the patch search returned no usable stations");
+      return;
+    }
+    const double spacing_m = patch.full_length_m / static_cast<double>(patch.full_station_count - 1U);
+    const double t_first = static_cast<double>(patch.stations.front().station_index) * spacing_m;
+    const double t_last = static_cast<double>(patch.stations.back().station_index) * spacing_m;
+    const double arc_to = line.start_arc_m - t_first;
+    const double arc_from = line.start_arc_m - t_last;
+    if (arc_from > fwd_start_m + 1e-6 || arc_to < line.overlap_point_arc_m - 1e-6) {
+      drop("the patch interval " + formatDouble(arc_from * 1000.0, 1) + ".." +
+        formatDouble(arc_to * 1000.0, 1) + " mm does not cover the forward start " +
+        formatDouble(fwd_start_m * 1000.0, 1) + " mm + overlap");
+      return;
+    }
+    forward.patch_coverage = left_cut_patch::coverage(fwd_start_m, fwd_end_m, true, arc_from, arc_to, edge_m);
+    forward.patch_from_back_middle_mm = (arc_from - forward_geometry.nominal_start_m) * 1000.0;
+    forward.patch_to_back_middle_mm = (arc_to - forward_geometry.nominal_start_m) * 1000.0;
+    forward.patch_status = "planned";
+    forward.patch = std::make_shared<LeftVaryingPlan>(std::move(patch));
   }
   // Uncorrected geometry baseline for a staged session; saved deltas reference it so
   // each completed record remains standalone.
@@ -6979,6 +8744,7 @@ private:
       return false;
     }
     if (refuseHalfSeam(who.c_str(), message)) return false;
+    if (refuseMiddleSag(who.c_str(), message)) return false;
     if (!applyTopCutTaughtOffsets(snapshot, options, message)) return false;
     options.cut_stroke_speed_factor = settings_.top_cut_staged_speed_factor;
     options.middle_finish_clearance_m = settings_.top_cut_lift_clearance_m;
@@ -7218,6 +8984,7 @@ private:
       return false;
     }
     if (refuseHalfSeam("plan_top_cut_staged", message)) return false;
+    if (refuseMiddleSag("plan_top_cut_staged", message)) return false;
     if (side_tape_handoff_info_.inProgress()) {
       message = "a side-tape hand-off is active or unresolved; call side_tape_retract first";
       return false;
@@ -7731,7 +9498,26 @@ private:
     }
     snapshot.header.stamp.sec = static_cast<std::int32_t>(snapshot.acquisition_stamp_ns / 1'000'000'000LL);
     snapshot.header.stamp.nanosec = static_cast<std::uint32_t>(snapshot.acquisition_stamp_ns % 1'000'000'000LL);
-    return applySnapshotFrameHandling(snapshot, message);
+    if (!applySnapshotFrameHandling(snapshot, message)) return false;
+    // Top-split marker (see snapshot_top_face.hpp). The extended point is the FILE's seam_end; a rotate_180
+    // relabel swaps seam_start/seam_end, so there it is the labelled seam_start. A marker key that cannot be
+    // read as a number is carried as NaN and refused by validateSnapshot.
+    if (document.get_child_optional("dual_cut_coordinator_top_split")) {
+      snapshot.top_split_marker.present = true;
+      const auto extension_node = document.get_child_optional(
+        "dual_cut_coordinator_top_split.right_end_extension_m");
+      if (extension_node) {
+        const auto extension = document.get_optional<double>(
+          "dual_cut_coordinator_top_split.right_end_extension_m");
+        snapshot.top_split_marker.extension_m =
+          extension ? *extension : std::numeric_limits<double>::quiet_NaN();
+      }
+      const auto relabel = snapshot_frame::relabelFromString(settings_.snapshot_relabel);
+      snapshot.top_split_marker.extended =
+        (relabel && *relabel == snapshot_frame::Relabel::kRotate180) ?
+        snapshot_top_face::ExtendedEnd::kSeamStart : snapshot_top_face::ExtendedEnd::kSeamEnd;
+    }
+    return true;
   }
   // True when the snapshot is NOT used as written (fixed transform and/or relabel).
   bool snapshotFrameHandlingIsActive() const
@@ -8127,19 +9913,28 @@ private:
       message = "snapshot corner ordering is not a rectangular carton top face";
       return false;
     }
-    const auto on_top_face = [&](const geometry_msgs::msg::Point& point) {
-      const auto relative = vector(snapshot.back_left, point);
-      const double x = dot(relative, back) / width;
-      const double y = dot(relative, left) / depth;
-      return x >= -0.01 && x <= width + 0.01 && y >= -0.01 && y <= depth + 0.01 &&
-             std::abs(dot(relative, normal)) <= 0.01;
-    };
-    if (!on_top_face(snapshot.seam_start) || !on_top_face(snapshot.seam_end) ||
-        !on_top_face(snapshot.seam_center) || !on_top_face(snapshot.back_middle_left) ||
-        !on_top_face(snapshot.front_middle_left) || !on_top_face(snapshot.back_middle_right) ||
-        !on_top_face(snapshot.front_middle_right)) {
-      message = "snapshot seam or side cutting point is outside the detected carton top face";
-      return false;
+    {
+      const auto eigen_point = [](const geometry_msgs::msg::Point& point) {
+        return Eigen::Vector3d(point.x, point.y, point.z);
+      };
+      const snapshot_top_face::Face face{
+        eigen_point(snapshot.back_left), eigen_point(snapshot.back_right),
+        eigen_point(snapshot.front_left), Eigen::Vector3d(normal[0], normal[1], normal[2])};
+      const auto face_result = snapshot_top_face::checkSeamAndSidePoints(
+        face, eigen_point(snapshot.seam_start), eigen_point(snapshot.seam_end),
+        eigen_point(snapshot.seam_center), eigen_point(snapshot.back_middle_left),
+        eigen_point(snapshot.front_middle_left), eigen_point(snapshot.back_middle_right),
+        eigen_point(snapshot.front_middle_right), eigen_point(snapshot.front_right),
+        snapshot.top_split_marker);
+      if (face_result == snapshot_top_face::Result::kInvalidExtension) {
+        message = "snapshot top-split marker has an invalid right_end_extension_m (must be a finite "
+          "number within [0, 0.02] m)";
+        return false;
+      }
+      if (face_result != snapshot_top_face::Result::kOk) {
+        message = "snapshot seam or side cutting point is outside the detected carton top face";
+        return false;
+      }
     }
     const auto midpoint_matches = [](
       const geometry_msgs::msg::Point& value, const geometry_msgs::msg::Point& first,
@@ -8300,10 +10095,17 @@ private:
       const bool pattern_has_left = pattern == "left_only" || pattern == "t_cut" ||
         pattern == "t_cut_handoff" || pattern == "h" || pattern == "combined";
       last_left_varying_summary_.clear();
+      last_left_patch_summary_.clear();
+      last_middle_sag_summary_.clear();
       if (pattern_has_left) {
         const std::string varying_conflict = leftVaryingConflict(pattern);
         if (!varying_conflict.empty()) {
           message = pattern + " planning refused: " + varying_conflict;
+          return false;
+        }
+        const std::string patch_conflict = leftPatchConflict(pattern);
+        if (!patch_conflict.empty()) {
+          message = pattern + " planning refused: " + patch_conflict;
           return false;
         }
         if (settings_.left_parallel_varying_orientation_enabled) {
@@ -8327,6 +10129,13 @@ private:
           RCLCPP_WARN(
             get_logger(), "left_cut_reverse_travel=true: planning the LEFT side cut front_middle_left"
             "->back_middle_left (blade +Y toward the front); pattern %s", pattern.c_str());
+        }
+        if (leftCutReverse()) {
+          RCLCPP_WARN(
+            get_logger(), "left_cut_direction=reverse (left_reverse_frame=%s): the varying "
+            "corner-to-corner LEFT cut travels front_middle_left->back_middle_left; stations are "
+            "searched in travel order (pattern %s)", settings_.left_reverse_frame.c_str(),
+            pattern.c_str());
         }
       }
       publishCartonGeometry(snapshot);
@@ -8418,6 +10227,7 @@ private:
       const bool varying_left =
         pattern_has_left && settings_.left_parallel_varying_orientation_enabled;
       if (varying_left) options.varying_plan_out = &debug_varying_plan;
+      std::string early_stop_note;   // set when the descent skipped steps (top_cut_descent.hpp)
       for (int step = 0; ; ++step) {
         bool planned = false;
         for (const double lift : lift_candidates) {
@@ -8443,10 +10253,11 @@ private:
             lift * 1000.0, message.c_str());
         }
         if (planned) break;
-        const double next_fraction = 1.0 - 0.05 * (step + 1);
+        double next_fraction = 1.0 - 0.05 * (step + 1);
         if ((pattern != "middle_only" && pattern != "t_cut") ||
             !settings_.top_cut_allow_shortened_cut || half_seam ||
             next_fraction < settings_.top_cut_min_cut_fraction - 1e-9) {
+          if (!early_stop_note.empty()) message += early_stop_note;
           if (half_seam) {
             message = "middle_only half seam (middle_seam_stop center, stop at " +
               formatDouble(half_seam_fraction * 100.0, 1) + " % of the seam) did not plan; "
@@ -8461,6 +10272,32 @@ private:
         RCLCPP_WARN(
           get_logger(), "%s: %.0f %% top cut did not plan (%s); trying shorter",
           pattern.c_str(), middle_only_fraction * 100.0, message.c_str());
+        // A failure before the cut stroke whose inputs do not depend on the cut length (the approach/align transit
+        // and its wrist gate; the stroke START is fixed in this mode) cannot be cured by a shorter cut: skip the
+        // steps in between and try the minimum fraction once (top_cut_descent.hpp).
+        if (settings_.top_cut_fraction_descent_stop_on_fraction_independent_failure &&
+            pattern == "middle_only" && !middle_reverse && lift_candidates.size() == 1U) {
+          const auto decision = top_cut_descent::decideAfterFailure(
+            step, settings_.top_cut_min_cut_fraction, settings_.top_cut_allow_shortened_cut,
+            true, last_plan_failure_.before_cut_stroke);
+          if (decision.action == top_cut_descent::Action::kJumpToMinimum) {
+            next_fraction = top_cut_descent::fractionOfStep(decision.next_step);
+            step = decision.next_step - 1;
+            std::string reason = last_plan_failure_.reason;
+            if (reason.size() > 160U) reason = reason.substr(0, 160U) + "...";
+            early_stop_note = " [top cut descent: " + formatDouble(middle_only_fraction * 100.0, 0) +
+              " % failed before the cut stroke in '" + last_plan_failure_.stage +
+              "', independent of the cut length; only the minimum fraction " +
+              formatDouble(next_fraction * 100.0, 0) + " % was tried after it]";
+            RCLCPP_WARN(
+              get_logger(),
+              "%s: top cut descent stops early at %.0f %%: stage '%s' failed before the cut stroke (%s); its "
+              "inputs do not depend on the cut length, so the steps in between are skipped and the minimum "
+              "fraction %.0f %% is tried once (top_cut_fraction_descent_stop_on_fraction_independent_failure)",
+              pattern.c_str(), middle_only_fraction * 100.0, last_plan_failure_.stage.c_str(), reason.c_str(),
+              next_fraction * 100.0);
+          }
+        }
         middle_only_fraction = next_fraction;
         planned_snapshot = base_snapshot;
         if (middle_reverse) {
@@ -8498,17 +10335,19 @@ private:
         message =
           "Snapshot-relative " + std::string(t_cut ? "T-cut" : "combined") +
           " dry-run plan [" + motion_profile + "] published to RViz; waypoint_order=approach" +
-          (settings_.left_cut_reverse_travel ?
+          (settings_.left_cut_reverse_travel || leftCutReverse() ?
            "->front_middle_left->back_middle_left" : "->back_middle_left->front_middle_left") +
           "->finish->transition->approach->seam_start"
           "->seam_end->finish" +
           (t_cut ? "" : "->transition->approach->back_middle_right->front_middle_right->finish") +
           "; side_knife_facing=opposite_travel; " + dwell_summary +
           (last_left_varying_summary_.empty() ? std::string() : "; " + last_left_varying_summary_) +
-          "; transit extra lift " + formatDouble(used_lift * 1000.0, 0) + " mm" +
+          (last_left_patch_summary_.empty() ? std::string() : "; " + last_left_patch_summary_) +
+          "; transit extra lift " + formatDouble(used_lift * 1000.0, 0) + " mm" + transitDetourSuffix() +
           (t_cut ? "; top cut_fraction=" + formatDouble(middle_only_fraction * 100.0, 0) +
             " % of the seam" + (middle_only_fraction < 1.0 ? " (SHORTENED, the rest is not cut)" : "") :
             std::string()) +
+          (last_middle_sag_summary_.empty() ? std::string() : "; " + last_middle_sag_summary_) +
           "; execution remains disabled until execution_enabled is set";
         return true;
       }
@@ -8523,6 +10362,7 @@ private:
                   "; left_cut_reverse_travel=true (front_middle_left->back_middle_left)" : "") +
                 (last_left_varying_summary_.empty() ? std::string() :
                   "; " + last_left_varying_summary_) +
+                (last_left_patch_summary_.empty() ? std::string() : "; " + last_left_patch_summary_) +
                 (includes_middle_seam ? "; middle entry alignment_m=" +
                   formatDouble(settings_.middle_entry_alignment_m, 3) : "") +
                 (middle_reverse ? "; middle_cut_reverse_travel=true (seam_end->seam_start)" : "") +
@@ -8530,6 +10370,8 @@ private:
                 (pattern == "middle_only" ? "; middle_only cut_fraction=" +
                   formatDouble(retained_middle_fraction_ * 100.0, 0) + " % of the seam" +
                   (middle_only_fraction < 1.0 ? " (SHORTENED, the rest is not cut)" : "") : "") +
+                (last_middle_sag_summary_.empty() ? std::string() : "; " + last_middle_sag_summary_) +
+                transitDetourSuffix() +
                 (half_seam ? "; middle_seam_stop=center (half seam, stroke ends " +
                   formatDouble(settings_.middle_seam_center_overlap_m * 1000.0, 1) +
                   " mm past the seam centre; the rest is not cut)" : "") +
@@ -8751,6 +10593,68 @@ private:
         return false;
       }
       out.positions[slot] = position;
+    }
+    return true;
+  }
+  // Adds every world object of move_group's scene to a throwaway probe scene, except the carton and the camera
+  // pole (the probe adds those itself: the carton from the snapshot, the pole from the latched topic) and
+  // anything that cannot be geometry. The carton's scoped contact allowance is an ACM entry on the carton id
+  // only, so it never covers an object added here. Fails closed: if move_group's scene cannot be read the
+  // probe fails (a probe without the table would pick poses that the MTC task, which has it, then rejects).
+  // With no extra object in the scene the probe scene equals the former one (logged at INFO).
+  bool addMonitoredWorldObjects(
+    planning_scene::PlanningScene& scene, const std::string& probe, std::string& error)
+  {
+    if (!settings_.probe_scene_include_world_objects) return true;
+    static std::atomic<int> probe_fetch_counter{0};
+    try {
+      auto node = std::make_shared<rclcpp::Node>(
+        "box_h_cut_executor_probe_scene_" + std::to_string(probe_fetch_counter.fetch_add(1)),
+        get_namespace());
+      auto client = node->create_client<moveit_msgs::srv::GetPlanningScene>("get_planning_scene");
+      if (!client->wait_for_service(std::chrono::seconds(5))) {
+        error = "get_planning_scene is not available; the " + probe + " cannot include move_group's world objects";
+        return false;
+      }
+      auto request = std::make_shared<moveit_msgs::srv::GetPlanningScene::Request>();
+      using Components = moveit_msgs::msg::PlanningSceneComponents;
+      request->components.components = Components::WORLD_OBJECT_NAMES | Components::WORLD_OBJECT_GEOMETRY |
+        Components::ALLOWED_COLLISION_MATRIX;
+      rclcpp::executors::SingleThreadedExecutor executor;
+      executor.add_node(node);
+      auto future = client->async_send_request(request);
+      if (executor.spin_until_future_complete(future, std::chrono::seconds(10)) !=
+          rclcpp::FutureReturnCode::SUCCESS) {
+        error = "get_planning_scene did not answer within 10 s for the " + probe;
+        return false;
+      }
+      const auto response = future.get();
+      const auto objects = probe_scene::selectObjects(
+        response->scene.world.collision_objects, {settings_.carton_collision_id, "camera_pole"});
+      for (const auto& object : objects) {
+        if (!scene.processCollisionObjectMsg(object)) {
+          error = "cannot add world object '" + object.id + "' of move_group's scene to the " + probe;
+          return false;
+        }
+      }
+      // The copied objects' ACM entries against robot links (e.g. the padded table vs the base link, an exemption
+      // the dual cell's table_collision.py writes into move_group's ACM) are copied too, so the probe judges a pose
+      // exactly as the MTC task does. Only entries "copied object x robot link" with ALWAYS are taken: entries of the
+      // carton (which the probe adds itself) or of any other name are never copied, so the carton contact allowance
+      // stays what the stage code sets.
+      const collision_detection::AllowedCollisionMatrix monitored_acm(response->scene.allowed_collision_matrix);
+      const auto model = scene.getRobotModel();
+      const std::size_t exemptions = probe_scene::copyExemptions(
+        monitored_acm, objects, [&model](const std::string& name) { return model->hasLinkModel(name); },
+        scene.getAllowedCollisionMatrixNonConst());
+      RCLCPP_INFO(
+        get_logger(),
+        "%s: %zu world object(s) of move_group's scene added besides carton and camera pole: %s (%zu object/link "
+        "collision exemption(s) copied from its ACM)",
+        probe.c_str(), objects.size(), probe_scene::idList(objects).c_str(), exemptions);
+    } catch (const std::exception& e) {
+      error = std::string("reading move_group's scene for the ") + probe + " failed: " + e.what();
+      return false;
     }
     return true;
   }
@@ -9303,7 +11207,51 @@ private:
     }
   }
 
+  // Plans the segments; when the plan carries a left reverse patch and fails for a patch-related
+  // reason (patch stage, patch transit wrist gate, patch collision/straightness/contact checks), the
+  // patch is DROPPED and the forward-only plan is planned again (never refuse the plan because of
+  // the patch; no gate is loosened).
   bool planCutSegments(
+    const Snapshot& snapshot, const std::vector<CutSegment>& segments,
+    const std::map<std::string, CutDebugCorrection>& active_corrections,
+    const std::string& motion_profile, const std::string& task_name,
+    const SegmentPlanOptions& options, std::unique_ptr<mtc::Task>& task,
+    std::vector<geometry_msgs::msg::PoseStamped>& cut_targets, std::string& message)
+  {
+    if (planCutSegmentsOnce(
+        snapshot, segments, active_corrections, motion_profile, task_name, options, task,
+        cut_targets, message)) {
+      return true;
+    }
+    if (!patch_in_last_plan_ || !options.drop_patch_reason.empty()) return false;
+    const bool patch_related = message.find("left side cut patch") != std::string::npos ||
+      last_plan_failure_.stage.find("left side cut patch") != std::string::npos;
+    if (!patch_related) return false;
+    SegmentPlanOptions retry = options;
+    retry.drop_patch_reason = message.size() > 300U ? message.substr(0, 300U) + "..." : message;
+    if (options.varying_plan_out != nullptr && !options.varying_plan_out->stations.empty() &&
+        options.reuse_varying == nullptr) {
+      // Do not search the (verified) forward plan again, and forget the dropped patch in the cache.
+      auto& cached = *options.varying_plan_out;
+      cached.patch.reset();
+      cached.patch_status = "dropped: " + retry.drop_patch_reason;
+      cached.patch_coverage.patched = false;
+      cached.patch_coverage.total_covered_mm = cached.patch_coverage.forward_kept_mm;
+      cached.patch_coverage.percent_of_edge = cached.patch_coverage.edge_mm > 0.0 ?
+        100.0 * cached.patch_coverage.forward_kept_mm / cached.patch_coverage.edge_mm : 0.0;
+      retry.reuse_varying = options.varying_plan_out;
+    }
+    RCLCPP_WARN(
+      get_logger(), "left reverse patch failed planning (%s); dropping it and planning the "
+      "forward-only cut", retry.drop_patch_reason.c_str());
+    task.reset();
+    cut_targets.clear();
+    message.clear();
+    return planCutSegmentsOnce(
+      snapshot, segments, active_corrections, motion_profile, task_name, retry, task, cut_targets,
+      message);
+  }
+  bool planCutSegmentsOnce(
     const Snapshot& snapshot, const std::vector<CutSegment>& segments,
     const std::map<std::string, CutDebugCorrection>& active_corrections,
     const std::string& motion_profile, const std::string& task_name,
@@ -9312,6 +11260,16 @@ private:
   {
     task = std::make_unique<mtc::Task>();
     task->stages()->setName(task_name);
+    {
+      std::lock_guard<std::mutex> lock(transit_detour_mutex_);
+      transit_detour_notes_.clear();
+    }
+    last_transit_detour_summary_.clear();
+    last_plan_failure_ = PlanFailureInfo{};
+    // Names of the stages before the first middle segment's cut stroke whose inputs are the same for every cut length
+    // (the approach transit to the hover and the short align move); filled where they are built below.
+    std::set<std::string> pre_stroke_stages;
+    std::set<std::string> pre_stroke_transits;
     // The robot model (and with it MTC's cached planning pipelines) is loaded once.
     if (robot_model_) {
       task->setRobotModel(robot_model_);
@@ -9406,6 +11364,9 @@ private:
     }
     cut_targets.clear();
     std::optional<LeftVaryingPlan> retained_varying;  // validated on the retained trajectory
+    std::shared_ptr<LeftVaryingPlan> retained_patch;  // the left reverse patch, validated likewise
+    std::size_t patch_dwell_count = 0U;               // extra pre-cut dwells of patch segments
+    patch_in_last_plan_ = false;
     for (std::size_t segment_index = 0; segment_index < segments.size(); ++segment_index) {
       const auto& segment = segments[segment_index];
       const bool is_middle_seam = segment.cut == CutKind::kMiddle;
@@ -9491,6 +11452,59 @@ private:
         cut_end.pose.position = toPoint(
           toEigen(cut_end.pose.position) + options.middle_end_extra_depth_m * deeper);
       }
+      // Top-cut lid sag (middle_cut_sag_m > 0 only; at 0 nothing below runs): the stroke endpoints
+      // go deeper by the profile's value at their position, and the stroke itself becomes a
+      // waypoint polyline (built where the stroke is added). Hover poses stay unchanged.
+      std::vector<Eigen::Isometry3d> sag_knots;
+      double sag_end_depth_m = 0.0;
+      if (is_middle_seam && !segment.hover_only && settings_.middle_cut_sag_m > 0.0) {
+        if (segment_correction != nullptr || segment.handoff_end || segment.force_fixed_orientation ||
+            options.cut_debug_start || options.side_tape_handoff || options.stop_pose_override ||
+            motion_profile != "ompl_cartesian") {
+          message = "middle_cut_sag_m > 0 is supported only for the plain middle seam cut with "
+            "motion_profile ompl_cartesian (no taught correction, t_cut_handoff, fixed debug "
+            "orientation, cut-debug or side-tape hand-off); set middle_cut_sag_m 0";
+          return false;
+        }
+        middle_cut_sag::Profile sag_profile;
+        std::string sag_error;
+        if (!middle_cut_sag::makeProfile(
+              toEigen(snapshot.seam_start), toEigen(snapshot.seam_end), toEigen(snapshot.seam_center),
+              toEigen(snapshot.back_left), toEigen(snapshot.front_left), toEigen(snapshot.back_right),
+              toEigen(snapshot.front_right), settings_.middle_cut_sag_m, sag_profile, sag_error)) {
+          message = sag_error;
+          return false;
+        }
+        const Eigen::Vector3d deeper = -toEigen(snapshot.surface_normal).normalized();
+        const Eigen::Vector3d p_start = toEigen(cut_start.pose.position);
+        const Eigen::Vector3d p_end = toEigen(cut_end.pose.position);
+        const double sag_start_m = middle_cut_sag::extraDepthM(sag_profile, p_start);
+        sag_end_depth_m = middle_cut_sag::extraDepthM(sag_profile, p_end);
+        const Eigen::Quaterniond q_start = toEigen(cut_start.pose.orientation).normalized();
+        const Eigen::Quaterniond q_end = toEigen(cut_end.pose.orientation).normalized();
+        const std::size_t legs =
+          middle_cut_sag::legCount((p_end - p_start).norm(), settings_.middle_cut_sag_step_m);
+        for (std::size_t leg = 0; leg <= legs; ++leg) {
+          const double t = static_cast<double>(leg) / static_cast<double>(legs);
+          const Eigen::Vector3d base = p_start + t * (p_end - p_start);
+          Eigen::Isometry3d knot = Eigen::Isometry3d::Identity();
+          knot.translation() = base + middle_cut_sag::extraDepthM(sag_profile, base) * deeper;
+          knot.linear() = q_start.slerp(t, q_end).normalized().toRotationMatrix();
+          sag_knots.push_back(knot);
+        }
+        // The endpoints are exactly the (sagged) start/end poses the entry and lift stages use.
+        sag_knots.front().translation() = p_start + sag_start_m * deeper;
+        sag_knots.back().translation() = p_end + sag_end_depth_m * deeper;
+        cut_start.pose.position = toPoint(sag_knots.front().translation());
+        cut_end.pose.position = toPoint(sag_knots.back().translation());
+        last_middle_sag_summary_ = "middle_cut_sag " + formatDouble(settings_.middle_cut_sag_m * 1000.0, 1) +
+          " mm (profile from seam_center, half length " +
+          formatDouble(sag_profile.half_length_m * 1000.0, 1) + " mm; stroke depth +" +
+          formatDouble(sag_start_m * 1000.0, 2) + " mm at the start, +" +
+          formatDouble(sag_end_depth_m * 1000.0, 2) + " mm at the end; " + std::to_string(legs) +
+          " waypoint legs of at most " + formatDouble(settings_.middle_cut_sag_step_m * 1000.0, 1) +
+          " mm, min_fraction 1.0)";
+      }
       geometry_msgs::msg::PoseStamped hover_start;
       geometry_msgs::msg::PoseStamped hover_end;
       if (!left_lateral_hover) {
@@ -9554,6 +11568,10 @@ private:
       // orientation; the stage structure below is the fixed parallel mode's, built from the
       // first/last station poses, with one Cartesian segment per station pair.
       std::optional<LeftVaryingPlan> varying_plan;
+      // Left reverse patch of this segment (null = forward-only), its poses (stations' first/last
+      // pose and the lateral-standoff hover poses).
+      std::shared_ptr<LeftVaryingPlan> patch_plan;
+      geometry_msgs::msg::PoseStamped patch_cut_start, patch_cut_end, patch_hover_start, patch_hover_end;
       const bool left_varying = left_parallel && settings_.left_parallel_varying_orientation_enabled;
       if (left_varying) {
         if (motion_profile != "ompl_cartesian") {
@@ -9591,6 +11609,7 @@ private:
         // of the cut, same orientation direction) as the nominal cut_start/cut_end, so the
         // line stays at the nominal cut height; only the position along the line changes.
         std::optional<LeftExtension> extension;
+        geometry_msgs::msg::Point forward_span_start, forward_span_end;  // un-swapped forward span ends
         if (settings_.left_cut_extend_to_corners) {
           LeftExtension geometry;
           geometry_msgs::msg::Point extended_start_point;
@@ -9598,6 +11617,25 @@ private:
           if (!computeLeftExtension(
               snapshot, segment, geometry, extended_start_point, extended_end_point, message)) {
             return false;
+          }
+          forward_span_start = extended_start_point;
+          forward_span_end = extended_end_point;
+          if (leftCutReverse()) {
+            // left_cut_direction reverse: the stations run front -> back. The search is written in
+            // travel order, so hand it the span end points swapped and the span geometry mapped to
+            // travel coordinates (s' = L - s, band limits swapped). The nominal segment passed to
+            // the other consumers (corrections, hand-off) stays back -> front.
+            std::swap(extended_start_point, extended_end_point);
+            const auto travel = left_cut_direction::toTravel(
+              left_cut_direction::SpanGeometry{
+                geometry.span_length_m, geometry.nominal_start_m, geometry.nominal_length_m,
+                geometry.seam_m, geometry.band_lo_m, geometry.band_hi_m}, true);
+            geometry.nominal_start_m = travel.nominal_start_m;
+            geometry.seam_m = travel.seam_m;
+            geometry.band_lo_m = travel.band_lo_m;
+            geometry.band_hi_m = travel.band_hi_m;
+            geometry.reverse = true;
+            geometry.convention = leftCutConvention();
           }
           const auto extended_orientation_targets = orientationTargets(
             snapshot, false, segment.start, segment.end, extended_start_point, extended_end_point);
@@ -9617,6 +11655,15 @@ private:
             snapshot, joint_group, ik_state, cut_start, cut_end, transit_seed,
             lift_follows_varying, found, message, extension ? &*extension : nullptr)) {
           return false;
+        }
+        // Left reverse patch: evaluated once behind the verified forward plan and cached in it.
+        if (settings_.left_cut_patch_enabled && !found.patch_attempted && extension &&
+            !leftCutReverse() && !options.stop_at_hover_start && !options.cut_debug_start &&
+            !options.side_tape_handoff && options.reuse_varying == nullptr &&
+            options.drop_patch_reason.empty()) {
+          planLeftPatch(
+            snapshot, segment, joint_group, ik_state, *extension, forward_span_start,
+            forward_span_end, tilt_deg, target_clearance_m, lift_follows_varying, found);
         }
         if (options.varying_plan_out != nullptr) *options.varying_plan_out = found;
         if (options.hover_start_joints_out != nullptr) {
@@ -9639,6 +11686,34 @@ private:
           return false;
         }
         if (options.reuse_varying == nullptr) last_left_varying_summary_ = found.summary;
+        if (found.patch_attempted) {
+          const bool use_patch = found.patch && options.drop_patch_reason.empty() &&
+            !options.stop_at_hover_start;
+          std::string status = found.patch_status;
+          if (found.patch && !options.drop_patch_reason.empty()) {
+            status = "dropped: " + options.drop_patch_reason;
+          }
+          last_left_patch_summary_ = leftPatchSummaryText(found, status, use_patch);
+          if (use_patch) {
+            patch_plan = found.patch;
+            const auto patch_station_pose = [&](const LeftVaryingStation& station) {
+                auto pose = cut_start;
+                pose.pose.position = toPoint(station.position);
+                pose.pose.orientation = toMsg(station.orientation);
+                return pose;
+              };
+            patch_cut_start = patch_station_pose(patch_plan->stations.front());
+            patch_cut_end = patch_station_pose(patch_plan->stations.back());
+            patch_hover_start = patch_cut_start;
+            patch_hover_end = patch_cut_end;
+            if (!offsetLeftPoseOutward(
+                snapshot, patch_hover_start, settings_.left_lateral_standoff_m, message) ||
+                !offsetLeftPoseOutward(
+                snapshot, patch_hover_end, settings_.left_lateral_standoff_m, message)) {
+              return false;
+            }
+          }
+        }
         retained_varying = found;
         varying_plan = std::move(found);
       }
@@ -9800,11 +11875,18 @@ private:
         } else {
           transit_stages.push_back(addMoveTo(*task, stage_name, transit_planner, entry_alignment));
         }
+        if (is_middle_seam && segment_index == 0U) {
+          pre_stroke_stages.insert(stage_name);
+          pre_stroke_transits.insert(stage_name);
+        }
       }
       if (middle_entry_alignment) {
         addMoveTo(
           *task, "align above middle seam start [" + motion_profile + "]", stroke_planner,
           hover_start);
+        if (is_middle_seam && segment_index == 0U) {
+          pre_stroke_stages.insert("align above middle seam start [" + motion_profile + "]");
+        }
       }
       if (settings_.pre_cut_stabilization_duration_s > 0.0) {
         task->add(std::make_unique<StationaryDwell>(
@@ -9850,7 +11932,24 @@ private:
           settings_.acceleration_scaling * options.cut_stroke_speed_factor);
         cut_stroke_planner = slow_cut_planners.stroke;
       }
-      if (varying_plan) {
+      if (!sag_knots.empty()) {
+        // Sagged top cut: ONE contact stroke through the profile knots (same planner as the left
+        // varying stroke): fraction 1.0 for the whole path, time-parameterised once with the
+        // contact scalings, orientation slerped exactly as the straight stroke does.
+        auto sag_stroke = std::make_shared<WaypointCartesianPath>(
+          sag_knots, WaypointCartesianPath::Config{
+            settings_.cartesian_step_m, 0.05, 5.0 * 3.14159265358979323846 / 180.0});
+        sag_stroke->setIKFrame(settings_.tool_link);
+        sag_stroke->setStepSize(settings_.cartesian_step_m);
+        sag_stroke->setJumpThreshold(0.0);
+        sag_stroke->setMinFraction(1.0);
+        sag_stroke->setMaxVelocityScalingFactor(
+          settings_.velocity_scaling * options.cut_stroke_speed_factor);
+        sag_stroke->setMaxAccelerationScalingFactor(
+          settings_.acceleration_scaling * options.cut_stroke_speed_factor);
+        addMoveTo(
+          *task, "cut " + segment.name + " [" + motion_profile + "]", sag_stroke, cut_end);
+      } else if (varying_plan) {
         // ONE contact stroke through the orientation knots: a single trajectory, time-
         // parameterised once with the contact scalings, fraction 1.0 for the whole path. The
         // stage keeps the fixed mode's name, so the contact validators and the stage list are
@@ -9899,7 +11998,7 @@ private:
           const double finish_clear_m = options.middle_finish_clearance_m ?
             *options.middle_finish_clearance_m : approach_clearance_m;
           const double end_depth_m = -settings_.middle_cut_clearance_m +
-            options.middle_end_extra_depth_m;
+            options.middle_end_extra_depth_m + sag_end_depth_m;
           addTiltableLift(
             *task, finish_label + segment.name + " [" + motion_profile + "]", stroke_planner,
             finish_pose, options.middle_finish_clearance_m ?
@@ -9909,10 +12008,15 @@ private:
             *task, finish_label + segment.name + " [" + motion_profile + "]", stroke_planner,
             hover_end);
         }
-        const bool lift_before_middle = is_left_side &&
+        // A following middle cut needs the lift (and the raise) after the left stroke. With a reverse
+        // patch the lift/raise ALSO follow the forward finish (the patch transit flips the knife next to
+        // the carton, exactly like the left -> top transit; the 10 mm lateral standoff leaves no room
+        // to rotate the wrist), and again after the PATCH's finish when a middle cut follows.
+        const bool lift_after_left = is_left_side &&
           (segment_index + 1U) < segments.size() &&
           segments[segment_index + 1U].cut == CutKind::kMiddle &&
           !segments[segment_index + 1U].hover_only;
+        const bool lift_before_middle = lift_after_left || static_cast<bool>(patch_plan);
         if (lift_before_middle) {
           // Safety: pull laterally clear first (ascend above), then lift along the
           // snapshot surface normal to hover clearance while holding the exact left
@@ -9944,6 +12048,101 @@ private:
             *task, "raise to safe transit height after " + segment.name + " [cartesian]",
             planners.cartesian, raise_target);
         }
+        if (patch_plan) {
+          // ---- left reverse patch (left_cut_patch.hpp): same task, after the forward finish and the
+          // restore above. Free-space transit to the verified patch hover (registered as a transit so
+          // validateFreeSpaceTransitWrist examines it), dwell, scoped contact allowance, lateral
+          // entry, ONE reverse contact stroke, lateral finish; then the lift/restore/raise that
+          // would have followed the forward stroke. min_fraction 1.0 for the whole patch stroke.
+          const std::string patch_name = segment.name + " patch";
+          patch_in_last_plan_ = true;
+          retained_patch = patch_plan;
+          std::map<std::string, double> patch_hover_goal;
+          const auto& patch_group_names = joint_group->getVariableNames();
+          for (std::size_t index = 0; index < patch_group_names.size(); ++index) {
+            patch_hover_goal.emplace(patch_group_names[index], patch_plan->hover_start_joints.at(index));
+          }
+          {
+            // Transit facts (joint deltas forward finish -> patch hover), for the evidence logs.
+            std::ostringstream delta;
+            delta << std::fixed << std::setprecision(1);
+            const auto& from = varying_plan->end_hover_joints;
+            for (std::size_t index = 0; index < patch_group_names.size() && index < from.size(); ++index) {
+              delta << (index ? "," : "") << (patch_plan->hover_start_joints.at(index) - from[index]) * 180.0 / 3.14159265358979323846;
+            }
+            RCLCPP_INFO(
+              get_logger(), "left reverse patch transit: joint delta forward finish -> patch hover [%s] deg",
+              delta.str().c_str());
+          }
+          transit_stages.push_back(addMoveTo(
+            *task, "approach pose outside " + patch_name + " [" + motion_profile + "]",
+            transit_planner, patch_hover_goal));
+          if (settings_.pre_cut_stabilization_duration_s > 0.0) {
+            task->add(std::make_unique<StationaryDwell>(
+              "stabilize blade before " + patch_name, settings_.planning_group,
+              settings_.pre_cut_stabilization_duration_s));
+            ++patch_dwell_count;
+          }
+          cut_targets.push_back(patch_cut_start);
+          cut_targets.push_back(patch_cut_end);
+          if (settings_.allow_tool_carton_contact && !contact_allowed_from_start) {
+            addCartonContactScope(
+              *task, "allow knife-tip contact with carton for " + patch_name, true);
+          }
+          addMoveTo(
+            *task, "enter laterally into " + patch_name + " start [" + motion_profile + "]",
+            stroke_planner, patch_cut_start);
+          std::vector<Eigen::Isometry3d> patch_knot_poses;
+          for (const auto& station : patch_plan->stations) {
+            if (!station.is_knot) continue;
+            Eigen::Isometry3d pose = Eigen::Isometry3d::Identity();
+            pose.translation() = station.position;
+            pose.linear() = station.orientation.toRotationMatrix();
+            patch_knot_poses.push_back(pose);
+          }
+          auto patch_stroke = std::make_shared<WaypointCartesianPath>(
+            patch_knot_poses, WaypointCartesianPath::Config{
+              settings_.cartesian_step_m, 0.05, 5.0 * 3.14159265358979323846 / 180.0});
+          patch_stroke->setIKFrame(settings_.tool_link);
+          patch_stroke->setStepSize(settings_.cartesian_step_m);
+          patch_stroke->setJumpThreshold(0.0);
+          patch_stroke->setMinFraction(1.0);
+          patch_stroke->setMaxVelocityScalingFactor(
+            settings_.velocity_scaling * options.cut_stroke_speed_factor);
+          patch_stroke->setMaxAccelerationScalingFactor(
+            settings_.acceleration_scaling * options.cut_stroke_speed_factor);
+          addMoveTo(
+            *task, "cut " + patch_name + " [reverse] [" + motion_profile + "]", patch_stroke,
+            patch_cut_end);
+          addMoveTo(
+            *task, "finish pose outside " + patch_name + " [" + motion_profile + "]", stroke_planner,
+            patch_hover_end);
+          if (lift_after_left) {
+            auto lift_target = patch_hover_end;
+            const double lift_m = settings_.hover_clearance_m - settings_.cut_clearance_m;
+            lift_target.pose.position.x += lift_m * snapshot.surface_normal.x;
+            lift_target.pose.position.y += lift_m * snapshot.surface_normal.y;
+            lift_target.pose.position.z += lift_m * snapshot.surface_normal.z;
+            addMoveTo(
+              *task, "lift clear of " + patch_name + " to hover [cartesian]", planners.cartesian,
+              lift_target);
+          }
+          if (settings_.allow_tool_carton_contact) {
+            addCartonContactScope(
+              *task, "restore knife-tip collision checking after " + patch_name, false);
+          }
+          if (lift_after_left && extra_lift_m > 0.0) {
+            auto raise_target = patch_hover_end;
+            const double raise_m = settings_.hover_clearance_m - settings_.cut_clearance_m +
+              extra_lift_m;
+            raise_target.pose.position.x += raise_m * snapshot.surface_normal.x;
+            raise_target.pose.position.y += raise_m * snapshot.surface_normal.y;
+            raise_target.pose.position.z += raise_m * snapshot.surface_normal.z;
+            addMoveTo(
+              *task, "raise to safe transit height after " + patch_name + " [cartesian]",
+              planners.cartesian, raise_target);
+          }
+        }
       }
     }
 
@@ -9969,7 +12168,12 @@ private:
     }
     const auto result = task->plan(static_cast<std::size_t>(settings_.max_solutions));
     if (result != moveit::core::MoveItErrorCode::SUCCESS || task->solutions().empty()) {
-      task->explainFailure();
+      // Same text on stdout as before; captured so the middle_only descent can see WHICH stage failed.
+      std::ostringstream explanation;
+      task->explainFailure(explanation);
+      std::cout << explanation.str();
+      const auto failure = top_cut_descent::classifyMtcFailure(explanation.str(), pre_stroke_stages);
+      last_plan_failure_ = PlanFailureInfo{failure.before_cut_stroke, failure.stage, failure.reason};
       message = "MTC candidate failed: task=" + task_name + " profile=" + motion_profile +
                 " segments=" + std::to_string(segments.size());
       return false;
@@ -9990,6 +12194,7 @@ private:
         }
       }
     }
+    expected_dwell_count += settings_.pre_cut_stabilization_duration_s > 0.0 ? patch_dwell_count : 0U;
     std::string dwell_error;
     if (!validateStationaryDwells(solution_message, expected_dwell_count, dwell_error)) {
       message = "planned trajectory has invalid pre-cut stabilization: " + dwell_error;
@@ -9998,10 +12203,52 @@ private:
     std::string wrist_error;
     if (!validateFreeSpaceTransitWrist(solution, solution_message, transit_stages, wrist_error)) {
       message = wrist_error;
+      const auto failure = top_cut_descent::classifyWristGateFailure(wrist_error, pre_stroke_transits);
+      last_plan_failure_ = PlanFailureInfo{failure.before_cut_stroke, failure.stage, failure.reason};
       return false;
     }
+    // Unwind detours of the retained solution (the gate above has just limited each transit, detour legs
+    // included, to pi of joint6 travel): name them in the plan response.
+    {
+      std::function<void(const mtc::SolutionBase*)> collect_detours = [&](const mtc::SolutionBase* node) {
+        if (node == nullptr) return;
+        if (const auto* wrapped = dynamic_cast<const mtc::WrappedSolution*>(node)) {
+          collect_detours(wrapped->wrapped());
+          return;
+        }
+        if (const auto* nested = dynamic_cast<const mtc::SolutionSequence*>(node)) {
+          for (const auto* child : nested->solutions()) collect_detours(child);
+          return;
+        }
+        if (const auto* sub = dynamic_cast<const mtc::SubTrajectory*>(node)) {
+          std::lock_guard<std::mutex> lock(transit_detour_mutex_);
+          const auto note = transit_detour_notes_.find(sub->trajectory().get());
+          if (note != transit_detour_notes_.end()) {
+            const auto* creator = sub->creator();
+            if (!last_transit_detour_summary_.empty()) last_transit_detour_summary_ += "; ";
+            last_transit_detour_summary_ += "stage '" + (creator != nullptr ? creator->name() : std::string()) +
+              "': " + note->second;
+          }
+        }
+      };
+      collect_detours(&solution);
+    }
+    // Which left contact strokes this plan must contain (split mode fails closed on a missing one).
+    // The approach-only debug task (stop_at_hover_start) has no contact stroke by construction;
+    // expectedLeftStrokes() expects none for it (the full task it was cut from was checked with
+    // the normal expectation) and still checks every stroke that is present.
+    std::vector<left_contact_travel::SegmentFacts> segment_facts;
+    for (const auto& planned : segments) {
+      segment_facts.push_back(
+        {planned.cut == CutKind::kLeft, planned.hover_only, planned.force_fixed_orientation,
+         planned.stop_after_start});
+    }
+    const auto expected_strokes =
+      left_contact_travel::expectedLeftStrokes(segment_facts, options.stop_at_hover_start);
+    const bool expect_left_contact = expected_strokes.contact;
+    const bool expect_left_cut = expected_strokes.cut;
     if (settings_.left_parallel_orientation_enabled &&
-        !validateLeftContactJointTravel(solution, wrist_error)) {
+        !validateLeftContactJointTravel(solution, expect_left_contact, expect_left_cut, wrist_error)) {
       message = wrist_error;
       return false;
     }
@@ -10019,6 +12266,14 @@ private:
         !validateLeftVaryingRetainedStroke(solution, *retained_varying, wrist_error)) {
       message = wrist_error;
       return false;
+    }
+    if (retained_patch && !options.stop_at_hover_start &&
+        !validateLeftVaryingRetainedStroke(solution, *retained_patch, wrist_error, /*patch=*/true)) {
+      message = wrist_error;
+      return false;
+    }
+    if (!last_left_patch_summary_.empty()) {
+      RCLCPP_INFO(get_logger(), "LEFTPATCH %s", last_left_patch_summary_.c_str());
     }
     if (options.final_joints_out != nullptr) {
       options.final_joints_out->clear();
@@ -10046,7 +12301,9 @@ private:
   // would otherwise be accepted. Rejects any such stroke whose joint travel exceeds
   // kMaxLeftContactJointTravelRad for any joint (a constant-orientation 25-60 mm stroke
   // needs far less).
-  bool validateLeftContactJointTravel(const mtc::SolutionBase& solution, std::string& error) const
+  bool validateLeftContactJointTravel(
+    const mtc::SolutionBase& solution, bool expect_left_contact, bool expect_left_cut,
+    std::string& error) const
   {
     std::vector<const mtc::SubTrajectory*> leaves;
     std::function<void(const mtc::SolutionBase*)> collect = [&](const mtc::SolutionBase* node) {
@@ -10063,6 +12320,7 @@ private:
     };
     collect(&solution);
     std::size_t examined = 0U;
+    bool cut_seen = false;
     for (const auto* leaf : leaves) {
       const auto* creator = leaf->creator();
       const std::string name = creator != nullptr ? creator->name() : std::string();
@@ -10072,34 +12330,51 @@ private:
         name.rfind("lift clear of left side cut", 0) == 0U;
       if (!left_contact) continue;
       ++examined;
+      if (name.rfind("cut left side cut", 0) == 0U) cut_seen = true;
       const auto& trajectory = leaf->trajectory();
       if (!trajectory || trajectory->getWayPointCount() == 0U) {
         error = "left contact stroke '" + name + "' has no trajectory; refusing to guess";
         return false;
       }
-      std::vector<double> previous;
-      std::vector<double> travel;
+      std::vector<std::vector<double> > stroke_joints;
       for (std::size_t index = 0; index < trajectory->getWayPointCount(); ++index) {
         std::vector<double> values;
         trajectory->getWayPoint(index).copyJointGroupPositions(settings_.planning_group, values);
-        if (previous.empty()) travel.assign(values.size(), 0.0);
-        for (std::size_t j = 0; j < values.size() && !previous.empty(); ++j) {
-          travel[j] += std::abs(values[j] - previous[j]);
-        }
-        previous = values;
+        stroke_joints.push_back(std::move(values));
       }
-      for (std::size_t j = 0; j < travel.size(); ++j) {
-        if (travel[j] > kMaxLeftContactJointTravelRad) {
-          error = "left contact stroke '" + name + "' moves joint" + std::to_string(j + 1) + " " +
-            formatDouble(travel[j], 3) + " rad (> " +
-            formatDouble(kMaxLeftContactJointTravelRad, 1) +
-            " rad): wrist branch change during contact; refusing the parallel left plan";
+      const moveit::core::JointModelGroup* stroke_group =
+        trajectory->getRobotModel()->getJointModelGroup(settings_.planning_group);
+      RCLCPP_INFO(
+        get_logger(), "left contact stroke '%s' (%zu waypoints): %s", name.c_str(),
+        stroke_joints.size(), leftContactStatsText(stroke_group, stroke_joints).c_str());
+      if (leftContactSplitMode()) {
+        const auto split_check = evaluateLeftContactSplit(stroke_group, stroke_joints);
+        if (!split_check.ok) {
+          error = "left contact stroke '" + name + "' refused: " + split_check.text +
+            " (left_contact_travel_mode split); refusing the parallel left plan";
           return false;
         }
+        continue;
+      }
+      const auto travel_check = left_contact_travel::checkJointTravel(
+        stroke_joints, kMaxLeftContactJointTravelRad);
+      if (!travel_check.ok) {
+        error = "left contact stroke '" + name + "' moves " +
+          left_contact_travel::jointTravelText(travel_check) + " rad (> " +
+          formatDouble(kMaxLeftContactJointTravelRad, 1) +
+          " rad): wrist branch change during contact; refusing the parallel left plan";
+        return false;
       }
     }
-    (void)examined;  // plans without a left segment have nothing to check
-    return true;
+    if (leftContactSplitMode()) {
+      const std::string coverage = left_contact_travel::coverageError(
+        expect_left_contact, expect_left_cut, examined, cut_seen);
+      if (!coverage.empty()) {
+        error = "left_contact_travel_mode split: " + coverage;
+        return false;
+      }
+    }
+    return true;  // aggregate mode: plans without a left segment have nothing to check
   }
 
   // Every cut stroke (stage name "cut ...", all patterns) is a straight Cartesian line, but the
@@ -10141,6 +12416,12 @@ private:
         return false;
       }
       const auto& scene = leaf->start()->scene();
+      // The left reverse patch approach flips the knife next to the arm's own links; the dual
+      // coordinator's world check finds shallow (sub-mm) wrist camera / link4 contacts that the 0.01 rad
+      // sampling steps over, so that one transit is sampled four times finer (a collision there DROPS
+      // the patch instead of refusing the whole dual plan).
+      const double step_rad = name.rfind("approach pose outside left side cut patch", 0) == 0U ?
+        kStepRad / 4.0 : kStepRad;
       const auto* group = trajectory->getGroup();
       const std::string group_name = group != nullptr ? group->getName() : settings_.planning_group;
       moveit::core::RobotState probe(trajectory->getWayPoint(0));
@@ -10164,7 +12445,7 @@ private:
         if (index > 0U) {
           const auto& from = trajectory->getWayPoint(index - 1U);
           const double distance = from.distance(to, group != nullptr ? group : to.getJointModelGroup(settings_.planning_group));
-          steps = std::max<std::size_t>(1U, static_cast<std::size_t>(std::ceil(distance / kStepRad)));
+          steps = std::max<std::size_t>(1U, static_cast<std::size_t>(std::ceil(distance / step_rad)));
           for (std::size_t step = 1; step < steps; ++step) {
             from.interpolate(to, static_cast<double>(step) / static_cast<double>(steps), probe);
             probe.update();
@@ -10193,6 +12474,8 @@ private:
   bool validateCutStrokesStraight(const mtc::SolutionBase& solution, std::string& error) const
   {
     constexpr double kMaxCutStrokeDeviationM = 0.003;
+    // A sagged top cut deliberately leaves the chord by up to middle_cut_sag_m (0 = unchanged).
+    const double kMaxMiddleStrokeDeviationM = kMaxCutStrokeDeviationM + settings_.middle_cut_sag_m;
     std::vector<const mtc::SubTrajectory*> leaves;
     std::function<void(const mtc::SolutionBase*)> collect = [&](const mtc::SolutionBase* node) {
       if (node == nullptr) return;
@@ -10211,6 +12494,8 @@ private:
       const auto* creator = leaf->creator();
       const std::string name = creator != nullptr ? creator->name() : std::string();
       if (name.rfind("cut ", 0) != 0U) continue;
+      const double max_deviation_m =
+        name.rfind("cut middle seam cut", 0) == 0U ? kMaxMiddleStrokeDeviationM : kMaxCutStrokeDeviationM;
       const auto& trajectory = leaf->trajectory();
       if (!trajectory || trajectory->getWayPointCount() == 0U) {
         error = "cut stroke '" + name + "' has no trajectory; refusing to guess";
@@ -10236,11 +12521,11 @@ private:
           worst_index = index;
         }
       }
-      if (!std::isfinite(worst) || worst > kMaxCutStrokeDeviationM) {
+      if (!std::isfinite(worst) || worst > max_deviation_m) {
         error = "cut stroke '" + name + "' leaves its straight line by " +
           formatDouble(worst * 1000.0, 1) + " mm at waypoint " + std::to_string(worst_index) +
           "/" + std::to_string(count) + " (> " +
-          formatDouble(kMaxCutStrokeDeviationM * 1000.0, 1) +
+          formatDouble(max_deviation_m * 1000.0, 1) +
           " mm): joint-space jump (wrist flip) inside the contact stroke; refusing the plan";
         return false;
       }
@@ -10255,7 +12540,8 @@ private:
   // within 1 mm and 1 deg of the station waypoint, on the replayed IK branch (every joint within
   // 0.2 rad of the station's recorded joints). Logs the stroke duration and path length.
   bool validateLeftVaryingRetainedStroke(
-    const mtc::SolutionBase& solution, const LeftVaryingPlan& plan, std::string& error)
+    const mtc::SolutionBase& solution, const LeftVaryingPlan& plan, std::string& error,
+    bool patch = false)
   {
     constexpr double kDeg = 3.14159265358979323846 / 180.0;
     constexpr double kMaxStepRad = 5.0 * kDeg + 1e-6;
@@ -10281,8 +12567,12 @@ private:
       const auto* creator = leaf->creator();
       const std::string name = creator != nullptr ? creator->name() : std::string();
       if (name.rfind("cut left side cut", 0) != 0U) continue;
+      // The reverse patch stroke ("cut left side cut patch [reverse] ...") is validated against its
+      // own plan; the forward stroke is the one cut stage that is not the patch.
+      if ((name.rfind("cut left side cut patch", 0) == 0U) != patch) continue;
       if (stroke != nullptr) {
-        error = "left varying plan has more than one left cut stroke stage; refusing";
+        error = std::string(patch ? "left reverse patch plan has more than one patch cut stroke stage; refusing" :
+          "left varying plan has more than one left cut stroke stage; refusing");
         return false;
       }
       stroke = leaf;
@@ -10389,14 +12679,65 @@ private:
       }
       previous_arc = best_arc;
     }
+    // True blade angle (theta_p = acos(|tool X . surface normal|)) of EVERY retained waypoint
+    // against the station cap at its arc position + left_varying_theta_p_tolerance_deg: the same
+    // pure check the search ran on its replay. The report states the measured values.
+    if (!plan.blade_gate_valid) {
+      error = "left varying plan carries no blade-angle gate data; refusing";
+      return false;
+    }
+    const auto blade = left_blade_cap::evaluateStroke(
+      plan.blade_cap, plan.has_seam_band, plan.band_lo_m, plan.band_hi_m, tcp, plan.span_origin,
+      plan.travel_dir, plan.blade_normal, plan.blade_along, plan.blade_tolerance_deg);
+    if (!blade.ok) {
+      error = "left varying stroke blade angle theta_p " +
+        formatDouble(blade.violation_theta_p_deg, 2) + " deg at waypoint " +
+        std::to_string(blade.violation_index) + "/" + std::to_string(count) + " (s=" +
+        formatDouble(blade.violation_s_m * 1000.0, 1) + " mm along the travel) exceeds the station cap " +
+        formatDouble(blade.violation_cap_deg, 2) + " deg (left_varying_max_theta_p_deg " +
+        formatDouble(plan.blade_cap.band_cap_deg, 1) + ", end cap " +
+        formatDouble(plan.blade_cap.end_cap_deg, 1) +
+        (plan.blade_cap.startGraded() ? ", caps " + plan.blade_cap.rangeText() : std::string()) +
+        ") + tolerance " +
+        formatDouble(plan.blade_tolerance_deg, 1) + " deg; refusing";
+      return false;
+    }
+    std::ostringstream blade_text;
+    blade_text << std::fixed << std::setprecision(2) << "; true blade angle (final stroke, " <<
+      blade.waypoints << " waypoints, cap " << std::setprecision(1) << plan.blade_cap.band_cap_deg <<
+      " deg in the band" << (plan.blade_cap.startGraded() ?
+      ", steeper before it (" + plan.blade_cap.rangeText() + ")" : std::string()) <<
+      (plan.blade_cap.graded() ?
+      " ramping to " + formatDouble(plan.blade_cap.end_cap_deg, 1) + " deg at the end" : "") <<
+      ", tolerance " << plan.blade_tolerance_deg << " deg): " << std::setprecision(2);
+    if (plan.has_seam_band) {
+      blade_text << "max theta_p inside the seam band " << blade.max_theta_p_band_deg << " deg, ";
+    }
+    blade_text << "max theta_p overall " << blade.max_theta_p_deg << " deg, max blade deviation " <<
+      blade.max_blade_deviation_deg << " deg, max interpolation overshoot over the station cap " <<
+      blade.max_overshoot_deg << " deg";
+    if (settings_.left_varying_diagnostics && plan.has_seam_band) {
+      // log-only diagnostics (left_varying_diagnostics): statistic only, no gate
+      blade_text << ", max blade deviation inside the seam band " <<
+        blade.max_blade_deviation_band_deg << " deg";
+    }
     const double duration = trajectory.getDuration();
     RCLCPP_INFO(
       get_logger(),
       "Left varying retained stroke OK: %zu waypoints, TCP path %.1f mm, duration %.2f s; %zu "
       "stations within 1 mm / 1 deg on the verified branch",
       count, arc.back() * 1000.0, duration, plan.stations.size());
+    if (patch) {
+      last_left_patch_summary_ += "; patch contact stroke " + formatDouble(duration, 1) + " s (" +
+        std::to_string(count) + " waypoints, one trajectory, TCP path " +
+        formatDouble(arc.back() * 1000.0, 1) + " mm)" + blade_text.str();
+      RCLCPP_INFO(get_logger(), "Left reverse patch%s", blade_text.str().c_str());
+      return true;
+    }
     last_left_varying_summary_ += "; contact stroke " + formatDouble(duration, 1) + " s (" +
       std::to_string(count) + " waypoints, one trajectory)";
+    last_left_varying_summary_ += blade_text.str();
+    RCLCPP_INFO(get_logger(), "Left varying%s", blade_text.str().c_str());
     return true;
   }
 
@@ -10473,7 +12814,36 @@ private:
     multi->push_back(direct);
     multi->push_back(fallback);
     // Pose goals are resolved to the nearest exact IK branch before either planner runs.
-    return std::make_shared<NearestBranchTransitPlanner>(multi, settings_.planning_timeout_s);
+    TransitDetourConfig detour;
+    if (settings_.transit_unwind_detour_enabled) {
+      detour.enabled = true;
+      detour.max_lift_m = settings_.transit_unwind_max_lift_m;
+      detour.joint = direct;
+      auto lift = std::make_shared<mtc::solvers::CartesianPath>();
+      lift->setStepSize(settings_.cartesian_step_m);
+      lift->setJumpThreshold(0.0);
+      lift->setMinFraction(1.0);
+      lift->setMaxVelocityScalingFactor(settings_.transit_velocity_scaling);
+      lift->setMaxAccelerationScalingFactor(settings_.transit_acceleration_scaling);
+      detour.lift = lift;
+      detour.carton_collision_id = settings_.carton_collision_id;
+      detour.report = [this](const robot_trajectory::RobotTrajectory* trajectory, const std::string& note) {
+        std::lock_guard<std::mutex> lock(transit_detour_mutex_);
+        transit_detour_notes_[trajectory] = note;
+      };
+    }
+    return std::make_shared<NearestBranchTransitPlanner>(
+      multi, settings_.planning_timeout_s, std::move(detour));
+  }
+  // Detours reported by the transit planner, keyed by the trajectory they produced (so only the detours of the
+  // RETAINED solution are reported, see transitDetourSummary).
+  mutable std::mutex transit_detour_mutex_;
+  mutable std::map<const robot_trajectory::RobotTrajectory*, std::string> transit_detour_notes_;
+  // Text of the detours used by the last successfully planned task of planCutSegments ("" = none).
+  std::string last_transit_detour_summary_;
+  std::string transitDetourSuffix() const
+  {
+    return last_transit_detour_summary_.empty() ? std::string() : "; " + last_transit_detour_summary_;
   }
 
   // Fail-closed wrist guard for free-space transits: rejects the retained solution
@@ -10814,6 +13184,21 @@ private:
   LeftParallelSelection last_left_parallel_selection_;
   // One-line summary of the last varying-orientation left plan (empty when not used).
   std::string last_left_varying_summary_;
+  // Left reverse patch: plan-message field (forward/patch/coverage numbers + status) and whether the
+  // plan being built carries the patch stages (planCutSegments).
+  std::string last_left_patch_summary_;
+  bool patch_in_last_plan_{false};
+  // Set by planCutSegments when the middle stroke is a sagged polyline; cleared per planSnapshot.
+  std::string last_middle_sag_summary_;
+  // Why the LAST planCutSegments call failed, for the middle_only fraction descent (top_cut_descent.hpp). Reset at
+  // the start of every planCutSegments; only the MTC-failure and wrist-gate exits fill it.
+  struct PlanFailureInfo
+  {
+    bool before_cut_stroke{false};
+    std::string stage;
+    std::string reason;
+  };
+  PlanFailureInfo last_plan_failure_;
   bool side_tape_handoff_pending_{false};
   SideTapeHandoffInfo side_tape_handoff_info_;
   std::optional<Snapshot> side_tape_handoff_snapshot_;

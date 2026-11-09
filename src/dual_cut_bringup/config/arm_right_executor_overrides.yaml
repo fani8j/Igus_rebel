@@ -53,6 +53,21 @@ box_h_cut_executor:
     cut_pattern: left_only
     # Right face: see above (planning parameter).
     left_cut_corner_margin_m: 0.04
+    # Right face depth (planning parameter): 4 mm, not the left arm's 7 mm. Operator 2026-10-20: after the
+    # right-base pause correction (dual_arm_calibration.yaml) the real right face cut at 1 mm; then +1 mm, then +2 mm (operator).
+    # 2026-10-22 operator: 4 -> 2 mm, then "3 mm shallower" -> 0 mm (the planner minimum: blade tip ON the detected face).
+    left_cut_inward_m: 0.0
+    # Right face cut height (read-only, restart to change): AT the top plane (0 mm) instead of the YAML's 3 mm below.
+    # Operator 2026-10-20: the right face cut ran too low in the dual run (-1.5 mm, then 0.5 mm and 1 mm higher). Depth 1 -> 2 mm (operator).
+    # 2026-10-22 operator: +0.002 tried (2 mm higher), then 2 mm lower again -> back AT the top plane. The right top
+    # half uses middle_cut_clearance_m from the YAML. NOTE: at +0.002 the right holder also cleared a 0.46 mm table
+    # contact at the right face entry (10-22 placement x 0.392 y -0.227); at 0.0 that placement is refused again.
+    # 2026-10-22 operator: 3 mm lower -> 3 mm below the top plane, then 1.5 mm LOWER -> 4.5 mm, then 1 mm lower -> 5.5 mm, then 1 mm lower -> 6.5 mm, then 0.5 mm lower -> 7 mm, then 0.5 mm lower -> 7.5 mm below.
+    cut_clearance_m: -0.0075
     # Top half: stroke ends this far past the seam centre (planning parameter; has no effect unless
     # middle_seam_stop is center). 7.5 mm per arm = 15 mm total overlap.
     middle_seam_center_overlap_m: 0.0075
+    # Same lid sag profile as the left arm (profile from seam_center + corners, so both top pieces lie on one curve).
+    # 2026-10-22 operator: top cut 1 mm deeper at start/end (middle_cut_clearance_m -0.006 in the YAML), centre
+    # unchanged at 7 mm -> sag 2 -> 1 mm.
+    middle_cut_sag_m: 0.001

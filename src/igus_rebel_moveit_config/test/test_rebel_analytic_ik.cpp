@@ -208,6 +208,75 @@ TEST(RebelAnalyticIk, JointLimitsAreEnforced)
   }
 }
 
+// diagnose() is the read-only twin of solve(): the branches it flags within_limits are exactly the
+// solutions solve() returns, for both tool offsets and for narrowed limits (so that violations
+// occur), and unreachable wrist centres report a signed excess.
+TEST(RebelAnalyticIk, DiagnoseMatchesSolveAndExplainsMissingSolutions)
+{
+  auto narrowed = rebel_analytic_ik::defaultJointLimits();
+  narrowed[4] = {-1.0, 1.0};
+  narrowed[1] = {-0.6, 1.6};
+  for (const auto& named : allOffsets()) {
+    SCOPED_TRACE(named.name);
+    std::mt19937 rng(20261017U);
+    std::size_t reachable_without_solution = 0, with_violation = 0;
+    for (const auto& limits : {rebel_analytic_ik::defaultJointLimits(), narrowed}) {
+      for (std::size_t i = 0; i < 3000U; ++i) {
+        rebel_analytic_ik::JointVector q{};
+        auto wide = rebel_analytic_ik::defaultJointLimits();
+        for (std::size_t j = 0; j < 6U; ++j) {
+          std::uniform_real_distribution<double> dist(wide[j].lower, wide[j].upper);
+          q[j] = dist(rng);
+        }
+        Eigen::Isometry3d target = rebel_analytic_ik::forwardKinematics(q, named.offset);
+        if (i % 4U == 3U) {  // push every 4th pose toward / beyond the reach envelope
+          std::uniform_real_distribution<double> scale(0.7, 1.6);
+          target.translation() *= scale(rng);
+        }
+        const auto solutions = rebel_analytic_ik::solve(target, named.offset, limits);
+        const auto diag = rebel_analytic_ik::diagnose(target, named.offset, limits);
+        if (!diag.reach.reachable) {
+          EXPECT_TRUE(solutions.empty());
+          EXPECT_TRUE(diag.branches.empty());
+          EXPECT_NE(diag.reach.excess_m, 0.0);
+          if (diag.reach.excess_m > 0.0) {
+            EXPECT_GT(diag.reach.radius_m, diag.reach.reach_max_m);
+          } else {
+            EXPECT_LT(diag.reach.radius_m, diag.reach.reach_min_m);
+          }
+          continue;
+        }
+        ASSERT_EQ(diag.branches.size(), 8U);
+        std::size_t within = 0;
+        for (const auto& branch : diag.branches) {
+          if (branch.within_limits) {
+            ++within;
+            EXPECT_EQ(branch.max_violation, 0.0);
+            // the same joint vector must be among solve()'s solutions
+            bool found = false;
+            for (const auto& solution : solutions) {
+              bool equal = true;
+              for (std::size_t j = 0; j < 6U; ++j) {
+                if (std::abs(solution[j] - branch.q[j]) > 1e-9) equal = false;
+              }
+              found = found || equal;
+            }
+            EXPECT_TRUE(found);
+          } else {
+            ++with_violation;
+            EXPECT_GT(branch.max_violation, 0.0);
+            EXPECT_GT(branch.violation[branch.worst_joint], 0.0);
+          }
+        }
+        EXPECT_EQ(within, solutions.size());
+        if (solutions.empty()) ++reachable_without_solution;
+      }
+    }
+    EXPECT_GT(reachable_without_solution, 0U);  // the interesting case occurs in the sample
+    EXPECT_GT(with_violation, 0U);
+  }
+}
+
 #if REBEL_ANALYTIC_IK_HAVE_KDL
 namespace
 {

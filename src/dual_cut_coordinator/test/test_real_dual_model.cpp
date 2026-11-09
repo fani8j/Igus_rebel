@@ -176,3 +176,54 @@ TEST(RealDualModel, BladeContactAllowanceOnlyForTheCartonOnlyWhenFlagged)
   addBox("camera_head");
   EXPECT_EQ(run("camera_head", true, contact_links).code, WorldCode::Collision);
 }
+
+
+// Table clearance gate on the real dual model (home pose): the base links are the only links within 5 mm of the
+// table (1 mm / 3.9 mm by design); with them exempt the nearest gated link is motor1 (about 100 mm up).
+TEST(RealDualModel, TableClearanceGateBaseLinkExemptionAtHome)
+{
+  std::string desc, moveit;
+  try
+  {
+    desc = ament_index_cpp::get_package_share_directory("rebel_dual_table_description");
+    moveit = ament_index_cpp::get_package_share_directory("rebel_dual_table_moveit_config");
+  }
+  catch (const std::exception & e)
+  {
+    GTEST_SKIP() << "real dual model packages not installed: " << e.what();
+  }
+  const std::string urdf =
+    runCommand("xacro " + desc + "/urdf/rebel_dual_table.urdf.xacro include_ros2_control:=false 2>/dev/null");
+  if (urdf.empty()) GTEST_SKIP() << "xacro failed";
+  auto model = dual_cut_test::buildModel(urdf, dual_cut_test::readFile(moveit + "/config/rebel_dual_table.srdf"));
+  ASSERT_NE(model, nullptr);
+  auto scene = std::make_shared<planning_scene::PlanningScene>(model);
+  ArmSpec left, right;
+  ASSERT_TRUE(makeArmSpec(*model, "left", left));
+  ASSERT_TRUE(makeArmSpec(*model, "right", right));
+  const std::vector<double> home(6, 0.0);
+  const SampledPath path = dual_cut_test::pathOf(right, {home});
+  auto run = [&](double clearance, const std::vector<std::string> & exempt)
+  {
+    WorldCheckConfig cfg;
+    cfg.table_link_name = "table";
+    cfg.table_min_clearance_m = clearance;
+    cfg.table_exempt_links = exempt;
+    std::unique_ptr<WorldChecker> w;
+    EXPECT_TRUE(WorldChecker::create(scene, right, left, cfg, w));
+    return w->check(path, home);
+  };
+  const WorldCheckResult unexempt = run(0.005, {});
+  EXPECT_EQ(unexempt.code, WorldCode::TableClearance) << unexempt.message;
+  EXPECT_EQ(unexempt.link, "arm_right_base_link");
+  EXPECT_LT(unexempt.table_min_distance_m, 0.005);
+  EXPECT_GT(unexempt.table_min_distance_m, 0.0);
+  const WorldCheckResult ok = run(0.005, {"arm_right_base_link"});
+  EXPECT_TRUE(ok.safe()) << ok.message;
+  EXPECT_EQ(ok.table_min_link, "arm_right_motor1");
+  EXPECT_GT(ok.table_min_distance_m, 0.05);
+  EXPECT_LT(ok.table_min_distance_m, 0.2);
+  const WorldCheckResult far = run(0.15, {"arm_right_base_link"});
+  EXPECT_EQ(far.code, WorldCode::TableClearance) << far.message;
+  EXPECT_EQ(far.link, "arm_right_motor1");
+}

@@ -1,0 +1,133 @@
+{
+ "schema": "box_h_cut_snapshot/v1",
+ "snapshot_id": "capture_frame_000026_20261022_002351_589697",
+ "capture_id": "frame_000026_20261022_002351_589697",
+ "acquisition_stamp_ns": 1792628630439848000,
+ "frame_id": "base_link",
+ "source_frame": "camera_color_optical_frame",
+ "source_file": "/media/farhan/My Passport/Igus_rebel/outputs/rgbd_captures/pipeline/frame_000026_20261022_002351_589697/20261022T002351_680505Z_2444564/camera_geometry.json",
+ "seam_start": {
+  "x": 0.4244606563296536,
+  "y": 0.08964049842763558,
+  "z": 0.028469718205062722
+ },
+ "seam_end": {
+  "x": 0.4346965462585207,
+  "y": -0.4801048340122799,
+  "z": 0.03141073883267875
+ },
+ "seam_center": {
+  "x": 0.4295785260509134,
+  "y": -0.19523236486516798,
+  "z": 0.029940228518870737
+ },
+ "back_left": {
+  "x": 0.5900835751788743,
+  "y": 0.0927129196926458,
+  "z": 0.02961937398060177
+ },
+ "back_right": {
+  "x": 0.600271752067146,
+  "y": -0.4771960213248585,
+  "z": 0.03256692407686368
+ },
+ "front_left": {
+  "x": 0.2601362935371614,
+  "y": 0.08681450149417283,
+  "z": 0.027327956641404194
+ },
+ "front_right": {
+  "x": 0.27032447042543284,
+  "y": -0.48309443952333153,
+  "z": 0.030263468062577736
+ },
+ "surface_normal": {
+  "x": -0.008527031752059207,
+  "y": 0.007329734846270253,
+  "z": 0.9999367803599299
+ },
+ "plane_rms_m": 0.0022273785089447352,
+ "back_middle_left": {
+  "x": 0.5072721637054546,
+  "y": 0.09117683465130214,
+  "z": 0.029044546092832246
+ },
+ "front_middle_left": {
+  "x": 0.3422984271465321,
+  "y": 0.0882273748001082,
+  "z": 0.027898837423233458
+ },
+ "back_middle_right": {
+  "x": 0.5174841270558959,
+  "y": -0.4786504855698623,
+  "z": 0.031988831454771216
+ },
+ "front_middle_right": {
+  "x": 0.3525105303872986,
+  "y": -0.4815995790278925,
+  "z": 0.030837103447628245
+ },
+ "side_cutting_points": {
+  "schema": "side_cutting_midpoints/v1",
+  "source_mapping": {
+   "back_middle_left": [
+    "back_left",
+    "seam_start"
+   ],
+   "front_middle_left": [
+    "front_left",
+    "seam_start"
+   ],
+   "back_middle_right": [
+    "back_right",
+    "seam_end"
+   ],
+   "front_middle_right": [
+    "front_right",
+    "seam_end"
+   ]
+  }
+ },
+ "detector_method": "autolabel_v2_sam3_fold_midline",
+ "autolabel_v2_attempts": {
+  "max_attempts": 4,
+  "used": 1,
+  "retry_policy": "smart",
+  "average_frames": 1,
+  "attempts": [
+   {
+    "attempt": 1,
+    "capture_id": "frame_000026_20261022_002351_589697",
+    "exit_code": 0,
+    "pipeline_dir": "/media/farhan/My Passport/Igus_rebel/outputs/rgbd_captures/pipeline/frame_000026_20261022_002351_589697/20261022T002351_680505Z_2444564",
+    "outcome": "accepted",
+    "reasons": [],
+    "retryable": false
+   }
+  ]
+ },
+ "cut_permission": {
+  "status": "allowed",
+  "reasons": [],
+  "flags": [
+   "height_waived(support_hidden)"
+  ]
+ },
+ "support_depth_below_top_m": 0.8611,
+ "support_depth_below_top_source": "support_clearance_mm",
+ "fixture_shift_mm": 0.0,
+ "box_scale": {
+  "mode": "rectify",
+  "target_LX_mm": 330,
+  "target_LY_mm": 570,
+  "template_Lx_mm": 274.63,
+  "template_Ly_mm": 393.18,
+  "scale_x": 1.20161,
+  "scale_y": 1.44973,
+  "height": "UNKNOWN - template/default carton_height_m 0.20 kept (not a snapshot field)",
+  "centre_xy_m": [
+   0.43020402280215364,
+   -0.19519075991534285
+  ]
+ }
+}

@@ -15,6 +15,25 @@ controller_manager:
     arm_right_trajectory_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
+    # Robot-side joint move, MOCK ONLY (igus_rebel mock_move_joint_server, one per arm, launched by dual_table.launch.py
+    # with mock_move_joint:=true): each server streams positions to its own forward controller, which is spawned
+    # INACTIVE and only active for the duration of a MoveJoint (the arm's JTC must be inactive then).
+    arm_left_mock_move_joint_controller:
+      type: forward_command_controller/ForwardCommandController
+
+    arm_right_mock_move_joint_controller:
+      type: forward_command_controller/ForwardCommandController
+
+arm_left_mock_move_joint_controller:
+  ros__parameters:
+    interface_name: position
+    joints: [arm_left_joint1, arm_left_joint2, arm_left_joint3, arm_left_joint4, arm_left_joint5, arm_left_joint6]
+
+arm_right_mock_move_joint_controller:
+  ros__parameters:
+    interface_name: position
+    joints: [arm_right_joint1, arm_right_joint2, arm_right_joint3, arm_right_joint4, arm_right_joint5, arm_right_joint6]
+
 arm_left_trajectory_controller:
   ros__parameters:
     joints:

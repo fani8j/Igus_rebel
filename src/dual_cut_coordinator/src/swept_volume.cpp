@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <iomanip>
+#include <sstream>
 #include <set>
 #include <unordered_map>
 
@@ -700,6 +702,35 @@ Status WorldChecker::create(
   for (const auto & l : config.contact_link_names)
     if (std::find(c->arm_links_.begin(), c->arm_links_.end(), l) == c->arm_links_.end())
       return Status::Error("contact link '" + l + "' is not a link of arm " + arm.side);
+  if (!(config.table_min_clearance_m >= 0.0) || !std::isfinite(config.table_min_clearance_m))
+    return Status::Error("table_min_clearance_m must be finite and >= 0");
+  if (!(config.object_clearance_m >= 0.0) || !std::isfinite(config.object_clearance_m))
+    return Status::Error("object_clearance_m must be finite and >= 0");
+  if (config.table_min_clearance_m > 0.0)
+  {
+    const auto * table = c->model_->hasLinkModel(config.table_link_name) ? c->model_->getLinkModel(config.table_link_name)
+                                                                         : nullptr;
+    if (table == nullptr || table->getShapes().empty())
+      return Status::Error("table link '" + config.table_link_name + "' is not a link with collision geometry");
+    for (const auto & l : config.table_exempt_links)
+      if (std::find(c->arm_links_.begin(), c->arm_links_.end(), l) == c->arm_links_.end())
+        return Status::Error("table exempt link '" + l + "' is not a link of arm " + arm.side);
+    std::vector<std::string> all;
+    for (const auto * l : c->model_->getLinkModels())
+      if (!l->getShapes().empty()) all.push_back(l->getName());
+    c->table_acm_.setEntry(all, all, true);
+    size_t gated = 0;
+    for (const auto & l : c->arm_links_)
+    {
+      if (std::find(config.table_exempt_links.begin(), config.table_exempt_links.end(), l) !=
+          config.table_exempt_links.end())
+        continue;
+      if (c->model_->getLinkModel(l)->getShapes().empty()) continue;
+      c->table_acm_.setEntry(l, config.table_link_name, false);
+      ++gated;
+    }
+    if (gated == 0) return Status::Error("table clearance gate has no arm link to check");
+  }
   out = std::move(c);
   return Status::Ok();
 }
@@ -831,6 +862,88 @@ WorldCheckResult WorldChecker::check(const SampledPath & path, const std::vector
       }
       r.message = "collision at sample " + std::to_string(i) + " between " + r.link + " and " + r.object;
       return r;
+    }
+
+    if (config_.object_clearance_m > 0.0)
+    {
+      // Exact distance of every arm link to every scene object it may not touch (the collision check above passed).
+      collision_detection::DistanceRequest oreq;
+      oreq.enable_nearest_points = true;
+      oreq.enable_signed_distance = true;
+      oreq.type = collision_detection::DistanceRequestType::GLOBAL;
+      oreq.acm = smp.contact_allowed ? &acm_contact : &acm;
+      collision_detection::DistanceResult ores;
+      env->distanceRobot(oreq, ores, state);
+      const double d = ores.minimum_distance.distance;
+      if (std::isfinite(d) && d < std::numeric_limits<double>::max())
+      {
+        if (!r.object_measured || d < r.object_min_distance_m)
+        {
+          r.object_measured = true;
+          r.object_min_distance_m = d;
+          // the pair comes back as (world object, robot link) or the other way round: sort it by the world's object ids
+          const bool first_is_object = scene_->getWorld()->hasObject(ores.minimum_distance.link_names[0]);
+          r.object_min_object = ores.minimum_distance.link_names[first_is_object ? 0 : 1];
+          r.object_min_link = ores.minimum_distance.link_names[first_is_object ? 1 : 0];
+          r.object_min_sample = i;
+        }
+        if (d < config_.object_clearance_m)
+        {
+          r.code = WorldCode::ObjectClearance;
+          r.sample_index = i;
+          r.time_s = smp.time_s;
+          r.segment_index = smp.segment_index;
+          r.sample_contact_allowed = smp.contact_allowed;
+          r.link = r.object_min_link;
+          r.object = r.object_min_object;
+          std::ostringstream o;
+          o << std::fixed << std::setprecision(1) << "object clearance: " << r.link << " is " << d * 1000.0 << " mm from " << r.object
+            << " at sample " << i << ", required >= " << config_.object_clearance_m * 1000.0 << " mm";
+          r.message = o.str();
+          return r;
+        }
+      }
+    }
+
+    if (config_.table_min_clearance_m > 0.0)
+    {
+      // Exact distance of every gated arm link to the table (the strict collision check above already passed).
+      collision_detection::DistanceRequest dreq;
+      dreq.enable_nearest_points = true;
+      dreq.enable_signed_distance = true;
+      dreq.type = collision_detection::DistanceRequestType::GLOBAL;
+      dreq.acm = &table_acm_;
+      collision_detection::DistanceResult dres;
+      env->distanceSelf(dreq, dres, state);
+      const double d = dres.minimum_distance.distance;
+      std::string link = dres.minimum_distance.link_names[0];
+      if (link == config_.table_link_name) link = dres.minimum_distance.link_names[1];
+      if (!std::isfinite(d) || d >= std::numeric_limits<double>::max() || link.empty())
+        return fail(WorldCode::QueryFailed, "table clearance: the distance query returned no arm link / table pair at sample " + std::to_string(i));
+      if (!r.table_measured || d < r.table_min_distance_m)
+      {
+        r.table_measured = true;
+        r.table_min_distance_m = d;
+        r.table_min_link = link;
+        r.table_min_sample = i;
+        r.table_min_time_s = smp.time_s;
+      }
+      if (d < config_.table_min_clearance_m)
+      {
+        r.code = WorldCode::TableClearance;
+        r.sample_index = i;
+        r.time_s = smp.time_s;
+        r.segment_index = smp.segment_index;
+        r.sample_contact_allowed = smp.contact_allowed;
+        r.link = link;
+        r.object = config_.table_link_name;
+        std::ostringstream o;
+        o << std::fixed << std::setprecision(1) << "table clearance: " << link << " is " << d * 1000.0
+          << " mm from the table at sample " << i << " (t " << std::setprecision(2) << smp.time_s << " s), required >= "
+          << std::setprecision(1) << config_.table_min_clearance_m * 1000.0 << " mm";
+        r.message = o.str();
+        return r;
+      }
     }
   }
   r.code = WorldCode::Ok;

@@ -14,6 +14,8 @@
        hardware_protocol   mock_hardware | rebel
        calibration_file    YAML in the dual_arm_calibration structure
        left_robot_ip / right_robot_ip / robot_port / fault_group  (rebel only)
+       left_jog_velocity_scale / right_jog_velocity_scale  (rebel only, default 1.65; the controllers.yaml
+                           gains assume it)
        table_*             table geometry, see below -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="rebel_dual_table">
   <xacro:arg name="hardware_protocol" default="mock_hardware"/>
@@ -22,6 +24,8 @@
   <xacro:arg name="right_robot_ip" default="192.168.3.12"/>
   <xacro:arg name="robot_port" default="3920"/>
   <xacro:arg name="fault_group" default="dual_arm_table"/>
+  <xacro:arg name="left_jog_velocity_scale" default="1.65"/>
+  <xacro:arg name="right_jog_velocity_scale" default="1.65"/>
   <xacro:arg name="include_ros2_control" default="true"/>
 
   <!-- Table geometry (APPROXIMATE, tape-measured 2026-10-06; adjust here, not in the macros).
@@ -79,13 +83,15 @@
       robot_ip="$(arg left_robot_ip)" robot_port="$(arg robot_port)"
       node_name="igus_rebel_left"
       trajectory_controller_name="arm_left_trajectory_controller"
-      fault_group="$(arg fault_group)"/>
+      fault_group="$(arg fault_group)"
+      jog_velocity_scale="$(arg left_jog_velocity_scale)"/>
     <xacro:rebel_dual_table_control
       arm_id="arm_right" prefix="arm_right_"
       hardware_protocol="$(arg hardware_protocol)"
       robot_ip="$(arg right_robot_ip)" robot_port="$(arg robot_port)"
       node_name="igus_rebel_right"
       trajectory_controller_name="arm_right_trajectory_controller"
-      fault_group="$(arg fault_group)"/>
+      fault_group="$(arg fault_group)"
+      jog_velocity_scale="$(arg right_jog_velocity_scale)"/>
   </xacro:if>
 </robot>

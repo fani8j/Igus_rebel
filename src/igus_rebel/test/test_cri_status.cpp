@@ -299,3 +299,106 @@ TEST(CriParse, MalformedInputNeverEscapesParseMessage)
   // An empty MESSAGE body is still a MESSAGE.
   EXPECT_TRUE(ParseMessage("1 MESSAGE").ok);
 }
+
+TEST(CriParse, ParsesMoveToExecErrorAndKeepsTheWholeReason)
+{
+  using Igus::CriMessages::ExecEvent;
+  using Igus::CriMessages::ParseMessage;
+
+  // Exact body recorded on the real ReBeL on an e-stop during CMD Move Joint, 2026-10-24.
+  auto parsed = ParseMessage("605 MOVETOEXECERROR 0 0 MoveTo Hardware error _ESTOP");
+  ASSERT_TRUE(parsed.ok) << parsed.error;
+  EXPECT_EQ(parsed.type, MessageType::MOVETOEXECERROR);
+  auto event = std::get<ExecEvent>(parsed.payload);
+  EXPECT_EQ(event.code, 0);  // 0 does NOT mean success for an ERROR
+  EXPECT_EQ(event.sub, 0);
+  EXPECT_EQ(event.program, "MoveTo");
+  EXPECT_EQ(event.reason, "Hardware error _ESTOP");
+
+  // Runs of whitespace collapse to single spaces; framing spaces are dropped.
+  parsed = ParseMessage(" 606 MOVETOEXECERROR  -5 2 MoveTo  Axis   1 limit  ");
+  ASSERT_TRUE(parsed.ok) << parsed.error;
+  event = std::get<ExecEvent>(parsed.payload);
+  EXPECT_EQ(event.code, -5);
+  EXPECT_EQ(event.sub, 2);
+  EXPECT_EQ(event.reason, "Axis 1 limit");
+
+  // EXECERROR (a program, not MoveTo) has the same shape.
+  parsed = ParseMessage("7 EXECERROR 0 0 Prog Program stopped by error");
+  ASSERT_TRUE(parsed.ok) << parsed.error;
+  EXPECT_EQ(parsed.type, MessageType::EXECERROR);
+  event = std::get<ExecEvent>(parsed.payload);
+  EXPECT_EQ(event.program, "Prog");
+  EXPECT_EQ(event.reason, "Program stopped by error");
+
+  // An error without text still parses (empty reason); malformed ones never throw and are not
+  // "unknown message type".
+  parsed = ParseMessage("8 MOVETOEXECERROR 0 0 MoveTo");
+  ASSERT_TRUE(parsed.ok) << parsed.error;
+  EXPECT_EQ(std::get<ExecEvent>(parsed.payload).reason, "");
+  for (const char * bad : {"1 MOVETOEXECERROR", "1 MOVETOEXECERROR x y MoveTo ESTOP", "1 EXECERROR 0"}) {
+    parsed = ParseMessage(bad);
+    EXPECT_FALSE(parsed.ok) << bad;
+    EXPECT_NE(parsed.type, MessageType::UNKNOWN) << bad;
+  }
+}
+
+TEST(CriParse, MultiWordEndReasonIsKeptWhole)
+{
+  using Igus::CriMessages::ExecEvent;
+  using Igus::CriMessages::ParseMessage;
+
+  auto parsed = ParseMessage("9 MOVETOEXECEND 0 0 MoveTo Stopped by emergency stop");
+  ASSERT_TRUE(parsed.ok) << parsed.error;
+  EXPECT_EQ(std::get<ExecEvent>(parsed.payload).reason, "Stopped by emergency stop");
+  parsed = ParseMessage("10 EXECEND -1 0 Prog PLAN");
+  ASSERT_TRUE(parsed.ok) << parsed.error;
+  EXPECT_EQ(std::get<ExecEvent>(parsed.payload).reason, "PLAN");
+}
+
+TEST(CriParse, ParsesMoveToExecMessagesFromTheRealRobot)
+{
+  using Igus::CriMessages::ExecEvent;
+  using Igus::CriMessages::ParseMessage;
+
+  // Exact bodies recorded on the real ReBeL (RobotControl V980-15), 2026-10-12.
+  auto parsed = ParseMessage("225 MOVETOEXECACK 0 0 MoveTo");
+  ASSERT_TRUE(parsed.ok) << parsed.error;
+  EXPECT_EQ(parsed.type, MessageType::MOVETOEXECACK);
+  auto event = std::get<ExecEvent>(parsed.payload);
+  EXPECT_EQ(event.code, 0);
+  EXPECT_EQ(event.sub, 0);
+  EXPECT_EQ(event.program, "MoveTo");
+  EXPECT_EQ(event.reason, "");
+
+  parsed = ParseMessage("273 MOVETOEXECEND -1 0 MoveTo PLAN");
+  ASSERT_TRUE(parsed.ok) << parsed.error;
+  EXPECT_EQ(parsed.type, MessageType::MOVETOEXECEND);
+  event = std::get<ExecEvent>(parsed.payload);
+  EXPECT_EQ(event.code, -1);
+  EXPECT_EQ(event.sub, 0);
+  EXPECT_EQ(event.program, "MoveTo");
+  EXPECT_EQ(event.reason, "PLAN");
+
+  parsed = ParseMessage(" 9 MOVETOEXECEND 0 0 MoveTo USER ");
+  ASSERT_TRUE(parsed.ok) << parsed.error;
+  EXPECT_EQ(std::get<ExecEvent>(parsed.payload).reason, "USER");
+
+  // EXECACK / EXECEND have the same shape and are recognised (not "unknown").
+  parsed = ParseMessage("3 EXECACK 0 0 Prog");
+  EXPECT_TRUE(parsed.ok);
+  EXPECT_EQ(parsed.type, MessageType::EXECACK);
+  parsed = ParseMessage("4 EXECEND -1 0 Prog PLAN");
+  EXPECT_TRUE(parsed.ok);
+  EXPECT_EQ(parsed.type, MessageType::EXECEND);
+
+  // Malformed ones never throw and are not "unknown message type".
+  for (const char * bad : {"1 MOVETOEXECACK", "1 MOVETOEXECEND x y MoveTo PLAN",
+      "1 MOVETOEXECEND 0", "1 MOVETOEXECEND 0 0"})
+  {
+    Igus::CriMessages::ParsedMessage result;
+    EXPECT_NO_THROW(result = ParseMessage(bad)) << bad;
+    EXPECT_FALSE(result.ok) << bad;
+    EXPECT_NE(result.type, MessageType::UNKNOWN) << bad;
+  }
+}

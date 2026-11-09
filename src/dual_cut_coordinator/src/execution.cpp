@@ -11,11 +11,6 @@ namespace dual_cut
 using namespace std::chrono_literals;
 using Clock = std::chrono::steady_clock;
 
-namespace
-{
-double secs(Clock::time_point t) { return std::chrono::duration<double>(t.time_since_epoch()).count(); }
-}
-
 double CoordinatorNode::snapshotAgeS() const
 {
   uint64_t stamp = 0;
@@ -39,44 +34,90 @@ void CoordinatorNode::doStop(const std::string & reason)
   const bool first = stop_reason_.empty();
   if (first) stop_reason_ = reason;
   state_ = Status_::STATE_STOPPED;
-  // 1. Hold: a one-point trajectory at the measured position replaces the controller's trajectory
-  //    (an EMPTY trajectory is rejected by the Humble JTC and does NOT hold; see wp6 evidence).
-  for (ArmIo * io : {&left_, &right_})
+  // The order comes from planStopSteps() (unit tested). With a robot-side joint move in play: FIRST every MoveJoint cancel
+  // (-> CMD Move Stop; the robot keeps moving if nothing tells it to stop, even after a driver death), THEN the JTC hold
+  // (not for an arm whose JTC is not in Normal mode: it is inactive and its joint states may be frozen, so nothing here
+  // reads /joint_states for an arm in a CRI run), THEN the FJT cancels. Without CRI it is today's hold-then-cancel.
+  const bool cri = cri_used_.load();
+  std::array<bool, 2> hold_ok{true, true};
+  if (cri)
   {
-    std::vector<double> q;
-    if (!armQ(*io, q)) continue;
-    trajectory_msgs::msg::JointTrajectory hold;
-    hold.joint_names = io->spec.joint_names;
-    trajectory_msgs::msg::JointTrajectoryPoint p;
-    p.positions = q;
-    p.velocities.assign(q.size(), 0.0);
-    p.time_from_start = rclcpp::Duration(0, 0);
-    hold.points.push_back(p);
-    io->hold_pub->publish(hold);
+    std::lock_guard<std::mutex> g(cri_mutex_);
+    for (size_t i = 0; i < 2; ++i) hold_ok[i] = cri_[i].mode == CtrlGateMode::Normal;
   }
-  // 2. Cancel every goal (the controller also holds on cancel).
-  for (ArmIo * io : {&left_, &right_})
+  for (const StopStep & step : planStopSteps(cri, hold_ok))
   {
-    GoalHandle::SharedPtr h;
+    ArmIo * io = step.arm == 0 ? &left_ : &right_;
+    if (cri) RCLCPP_WARN(get_logger(), "doStop step: %s %s (t=%.3f)", toString(step.action), io->side.c_str(), now().seconds());
+    switch (step.action)
     {
-      std::lock_guard<std::mutex> g(io->goal.m);
-      h = io->goal.handle;
-    }
-    try
-    {
-      if (h) io->action->async_cancel_goal(h);   // throws if the goal already finished and was forgotten
-    }
-    catch (const std::exception & e)
-    {
-      RCLCPP_DEBUG(get_logger(), "cancel %s: %s", io->side.c_str(), e.what());
-    }
-    try
-    {
-      io->action->async_cancel_all_goals();
-    }
-    catch (const std::exception & e)
-    {
-      RCLCPP_DEBUG(get_logger(), "cancel-all %s: %s", io->side.c_str(), e.what());
+      case StopAction::CancelMoveJoint:
+      {
+        MoveJointHandle::SharedPtr h;
+        {
+          std::lock_guard<std::mutex> g(cri_mutex_);
+          h = cri_[static_cast<size_t>(step.arm)].handle;
+        }
+        try
+        {
+          if (h) io->cri_action->async_cancel_goal(h);
+        }
+        catch (const std::exception & e)
+        {
+          RCLCPP_DEBUG(get_logger(), "cancel MoveJoint %s: %s", io->side.c_str(), e.what());
+        }
+        try
+        {
+          io->cri_action->async_cancel_all_goals();   // also a goal whose acceptance has not come back yet
+        }
+        catch (const std::exception & e)
+        {
+          RCLCPP_DEBUG(get_logger(), "cancel-all MoveJoint %s: %s", io->side.c_str(), e.what());
+        }
+        break;
+      }
+      case StopAction::HoldJtc:
+      {
+        // a one-point trajectory at the measured position replaces the controller's trajectory (an EMPTY trajectory is
+        // rejected by the Humble JTC and does NOT hold; see wp6 evidence).
+        std::vector<double> q;
+        if (!(cri ? armQEff(*io, q) : armQ(*io, q))) break;
+        trajectory_msgs::msg::JointTrajectory hold;
+        hold.joint_names = io->spec.joint_names;
+        trajectory_msgs::msg::JointTrajectoryPoint p;
+        p.positions = q;
+        p.velocities.assign(q.size(), 0.0);
+        p.time_from_start = rclcpp::Duration(0, 0);
+        hold.points.push_back(p);
+        io->hold_pub->publish(hold);
+        break;
+      }
+      case StopAction::CancelFjt:
+      {
+        // cancel every goal (the controller also holds on cancel)
+        GoalHandle::SharedPtr h;
+        {
+          std::lock_guard<std::mutex> g(io->goal.m);
+          h = io->goal.handle;
+        }
+        try
+        {
+          if (h) io->action->async_cancel_goal(h);   // throws if the goal already finished and was forgotten
+        }
+        catch (const std::exception & e)
+        {
+          RCLCPP_DEBUG(get_logger(), "cancel %s: %s", io->side.c_str(), e.what());
+        }
+        try
+        {
+          io->action->async_cancel_all_goals();
+        }
+        catch (const std::exception & e)
+        {
+          RCLCPP_DEBUG(get_logger(), "cancel-all %s: %s", io->side.c_str(), e.what());
+        }
+        break;
+      }
     }
   }
   if (first) RCLCPP_ERROR(get_logger(), "STOP latched: %s", reason.c_str());
@@ -140,17 +181,33 @@ void CoordinatorNode::handleRearm(const std::shared_ptr<Trigger::Request>, std::
     }
   }
   if (exec_thread_.joinable()) exec_thread_.join();
-  // at rest
-  double rest;
-  {
-    std::lock_guard<std::mutex> lk(js_mutex_);
-    rest = rest_tracker_.restDuration(secs(Clock::now()));
-  }
+  // at rest. With a robot-side joint move in play (enabled, or used since the last rearm) the live per-arm measurement and
+  // BOTH drivers' hardware_state (fresh, not latched, no stop pending, idle) decide, not /joint_states.
+  const bool cri_rearm = cri_used_.load() || pb("cri_transit_enabled");
+  const double rest = restDurationS();
   if (rest < get_parameter("barrier_rest_duration_s").as_double() || jointStateAgeS() > 0.5)
   {
     res->success = false;
     res->message = "refused: the arms are not at rest (rest " + std::to_string(rest) + " s)";
     return;
+  }
+  if (cri_rearm)
+  {
+    const Status g = criBothArmsGate(0.5);
+    if (!g)
+    {
+      res->success = false;
+      res->message = "refused: " + g.message;
+      return;
+    }
+    std::lock_guard<std::mutex> lk(cri_mutex_);
+    for (size_t i = 0; i < 2; ++i)
+      if (cri_[i].sending || (cri_[i].accepted && !cri_[i].have_result))
+      {
+        res->success = false;
+        res->message = std::string("refused: a MoveJoint goal is still active on ") + (i == 0 ? "left" : "right");
+        return;
+      }
   }
   for (ArmIo * io : {&left_, &right_})
   {
@@ -159,6 +216,17 @@ void CoordinatorNode::handleRearm(const std::shared_ptr<Trigger::Request>, std::
     {
       res->success = false;
       res->message = "refused: a goal is still active on " + io->side;
+      return;
+    }
+  }
+  if (cri_rearm)
+  {
+    // a stop in (or around) a robot-side move leaves that arm's JTC deactivated: strict reactivation, hold check
+    const Status rs = criRecoverControllers();
+    if (!rs)
+    {
+      res->success = false;
+      res->message = "refused: " + rs.message;
       return;
     }
   }
@@ -178,6 +246,19 @@ void CoordinatorNode::handleRearm(const std::shared_ptr<Trigger::Request>, std::
     stop_reason_.clear();
   }
   current_phase_.clear();
+  if (cri_rearm)
+  {
+    std::lock_guard<std::mutex> lk(cri_mutex_);
+    for (CriArmState & a : cri_)
+    {
+      a.run_active = false;
+      a.sending = a.accepted = a.rejected = a.have_result = false;
+      a.handle.reset();
+      a.mode = CtrlGateMode::Normal;
+      a.mode_since = Clock::now();
+    }
+  }
+  cri_used_ = false;
   stop_latched_ = false;
   state_ = Status_::STATE_IDLE;
   res->success = true;
@@ -205,6 +286,12 @@ void CoordinatorNode::handleExecute(const std::shared_ptr<Trigger::Request>, std
   if (pb("execute_phase_a_enabled")) phases.push_back('A');
   if (pb("execute_phase_b_enabled")) phases.push_back('B');
   if (phases.empty()) return refuse("no phase is enabled (execute_phase_a_enabled / execute_phase_b_enabled)");
+  if (pb("cri_transit_enabled"))
+  {
+    // fail closed: both drivers' hardware_state and robot_joint_states must be there, fresh and clean
+    const Status g = criBothArmsGate(0.5);
+    if (!g) return refuse("cri_transit_enabled: " + g.message);
+  }
   bool expected = false;
   if (!executing_.compare_exchange_strong(expected, true)) return refuse("an execution is already running");
 
@@ -214,6 +301,28 @@ void CoordinatorNode::handleExecute(const std::shared_ptr<Trigger::Request>, std
     {
       executing_ = false;
       return refuse("no validated plan is retained");
+    }
+    // detection permission of the plan's snapshot (cut_permission written by the detector); evaluated at execute time
+    const ExecuteGateResult dg = detectionExecuteGate(retained_.detection, pb("allow_blocked_detection"), pb("honor_detection_override"));
+    if (!dg.allowed)
+    {
+      executing_ = false;
+      return refuse("detection blocked: " + dg.message);
+    }
+    if (dg.by == "allow_blocked_detection" || dg.by == "detector_override")
+      RCLCPP_WARN(get_logger(), "execute: %s", dg.message.c_str());
+    else if (dg.by == "unknown_permission")
+      RCLCPP_WARN(get_logger(), "execute: the plan's snapshot has no cut_permission field (old snapshot): treated as allowed");
+    if (retained_.sequence)
+    {
+      // sequence schedule: one execution of the whole timelines, gated by execute_phase_a_enabled only
+      // (execute_phase_b_enabled is not used)
+      if (!pb("execute_phase_a_enabled"))
+      {
+        executing_ = false;
+        return refuse("the retained plan is a sequence schedule: it needs execute_phase_a_enabled (phase B enable is not used)");
+      }
+      phases = {'A'};
     }
     for (char p : phases)
       if (!(p == 'A' ? retained_.set.a : retained_.set.b).validated())
@@ -251,7 +360,8 @@ Status CoordinatorNode::waitBarriers(const Phase & phase, double)
     in.stop_latched = stop_latched_.load();
     std::vector<double> ql, qr;
     double a1 = 0, a2 = 0;
-    const bool have = armQ(left_, ql, &a1) && armQ(right_, qr, &a2);
+    const bool cri_on = pb("cri_transit_enabled");   // live robot_joint_states per arm (the driver's own telemetry), not /joint_states
+    const bool have = cri_on ? (criQ(left_, ql, &a1) && criQ(right_, qr, &a2)) : (armQ(left_, ql, &a1) && armQ(right_, qr, &a2));
     in.joint_state_age_s = have ? std::max({a1, a2, jointStateAgeS()}) : std::numeric_limits<double>::infinity();
     if (have)
     {
@@ -274,9 +384,14 @@ Status CoordinatorNode::waitBarriers(const Phase & phase, double)
       }
       in.max_joint_error_to_start_rad = err;
     }
+    in.rest_duration_s = restDurationS();
+    if (cri_on)
     {
-      std::lock_guard<std::mutex> lk(js_mutex_);
-      in.rest_duration_s = rest_tracker_.restDuration(secs(Clock::now()));
+      // BOTH arms: hardware_state fresh, not latched, no stop pending, idle; live measurement fresh. Missing = refused.
+      const Status g = criBothArmsGate(pd("barrier_joint_state_age_s"));
+      in.arm_health_required = true;
+      in.arm_health_ok = g.ok;
+      in.arm_health_text = g.message;
     }
     {
       std::lock_guard<std::mutex> lk(poll_mutex_);
@@ -444,6 +559,14 @@ void CoordinatorNode::executionThread(std::vector<char> phases)
     std::lock_guard<std::mutex> lk(data_mutex_);
     plan = retained_;
   }
+  if (plan.sequence)
+  {
+    runSequence(plan);
+    return;
+  }
+  // The certificate parameters are the plan's own; whether the driver caps may be assumed is the operator's switch NOW
+  // (a planning-scope parameter, so it cannot change while this execution runs).
+  plan.cri.params.assume_driver_cap_ok = pb("cri_assume_driver_cap_ok");
   for (char label : phases)
   {
     if (stop_latched_) break;
@@ -484,6 +607,9 @@ void CoordinatorNode::executionThread(std::vector<char> phases)
     right_.goal.reset();
 
     const bool serial = phase.validation().serial_fallback;
+    const bool cri_on = pb("cri_transit_enabled");
+    std::string cri_note = cri_on ? "parallel phase: every segment stays on the JTC (stage 1: serial phases only)" : "CRI off";
+    std::vector<CriRunReport> cri_runs;
     auto launch = [&](ArmIo & io, FJT::Goal & goal, Expected & ex, bool left_side)
     {
       const double delay = pd("start_delay_s");
@@ -537,30 +663,180 @@ void CoordinatorNode::executionThread(std::vector<char> phases)
       Expected & e1 = left_first ? el : er;
       Expected & e2 = left_first ? er : el;
       RCLCPP_INFO(get_logger(), "phase %c runs serially: %s arm first", label, first.side.c_str());
-      launch(first, g1, e1, left_first);
-      ok = waitGoalsDone({&first}, (left_first ? phase.left() : phase.right()).duration() + pd("start_delay_s") + 10.0);
-      if (ok)
+
+      // Robot-side joint move legs of this serial phase (opt-in, certified at plan time with the plan's own parameters). The
+      // run split is [JTC run | CRI run | JTC run]; without a selected leg (CRI off, parallel phase, sequence plan, driver cap
+      // unknown ...) every arm has ONE JTC run and the code below is today's code.
+      std::array<CriArmRuns, 2> runs;
+      cri_note = "CRI off";
+      for (const ArmIo * io : {&left_, &right_})
       {
-        markFinished(left_first);
-        // the second arm starts only once everything is at rest again
-        const auto deadline = Clock::now() + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(pd("barrier_timeout_s")));
-        while (!stop_latched_ && Clock::now() < deadline)
+        const CriArmPhasePlan * ap = cri_on && plan.cri.computed ? plan.cri.find(std::string(1, label), io->side) : nullptr;
+        std::string why;
+        const bool cap_ok = criCapOk(criHwView(armIndex(*io)), plan.cri.params, &why);
+        runs[armIndex(*io)] = buildCriArmRuns(cri_on, cap_ok, ap, phase.arm(io->side));
+        if (!cri_on) continue;
+        if (!plan.cri.computed)
+          cri_note = "the retained plan carries no CRI analysis (it was made with cri_transit_enabled=false)";
+        else if (ap && !ap->selected_segments.empty() && !cap_ok)
         {
-          double rest;
+          cri_note = io->side + ": CRI leg stays on the JTC, " + why;
+          RCLCPP_WARN(get_logger(), "phase %c: %s", label, cri_note.c_str());
+        }
+        else if (cri_note == "CRI off" || cri_note == "no leg selected for this phase")
+          cri_note = ap && !ap->selected_segments.empty() ? "CRI legs dispatched" : "no leg selected for this phase";
+      }
+      auto hasCri = [](const CriArmRuns & r)
+      {
+        for (const CriRun & x : r.runs)
+          if (x.type == CriRunType::Cri) return true;
+        return false;
+      };
+      const bool use_runs = hasCri(runs[0]) || hasCri(runs[1]);
+
+      if (!use_runs)
+      {
+        launch(first, g1, e1, left_first);
+        ok = waitGoalsDone({&first}, (left_first ? phase.left() : phase.right()).duration() + pd("start_delay_s") + 10.0);
+        if (ok)
+        {
+          markFinished(left_first);
+          // the second arm starts only once everything is at rest again
+          const auto deadline = Clock::now() + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(pd("barrier_timeout_s")));
+          while (!stop_latched_ && Clock::now() < deadline)
           {
-            std::lock_guard<std::mutex> lk(js_mutex_);
-            rest = rest_tracker_.restDuration(secs(Clock::now()));
+            if (restDurationS() >= pd("barrier_rest_duration_s")) break;
+            std::this_thread::sleep_for(50ms);
           }
-          if (rest >= pd("barrier_rest_duration_s")) break;
-          std::this_thread::sleep_for(50ms);
+          if (stop_latched_) ok = false;
+          else if (const Status g = cri_on ? criBothArmsGate(pd("barrier_joint_state_age_s")) : Status::Ok(); !g)
+          {
+            doStop("second arm of the serial phase not started: " + g.message);
+            ok = false;
+          }
+          else
+          {
+            launch(second, g2, e2, !left_first);
+            ok = waitGoalsDone({&second}, (left_first ? phase.right() : phase.left()).duration() + pd("start_delay_s") + 10.0);
+            if (ok) markFinished(!left_first);
+          }
         }
-        if (stop_latched_) ok = false;
-        else
+      }
+      else
+      {
+        // One arm after the other, each as its list of runs. Between runs the arm must be at rest on LIVE state with healthy
+        // drivers (both arms); the second arm starts only after ALL runs of the first are done and at rest.
+        auto parkExpected = [&](bool left_side, const std::vector<double> & q_spec, bool finished)
         {
-          launch(second, g2, e2, !left_first);
-          ok = waitGoalsDone({&second}, (left_first ? phase.right() : phase.left()).duration() + pd("start_delay_s") + 10.0);
-          if (ok) markFinished(!left_first);
+          std::lock_guard<std::mutex> lk(expected_mutex_);
+          Expected & dst = left_side ? expected_left_ : expected_right_;
+          dst = Expected{};
+          dst.valid = true;
+          dst.q_start = q_spec;
+          dst.q_end = q_spec;
+          dst.finished = finished;
+        };
+        auto settle = [&]() -> bool
+        {
+          if (!waitAtRest({&left_, &right_}, pd("barrier_timeout_s")))
+          {
+            if (!stop_latched_) doStop("arms did not come to rest between runs");
+            return false;
+          }
+          const Status g = criBothArmsGate(pd("barrier_joint_state_age_s"));
+          if (!g)
+          {
+            if (!stop_latched_) doStop("between runs: " + g.message);
+            return false;
+          }
+          return true;
+        };
+        auto runArm = [&](ArmIo & io, bool left_side) -> bool
+        {
+          const CriArmRuns & arm_runs = runs[armIndex(io)];
+          const ArmPhase & ap = arm_runs.phase;   // a partial CRI leg is [JTC head, leg, JTC tail] here
+          for (size_t run_i = 0; run_i < arm_runs.runs.size(); ++run_i)
+          {
+            const CriRun & run = arm_runs.runs[run_i];
+            if (stop_latched_) return false;
+            CriRunReport rep;
+            rep.arm = io.side;
+            rep.type = toString(run.type);
+            rep.first_segment = run.first_segment;
+            rep.end_segment = run.end_segment;
+            const auto t_run0 = Clock::now();
+            bool run_ok = false;
+            if (run.type == CriRunType::Jtc)
+            {
+              ArmPhase sub = ap;
+              sub.segments.assign(ap.segments.begin() + static_cast<std::ptrdiff_t>(run.first_segment), ap.segments.begin() + static_cast<std::ptrdiff_t>(run.end_segment));
+              sub.start_q = sub.segments.front().trajectory.points.front().positions;
+              sub.end_q = sub.segments.back().trajectory.points.back().positions;
+              FJT::Goal g;
+              Expected ex;
+              const Status bs = buildGoal(sub, ex, g);
+              if (!bs)
+              {
+                if (!stop_latched_) doStop("cannot build the goal of a JTC run: " + bs.message);
+                rep.note = bs.message;
+              }
+              else
+              {
+                {
+                  std::lock_guard<std::mutex> lk(expected_mutex_);
+                  (left_side ? expected_left_ : expected_right_) = ex;
+                }
+                rep.planned_s = sub.duration();
+                launch(io, g, ex, left_side);
+                run_ok = waitGoalsDone({&io}, sub.duration() + pd("start_delay_s") + 10.0);
+                if (run_ok) markFinished(left_side);
+              }
+              rep.ok = run_ok;
+            }
+            else
+            {
+              const CriLegRecord * leg = arm_runs.leg[run_i];
+              if (!leg)
+              {
+                if (!stop_latched_) doStop("CRI run without a selected leg record (internal)");
+                rep.note = "no leg record";
+              }
+              else
+              {
+                rep.planned_s = ap.segments[run.first_segment].trajectory.duration();
+                run_ok = runCriLeg(io, ap, *leg, plan.cri.params, rep);
+                if (run_ok)
+                {
+                  // the arm now stands at the chord end (spec order): the tracking reference of the parked arm
+                  std::vector<double> goal_spec;
+                  for (const auto & n : io.spec.joint_names)
+                  {
+                    std::string plain;
+                    stripJointPrefix(io.prefix, n, plain);
+                    const auto it = std::find(leg->geometry.joint_names.begin(), leg->geometry.joint_names.end(), plain);
+                    goal_spec.push_back(leg->cri_goal[static_cast<size_t>(it - leg->geometry.joint_names.begin())]);
+                  }
+                  parkExpected(left_side, goal_spec, false);
+                }
+              }
+            }
+            rep.wall_s = std::chrono::duration<double>(Clock::now() - t_run0).count();
+            rep.ok = run_ok;
+            cri_runs.push_back(rep);
+            if (!run_ok) return false;
+            if (!settle()) return false;
+          }
+          return true;
+        };
+        // the arm that has not started yet is parked at its phase start: its tracking reference
+        ok = runArm(first, left_first);
+        if (ok)
+        {
+          markFinished(left_first);
+          ok = !stop_latched_;
         }
+        if (ok) ok = runArm(second, !left_first);
+        if (ok) markFinished(!left_first);
       }
     }
     const double phase_wall = std::chrono::duration<double>(Clock::now() - t_phase0).count();
@@ -574,13 +850,15 @@ void CoordinatorNode::executionThread(std::vector<char> phases)
         ticks = exec_monitor_ticks_;
       }
       std::ostringstream o;
-      o << std::setprecision(9) << "{\"phase\":\"" << label << "\",\"completed\":" << (ok ? "true" : "false") << ",\"mode\":\""
+      o << std::setprecision(9) << "{\"plan_variant\":\"" << plan.variant << "\",\"phase\":\"" << label << "\",\"completed\":" << (ok ? "true" : "false") << ",\"mode\":\""
         << (serial ? "serial" : "parallel") << "\",\"serial_first\":\"" << phase.validation().serial_first << "\",\"planned_duration_left_s\":"
         << phase.left().duration() << ",\"planned_duration_right_s\":" << phase.right().duration() << ",\"wall_s\":" << phase_wall
         << ",\"snapshot_age_at_phase_start_s\":" << snapshot_age_at_start << ",\"snapshot_age_limit_s\":"
         << pd("external_snapshot_max_age_s") << ",\"monitor_ticks\":" << ticks << ",\"min_cross_distance_during_execution_m\":"
         << (std::isfinite(min_d) ? min_d : -1.0) << ",\"max_tracking_error_rad\":" << max_t << ",\"stop_latched\":"
-        << (stop_latched_.load() ? "true" : "false") << ",\"stop_reason\":\"" << stopReason() << "\"}";
+        << (stop_latched_.load() ? "true" : "false") << ",\"stop_reason\":\"" << stopReason() << "\"";
+      if (cri_on) o << ",\"cri\":" << criRunReportJson(cri_runs, cri_note);
+      o << "}";
       publishExecReport(o.str());
     }
     if (!ok)

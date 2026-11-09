@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <random>
 #include <string>
 
@@ -259,6 +260,156 @@ std::vector<JointVector> solve(
     }
   }
   return solutions;
+}
+
+IkDiagnosis diagnose(
+  const Eigen::Isometry3d& target, const Eigen::Isometry3d& tool_offset,
+  const std::array<JointLimits, 6>& limits)
+{
+  // Same geometry as solve() (kept textually parallel on purpose); nothing is filtered out.
+  IkDiagnosis out;
+  const double L1 = kL1;
+  const double L2 = effectiveL2();
+  const double beta = effectiveBeta();
+  const Eigen::Matrix3d r06 = target.linear() * tool_offset.linear().transpose();
+  const Eigen::Vector3d p06 = target.translation() - r06 * tool_offset.translation();
+  const Eigen::Vector3d wrist = p06 - kJ6Z * r06.col(2);
+  const double r_xy = std::hypot(wrist.x(), wrist.y());
+  const double psi = std::atan2(wrist.y(), wrist.x());
+  const double z_prime = wrist.z() - kD1Z - kO2Z;
+  out.reach.radius_m = std::sqrt(r_xy * r_xy + z_prime * z_prime);
+  out.reach.reach_max_m = L1 + L2;
+  out.reach.reach_min_m = std::abs(L1 - L2);
+  const double cos_arg =
+    (out.reach.radius_m * out.reach.radius_m - L1 * L1 - L2 * L2) / (2.0 * L1 * L2);
+  if (!(cos_arg >= -1.0 - 1e-9 && cos_arg <= 1.0 + 1e-9)) {
+    out.reach.reachable = false;
+    out.reach.excess_m = out.reach.radius_m > out.reach.reach_max_m ?
+      out.reach.radius_m - out.reach.reach_max_m : out.reach.radius_m - out.reach.reach_min_m;
+    return out;
+  }
+  out.reach.reachable = true;
+  const double gamma = std::acos(std::clamp(cos_arg, -1.0, 1.0));
+  std::vector<double> theta1_branches;
+  std::vector<double> x_for_branch;
+  if (r_xy < 1e-9) {
+    theta1_branches = {0.0, kPi};
+    x_for_branch = {0.0, 0.0};
+  } else {
+    theta1_branches = {wrapPi(psi - kBaseYaw), wrapPi(psi - kBaseYaw + kPi)};
+    x_for_branch = {r_xy, -r_xy};
+  }
+  for (std::size_t shoulder = 0; shoulder < theta1_branches.size(); ++shoulder) {
+    const double theta1 = theta1_branches[shoulder];
+    const double x_target = x_for_branch[shoulder];
+    for (int elbow = 0; elbow < 2; ++elbow) {
+      const double signed_gamma = elbow == 0 ? gamma : -gamma;
+      const double t3 = beta + signed_gamma;
+      const double k1 = L1 + L2 * std::cos(signed_gamma);
+      const double k2 = L2 * std::sin(signed_gamma);
+      const double denom = k1 * k1 + k2 * k2;
+      if (denom < 1e-12) continue;
+      const double sin_t2 = -(k1 * x_target + k2 * z_prime) / denom;
+      const double cos_t2 = -(k2 * x_target - k1 * z_prime) / denom;
+      const double t2 = std::atan2(sin_t2, cos_t2);
+      const Eigen::Matrix3d r03 = rotZ(kBaseYaw) * rotZ(theta1) * rotY(-(t2 + t3));
+      const Eigen::Matrix3d rw = r03.transpose() * r06;
+      const double cos_t5 = std::clamp(rw(2, 2), -1.0, 1.0);
+      for (int wrist_index = 0; wrist_index < 2; ++wrist_index) {
+        const double sign5 = wrist_index == 0 ? 1.0 : -1.0;
+        const double t5 = sign5 * std::acos(cos_t5);
+        const double sin_t5 = std::sin(t5);
+        double t4, t6;
+        if (std::abs(sin_t5) < 1e-9) {
+          t6 = 0.0;
+          t4 = cos_t5 > 0.0 ? std::atan2(rw(1, 0), rw(0, 0)) : std::atan2(-rw(1, 0), -rw(0, 0));
+        } else {
+          const double s = sin_t5 > 0.0 ? 1.0 : -1.0;
+          t4 = std::atan2(s * -rw(1, 2), s * -rw(0, 2));
+          t6 = std::atan2(s * -rw(2, 1), s * rw(2, 0));
+        }
+        BranchDiagnosis branch;
+        branch.shoulder = shoulder == 0U ? 1 : -1;
+        branch.elbow = elbow == 0 ? 1 : -1;
+        branch.wrist = wrist_index == 0 ? 1 : -1;
+        const std::array<double, 6> raw{wrapPi(theta1), wrapPi(t2), wrapPi(t3), wrapPi(t4),
+          wrapPi(t5), wrapPi(t6)};
+        branch.within_limits = true;
+        for (std::size_t j = 0; j < 6U; ++j) {
+          double best_violation = std::numeric_limits<double>::infinity();
+          double best_value = raw[j];
+          for (const double candidate : {raw[j], raw[j] + kTwoPi, raw[j] - kTwoPi}) {
+            const double violation =
+              std::max({0.0, limits[j].lower - candidate, candidate - limits[j].upper});
+            if (violation < best_violation) {
+              best_violation = violation;
+              best_value = candidate;
+            }
+          }
+          if (best_violation <= 1e-12) best_violation = 0.0;
+          branch.q[j] = best_value;
+          branch.violation[j] = best_violation;
+          if (best_violation > branch.max_violation) {
+            branch.max_violation = best_violation;
+            branch.worst_joint = j;
+          }
+          if (best_violation > 0.0) branch.within_limits = false;
+        }
+        out.branches.push_back(branch);
+      }
+    }
+  }
+  return out;
+}
+
+namespace
+{
+// Radial coordinate X of the wrist centre (joint5 origin) in the joint1-rotated frame: the signed
+// x that solve() matches (x_for_branch), i.e. X(t2,t3) = -L1 sin(t2) + Rx of the combined
+// (link3 -> joint5) offset under Ry(-(t2+t3)). The y offsets cancel (kO2Y + kL1Y = 0).
+double wristRadialX_(double t2, double t3)
+{
+  const double a = t2 + t3;
+  return -kL1 * std::sin(t2) + kJ4X * std::cos(a) - (kJ4Z + kJ5Z) * std::sin(a);
+}
+int signOf(double value)
+{
+  return value >= 0.0 ? 1 : -1;
+}
+}  // namespace
+
+double wristRadialX(double q2, double q3)
+{
+  return wristRadialX_(q2, q3);
+}
+
+double wristRadialXVariation(double dq2, double dq3)
+{
+  const double l2 = effectiveL2();
+  return (kL1 + l2) * std::abs(dq2) + l2 * std::abs(dq3);
+}
+
+double elbowStraightArmAngle()
+{
+  return effectiveBeta();
+}
+
+BranchLabel classifyBranch(const JointVector& q)
+{
+  BranchLabel label;
+  label.shoulder = signOf(wristRadialX_(q[1], q[2]));
+  label.elbow = signOf(q[2] - effectiveBeta());
+  label.wrist = signOf(q[4]);
+  return label;
+}
+
+BranchMargins branchMargins(const JointVector& q)
+{
+  BranchMargins margins;
+  margins.shoulder_m = std::abs(wristRadialX_(q[1], q[2]));
+  margins.elbow_rad = std::abs(q[2] - effectiveBeta());
+  margins.wrist_rad = std::abs(q[4]);
+  return margins;
 }
 
 SelfCheckResult selfCheck(

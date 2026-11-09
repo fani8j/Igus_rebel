@@ -172,8 +172,8 @@ carton penetration but does not model cutting force or material deformation.
 the signed middle-seam offset: positive values hover above the detected plane,
 while negative values penetrate it. The configured values are -1 mm for side cuts
 and -2 mm for the middle cut, with `hover_clearance_m` 10 mm (all read-only; edit the
-YAML and restart). Side penetration is capped at 3 mm and middle
-penetration at 5 mm, accepted only when `allow_tool_carton_contact` is enabled.
+YAML and restart). Side penetration is capped at 8 mm and middle penetration at 6 mm (3 mm / 5 mm until
+2026-10-22), accepted only when `allow_tool_carton_contact` is enabled.
 
 Side-cut roll is configured independently with `left_side_cut_tilt_deg` and
 `right_side_cut_tilt_deg`. As prior-model context, a batch scan reconstructed 86 structurally complete
@@ -614,6 +614,90 @@ needs `execution_enabled` AND `debug_motion_execution_enabled`, plus the usual f
 `debug_allow_stale_snapshot` blocks. The response is labelled APPROACH-ONLY and gives the full-cut summary, hover
 pose and hover joints.
 
+## Varying left cut: true blade-angle gate and graded end cap (2026-10-16)
+Design: `scan_results/left_yaw_window_20261015/` (PLAN.md round 2, README.md "Steps 1-3 (builder)").
+
+- **Shared contact joint-travel check** (refactor, no behaviour change): `include/igus_rebel_moveit_config/left_contact_travel.hpp`
+  (`checkJointTravel`, `headTailTravel`, limit 1.0 rad) is used by the varying search replay and by
+  `validateLeftContactJointTravel`; same error texts. Gtest `test/test_left_contact_travel.cpp` (legit stroke passes, synthetic wrist
+  flip q4+pi/q5->-q5/q6+pi rejected, joint5 sign flip rejected, a monotonic 1.5 rad joint3 pass is rejected today).
+- **`left_varying_max_theta_p_deg`** (PLANNING, default 15, [5, 45]): TRUE blade angle `theta_p = acos(|tool X . surface_normal|)` may
+  not exceed this from the stroke start through the seam band (`left_cut_seam_cover_m`). Varying mode only. (a) Per-station
+  candidate filter in the search (`evaluate_station`): only candidates with `theta_p <= cap(station)`; the profile smoothing also
+  requires every smoothed station within the cap (otherwise it becomes a knot). (b) The search replay and
+  `validateLeftVaryingRetainedStroke` evaluate the same pure check (`left_blade_cap.hpp`, `evaluateStroke`) on EVERY waypoint of the
+  Cartesian stroke: refused when `theta_p > cap(s) + left_varying_theta_p_tolerance_deg`, s = arc position of the TCP along the
+  travel direction from the extended span start. A replay violation bans the station-to-station edge and re-solves.
+- **`left_varying_theta_p_tolerance_deg`** (READ-ONLY, default 1.0, [0, 3]): slack for the interpolation between stations.
+- **`left_varying_end_max_theta_p_deg`** (PLANNING, default 15 = no ramp, [band cap, 45]; `validateSettings` refuses end < band
+  cap): after the seam band the cap rises linearly to this value at the end of the extended span (front corner - margin in
+  today's forward travel). The cap profile is defined by TRAVEL order on the fixed extended span (independent of trimming), so a
+  later reverse travel only has to swap `bandExitTravel(..., reverse)`; reverse is NOT implemented. A ramp (end > band cap) needs
+  `left_cut_extend_to_corners` (the seam band is only known there); otherwise the search fails closed. The candidate grid is still
+  limited by `left_parallel_max_tilt_deg` (tilt and pitch each, combined up to about 1.41x): an end cap above what the grid can
+  produce needs a larger `left_parallel_max_tilt_deg`. Operator rule: the tape band stays at the band cap (a steep blade at the
+  tape did not cut it); without a start cap the start stays at the band cap too.
+- **`left_varying_start_max_theta_p_deg`** (PLANNING, default 0 = OFF, plans bit-identical to before; else within
+  [`left_varying_max_theta_p_deg`, 45], otherwise the parameter set / startup validation is refused) and
+  **`left_varying_start_ramp_m`** (PLANNING, default 0.05, [0, 0.2] m): steeper blade at the START of the travel, back at the band cap
+  before the tape. In travel coordinates (`left_blade_cap.hpp`, `Profile::capAt`, `band_entry_m` = mapped `band_lo_m`): `s <=
+  band_entry - ramp` start cap; between that and `band_entry` linear start cap -> band cap (a ramp starting before s = 0 is clipped,
+  it still ends at the band entry); `band_entry <= s <= band_exit` band cap (with ramp 0 the band wins at the entry itself); after the
+  band exit the end ramp as before. Non-finite or inconsistent geometry (entry < 0, entry > exit or span, negative ramp) falls back to
+  the band cap; waypoints more than 1 mm before s = 0 get the band cap. `evaluateStroke` additionally clamps the cap to the band cap
+  inside the reported band (and drops the start cap when no band is known), so the tape band is held even if the profile and the
+  band disagree. Needs `left_cut_extend_to_corners` (planning fails with a clear error otherwise). The same Profile (`plan.blade_cap`)
+  feeds the station filter, the search replay and `validateLeftVaryingRetainedStroke`. Reports print
+  `start S (ramp N mm) -> band B -> end E` while active. Candidate grid limits (`left_parallel_max_tilt_deg`) apply as for the end cap.
+- The plan success message reports (from the final retained stroke): max theta_p inside the seam band, max overall, max blade
+  deviation, max interpolation overshoot over the station cap. Not in the YAML (code defaults).
+
+## Varying left cut: reverse travel (front -> back) (2026-10-16)
+Design: `scan_results/left_yaw_window_20261015/` (PLAN.md round 2, README.md "Step 4 (builder)"). Pure maths + gtests:
+`include/igus_rebel_moveit_config/left_cut_direction.hpp`, `test/test_left_cut_direction.cpp`. Not in the YAML (code defaults).
+
+- **`left_cut_direction`** (PLANNING, `forward` default | `reverse`): forward is bit-identical to before (66-row regression). Reverse needs
+  `left_parallel_varying_orientation_enabled` + `left_cut_extend_to_corners` and `cut_pattern` `left_only` or `t_cut`; refused (planning error,
+  nothing planned) with left corrections, cut-debug, side-tape hand-off / `continue_side_cut` / `side_cut_penetrate` / `plan_t_cut` /
+  `t_cut_handoff`, `h`/`combined` (unverified), `left_cut_reverse_travel` (the separate FIXED-mode reverse; combining both is refused) and
+  `left_debug_stop_at_approach`. No auto selection.
+- **What is direction-aware**: the extended-span end points are swapped (cut_start = front end) and the span geometry mapped s -> L - s (nominal
+  start, seam, band_lo' = L - band_hi, band_hi' = L - band_lo), so `requiredStationRange`, the covering-chain selection, the minimum length (against
+  the NOMINAL segment), the inward taper (from the kept START = front end in reverse), the seam-band theta_p statistics and the blade-angle profile
+  (`bandExitTravel`, ramp toward the back corner) all work in travel coordinates. The candidate frames use a TRAVEL basis (along -> -along, across ->
+  -across) instead of `cutDebugBasis` (the nominal back->front basis stays for corrections / hand-off). The plan summary reports the kept interval and
+  the trims as PHYSICAL back/front and states `left_cut_direction=... left_reverse_frame=...`. Lateral entry/withdrawal (`offsetLeftPoseOutward`),
+  hover, lift, left->top transit, return-home transit, the pi wrist gate and all validators are unchanged and run on the selected endpoint.
+- **`left_reverse_frame`** (PLANNING, `about_normal` default | `about_edge`, reverse only): tool Y must equal -travel (blade edge leads), which leaves one
+  free choice. `about_normal`: X = -normal kept, Z = X x Y flips (the forward frame rotated 180 deg about the surface normal; the blade point
+  and the handpiece change sides of the cut line). `about_edge`: Z keeps its physical side, X = +normal (rotated 180 deg about tool Z; the blade plate
+  is upside down). For the edge-flipped frame the left penetration gate (`dot_x >= 0.7 || dot_z >= 0.7`, "into the carton") reads the sign-mapped X
+  axis (X . normal) so the flat upside-down blade is a valid candidate; Z is unchanged. theta_p = acos(|X . normal|) is identical in both variants.
+- The search failure message now also states the IK branch statistics (found / outside the joint margin / in collision / out of bounds) and the most
+  frequent first-contact collision pairs; for reverse it names the direction.
+
+## Left side cut: reverse patch for the back-end gap (2026-11-06)
+Design: operator-approved 2026-11-06; evidence `scan_results/left_side_patch_20261106/`. Pure maths + gtests: `include/igus_rebel_moveit_config/left_cut_patch.hpp`,
+`test/test_left_cut_patch.cpp` (also the `origin_offset_m` of `left_blade_cap::Profile`). Not in the YAML header lists by default (commented block in `config/box_h_cut_executor.yaml`).
+
+- **Parameters** (PLANNING, same declare/validate/busy rules as the other `left_*` planning parameters): `left_cut_patch_enabled` (bool, false = bit-identical
+  plans), `left_cut_patch_min_gap_m` (0.015, [0, 0.10]; skip the patch when the forward back trim is <= this), `left_cut_patch_overlap_m` (0.015, [0.005, 0.05]).
+- **Plan structure**: after the verified forward plan (unchanged search, unchanged stages) `planLeftPatch` runs the same varying search in reverse travel
+  (`LeftExtension::patch`) on the sub-span from forward-kept-start + overlap + 10 mm slack to the back end; the kept chain must start at or before the overlap
+  point and end at least one station beyond the forward start. The blade-angle profile keeps the full reverse-span coordinates (`Profile::origin_offset_m`).
+  `planCutSegments` adds the patch stages (names above in CONTEXT.md) behind the forward finish/restore; the approach is a registered transit (wrist gate) with a
+  joint goal on the verified branch; the lift/restore/raise of a following top cut move behind the patch. Extra dwell, 2 more `cut_targets`
+  (the exporter pairs them with the extra CUT stage), the patch stroke has its own `validateLeftVaryingRetainedStroke(..., patch=true)`.
+- **Drop, never refuse**: no valid patch, or a patch-related MTC/wrist/collision/straightness/contact failure (`planCutSegments` wrapper retries once without the
+  patch, reusing the cached forward search) -> forward-only plan + `patch status: dropped: <reason>`.
+- **Coordinator**: `dual_cut_coordinator` `handlePlan` plans as before; if every chain attempt is refused and the refusal names a patch stage (`left side cut patch`, e.g. a
+  world-check collision of the patch transit that only the coordinator's exact check finds), it switches `left_cut_patch_enabled` off on the arms that had it on, plans the
+  chain once more (restores the parameter afterwards) and prefixes the message `LEFT PATCH DROPPED by the coordinator`. Without a patch-related refusal nothing changes.
+- **Finding (mock, 39 real placements)**: with the production caps (band/end cap 25, tilt 25) the reverse stroke found no feasible interval in any of the 29 cases with a gap > 15 mm
+  (reverse `about_normal`/`about_edge` put the handpiece/holder/link6 into the carton or out of reach; the same reason `left_cut_direction reverse` plans nowhere there), so every
+  patch was dropped and every plan equals the forward-only plan. Patches plan only with relaxed caps and `about_edge`; see `scan_results/left_side_patch_20261106/README.md`.
+- **Refused**: see CONTEXT.md (forward varying corner-to-corner mode required).
+
 ## Dual-arm planning stack: snapshot frame, half seam, plan export, plan from state (2026-10-15)
 Design: `scan_results/dual_arm_stack_20261014/design/P3_P4_DESIGN.md` sections 2-4 and 7; regression evidence in
 `scan_results/dual_cut_p3_regression_20261015/`. With every new parameter at its default the left arm's plans are
@@ -722,3 +806,30 @@ t_cut/left_only identical, plan times unchanged (t_cut 10.8-11.8 s, left_only 10
 WP7 strict (`world_penetration_tolerance_m=0`), blade on: 09:20 and 07:49 plan and execute A+B with 0 penetration, except
 one 09:20 run (first after stack start) where left phase B refused: the OMPL approach transit ended with the blade box
 grazing the carton (Computed path is not valid, states 128-134 of 138); 3 reruns of 09:20 and 07:49 passed.
+
+## Left contact joint-travel gate: opt-in split mode (2026-10-16, step 6 + fix round)
+Design: `scan_results/left_yaw_window_20261015/` (PLAN.md round 2, README.md "Step 6 (builder)" and "Step 6 fix round"); advisor-fable's split gate, operator-approved.
+Pure code + gtests: `include/igus_rebel_moveit_config/left_contact_travel.hpp`, `rebel_analytic_ik.{hpp,cpp}` (`classifyBranch`, `branchMargins`, `wristRadialX`,
+`wristRadialXVariation`, `elbowStraightArmAngle`), `test/test_left_contact_travel.cpp`. Not in the YAML (code defaults); the default mode is today's behaviour.
+
+- **`left_contact_travel_mode`** (PLANNING, `aggregate` default | `split`): `aggregate` is bit-identical to before (66-row regression). `split` is refused by
+  `validateSettings` unless `left_parallel_orientation_enabled` (the flag that runs `validateLeftContactJointTravel`; the varying search that also applies it requires
+  that flag too). It replaces the single 1.0 rad bound on every joint by these rules (joint1..joint6 order; the executor maps the planning-group variables by name,
+  cross-checks `analyticVariableIndex`, and refuses with a message if a jointN is missing; split also refuses unless `analytic_ik_available_`, i.e. the startup
+  self-check of the ReBeL constants against the live model passed):
+  (a) joint4, joint5, joint6 aggregate travel <= 1.0 rad (joint5 was uncapped in the first version); (b) joint5 never changes sign and
+  min |joint5| >= `left_contact_min_abs_joint5_deg` (default 15, [5, 30]); (c) the Pieper branch label (shoulder = sign of the wrist centre's radial coordinate X in the
+  joint1 frame, elbow = sign of joint3 - beta, wrist = sign of joint5; the 2 x 2 x 2 partition `rebel_analytic_ik::solve` enumerates, checked by a gtest) is constant over the
+  sampled waypoints; (d) every waypoint keeps |joint3 - beta| >= `left_contact_min_elbow_margin_deg` (default 5, [1, 30]) and |X| >= `left_contact_min_shoulder_margin_m`
+  (default 0.05, [0.01, 0.25]); (e) joints 1-3 aggregate travel <= `left_contact_arm_travel_max_rad` (default 2.0, [1, 4]; a coarse bound, not a flip detector).
+- **Guarantee**: sampled labels and margins at the waypoints; between two waypoints joint3 and joint5 are linear (equal signs/margins at both ends hold on the whole segment), and the nonlinear
+  shoulder coordinate X(q2,q3) is proven clear per segment with a Lipschitz bound (L1+L2 in q2, L2 in q3) and recursive halving (depth <= 24, unprovable = refused). Nothing inspects a
+  flip that is not a straight joint-space segment between two waypoints.
+- Applied to every left contact stroke the validator examines (entry, cut, finish, lift). In split mode the validator also fails closed when the plan contains a left side cut (a non-hover,
+  non-fixed left segment) but no left contact stroke was examined, or when it contains the left cut but the cut stroke is missing (entry-only `stop_after_start` plans are fine). In split mode
+  the search replay also checks the entry, finish and lift legs (aggregate mode never did, so its behaviour is unchanged). The existing 5 deg per-waypoint step gate and the
+  per-station branch tolerance are untouched; `validateFreeSpaceTransitWrist` is untouched.
+- Rule reporting: the rule that fails at the EARLIEST waypoint is named (ties: branch_change, joint5_sign_change, joint5_margin, elbow_margin, shoulder_margin, wrist_travel, arm_travel). Search
+  attribution (same `Failure::Kind::kTravel` machinery): travel rules keep `headTailTravel`; the others trim the end the first failing waypoint lies on.
+- The plan message gets "left contact travel gate <mode> (cut stroke travel rad j1..j6 [...], min|joint5| ..., IK branch (...) constant, min boundary margin shoulder ... mm, elbow ... deg,
+  wrist ... deg)"; `validateLeftContactJointTravel` logs the same line per stroke.

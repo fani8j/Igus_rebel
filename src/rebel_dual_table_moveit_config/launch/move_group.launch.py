@@ -12,6 +12,12 @@ camera_pole_collision.py UNCHANGED, with base_frame:=world: it publishes the fix
 camera_pole / camera_head boxes into the planning scene from the TF camera_link and
 camera_color_optical_frame (world -> camera_link from the calibration YAML via dual_table.launch.py;
 camera_link -> camera_color_optical_frame from the camera driver, or from dual_table.launch.py in mock).
+
+allow_trajectory_execution (default true = MoveIt executes plans on the arm trajectory controllers, e.g. the
+RViz MotionPlanning "Plan & Execute" button). With false the move_group gets allow_trajectory_execution:=false
+and no controller manager: it still plans and serves /compute_ik, /check_state_validity and the planning
+scene, but its execute_trajectory / move_action goals are refused. dual_cut_bringup dual_cut_system.launch.py
+passes false (the dual_cut_coordinator sends its own checked FollowJointTrajectory goals).
 """
 import os
 from pathlib import Path
@@ -94,6 +100,14 @@ def launch_setup(context):
         "default_planning_pipeline": "ompl",
         "ompl": ompl_context,
     }
+    allow_execution = LaunchConfiguration("allow_trajectory_execution").perform(context).strip().lower()
+    if allow_execution not in ("true", "false"):
+        raise RuntimeError(f"allow_trajectory_execution must be true or false, got {allow_execution!r}")
+    if allow_execution == "false":
+        # Plan-only move_group: no controller manager, no execution (same as the per-arm planners).
+        for key in ("moveit_simple_controller_manager", "moveit_controller_manager"):
+            moveit_args.pop(key)
+        moveit_args["allow_trajectory_execution"] = False
     if not IS_HUMBLE:
         moveit_args["publish_robot_description"] = True
         moveit_args["publish_robot_description_semantic"] = True
@@ -131,6 +145,9 @@ def generate_launch_description():
         DeclareLaunchArgument("use_gui", default_value="true", description="start RViz (MotionPlanning)"),
         DeclareLaunchArgument("run_camera_pole", default_value="true",
                               description="maintain the camera_pole / camera_head collision boxes from camera TF"),
+        DeclareLaunchArgument("allow_trajectory_execution", default_value="true", choices=["true", "false"],
+                              description="false: plan-only move_group (RViz Plan & Execute and execute_trajectory "
+                                          "goals are refused); true: MoveIt executes on the trajectory controllers"),
         DeclareLaunchArgument("rviz_config", default_value=os.path.join(share, "config", "rebel_dual_table.rviz")),
         DeclareLaunchArgument(
             "calibration_file", default_value=os.path.join(desc_share, "config", "dual_arm_calibration.yaml"),

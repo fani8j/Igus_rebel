@@ -36,6 +36,12 @@ enum class MessageType
   CMDERROR,
   CMDACK,
   CYCLESTAT,
+  MOVETOEXECACK,
+  MOVETOEXECEND,
+  MOVETOEXECERROR,
+  EXECACK,
+  EXECEND,
+  EXECERROR,
   UNKNOWN = 1000
 };
 
@@ -195,12 +201,29 @@ public:
   float workload;   // as sent by the controller (iRC V15: fraction, e.g. 0.2 = 20 %)
 };
 
+// MOVETOEXECACK / MOVETOEXECEND / MOVETOEXECERROR / EXECACK / EXECEND / EXECERROR:
+// "<counter> <TYPE> <code> <sub> <program> [<reason...>]". `reason` is the WHOLE remainder after
+// the program token, joined with single spaces (empty for ACK messages). Measured on the real
+// robot: ACK is "0 0 MoveTo", a finished move "-1 0 MoveTo PLAN", a move stopped by CMD Move Stop
+// "0 0 MoveTo USER", an e-stop "605 MOVETOEXECERROR 0 0 MoveTo Hardware error _ESTOP" (reason
+// "Hardware error _ESTOP"; the code 0 of an ERROR does not mean success). These messages carry no
+// command counter.
+class ExecEvent : public CriMessage
+{
+public:
+  ExecEvent(const std::string & messageString, const std::string & typeKeyword);
+  int code = 0;
+  int sub = 0;
+  std::string program;
+  std::string reason;
+};
+
 // Result of ParseMessage(). `ok` is false if the message could not be parsed (the
 // parser threw or the STATUS was invalid); `error` then holds a short reason.
 // `payload` holds the parsed object for the types the driver consumes and
 // std::monostate for types that are only recognised (RUNSTATE, OPINFO, ...).
 using Payload = std::variant<
-  std::monostate, Status, Message, Command, Info, LogMsg, CmdError, CmdAck, Cyclestat>;
+  std::monostate, Status, Message, Command, Info, LogMsg, CmdError, CmdAck, Cyclestat, ExecEvent>;
 
 struct ParsedMessage
 {

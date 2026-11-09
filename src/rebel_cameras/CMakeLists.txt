@@ -9,7 +9,7 @@ install(
 )
 install(
   PROGRAMS scripts/usb_reset.py scripts/camera_sync_check.py
-  scripts/gripper_camera_supervisor.py
+  scripts/gripper_camera_supervisor.py scripts/gripper_camera_setup.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -22,6 +22,11 @@ if(BUILD_TESTING)
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     ENV PYTEST_ADDOPTS=-p\ no:anyio
     TIMEOUT 180)
+  # cover-test logic and YAML update of the gripper camera setup tool, no hardware
+  ament_add_pytest_test(test_gripper_camera_setup test/test_gripper_camera_setup.py
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    ENV PYTEST_ADDOPTS=-p\ no:anyio
+    TIMEOUT 60)
 endif()
 
 ament_package()

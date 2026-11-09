@@ -9,6 +9,7 @@ from launch.substitutions import (
     PythonExpression,
 )
 from launch.actions import DeclareLaunchArgument, RegisterEventHandler
+from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 from ament_index_python.packages import get_package_share_directory
 import os
@@ -21,10 +22,24 @@ def generate_launch_description():
         choices=["mock_hardware", "gazebo", "isaac_topic", "rebel"],
         description="Which hardware protocol or mock hardware should be used",
     )
+    move_joint_vel_arg = DeclareLaunchArgument(
+        "move_joint_max_velocity_percent",
+        default_value="25",
+        description="CRI MoveJoint velocity cap in percent (driver default 25, hard cap 100); raise only "
+                    "for supervised real-arm tests",
+    )
     robot_ip_arg = DeclareLaunchArgument(
         "robot_ip",
         default_value="192.168.3.11",
         description="CRI controller IPv4 address (192.168.3.11 wired LAN, 192.168.50.133 Wi-Fi)",
+    )
+
+    jog_velocity_scale_arg = DeclareLaunchArgument(
+        "jog_velocity_scale",
+        default_value="1.65",
+        description="Joint jog scale: jog [%] = scale * velocity [deg/s]. 1.65 since 2026-10-31 (real left arm: "
+                    "the robot moves 0.600 deg/s per jog %, exact scale 1.667, 10-100 %; the C++ fallback "
+                    "when the parameter is absent stays 2.0). controller.yaml gains assume this scale.",
     )
 
     tool_variant_arg = DeclareLaunchArgument(
@@ -34,6 +49,14 @@ def generate_launch_description():
         description="Tool model on link6 (xacro arg tool_variant): knife_c = variant-C knife "
                     "holder (default), xeg32_knife_v1 = previous XEG-32 gripper + old knife. "
                     "Must match the move_group launch.",
+    )
+    mock_move_joint_arg = DeclareLaunchArgument(
+        "mock_move_joint",
+        default_value="false",
+        choices=["true", "false"],
+        description="mock_hardware only: serve the move_joint action with a mock (streams "
+        "positions through an inactive forward_command_controller). Ignored for other "
+        "hardware_protocol values; the real driver serves the action itself.",
     )
 
     igus_rebel_pkg = get_package_share_directory("igus_rebel")
@@ -69,8 +92,12 @@ def generate_launch_description():
                 LaunchConfiguration("hardware_protocol"),
                 " robot_ip:=",
                 LaunchConfiguration("robot_ip"),
+                " jog_velocity_scale:=",
+                LaunchConfiguration("jog_velocity_scale"),
                 " tool_variant:=",
                 LaunchConfiguration("tool_variant"),
+                " move_joint_max_velocity_percent:=",
+                LaunchConfiguration("move_joint_max_velocity_percent"),
             ]
         ),
         value_type=str,
@@ -121,12 +148,54 @@ def generate_launch_description():
         )
     )
 
+    use_mock_move_joint = IfCondition(
+        PythonExpression([
+            "'", LaunchConfiguration("mock_move_joint"), "' == 'true' and '",
+            LaunchConfiguration("hardware_protocol"), "' == 'mock_hardware'",
+        ])
+    )
+
+    mock_move_joint_server = Node(
+        package="igus_rebel",
+        executable="mock_move_joint_server",
+        # Same node name as the real driver's plugin node, so the action is /igus_rebel/move_joint.
+        name="igus_rebel",
+        output="both",
+        condition=use_mock_move_joint,
+    )
+
+    mock_move_joint_controller_spawner = Node(
+        package="controller_manager",
+        executable="spawner",
+        arguments=[
+            "mock_move_joint_controller",
+            "--controller-manager",
+            "/controller_manager",
+            "--inactive",
+        ],
+        output="both",
+        condition=use_mock_move_joint,
+    )
+
+    # Same one-at-a-time rule as above: after the trajectory spawner exited.
+    delayed_mock_move_joint_controller_spawner = RegisterEventHandler(
+        event_handler=OnProcessExit(
+            target_action=robot_trajectory_controller_spawner,
+            on_exit=[mock_move_joint_controller_spawner],
+        )
+    )
+
     return LaunchDescription([
         hardware_protocol_arg,
         robot_ip_arg,
+        jog_velocity_scale_arg,
+        move_joint_vel_arg,
         tool_variant_arg,
+        mock_move_joint_arg,
         ros2_control_node,
         robot_state_pub_node,
         joint_state_broadcaster_spawner,
         delayed_robot_trajectory_controller_spawner,
+        mock_move_joint_server,
+        delayed_mock_move_joint_controller_spawner,
     ])

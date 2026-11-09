@@ -8,6 +8,22 @@ controller_manager:
     rebel_arm_trajectory_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
+    # Only spawned (inactive) by rebel.launch.py with mock_move_joint:=true: the position
+    # streamer of mock_move_joint_server, standing in for the robot-side CMD Move Joint.
+    mock_move_joint_controller:
+      type: forward_command_controller/ForwardCommandController
+
+mock_move_joint_controller:
+  ros__parameters:
+    joints:
+      - joint1
+      - joint2
+      - joint3
+      - joint4
+      - joint5
+      - joint6
+    interface_name: position
+
 rebel_arm_trajectory_controller:
   ros__parameters:
     joints:

@@ -105,6 +105,92 @@ TEST(CutLines, PointToSegment)
   EXPECT_NEAR(distancePointToSegment({0.2, 0, 0.4}, a, a), std::hypot(0.2, 0.4), 1e-12);  // degenerate
 }
 
+// Top-cut sag: carton centre x = 0.35, seam axis +x, half length h = 0.15 (so the sag is zero at the cut ends 0.2 / 0.5),
+// the sag bends the stroke down (-z) by sag * (1 - (d/h)^2).
+namespace
+{
+CutSag sagFor(double sag)
+{
+  CutSag g;
+  g.active = sag != 0.0;
+  g.sag_m = sag;
+  g.half_length_m = 0.15;
+  g.center = Eigen::Vector3d(0.35, 0.0, 0.1);
+  g.u = Eigen::Vector3d::UnitX();
+  g.down = -Eigen::Vector3d::UnitZ();
+  return g;
+}
+TipFk sagTip(double sag)
+{
+  return [sag](const std::vector<std::string> &, const std::vector<double> & q, Eigen::Vector3d & tip) -> Status
+  {
+    const double d = std::abs(q[0] - 0.35) / 0.15;
+    tip = Eigen::Vector3d(q[0], 0.0, 0.1 - sag * std::max(0.0, 1.0 - d * d));
+    return Status::Ok();
+  };
+}
+}  // namespace
+
+TEST(TipGate, TopSagOffsetProfile)
+{
+  const CutSag g = sagFor(0.002);
+  EXPECT_NEAR(topSagOffset(g, {0.35, 0, 0.1}).z(), -0.002, 1e-12);                  // centre: full sag, downwards
+  EXPECT_NEAR(topSagOffset(g, {0.35, 0, 0.1}).head<2>().norm(), 0.0, 1e-12);
+  EXPECT_NEAR(topSagOffset(g, {0.5, 0, 0.1}).norm(), 0.0, 1e-12);                   // |d| = h: zero
+  EXPECT_NEAR(topSagOffset(g, {0.2, 0, 0.1}).norm(), 0.0, 1e-12);
+  EXPECT_NEAR(topSagOffset(g, {0.6, 0, 0.1}).norm(), 0.0, 1e-12);                   // beyond h: zero (clamped)
+  EXPECT_NEAR(topSagOffset(g, {0.425, 0, 0.1}).z(), -0.002 * 0.75, 1e-12);          // d = h/2
+  EXPECT_NEAR(topSagOffset(sagFor(0.0), {0.35, 0, 0.1}).norm(), 0.0, 1e-15);        // inactive
+}
+
+TEST(TipGate, SaggedStrokeAgainstTheSaggedCurve)
+{
+  SampleOptions so;
+  so.dt_s = 0.1;
+  so.max_joint_step_rad = 0.01;
+  const ArmPhase ph = cutPhase(0.2, 0.5);
+  auto line = [](double sag)
+  {
+    CutLine l{{0.2, 0, 0.1}, {0.5, 0, 0.1}};
+    l.sag = sagFor(sag);
+    return l;
+  };
+  // sag 0: bit-identical to the straight check (inactive sag object)
+  const TipGateResult plain = checkTipOnLine(ph, {CutLine{{0.2, 0, 0.1}, {0.5, 0, 0.1}}}, kLineFk, 0.002, so);
+  const TipGateResult zero = checkTipOnLine(ph, {line(0.0)}, kLineFk, 0.002, so);
+  EXPECT_TRUE(plain.ok && zero.ok);
+  EXPECT_EQ(plain.max_deviation_m, zero.max_deviation_m);
+  EXPECT_EQ(plain.max_endpoint_error_m, zero.max_endpoint_error_m);
+  // a 2 mm sagged stroke passes against the sagged curve (and a 4 mm one too), within a small chord error
+  EXPECT_TRUE(checkTipOnLine(ph, {line(0.002)}, sagTip(0.002), 0.002, so).ok);
+  const TipGateResult four = checkTipOnLine(ph, {line(0.004)}, sagTip(0.004), 0.002, so);
+  EXPECT_TRUE(four.ok);
+  EXPECT_LT(four.max_deviation_m, 1e-5);
+  // the same 4 mm sagged stroke is refused by the straight check (this is what the sag support replaces)
+  EXPECT_FALSE(checkTipOnLine(ph, {CutLine{{0.2, 0, 0.1}, {0.5, 0, 0.1}}}, sagTip(0.004), 0.002, so).ok);
+  // a STRAIGHT stroke while a sag is configured fails at the centre: 4 mm sag, 2 mm tolerance ...
+  const TipGateResult straight = checkTipOnLine(ph, {line(0.004)}, kLineFk, 0.002, so);
+  EXPECT_FALSE(straight.ok);
+  EXPECT_TRUE(straight.message.find("sample") != std::string::npos) << straight.message;
+  // ... and a 2 mm sag against a 1.5 mm tolerance (a 2 mm sag sits exactly at the 2 mm limit)
+  EXPECT_FALSE(checkTipOnLine(ph, {line(0.002)}, kLineFk, 0.0015, so).ok);
+  EXPECT_TRUE(checkTipOnLine(ph, {line(0.002)}, kLineFk, 0.0021, so).ok);
+  // the sagged stroke is also off a sagged curve of a different depth by more than the tolerance
+  EXPECT_FALSE(checkTipOnLine(ph, {line(0.006)}, sagTip(0.002), 0.002, so).ok);
+  // applyTopSag marks only top ("middle") CUT segments
+  ArmPhase top = ph;
+  top.segments[1].cut_id = "middle";
+  std::vector<CutLine> lines{CutLine{{0.2, 0, 0.1}, {0.5, 0, 0.1}}};
+  applyTopSag(top, lines, sagFor(0.002));
+  EXPECT_TRUE(lines[0].sag.active);
+  std::vector<CutLine> face{CutLine{{0.2, 0, 0.1}, {0.5, 0, 0.1}}};
+  ArmPhase side = ph;
+  side.segments[1].cut_id = "left";
+  side.segments[1].physical_cut = "left";
+  applyTopSag(side, face, sagFor(0.002));
+  EXPECT_FALSE(face[0].sag.active);
+}
+
 TEST(TipGate, PassesOnTheLineAndFailsOffIt)
 {
   SampleOptions so;

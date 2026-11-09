@@ -11,8 +11,8 @@ keyboard / gamepad (unmodified single-arm nodes, remapped)
         v
  /dual_teleop/selector  --- interlocks (coordinator, controller, scene), arm selection, scaling ---+
         |                                                                                          |
-        +--> /arm_left/servo/delta_*_cmds  --> MoveIt Servo (group arm_left)  -> arm_left_trajectory_controller
-        +--> /arm_right/servo/delta_*_cmds --> MoveIt Servo (group arm_right) -> arm_right_trajectory_controller
+        +--> /arm_left/servo/delta_*_cmds  --> MoveIt Servo (group arm_left)  -> [relay] -> arm_left_trajectory_controller
+        +--> /arm_right/servo/delta_*_cmds --> MoveIt Servo (group arm_right) -> [relay] -> arm_right_trajectory_controller
         +--> /dual_teleop/servo_scene (dual move_group scene, same-arm pairs allowed) --> both Servos
 ```
 
@@ -29,7 +29,8 @@ ros2 launch dual_teleop dual_teleop.launch.py arm:=left keyboard:=true      # or
 
 `dual_teleop.launch.py` arguments: `arm` (left), `keyboard`, `gamepad`, `console`, `keyboard_prefix`
 (default `gnome-terminal --wait --`: the keyboard needs a TTY), `start_enabled` (false), `speed_scale` (0.5),
-`base_command_frame` (`world` | `arm_base`), `coordinator_status_topic`, `run_servo`, `calibration_file`.
+`base_command_frame` (`world` | `arm_base`), `coordinator_status_topic`, `run_servo`, `calibration_file`,
+`servo_relay` (true), `relay_max_lead_rad` (0.05), `relay_lead_time_s` (0.2); see "Servo speed relay" below.
 
 Teleop **starts paused**: no Servo is even running. Enable with console key `e`, the gamepad Back button, or
 `ros2 service call /dual_teleop/enable std_srvs/srv/Trigger`. The first command after enabling / selecting /
@@ -44,6 +45,28 @@ ros2 run igus_rebel_moveit_config rebel_servo_teleop_keyboard --ros-args -r __ns
   -r servo_node/start_servo:=/dual_teleop/servo_start_stub -r /status:=/dual_teleop/servo_alive
 ros2 run dual_teleop teleop_console          # the screen + arm keys
 ```
+
+## Servo speed relay (`servo_relay`, default true)
+
+MoveIt Servo 2.5.10 anchors every command on the MEASURED joint state, and the joint_trajectory_controller (JTC)
+restarts each stamp-0 trajectory from its current state, so on the real law an arm realises only ~1/3 of the
+commanded speed. `rebel_servo_relay` fixes this: with `servo_relay:=true` (default) each Servo runs the
+pass-through smoothing plugin `rebel_servo_relay::PassThroughFilterPlugin` (Servo's Butterworth filter would remove
+~25 % of the velocity) and publishes to `/arm_<side>/servo/trajectory_out`; the node
+`/arm_<side>/servo/trajectory_relay` (`servo_trajectory_relay`) integrates Servo's velocity into its own reference and
+publishes 3-point trajectories to `/arm_<side>_trajectory_controller/joint_trajectory`. The relay reads the joint
+limits from `/robot_state_publisher` (the dual-table URDF) and joint states from `/joint_states`; Servo's collision
+checking and the selector are unchanged (the selector never looked at the JTC topic).
+`servo_relay:=false` is the old direct Servo -> JTC wiring (comparison only, not a safety fallback).
+
+* `relay_max_lead_rad` (0.05, range (0, 0.15]): bound on |reference - measured| per joint.
+* `relay_lead_time_s` (0.2, range [0, 1]): lead bound `min(max_lead, lead_time * |v| + 0.005 rad)`.
+* Values outside the ranges (or a `servo_relay` other than true/false) abort the launch instead of being clamped.
+* Fixed relay caps (defaults, same as `rebel_mocap_follower`): 0.785 rad/s and 5.24 rad/s^2 per joint, final stop
+  segment = horizon (3 x publish_period = 0.102 s), so the effective velocity cap is 5.24 x 0.102 = 0.534 rad/s.
+* Mock numbers (domain 177, 2026-10-31): `scan_results/dual_teleop_relay_20261031/README.md`.
+* Do not run it next to `mocap_follower_dual.launch.py` (both would command the same JTC; the followers also hold
+  when they see another publisher).
 
 ## Arm selection
 
@@ -120,7 +143,7 @@ blocked anyway. If the knife was left in contact that way, re-enter touch mode (
 | `move_group_name` | `igus_rebel_arm` | `arm_left` / `arm_right` (dual SRDF) |
 | `planning_frame`, `robot_link_command_frame` | `base_link` | `world` |
 | `ee_frame_name` | `xeg32_tool_tip` | `arm_<side>_xeg32_tool_tip` |
-| `command_out_topic` | `rebel_arm_trajectory_controller/joint_trajectory` | `/arm_<side>_trajectory_controller/joint_trajectory` |
+| `command_out_topic` | `rebel_arm_trajectory_controller/joint_trajectory` | `/arm_<side>_trajectory_controller/joint_trajectory` (with `servo_relay:=true`: `/arm_<side>/servo/trajectory_out`, the relay publishes to the JTC) |
 | `joint_topic` | `joint_states` | `/joint_states` (all 12 joints) |
 | namespace | `/` | `/arm_<side>/servo`, node `servo_node` |
 | `check_collisions` | **false** | **true**, full dual model |
@@ -158,5 +181,6 @@ cross-stop test with the arms standing still), so the selector caps below are no
 
 ## Tests
 
-`cd src/dual_teleop && python3 -m pytest -p no:anyio test` (selector logic, no ROS needed); mock gates in
+`cd src/dual_teleop && python3 -m pytest -p no:anyio test` (selector logic, no ROS needed; `test_launch_servo_relay.py`
+needs a sourced workspace incl. `rebel_servo_relay`, otherwise it is skipped); mock gates in
 `scan_results/dual_arm_stack_20261014/teleop/tools/` (domain 202).

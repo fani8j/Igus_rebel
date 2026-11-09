@@ -107,7 +107,8 @@ def _gripper_camera(name, config_file, namespace):
         actions.append(LogInfo(msg=f'WARNING: {name} camera not found at {device}; the '
                                    f'supervisor waits for it ({name}:=false hides this). '
                                    f'Gripper cameras plugged in now: {found} '
-                                   f'(set video_device in {os.path.basename(config_file)})'))
+                                   f'(set video_device in {os.path.basename(config_file)}, or run '
+                                   f'`ros2 run rebel_cameras gripper_camera_setup.py`)'))
     actions.append(ExecuteProcess(
         cmd=[os.path.join(get_package_prefix('rebel_cameras'), 'lib', 'rebel_cameras',
                           'gripper_camera_supervisor.py'),

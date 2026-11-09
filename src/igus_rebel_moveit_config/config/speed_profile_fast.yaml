@@ -1,0 +1,30 @@
+# FAST speed profile (opt-in; launch arg speed_profile:=fast). Loaded AFTER box_h_cut_executor.yaml and the per-arm
+# override files, so these values win. speed_profile:=default (the default) loads nothing from this file: the effective
+# parameters are exactly those of box_h_cut_executor.yaml + overrides.
+#
+# Why opt-in: the real JTC lagged ~0.4 s x v with the old gains; the first real transits at 0.40 overshot, hence the
+# default transit velocity 0.20. The FAST profile is meant for the new JTC gains (p 3 / ff 0.6, jog scale 1.65), which need
+# every PLANNED acceleration capped at <= 0.4 rad/s^2 (the robot's jog acceleration limit is ~0.55). Since 2026-10-31 the
+# default profile has the same 0.0763 acceleration scalings; this profile only raises the velocities. It is NOT validated
+# on the real arms.
+#
+# Scalings are fractions of joint_limits.yaml (0.785 rad/s, 5.24 rad/s^2):
+#   transit  velocity 0.40   * 0.785 = 0.314 rad/s     acceleration 0.0763 * 5.24 = 0.400 rad/s^2   (default 0.157 / 0.400)
+#   contact  velocity 0.2064 * 0.785 = 0.162 rad/s     acceleration 0.0763 * 5.24 = 0.400 rad/s^2   (default 0.108 / 0.400)
+# The side_tape_continue / top_cut_staged / cut_stroke speed factors (all <= 1.0) multiply the contact scalings and so
+# follow the profile and stay under the same cap. Dwells, gates and tolerances are NOT touched by this file.
+# test_speed_profile.py checks the acceleration cap against joint_limits.yaml.
+box_h_cut_executor:
+  ros__parameters:
+    velocity_scaling: 0.2064
+    acceleration_scaling: 0.0763
+    transit_velocity_scaling: 0.40
+    transit_acceleration_scaling: 0.0763
+
+# Applied only by dual_cut_system.launch.py (-> coordinator.launch.py speed_profile_file): the JTC sub-chords either side
+# of a partial CRI MoveJoint stretch use the executor's TRANSIT limits (leading joint), so they follow the profile
+# (0.40 * 0.785 = 0.314 rad/s, 0.0763 * 5.24 = 0.400 rad/s^2). Only relevant with cri_transit_enabled (default false).
+dual_cut_coordinator:
+  ros__parameters:
+    cri_subchord_velocity_rad_s: 0.314
+    cri_subchord_acceleration_rad_s2: 0.400

@@ -43,11 +43,34 @@ Status checkBoxConsistency(
 
 // ---- cut lines and the tip-on-line gate ---------------------------------------------------------
 
+/// Top (middle_only) cut sag (executor planning parameter middle_cut_sag_m): the CUT stroke is bent down by
+/// s(p) = sag_m * max(0, 1 - (d/h)^2) along `down` (= -surface_normal), d = |(p - center) . u|, h = half carton length.
+/// `active == false` (sag 0): the expected tip line is the straight cut-target line, as always.
+struct CutSag
+{
+  bool active = false;
+  double sag_m = 0.0;
+  double half_length_m = 0.0;                           // h
+  Eigen::Vector3d center = Eigen::Vector3d::Zero();     // seam_center, world
+  Eigen::Vector3d u = Eigen::Vector3d::UnitX();         // seam axis unit vector, world
+  Eigen::Vector3d down = -Eigen::Vector3d::UnitZ();     // -surface_normal, world, unit
+};
+
 struct CutLine
 {
   Eigen::Vector3d start = Eigen::Vector3d::Zero();   // world frame
   Eigen::Vector3d end = Eigen::Vector3d::Zero();
+  CutSag sag;                                        // default inactive: the straight line
 };
+
+/// s(p) * down for a point p of the straight line (zero vector if the sag is inactive).
+Eigen::Vector3d topSagOffset(const CutSag & sag, const Eigen::Vector3d & p);
+/// The expected tip curve of a cut: n+1 points of the straight line, each moved by topSagOffset().
+std::vector<Eigen::Vector3d> saggedPolyline(const CutLine & line, size_t n = 200);
+double distancePointToPolyline(const Eigen::Vector3d & p, const std::vector<Eigen::Vector3d> & poly);
+/// Marks the lines of the top ("middle") CUT segments of the arm phase with `sag` (lines[i] belongs to the i-th CUT
+/// segment). Does nothing if !sag.active or the line count does not match (checkTipOnLine then fails closed).
+void applyTopSag(const ArmPhase & arm, std::vector<CutLine> & lines, const CutSag & sag);
 
 /// Distance from a point to the finite segment [a, b].
 double distancePointToSegment(const Eigen::Vector3d & p, const Eigen::Vector3d & a, const Eigen::Vector3d & b);
@@ -122,6 +145,11 @@ struct BarrierInputs
   bool stop_latched = true;
   double monitor_age_s = std::numeric_limits<double>::infinity();   // time since the last monitor tick
   bool monitor_healthy = false;                                     // last tick found no stop condition
+  /// cri_transit_enabled only: both arms' driver telemetry (hardware_state fresh, not latched, no stop pending, idle; live
+  /// robot_joint_states fresh) must be healthy. Off (not required) by default, so nothing changes with CRI off.
+  bool arm_health_required = false;
+  bool arm_health_ok = true;
+  std::string arm_health_text;
 };
 
 /// ok iff every barrier holds. failures lists each violated one.

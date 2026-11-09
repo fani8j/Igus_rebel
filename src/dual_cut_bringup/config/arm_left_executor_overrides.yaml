@@ -13,3 +13,23 @@
 box_h_cut_executor:
   ros__parameters:
     middle_seam_center_overlap_m: 0.0075
+    # Top cut: YAML depth 3 mm + lid sag profile 2 mm at the seam centre (0 at the carton edges). Operator 2026-10-20:
+    # the lid dips ~2 mm mid-seam (was a flat -5 mm workaround). Needs the executor with middle_cut_sag_m
+    # (install_sag overlay or the rebuilt main install); an older executor ignores it.
+    # 2026-10-22 operator: top cut 1 mm deeper at start/end (middle_cut_clearance_m -0.006 in the YAML), centre
+    # unchanged at 7 mm -> sag 2 -> 1 mm.
+    middle_cut_sag_m: 0.001
+    # Left face cut height (read-only, restart): 3 mm lower than the YAML's -0.003 -> 6 mm below the top plane
+    # (operator 2026-10-22; needs the executor with the 6 mm side cap, rebuilt 2026-10-22).
+    # 2026-10-22 later: 1.5 mm lower again -> 7.5 mm below the top plane (side cap now 8 mm).
+    cut_clearance_m: -0.0075
+    # left_cut_inward_m: YAML 7 mm (operator 2026-10-20 tried 8 mm; back to 7: 8 mm cost the -5 deg carton angles).
+    # 2026-10-22 operator: whole left face 1 mm deeper into the face, 7 -> 8 mm (the planner maximum), instead of a
+    # lower cut height (cut_clearance_m -0.003 is already the executor cap). Planning parameter.
+    left_cut_inward_m: 0.008
+    # Left face blade caps: 40 deg on 2026-10-21 (mock: back-end trim ~10 mm instead of 49-98 mm), back to 25 deg on
+    # 2026-10-22 (operator). With 25 deg + 7 mm inward the back end of the face is trimmed by 49-98 mm on every
+    # placement (scan_results/dual_plan_video_20261021/, left_reach_sweep_20261021/). Planning parameters.
+    left_varying_max_theta_p_deg: 25.0
+    left_varying_end_max_theta_p_deg: 25.0
+    left_parallel_max_tilt_deg: 25.0

@@ -14,6 +14,14 @@ dual_cut_coordinator:
     exact_distance_tolerance_m: 0.002     # subtracted from every FCL distance (WP5b: measured max overestimate 0.07 mm)
     tip_on_line_tolerance_m: 0.002        # tool tip within 2 mm of the exported cut line in CUT segments
     world_penetration_tolerance_m: 0.0    # strict: any contact outside the allowed tool/carton contact refuses the phase
+    # Table clearance gate (2026-10-22): the plan is refused if any link of the checked arm except the exempt ones comes
+    # closer than this to the table link at any sample (exact distance; the report names the link and the distance).
+    # The base links (suffix base_link) sit 1 mm (left) / 3.9 mm (right) above the table by design and cannot move
+    # (min over the joint range: left 0.7 mm, right 3.5 mm); motor1/link1/motor2 are 101-205 mm away at every joint
+    # state, so they need no exemption. Per-arm planners use the same value as table_padding_m (dual_cut_bringup).
+    table_min_clearance_m: 0.010          # 0 = gate off. 10 mm: 2026-10-22 mock, 5 mm left 4 plans at 5.4-6.9 mm; 10 mm kept all 40 plans (+<=3 s)
+    table_link_name: table
+    table_exempt_link_suffixes: ["base_link"]
     frame_tolerance: 1.0e-6               # exported base transform vs dual URDF world -> arm_X_base_link
     external_snapshot_max_age_s: 240.0    # same limit as the executors (cap 600 s)
     sample_dt_s: 0.05
@@ -34,11 +42,98 @@ dual_cut_coordinator:
 
     # --- executor parameters set before each planning call ("name=value") ---
     # middle_seam_stop must be end for every pattern but middle_only (the executor refuses the combination).
+    # The coordinator APPENDS (so they win) per-mode overrides, see top_split_mode below: in left_max the
+    # left phase A / right phase B top-seam entries below (middle_seam_stop=center) are overridden, in half
+    # they are used as written. middle_cut_reverse_travel=false is appended to every list that does not set it.
     left_phase_a_params: ["cut_pattern=middle_only", "middle_seam_stop=center"]
     left_phase_b_params: ["cut_pattern=left_only", "middle_seam_stop=end"]
     right_phase_a_params: ["cut_pattern=left_only", "middle_seam_stop=end"]
     right_phase_b_params: ["cut_pattern=middle_only", "middle_seam_stop=center"]
     executor_call_timeout_s: 200.0
+
+    # phase_order (phases mode): top_first (DEFAULT) A = left top + right face, B = left face + right top (each
+    #   phase ends at home). side_first: A = LEFT FACE + RIGHT TOP, B = LEFT TOP + RIGHT FACE, with NO return home
+    #   between the phases (return_home_after_cut=false in both phase A lists, true in both B lists; B's leading
+    #   transit is moved into A as always). Left B (top, left_max) is planned first; the right top (phase A) waits
+    #   for its export and plans the derived snapshot. Works with top_split_mode half too (the lists swap phases).
+    phase_order: side_first   # operator 2026-10-20: A = left face + right top, B = left top + right face, no home between
+
+    # --- top-seam split between the two arms (planning parameters; rejected while planning / executing) ---
+    # left_max (default, operator rule 2026-10-20): the LEFT arm cuts the top seam as far as it can reach from
+    #   the left end (phase A: cut_pattern=middle_only, middle_seam_stop=end, top_cut_min_cut_fraction =
+    #   top_split_left_min_fraction); the RIGHT arm only cuts the remainder, starting top_split_overlap_m before
+    #   where the left stopped and running to the right end IN THE LEFT ARM'S TRAVEL DIRECTION (phase B waits
+    #   for the left's phase A export, then plans a derived snapshot with seam_start moved to that fraction and
+    #   middle_cut_reverse_travel=true). Idle-arm phases (the left reaching 100 % so the right has nothing to
+    #   cut) are out of scope: the right always cuts at least the last top_split_right_min_tail of the seam.
+    # half: today's behaviour, both arms cut half of the seam around the centre (middle_seam_stop=center).
+    # The source snapshot is ALWAYS the LEFT executor's external_snapshot_file (single source of truth); the
+    # right executor's external_snapshot_file is set by the coordinator per phase and put back afterwards.
+    top_split_mode: left_max
+    top_split_overlap_m: 0.012          # right start = left reach minus this (planning scope [0.003, 0.05] m)
+    top_split_right_min_tail: 0.10      # right cuts at least the last 10 % of the seam [0.05, 0.5]
+    top_split_left_min_fraction: 0.05   # top_cut_min_cut_fraction handed to the left in phase A [0.05, 1.0]
+    # left_max only: the RIGHT arm's top cut finishes this far PAST the seam end (the carton's right edge). The
+    #   derived right snapshot's seam_end (and its two right side points) move outward along the ORIGINAL seam
+    #   direction by this distance; the left plan and the source snapshot are untouched. 0.0 = off (bit-identical
+    #   derived snapshot). [0.0, 0.02] m. The coverage check then expects the right cut to end at the seam end +
+    #   this (same end tolerance). The right executor accepts the extended seam end up to 10 mm + this beyond the
+    #   top face (only on a file with the dual_cut_coordinator_top_split marker, only along the seam); the two moved
+    #   side points are face-checked at their pre-extension position (10 mm limit, as with no extension).
+    #   Operator 2026-10-22: 5 mm, then 15 mm.
+    top_split_right_end_extension_m: 0.015
+    # Coverage check after export (both modes, fail closed): the top cut lines of left phase A and right phase B,
+    # projected on the source seam axis, must start at the left end / end at the right end within end_tolerance
+    # and overlap by at least min_overlap, else the plan is refused.
+    top_split_min_overlap_m: 0.005
+    top_split_end_tolerance_m: 0.005
+    # Derived snapshot for the right arm's phase B (rewritten atomically each plan; mtime = the source's mtime).
+    top_split_snapshot_file: /home/farhan/.ros/dual_cut_coordinator/right_top_snapshot.json
+
+    schedule_mode: phases              # phases | sequence (see the schedule mode section at the end of the file)
+    sequence_skew_margin_s: 5.0        # [0.5, 10] window margin and skew gate (operator 2026-10-20: 2.0 tripped on the real arms)
+    sequence_delay_step_s: 1.0         # [0.1, 10]
+    sequence_max_delay_s: 60.0         # [0, 600]
+    sequence_dispatch_lead_s: 0.05     # stamp lead of every later segment goal [0, 1]
+
+    # --- plan order fallback (planning parameters; rejected while planning / executing) ---
+    # When the requested plan is refused, ~/plan tries the next chain entry and keeps the FIRST plan that passes every
+    # existing check. Entries: sequence (left arm face cut first, then its top cut), sequence_left_top_first (the LEFT
+    # arm's job order swapped: top cut first from home, then the face cut; the right arm keeps its order),
+    # phases_top_first, phases_side_first. The chain starts at the entry of the configured schedule_mode / phase_order
+    # (phases + side_first: only phases_side_first is left); a configured mode that is not in the list is put first.
+    # Only refusals an order change can fix are retried (executor plan-stage failures such as a wrist winding transit,
+    # world / tip-on-line / cross-arm validator refusals, no safe sequence schedule). Snapshot, scene, frame,
+    # precondition, busy, top-face and left-face-reach refusals end the chain at once. The report (plan_fallback,
+    # plan_attempts_summary), the log and the plan response say which attempt was used and why earlier ones failed.
+    # plan_retries (random executor failures) still applies inside each attempt.
+    plan_fallback_chain: ["sequence", "sequence_left_top_first", "phases_top_first", "phases_side_first"]
+    # Order of the retries (2026-10-24): BREADTH FIRST. Every chain entry is tried once before any entry is retried; only a
+    # refusal whose text contains one of plan_inplace_retry_labels is retried at once, in place (final_planner_fixes 2026-10-22:
+    # the retry of "right job 2 (right face)" succeeded 4 of 4, the retries of the left top descent, the right top and the
+    # left face after the top 0 of 70). If no entry passed, the entries are retried round robin in chain order (random-looking
+    # refusals only), at most plan_retries retries per entry in total, within the budget below. The report names the attempt
+    # used ("on a retry in the second pass" if it was one) and every refusal. false = former order (retry in place first).
+    plan_retry_breadth_first: true
+    plan_inplace_retry_labels: ["right job 2 (right face)"]
+    # Random-looking executor refusals that are retried (plan_retries). The collision-gate entries match free-space transits
+    # only (random OMPL paths); a colliding cut stroke is deterministic and ends the attempt.
+    plan_retry_signatures: ["winds the wrist", "MTC candidate failed", "no planner solution",
+                            "collision gate: stage 'approach pose", "collision gate: stage 'transition from",
+                            "collision gate: stage 'transit to"]
+    plan_fallback_budget_s: 150.0        # [10, 3000] no new attempt starts after this total planning time, no random-failure retry after half of it
+                                         # (an attempt in flight is not cut short: worst case = budget + one attempt; the UI plan_timeout_s must be larger)
+
+    # --- detection permission (cut_permission of the source snapshot) ---
+    # A blocked detection (or an unusable cut_permission) still plans (report: detection.blocked, WARN), but ~/execute is
+    # refused unless allow_blocked_detection is true (runtime, checked at execute time) or the detector's own override
+    # field is truthy and honor_detection_override is true. A snapshot without cut_permission is treated as allowed
+    # (report: detection.permission "unknown").
+    # honor_detection_override is false: the UI's default detect command passes --allow-cut-blocked, so every blocked
+    # snapshot of 2026-10-22 carries override "allow_cut_blocked" and honoring it would make this gate a no-op. The
+    # operator's allow_blocked_detection switch (UI, auto-off on the next detect) is the one override.
+    allow_blocked_detection: false
+    honor_detection_override: false
 
     # --- monitor (20 Hz) and start barriers ---
     monitor_stop_distance_m: 0.03
@@ -53,6 +148,49 @@ dual_cut_coordinator:
     start_delay_s: 0.25
     expected_hardware_components: 2
 
+    # --- robot-side joint move (CRI MoveJoint) for eligible free-space transit legs: OPT-IN, default OFF (stage 1) ---
+    # Phases mode, SERIAL phases only (a parallel phase and the sequence schedule stay 100 % on the JTC). With the switch
+    # false nothing below is used: no gate changes, the execution is exactly the JTC execution. The switch is a runtime
+    # parameter (rejected while planning / executing); the launch refuses a config that sets it true. Out-of-range values are
+    # rejected, never clamped. The robot completes a sent move even after a driver death or a cable pull (see the README).
+    cri_transit_enabled: false
+    cri_transit_velocity_percent: 20.0        # (0, 25]
+    cri_transit_acceleration_percent: 30.0    # (0, 40]
+    cri_transit_min_length_rad: 0.05          # shorter legs stay on the JTC
+    cri_transit_path_tolerance_rad: 0.005     # monitor STOP and driver path tolerance (max per-joint deviation from the chord); measured real deviation <= 0.9 mrad
+    cri_transit_goal_tolerance_rad: 0.005
+    cri_transit_start_tolerance_rad: 0.01
+    cri_transit_max_runs_per_arm_phase: 1     # [1, 4]; the longest certified legs are chosen
+    cri_driver_max_velocity_cap_percent: 25.0       # the driver's effective cap must not exceed this
+    cri_driver_max_acceleration_cap_percent: 40.0
+    # Until HardwareState carries the driver's effective move_joint caps the cap is UNKNOWN and no leg is dispatched (it stays on
+    # the JTC) unless this is true. Mock tests may set it true; on the real arms only after the driver caps are confirmed.
+    cri_assume_driver_cap_ok: false
+    # CERTIFICATE (lead decision 2026-10-24): padding = cri_transit_path_tolerance_rad * reach, NO stop travel in it: a Move Stop
+    # decelerates ALONG the robot-side joint-linear path, which is the certified chord itself, and a lost link makes the robot
+    # complete the same chord; the deviation of an emergency stop applies to JTC legs just the same, so it is not CRI-specific.
+    # reach 0 (default) = the rigorous bound from the model: for each joint the largest distance from its frame origin to any
+    # geometry it carries, summed over the six joints (a deviation in EVERY joint at once; ~3.6 m for the real arm). > 0 = this
+    # constant [m] (1.0 would be "link + tool reach", which is NOT a rigorous bound). The plan report shows both numbers.
+    cri_transit_reach_m: 0.0
+    # PARTIAL CHORD: when the full chord fails the padded checks (world, table, scene-object clearance, parked other arm) only near
+    # its ends, the maximal contiguous middle stretch of samples that pass (>= cri_transit_min_length_rad of joint change) goes to
+    # the robot and the two ends stay on the JTC as rest-to-rest quintic sub-chords on the same chord. Their limits = the
+    # executor's transit scalings read as fractions of joint_limits.yaml: 0.20 * 0.785 rad/s and 0.0763 * 5.24 = 0.400 rad/s^2 (leading
+    # joint; the 0.4 rad/s^2 planned-acceleration cap since 2026-10-31, was 0.10 * 5.24 = 0.524).
+    # speed_profile:=fast (dual_cut_system.launch.py) loads igus_rebel_moveit_config/config/speed_profile_fast.yaml after this file:
+    # 0.314 rad/s and 0.400 rad/s^2 (the fast transit limits).
+    cri_subchord_velocity_rad_s: 0.157
+    cri_subchord_acceleration_rad_s2: 0.400
+    # Wiring (read only). TODO-confirm against the driver launch: node_name igus_rebel_left / igus_rebel_right
+    # (rebel_dual_table.urdf.xacro), action /<node_name>/move_joint, topics /<node_name>/hardware_state and robot_joint_states.
+    cri_left_move_joint_action: /igus_rebel_left/move_joint
+    cri_right_move_joint_action: /igus_rebel_right/move_joint
+    cri_left_hardware_state_topic: /igus_rebel_left/hardware_state
+    cri_right_hardware_state_topic: /igus_rebel_right/hardware_state
+    cri_left_robot_joint_states_topic: /igus_rebel_left/robot_joint_states
+    cri_right_robot_joint_states_topic: /igus_rebel_right/robot_joint_states
+
     # --- wiring (read only) ---
     left_executor_ns: /arm_left/box_h_cut_executor
     right_executor_ns: /arm_right/box_h_cut_executor
@@ -65,3 +203,23 @@ dual_cut_coordinator:
     expected_planning_frame: base_link
     expected_tool_link: xeg32_tool_tip
     tip_link_suffix: xeg32_tool_tip
+
+# --- schedule mode ---
+# phases (DEFAULT): phases A and B, the arms run in parallel inside a phase (or serially if only that is safe).
+# sequence: each arm runs ITS OWN cuts back to back with no return home in between and without waiting for the
+#   other arm. LEFT: left face, then top (as far as it reaches, see top_split_mode left_max); RIGHT: top remainder,
+#   then right face. Planned before any motion (left job 1 -> left job 2 -> right job 1 (needs the left reach)
+#   -> right job 2), one arm timeline each (the executors' return_home_after_cut is false for job 1, true for
+#   job 2). The cross-arm check is SEGMENT-WINDOW ALL-PAIRS: every left segment against every right segment
+#   whose windows [planned start - sequence_skew_margin_s, planned end + margin] overlap (existing all-pairs
+#   swept check, padding and tolerance; no time assumption inside a segment); an arm standing still after its
+#   timeline is over and an inserted delay hold are segments too (end clamping). If that fails, the LEFT job 2
+#   and then the RIGHT job 2 are delayed by a stationary hold of step, 2*step ... up to sequence_max_delay_s and
+#   the smallest-makespan schedule that passes is used. If none passes the normal phases plan is made instead
+#   (said in the plan response and report).
+#   Execution (execution_enabled + execute_phase_a_enabled; execute_phase_b_enabled is NOT used): one
+#   FollowJointTrajectory goal per segment, started at its planned start (common t0 after the start barrier),
+#   an arm that is early waits holding its pose, SKEW GATE: a segment not complete by planned end + margin, or a
+#   rejected / aborted goal, stops both arms. The 20 Hz monitor, tracking stop and ~/stop are unchanged (the
+#   tracking reference is the segment being executed).
+#   (There is no sequence_lag_s: a fixed time band was rejected, a 0.2 rad tracking error is not a time lag.)

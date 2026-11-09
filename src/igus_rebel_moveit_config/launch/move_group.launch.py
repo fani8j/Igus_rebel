@@ -1,4 +1,5 @@
 import os
+import subprocess
 from pathlib import Path
 
 from ament_index_python.packages import get_package_prefix, get_package_share_directory
@@ -43,6 +44,49 @@ HUMBLE_PILZ_REQUEST_ADAPTERS = (
 )
 
 
+SPEED_PROFILES = ("default", "fast")
+SPEED_PROFILE_FILE = "speed_profile_fast.yaml"
+EXECUTOR_NODE = "box_h_cut_executor"
+SPEED_SCALING_KEYS = ("velocity_scaling", "acceleration_scaling", "transit_velocity_scaling",
+                      "transit_acceleration_scaling")
+# joint_limits.yaml: the scalings are fractions of these (used for the log line only).
+JOINT_LIMIT_VELOCITY_RAD_S = 0.785
+JOINT_LIMIT_ACCELERATION_RAD_S2 = 5.24
+
+
+def speed_profile_file(profile):
+    """Path of the speed profile YAML to load AFTER box_h_cut_executor.yaml, or None for `default` (nothing is loaded:
+    the effective executor parameters are exactly those of box_h_cut_executor.yaml). Fail closed on an unknown profile."""
+    if profile not in SPEED_PROFILES:
+        raise RuntimeError(f"speed_profile must be one of {SPEED_PROFILES}, got {profile!r}")
+    if profile == "default":
+        return None
+    return os.path.join(get_package_share_directory(PACKAGE), "config", SPEED_PROFILE_FILE)
+
+
+def effective_speed_scalings(base_file, profile_file):
+    """The four scalings the executor will see: base YAML, then the profile file (which wins)."""
+    values = {}
+    for path in (base_file, profile_file):
+        if path is None:
+            continue
+        section = (load_yaml(Path(path)) or {}).get(EXECUTOR_NODE, {}).get("ros__parameters", {})
+        values.update({name: float(section[name]) for name in SPEED_SCALING_KEYS if name in section})
+    missing = [name for name in SPEED_SCALING_KEYS if name not in values]
+    if missing:
+        raise RuntimeError(f"no value for {missing} in {base_file} / {profile_file}")
+    return values
+
+
+def speed_profile_summary(profile, v):
+    a_lim, v_lim = JOINT_LIMIT_ACCELERATION_RAD_S2, JOINT_LIMIT_VELOCITY_RAD_S
+    return (f"speed_profile={profile}: contact velocity_scaling={v['velocity_scaling']:g} ({v['velocity_scaling'] * v_lim:.3f} rad/s) "
+            f"acceleration_scaling={v['acceleration_scaling']:g} ({v['acceleration_scaling'] * a_lim:.3f} rad/s^2); "
+            f"transit_velocity_scaling={v['transit_velocity_scaling']:g} ({v['transit_velocity_scaling'] * v_lim:.3f} rad/s) "
+            f"transit_acceleration_scaling={v['transit_acceleration_scaling']:g} "
+            f"({v['transit_acceleration_scaling'] * a_lim:.3f} rad/s^2)")
+
+
 def package_file(package, *parts):
     return PathJoinSubstitution([FindPackageShare(package), *parts])
 
@@ -73,22 +117,47 @@ def cut_recorder_script():
     return next((c for c in candidates if c.is_file()), None)
 
 
-def cut_recorder_actions(context):
-    """Passive camera recorder: one clip per trajectory execution (see its README).
+# Camera names of tools/cut_recorder (backend `video`) -> camera keys of robot_remote's raw recorder (backend `raw`);
+# mirrors dual_cut_bringup/launch/dual_cut_system.launch.py.
+VIDEO_TO_RAW = {"knife": "knife", "scene": "head", "wrist": "wrist_left_knife", "right_wrist": "wrist_right_knife",
+                    "left_gripper": "wrist_left_gripper", "right_gripper": "wrist_right_gripper",
+                    "left_vision": "left_vision", "right_vision": "right_vision"}
+RAW_TO_VIDEO = {new: old for old, new in VIDEO_TO_RAW.items()}
+RAW_CAMERAS = "head,knife,wrist_left_knife,wrist_right_knife,wrist_left_gripper,wrist_right_gripper,left_vision,right_vision"
+VIDEO_CAMERAS = "knife,scene,wrist,right_wrist"
 
-    Real hardware only, and only alongside the H-cut executor. It subscribes to the
-    controller's action status and the camera topics; it never commands anything.
-    """
-    if (LaunchConfiguration("record_cut_video").perform(context).lower() != "true"
-            or LaunchConfiguration("run_box_h_cut_executor").perform(context).lower() != "true"
-            or LaunchConfiguration("hardware_protocol").perform(context) != "rebel"):
-        return []
+
+def map_cameras(value, mapping):
+    """Comma list of camera names through `mapping` (names already in the target vocabulary pass unchanged)."""
+    out = []
+    for name in (n.strip() for n in value.split(",")):
+        name = mapping.get(name, name)
+        if name and name not in out:
+            out.append(name)
+    return ",".join(out)
+
+
+def raw_ready(robot_remote_dir):
+    """(recorder script or None, why not): robot_remote's raw recorder needs its script and a python that imports rosbag2_py
+    (no LeRobot needed)."""
+    script = Path(os.path.expanduser(robot_remote_dir)) / "recording" / "record_raw_cut.py"
+    if not script.is_file():
+        return None, f"{script} not found"
+    try:
+        ok = subprocess.run(["python3", "-c", "import rosbag2_py"], capture_output=True, timeout=120).returncode == 0
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None, f"cannot run python3: {exc}"
+    return (script, "") if ok else (None, "python3 cannot import rosbag2_py")
+
+
+def video_recorder_actions(context):
+    """Backend `video`: the passive mp4 recorder (tools/cut_recorder, trigger = FJT action status)."""
     script = cut_recorder_script()
     if script is None:
         return [LogInfo(msg="record_cut_video: tools/cut_recorder/cut_recorder.py not found; "
                             "camera recording disabled")]
-    cmd = ["nice", "-n", "10", "python3", str(script),
-           "--cameras", LaunchConfiguration("cut_video_cameras").perform(context)]
+    cameras = LaunchConfiguration("cut_video_cameras").perform(context).strip() or VIDEO_CAMERAS
+    cmd = ["nice", "-n", "10", "python3", str(script), "--cameras", map_cameras(cameras, RAW_TO_VIDEO)]
     out_dir = LaunchConfiguration("cut_video_dir").perform(context)
     if out_dir:
         cmd += ["--out-dir", out_dir]
@@ -97,6 +166,40 @@ def cut_recorder_actions(context):
         name="cut_recorder",
         output="screen",
     )]
+
+
+def raw_recorder_actions(context, script):
+    """Backend `raw` (default): robot_remote's read-only raw recorder. Trigger fjt-status = any FollowJointTrajectory goal on
+    the arm's controller (like the video recorder), 5 s hold; one rosbag2 (sqlite3) per cut with the cameras as published
+    (full-resolution JPEG), joint / controller state and tf, kept whatever the outcome."""
+    cameras = LaunchConfiguration("cut_video_cameras").perform(context).strip() or RAW_CAMERAS
+    cmd = ["nice", "-n", "10", "python3", str(script), "--trigger", "fjt-status", "--fjt-hold-s", "5.0",
+           "--camera-keys", map_cameras(cameras, VIDEO_TO_RAW)]
+    out_dir = LaunchConfiguration("cut_video_dir").perform(context)
+    if out_dir:
+        cmd += ["--clip-dir", out_dir]
+    return [ExecuteProcess(cmd=cmd, name="cut_recorder", output="screen", sigterm_timeout="60", sigkill_timeout="15")]
+
+
+def cut_recorder_actions(context):
+    """Automatic cut recording (see tools/cut_recorder/README.md and robot_remote's README "Record cutting runs").
+
+    record_cut_video true = real hardware with the H-cut executor, always = also in mock (tests), false = off. It only
+    subscribes; it never commands anything. cut_recorder_backend raw (default) falls back to video when
+    robot_remote or rosbag2_py is missing - the launch never fails because of it.
+    """
+    mode = LaunchConfiguration("record_cut_video").perform(context).strip().lower()
+    if mode == "false" or (mode == "true" and (
+            LaunchConfiguration("run_box_h_cut_executor").perform(context).lower() != "true"
+            or LaunchConfiguration("hardware_protocol").perform(context) != "rebel")):
+        return []
+    if LaunchConfiguration("cut_recorder_backend").perform(context).strip().lower() == "raw":
+        script, why = raw_ready(LaunchConfiguration("robot_remote_dir").perform(context))
+        if script is not None:
+            return raw_recorder_actions(context, script)
+        return [LogInfo(msg=f"record_cut_video: raw recorder unavailable ({why}); falling back to the video backend "
+                            "(tools/cut_recorder)"), *video_recorder_actions(context)]
+    return video_recorder_actions(context)
 
 
 def opaque_func(context, *args, **kwargs):
@@ -170,12 +273,19 @@ def opaque_func(context, *args, **kwargs):
         parameters=[{"use_sim_time": use_sim_time}, moveit_args],
     )
 
+    # Opt-in speed profile: its file is listed right after the base YAML, so its values win (default: nothing extra).
+    speed_profile = LaunchConfiguration("speed_profile", default="default").perform(context).strip()
+    profile_file = speed_profile_file(speed_profile)
+    base_executor_yaml = config_file("box_h_cut_executor.yaml").perform(context)
+    speed_log = LogInfo(msg="[igus_rebel_moveit_config] " + speed_profile_summary(
+        speed_profile, effective_speed_scalings(base_executor_yaml, profile_file)))
     box_h_cut_node = Node(
         condition=IfCondition(LaunchConfiguration("run_box_h_cut_executor")),
         package=PACKAGE,
         executable="box_h_cut_executor",
         parameters=[
             config_file("box_h_cut_executor.yaml"),
+            *([profile_file] if profile_file else []),
             {"use_sim_time": use_sim_time},
             moveit_args,
         ],
@@ -284,6 +394,7 @@ def opaque_func(context, *args, **kwargs):
         joy_node,
         teleop_twist_joy_node,
         delayed_box_h_cut_node,
+        speed_log,
         launch_rviz,
         *cut_recorder_actions(context),
     ]
@@ -328,21 +439,34 @@ def generate_launch_description():
             description="Start the frozen-snapshot plan-only H-cut MTC executor",
         ),
         DeclareLaunchArgument(
+            "speed_profile", default_value="default", choices=list(SPEED_PROFILES),
+            description="H-cut executor speeds: default = box_h_cut_executor.yaml unchanged; fast = opt-in "
+                        "config/speed_profile_fast.yaml loaded after it (faster transits and cut strokes, planned "
+                        "accelerations <= 0.4 rad/s^2; NOT validated on the real arm)"),
+        DeclareLaunchArgument(
             "box_h_cut_start_delay",
             default_value="3.0",
             description="Seconds to wait for MoveIt before starting the H-cut executor",
         ),
         DeclareLaunchArgument(
-            "record_cut_video", default_value="true",
-            description="With the H-cut executor on real hardware: record the cameras during "
-                        "every trajectory execution (tools/cut_recorder, passive)"),
+            "record_cut_video", default_value="true", choices=["true", "false", "always"],
+            description="Record the cuts automatically (every trajectory execution): true = with the H-cut "
+                        "executor on real hardware, always = also in mock (tests), false = off"),
         DeclareLaunchArgument(
-            "cut_video_cameras", default_value="knife,scene,wrist,right_wrist",
-            description="Cameras for record_cut_video (comma list of knife, scene, wrist, "
-                        "right_wrist)"),
+            "cut_recorder_backend", default_value="raw", choices=["raw", "video"],
+            description="raw = robot_remote's raw rosbag2 recorder, full resolution (falls back to video when robot_remote or "
+                        "rosbag2_py is missing); video = tools/cut_recorder, passive mp4 clips"),
+        DeclareLaunchArgument(
+            "robot_remote_dir", default_value="~/robot_remote",
+            description="robot_remote checkout (recording/record_raw_cut.py) for the raw backend"),
+        DeclareLaunchArgument(
+            "cut_video_cameras", default_value="",
+            description="Cameras for record_cut_video, comma list; empty = all (raw: head,knife,wrist_left_knife,"
+                        "wrist_right_knife,wrist_left_gripper,wrist_right_gripper,left_vision,right_vision; video: "
+                        "knife,scene,wrist,right_wrist). Old names (scene, wrist, ...) work with both backends"),
         DeclareLaunchArgument(
             "cut_video_dir", default_value="",
-            description="Clip folder root for record_cut_video (empty: the recorder default, "
+            description="Clip / sidecar folder root for record_cut_video (empty: the recorder default, "
                         "the external drive's igus_nvidia/cut_videos)"),
         DeclareLaunchArgument("run_calibration_verification", default_value="false"),
         DeclareLaunchArgument("calibration_execution_allowed", default_value="false"),

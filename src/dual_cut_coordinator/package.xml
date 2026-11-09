@@ -16,12 +16,14 @@
   <depend>dual_cut_msgs</depend>
   <depend>eigen</depend>
   <depend>geometric_shapes</depend>
+  <depend>igus_rebel_msgs</depend>
   <depend>moveit_core</depend>
   <depend>control_msgs</depend>
   <depend>controller_manager_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>lifecycle_msgs</depend>
   <depend>moveit_msgs</depend>
+  <depend>nlohmann-json-dev</depend>
   <depend>rcl_interfaces</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_action</depend>

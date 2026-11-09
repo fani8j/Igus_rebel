@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dual-arm carton cutting</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logos"><img src="/static/lab_logo.png" alt="Hucenrotia Lab" class="logo-lab"><img src="/static/compal_logo.svg" alt="Compal" class="logo-compal"></span>
+      <span class="brand-title">Dual-arm cutting</span>
+    </div>
+    <div id="state-pill" class="pill offline" aria-live="polite">COORDINATOR OFFLINE</div>
+    <div id="chips" class="chips" aria-label="Cell health"></div>
+    <div class="opbox">
+      <span id="op-label" class="who ro">Read-only</span>
+      <button id="take-control" type="button" class="small opctl" hidden>Take control</button>
+    </div>
+    <div class="stop-group">
+      <button id="stop" type="button" aria-label="Software stop">Software stop</button>
+      <p class="stop-caption">Not an emergency stop &mdash; keep the hardware e-stop in reach</p>
+    </div>
+  </header>
+
+  <div class="statusbars">
+    <div id="banner-backend" class="banner warn" role="alert" hidden>No answer from the UI server. Retrying.</div>
+    <div id="banner-auth" class="banner bad" role="alert" hidden>Token missing or invalid: open the URL printed by the dual_cut_ui node.</div>
+    <div id="banner-stop" class="banner ok" role="alert" hidden><span id="banner-stop-text"></span><button id="banner-stop-close" type="button" class="small">Dismiss</button></div>
+    <div id="banner-error" class="banner bad" role="alert" hidden><span id="banner-error-text"></span><button id="banner-error-close" type="button" class="small">Dismiss</button></div>
+  </div>
+
+  <main>
+    <section id="cams" aria-label="Cameras">
+      <div class="camhead">
+        <strong id="cam-title">Cameras</strong>
+        <button id="det-toggle" type="button" class="small toggle" aria-pressed="false" hidden>Show detection</button>
+        <div class="cam-menu-wrap">
+          <button id="cam-menu-btn" type="button" class="small" aria-expanded="false" aria-controls="cam-menu">Cameras on/off</button>
+          <div id="cam-menu" class="cam-menu" role="group" aria-label="Cameras shown" hidden></div>
+        </div>
+      </div>
+      <div id="tile-large" class="tile"><img id="img-large" alt="large camera view"><span class="cap" id="cap-large"></span><span class="nosig" id="nosig-large">no signal</span></div>
+      <div id="small-tiles" class="small-tiles"></div>
+    </section>
+
+    <section id="right" aria-label="Cut">
+      <div class="card ctl opctl">
+        <div class="row">
+          <button id="btn-dp" type="button" class="big primary grow opctl">Detect &amp; plan</button>
+          <button id="btn-more" type="button" class="small opctl" aria-expanded="false">More</button>
+        </div>
+        <div id="adv-row" class="row adv" hidden>
+          <button id="btn-detect" type="button" class="small opctl">Detect only</button>
+          <button id="btn-plan" type="button" class="small opctl">Plan only</button>
+          <button id="btn-cancel-job" type="button" class="small opctl" hidden>Cancel detect</button>
+          <button id="btn-rearm" type="button" class="small opctl">Rearm</button>
+        </div>
+        <ul id="steps" class="steps"></ul>
+        <div id="perm-line" class="permline unk" role="status" hidden></div>
+        <div id="place-notes" class="placenotes" aria-label="Placement pre-check (information only)" hidden></div>
+        <div class="row switchrow">
+          <button id="btn-enable" type="button" role="switch" aria-checked="false" class="opctl grow">Enable execution</button>
+          <span class="muted">Coordinator: <span id="gates-readback" class="readback off">?</span></span>
+        </div>
+        <div id="allow-row" class="row switchrow" hidden>
+          <button id="btn-allow" type="button" role="switch" aria-checked="false" class="opctl grow">Allow blocked detection</button>
+          <span class="muted">Coordinator: <span id="allow-readback" class="readback off">?</span></span>
+        </div>
+        <button id="cut-btn" type="button" class="big opctl" disabled>Cut</button>
+        <div id="exec-line" class="execline" hidden></div>
+        <div id="last-action" class="lastaction" aria-live="polite"></div>
+        <div id="why" class="why"></div>
+      </div>
+
+      <div class="card result" id="result">
+        <div id="tabbar" class="tabs" role="tablist">
+          <button type="button" role="tab" class="tab" data-tab="summary">Summary</button>
+          <button type="button" role="tab" class="tab" data-tab="detection">Detection</button>
+          <button type="button" role="tab" class="tab" data-tab="phases">Phases</button>
+          <button type="button" role="tab" class="tab" data-tab="plan">Plan</button>
+          <button type="button" role="tab" class="tab" data-tab="log">Log</button>
+        </div>
+        <div id="result-body" class="tabbody">Nothing yet.</div>
+      </div>
+    </section>
+  </main>
+
+  <div id="backdrop" class="backdrop" hidden></div>
+
+  <dialog id="dlg-confirm">
+    <h2 id="dlg-confirm-title">Confirm</h2>
+    <p id="dlg-confirm-text"></p>
+    <div class="actions"><button id="dlg-confirm-no" type="button">Cancel</button><button id="dlg-confirm-yes" type="button" class="primary">Yes</button></div>
+  </dialog>
+
+  <dialog id="dlg-cut">
+    <h2>Cut now?</h2>
+    <dl id="dlg-cut-summary" class="facts"></dl>
+    <p class="muted">Hold the red button for 1.5 s. Letting go early cancels.</p>
+    <div class="actions">
+      <button id="dlg-cut-no" type="button">Cancel</button>
+      <button id="dlg-cut-hold" type="button" class="hold"><div class="bar" id="hold-bar"></div><span>HOLD TO CUT</span></button>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-image"><img id="img-zoom" alt="detection overlay" style="width:100%"><div class="actions"><button id="dlg-image-close" type="button">Close</button></div></dialog>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -7,6 +7,13 @@ Optional: dual_cut_coordinator (its CoordinatorStatus interlocks teleop while a 
 
     ros2 launch dual_teleop dual_teleop.launch.py arm:=left keyboard:=true
 
+Servo speed (launch argument servo_relay, default true): Servo 2.5.10 anchors each command on the measured joint
+state and the JTC restarts every stamp-0 trajectory from its current state, which realises only ~1/3 of the
+commanded speed. With servo_relay:=true each Servo runs a pass-through smoothing plugin and publishes to
+/arm_<side>/servo/trajectory_out; a rebel_servo_relay node (/arm_<side>/servo/trajectory_relay) integrates Servo's
+velocity into its own reference and publishes the JTC trajectories. servo_relay:=false is the old direct
+Servo -> JTC wiring. See the README.
+
 Teleop starts PAUSED: nothing moves until it is enabled (console key 'e', gamepad Back, or
 `ros2 service call /dual_teleop/enable std_srvs/srv/Trigger`) or start_enabled:=true is given.
 
@@ -32,6 +39,14 @@ PACKAGE = "dual_teleop"
 IS_HUMBLE = os.environ.get("ROS_DISTRO") == "humble"
 
 # The unmodified single-arm teleop nodes publish with hard-coded names; remap them into the selector.
+# rebel_servo_relay's pass-through online_signal_smoothing plugin (Servo's smoothing_filter_plugin_name).
+SERVO_PASS_THROUGH_PLUGIN = "rebel_servo_relay::PassThroughFilterPlugin"
+
+# Relay lead bound (rebel_servo_relay): |reference - measured| <= min(max_lead, lead_time x |v| + 0.005 rad). The cap stays
+# well below the JTC state tolerance of 0.25 rad (lead + v x horizon + tracking lag must fit into it).
+MAX_RELAY_MAX_LEAD_RAD = 0.15
+MAX_RELAY_LEAD_TIME_S = 1.0
+
 TELEOP_REMAPS = [
     ("delta_twist_cmds", "/dual_teleop/in/delta_twist_cmds"),
     ("delta_joint_cmds", "/dual_teleop/in/delta_joint_cmds"),
@@ -41,7 +56,30 @@ TELEOP_REMAPS = [
 ]
 
 
+def relay_lead_args(context):
+    """(max_lead_rad, lead_time_s) from the launch arguments; RuntimeError instead of clamping."""
+    out = []
+    for name, lo_excl, hi in (("relay_max_lead_rad", True, MAX_RELAY_MAX_LEAD_RAD),
+                              ("relay_lead_time_s", False, MAX_RELAY_LEAD_TIME_S)):
+        raw = LaunchConfiguration(name).perform(context)
+        try:
+            val = float(raw)
+        except ValueError:
+            val = float("nan")
+        if not ((val > 0.0 if lo_excl else val >= 0.0) and val <= hi):  # also rejects NaN
+            raise RuntimeError(f"{name}:={raw!r} is invalid: it must be a number in "
+                               f"{'(0' if lo_excl else '[0'}, {hi}]. Refusing to start instead of clamping.")
+        out.append(val)
+    return out
+
+
 def launch_setup(context):
+    servo_relay_arg = LaunchConfiguration("servo_relay").perform(context)
+    if servo_relay_arg.strip().lower() not in ("true", "false"):
+        raise RuntimeError(f"servo_relay:={servo_relay_arg!r} is invalid: it must be 'true' or 'false'. "
+                           "Refusing to start instead of guessing.")
+    servo_relay = servo_relay_arg.strip().lower() == "true"
+    relay_max_lead, relay_lead_time = relay_lead_args(context)
     share = get_package_share_directory(PACKAGE)
     desc_share = get_package_share_directory("rebel_dual_table_description")
     mc_share = get_package_share_directory("rebel_dual_table_moveit_config")
@@ -75,6 +113,13 @@ def launch_setup(context):
             "robot_link_command_frame": "world",
             "command_out_topic": f"/arm_{side}_trajectory_controller/joint_trajectory",
         })
+        jtc_topic = servo["command_out_topic"]
+        relay_in = f"/arm_{side}/servo/trajectory_out"
+        if servo_relay:
+            # Servo -> relay -> JTC. The pass-through plugin keeps Servo's output velocity equal to the
+            # commanded one (the default Butterworth filter would remove ~25 % of it).
+            servo["command_out_topic"] = relay_in
+            servo["smoothing_filter_plugin_name"] = SERVO_PASS_THROUGH_PLUGIN
         if IS_HUMBLE:
             # Same translation as igus_rebel_moveit_config/launch/move_group.launch.py.
             servo["joint_limit_margin"] = servo.pop("joint_limit_margins", [0.1])[0]
@@ -95,6 +140,19 @@ def launch_setup(context):
             parameters=[{"use_sim_time": use_sim_time}, {"moveit_servo": servo},
                         {"planning_group_name": f"arm_{side}"}, moveit_args],
             output="screen"))
+        if servo_relay:
+            actions.append(Node(
+                condition=IfCondition(LaunchConfiguration("run_servo")),
+                package="rebel_servo_relay", executable="servo_trajectory_relay",
+                name="trajectory_relay", namespace=f"/arm_{side}/servo",
+                parameters=[{
+                    "input_topic": relay_in, "output_topic": jtc_topic, "joint_states_topic": "/joint_states",
+                    "publish_period_s": float(servo["publish_period"]),
+                    "max_lead_rad": relay_max_lead, "lead_time_s": relay_lead_time,
+                    # dual_table.launch.py's robot_state_publisher holds the dual-table URDF (joint limits)
+                    "robot_description_node": "/robot_state_publisher",
+                }],
+                output="screen"))
 
     actions.append(Node(
         package=PACKAGE, executable="teleop_selector", name="selector", namespace="/dual_teleop",
@@ -161,6 +219,14 @@ def generate_launch_description():
                               description="frame 'base_link' (keyboard 'w') is mapped to: world or the arm's own base"),
         DeclareLaunchArgument("coordinator_status_topic", default_value="/dual_cut_coordinator/status"),
         DeclareLaunchArgument("run_servo", default_value="true", description="start the two Servo nodes"),
+        DeclareLaunchArgument("servo_relay", default_value="true", choices=["true", "false"],
+                              description="true: pass-through Servo smoothing + rebel_servo_relay between Servo and "
+                                          "the JTC (arm moves at the commanded speed); false: old direct wiring "
+                                          "(~1/3 of the commanded speed)"),
+        DeclareLaunchArgument("relay_max_lead_rad", default_value="0.05",
+                              description="servo_relay: bound on |reference - measured| in rad, in (0, 0.15]"),
+        DeclareLaunchArgument("relay_lead_time_s", default_value="0.2",
+                              description="servo_relay: lead per rad/s of joint velocity in s, in [0, 1]"),
         DeclareLaunchArgument("hardware_protocol", default_value="mock_hardware", choices=["mock_hardware", "rebel"],
                               description="only used to generate the model; must match the dual stack"),
         DeclareLaunchArgument("calibration_file",

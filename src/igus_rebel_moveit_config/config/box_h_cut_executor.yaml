@@ -7,17 +7,22 @@
 # Change semantics (`ros2 param set /box_h_cut_executor ...`):
 # - READ-ONLY (startup only; `param set` is rejected; edit this file and restart): tool_link,
 #   carton_contact_links (default [] = [tool_link]; set by the dual per-arm launch, not here),
+#   probe_scene_include_world_objects (default true: the orientation-search probe scenes also hold every world
+#   object of move_group's scene, e.g. the dual cell's table; false = carton + camera pole only),
 #   external_snapshot_max_age_s, allow_tool_carton_contact, approach_joint_degrees, clearances,
 #   middle_blade_reversed, all *_scaling, top_cut_* offsets/lifts, side_tape_continue_* gates,
 #   side_tape_handoff_*_axis_tool and retract/servo gates.
 # - PLANNING (validated, applied, retained plan cleared; "busy" while a plan/execute/cut-debug
 #   session or side-tape hand-off is active): motion_profile, cut_pattern, side tilts,
-#   left_cut_reverse_travel,
+#   left_cut_reverse_travel, middle_cut_sag_m, middle_cut_sag_step_m,
 #   pre_cut_stabilization_duration_s, left_parallel_* (incl.
 #   left_parallel_varying_orientation_enabled), left_varying_station_spacing_m,
 #   left_varying_max_step_deg, left_varying_min_cut_fraction, left_varying_start_extra_inward_m,
-#   left_cut_extend_to_corners,
+#   left_cut_extend_to_corners, left_varying_*theta_p_deg (incl. left_varying_start_max_theta_p_deg,
+#   left_varying_start_ramp_m), left_contact_*,
 #   left_cut_corner_margin_m, left_cut_seam_cover_m, left_debug_stop_at_approach,
+#   left_cut_direction, left_reverse_frame, left_cut_patch_enabled, left_cut_patch_min_gap_m,
+#   left_cut_patch_overlap_m,
 #   cut_debug_*_correction_file,
 #   side_tape_handoff_enabled/variant/standoff_mm/box_offset/max_search_angle.
 # - RUNTIME (read when used, never blocked): execution_enabled, debug_motion_execution_enabled,
@@ -49,14 +54,19 @@ box_h_cut_executor:
     pre_cut_stabilization_duration_s: 1.0
 
     # ---- Speeds (fractions of joint_limits.yaml: 0.785 rad/s, 5.24 rad/s^2) -------------
-    # Contact strokes: 0.1376*0.785 = 0.108 rad/s, 0.0954*5.24 = 0.50 rad/s^2 (operator-approved
-    # rescale 2026-09-27). Finite, in (0, 1].
+    # Planned accelerations are capped at 0.4 rad/s^2 (0.0763*5.24) since 2026-10-31: the real arm
+    # speeds up at ~0.55 rad/s^2 max (brakes on a zero jog at ~1.5), so faster plans cannot be tracked
+    # (scan_results/jog_speed_check_20261031/). The JTC gains (p 3 / ff 0.6) assume this cap.
+    # Contact strokes: 0.1376*0.785 = 0.108 rad/s (operator-approved rescale 2026-09-27).
+    # Finite, in (0, 1].
     velocity_scaling: 0.1376
-    acceleration_scaling: 0.0954
-    # Free-space transit only. Lowered 2026-09-29 after real-robot moves overshot at transit
-    # ends (operator): 0.20*0.785 = 0.157 rad/s (~9 deg/s); 0.10*5.24 = 0.52 rad/s^2.
+    acceleration_scaling: 0.0763
+    # Free-space transit only. Velocity lowered 2026-09-29 after real-robot moves overshot at transit
+    # ends (operator): 0.20*0.785 = 0.157 rad/s (~9 deg/s). Acceleration 0.0763*5.24 = 0.4 rad/s^2.
     transit_velocity_scaling: 0.20
-    transit_acceleration_scaling: 0.10
+    transit_acceleration_scaling: 0.0763
+    # Opt-in FAST profile: launch arg speed_profile:=fast loads config/speed_profile_fast.yaml AFTER this file (and after the
+    # dual per-arm overrides) so its four scalings win; the default profile loads nothing, these values stay as above.
 
     # ---- Clearances & side tilts ------------------------------------------------------
     # Signed distance along surface_normal: positive hovers, negative penetrates the top plane.
@@ -64,8 +74,17 @@ box_h_cut_executor:
     hover_clearance_m: 0.01
     # 2026-10-13 operator: blade 3 mm below the top (was -0.001) so the tilted knife_c start still cuts the tape.
     cut_clearance_m: -0.003
-    # Middle seam (top cut) only. 2026-10-15 operator: 5 mm below the top (was -0.002; max -0.005).
-    middle_cut_clearance_m: -0.003
+    # Middle seam (top cut) only. 2026-10-17 operator: 3 mm below the top (was -0.005, -0.002 before; max -0.005).
+    # 2026-10-22 operator: 2 mm deeper -> 5 mm, then 1 mm deeper at the start/end -> 6 mm below the top (the cap),
+    # both arms, with middle_cut_sag_m reduced 2 -> 1 mm in the per-arm overrides so the centre stays at 7 mm.
+    middle_cut_clearance_m: -0.006
+    # Top-cut lid sag (2026-10-20): extra depth below middle_cut_clearance_m along -surface_normal, a
+    # parabola from 0 at the two carton edges the seam ends on to this value at seam_center
+    # ([0, 0.006] m; PLANNING). Profile = seam_center + the 4 corners (invariant to shortening,
+    # reverse travel and the right arm's derived snapshot). 0 = the unchanged straight stroke.
+    # > 0 plans the middle stroke as a polyline (middle_cut_sag_step_m, default 0.01 m) with
+    # min_fraction 1.0; not supported by plan_top_cut_staged / continue_top_cut / t_cut_handoff.
+    middle_cut_sag_m: 0.0
     # Roll about the blade axis per side (batch scan over 59 boxes: -10 left, -5 right).
     left_side_cut_tilt_deg: -10.0
     right_side_cut_tilt_deg: -5.0
@@ -88,7 +107,24 @@ box_h_cut_executor:
     # Max blade tilt/pitch off the side face for the left_parallel / varying search ([0, 45] deg,
     # code default 45). 2026-10-15 operator: 10 (set live, made default): flatter blade, the steep
     # back-corner start is trimmed instead (the kept part must still cross the tape).
-    left_parallel_max_tilt_deg: 10.0
+    # 2026-10-18 operator: 25 (with the 25 deg theta_p cap below; the grid must be able to produce
+    # the cap). Mock: +1 negative yaw step per carton (scan_results/left_yaw_window_20261015/).
+    left_parallel_max_tilt_deg: 25.0
+    # True blade-plane angle cap theta_p = acos(|tool X . surface normal|) from the stroke start
+    # through the end of the tape band ([5, 45] deg, code default 15), and the cap it ramps to at the
+    # END of the travel ([this, 45], code default 15). 2026-10-18 operator: 25/25 to try on real
+    # cuts (15 was chosen 2026-10-16 because a steep start did not cut the tape; verify 25 cuts it).
+    left_varying_max_theta_p_deg: 25.0
+    left_varying_end_max_theta_p_deg: 25.0
+    # Steeper cap at the START of the travel: 0 = off (code default); else [band cap, 45]. Holds until
+    # left_varying_start_ramp_m before the tape band, ramps down to the band cap and equals it at the
+    # band entry (the tape band never exceeds the band cap). Needs left_cut_extend_to_corners.
+    left_varying_start_max_theta_p_deg: 0.0
+    left_varying_start_ramp_m: 0.05
+    # Left contact joint-travel gate: aggregate (code default) | split (per-joint-group caps,
+    # constant arm branch, wrist margins; see CONTEXT.md). 2026-10-18 operator: split (removes the
+    # positive-yaw end trims; all 25 deg mock tests ran with it).
+    left_contact_travel_mode: split
     # Opt-in (default false, plan-only left_only/t_cut/h/combined): let the left_parallel
     # orientation VARY along the stroke (stations every left_varying_station_spacing_m
     # [0.005, 0.03] m, at most left_varying_max_step_deg [1, 15] deg of tool rotation between
@@ -130,6 +166,17 @@ box_h_cut_executor:
     left_cut_extend_to_corners: true
     left_cut_corner_margin_m: 0.005
     left_cut_seam_cover_m: 0.025
+    # Left reverse patch (default false = plans bit-identical; operator-approved design 2026-11-06,
+    # needs the forward varying corner-to-corner mode above, cut_pattern left_only/t_cut): when the
+    # forward cut leaves a back-end gap > left_cut_patch_min_gap_m [0, 0.10] m, the SAME plan gets a
+    # transit to a patch approach pose and a short REVERSE stroke (front -> back, frame per
+    # left_reverse_frame, default about_normal) that contains forward-kept-start + left_cut_patch_overlap_m
+    # [0.005, 0.05] m and reaches as far toward the back corner as possible. A patch that cannot be planned
+    # is dropped (forward-only plan, reason in the plan message). Evidence:
+    # scan_results/left_side_patch_20261106/. Enable with: left_cut_patch_enabled: true
+    # left_cut_patch_enabled: false
+    # left_cut_patch_min_gap_m: 0.015
+    # left_cut_patch_overlap_m: 0.015
     # Debug (default false; cut_pattern left_only only, otherwise plan_h_cut refuses): plan the
     # full left cut as usual (published to RViz) but retain only the approach to the left hover
     # pose after the pre-cut dwell. Executing it needs execution_enabled AND
@@ -198,6 +245,12 @@ box_h_cut_executor:
     # the cut targets only. Poses in scan_results/top_cut_teach_20261001/.
     top_cut_start_offset_mm: [-11.1, -3.8, 11.8]
     top_cut_end_offset_mm: [-6.3, -3.3, 12.1]
+    # PLANNING parameter (2026-10-24, search reduction only): middle_only fraction descent (100, 95 ... 5 %). A failure BEFORE
+    # the cut stroke whose inputs do not depend on the cut length (the transit to the seam-start hover, the align move, the wrist
+    # gate on that transit; stroke start fixed, so not middle_cut_reverse_travel) cannot be cured by a shorter cut: the steps in
+    # between are skipped and the minimum fraction (top_cut_min_cut_fraction) is tried once. One WARN line names stage and reason.
+    # false = the plain 5 % descent. Evidence: scan_results/fallback_speed_20261024/README.md.
+    top_cut_fraction_descent_stop_on_fraction_independent_failure: true
     # Hold at the penetration pose before the cut stroke (every middle-seam plan).
     top_cut_post_penetration_dwell_s: 1.0
     # Tip height above the top after the top-cut lift (staged/continue only), [0.001, 0.05] m.
