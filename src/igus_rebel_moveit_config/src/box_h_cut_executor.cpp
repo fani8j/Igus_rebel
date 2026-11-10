@@ -43,6 +43,7 @@
 #include "igus_rebel_moveit_config/left_blade_cap.hpp"
 #include "igus_rebel_moveit_config/left_contact_travel.hpp"
 #include "igus_rebel_moveit_config/left_cut_direction.hpp"
+#include "igus_rebel_moveit_config/left_cut_gate_trim.hpp"
 #include "igus_rebel_moveit_config/left_cut_patch.hpp"
 #include "igus_rebel_moveit_config/left_varying_chain.hpp"
 #include "igus_rebel_moveit_config/middle_cut_sag.hpp"
@@ -1078,6 +1079,18 @@ struct SegmentPlanOptions {
   // Non-empty: do NOT add the left reverse patch even when the forward plan carries one (the retry
   // after a patch-related planning failure); the text is the reason reported in the plan message.
   std::string drop_patch_reason;
+  // Left cut gate trim (left_cut_gate_trim.hpp): planSnapshot sets allow_left_gate_trim for the
+  // varying corner-to-corner left cut it plans itself (never for left_debug_stop_at_approach, cut-debug,
+  // hand-off or reuse of a supplied plan). planCutSegments then fills left_gate_trim for each retry
+  // after the collision gate found a contact inside the forward left cut stroke; retries == 0 means
+  // "no trim", and every code path below is then exactly the old one.
+  bool allow_left_gate_trim{false};
+  struct LeftGateTrim {
+    left_cut_gate_trim::Limits limits;     // travel coordinates of the search
+    int retries{0};
+    std::vector<std::string> events;       // one text per trim applied so far
+    double initial_trim_back_mm{0.0}, initial_trim_front_mm{0.0};  // of the plan that hit the gate
+  } left_gate_trim;
 };
 // The candidate the left_parallel search last selected (angles relative to F0).
 struct LeftParallelSelection {
@@ -1135,6 +1148,10 @@ struct LeftVaryingPlan {
   double patch_from_back_middle_mm{0.0}, patch_to_back_middle_mm{0.0};  // physical, valid when patch
   double forward_from_back_middle_mm{0.0}, forward_to_back_middle_mm{0.0};
   std::string summary;  // one line for the plan response
+  // Left cut gate trim: how a travel coordinate maps to metres from back_middle_left (physical, back ->
+  // front): physical = physical_origin_m + physical_sign * s; the search's minimum kept length.
+  bool travel_reverse{false};
+  double physical_origin_m{0.0}, physical_sign{1.0}, min_kept_length_m{0.0};
 };
 // left_cut_extend_to_corners geometry handed to searchLeftVaryingOrientation. Arc positions are
 // metres along the candidate line measured from its START (the first point the blade reaches:
@@ -1158,6 +1175,9 @@ struct LeftExtension {
   bool patch{false};
   double patch_origin_m{0.0};
   std::size_t patch_first_max{0}, patch_last_min{0};
+  // Left cut gate trim (left_cut_gate_trim.hpp): TRAVEL coordinates between which a station may be
+  // kept. Infinite = no limit (the search is then the old search). Never set for the patch search.
+  left_cut_gate_trim::Limits gate_limits;
   left_cut_direction::SpanGeometry travelGeometry() const
   {
     left_cut_direction::SpanGeometry g;
@@ -1179,6 +1199,23 @@ struct LeftExtension {
   {
     return fromBackMiddleM(s_local_m + (patch ? patch_origin_m : 0.0));
   }
+};
+// Where validateTrajectoriesCollisionFree found its first collision (structured, never parsed back
+// out of the error text).
+struct CollisionGateHit {
+  bool valid{false};
+  std::string stage;   // creator name of the colliding stage
+  std::string bodies;  // "A / B" of the first contact
+  std::size_t waypoint{0}, waypoint_count{0};
+  bool between_waypoints{false};  // true: an interpolated state between waypoint-1 and waypoint
+  Eigen::Vector3d tool_position{Eigen::Vector3d::Zero()};  // tool_link in the planning frame
+};
+// The collision gate failure of the last planCutSegmentsOnce together with the varying left plan
+// whose stroke it hit (left cut gate trim).
+struct LeftGateFailure {
+  CollisionGateHit hit;
+  std::string error;  // the gate's error text
+  std::optional<LeftVaryingPlan> plan;
 };
 struct Snapshot {
   std::string snapshot_id;
@@ -1378,6 +1415,11 @@ struct PlannerSettings {
   // short REVERSE stroke covers an uncut back end larger than left_cut_patch_min_gap_m.
   bool left_cut_patch_enabled{false};
   double left_cut_patch_min_gap_m{0.015}, left_cut_patch_overlap_m{0.015};
+  // Left cut gate trim (left_cut_gate_trim.hpp): after a collision-gate contact inside the forward
+  // left cut stroke of the varying corner-to-corner cut, shorten the cut at the nearer end to
+  // contact -/+ left_cut_gate_trim_clearance_m and plan again, up to left_cut_gate_trim_max_retries times.
+  std::int64_t left_cut_gate_trim_max_retries{3};
+  double left_cut_gate_trim_clearance_m{0.010};
   // Left contact-stroke joint-travel gate (left_contact_travel.hpp): aggregate (default, 1.0 rad on
   // every joint) or split (j4/j5/j6 1.0 rad, joint5 sign, constant sampled IK branch label, margins to
   // the joint5 / elbow / shoulder boundaries, j1-3 arm cap).
@@ -2013,6 +2055,13 @@ private:
       field<bool>("left_cut_patch_enabled", kPlan, false, &S::left_cut_patch_enabled),
       field<double>("left_cut_patch_min_gap_m", kPlan, 0.015, &S::left_cut_patch_min_gap_m),
       field<double>("left_cut_patch_overlap_m", kPlan, 0.015, &S::left_cut_patch_overlap_m),
+      // Left cut gate trim (default 3 retries, 10 mm clearance; 0 retries = refuse as before): when the
+      // final collision gate finds a contact inside the forward left cut stroke of the varying
+      // corner-to-corner cut, the cut is shortened at the END NEARER to the contact (no station within
+      // the clearance of the contact is kept) and planned again with every gate in force; the plan
+      // message and a WARN say so. See left_cut_gate_trim.hpp.
+      field<std::int64_t>("left_cut_gate_trim_max_retries", kPlan, 3, &S::left_cut_gate_trim_max_retries),
+      field<double>("left_cut_gate_trim_clearance_m", kPlan, 0.010, &S::left_cut_gate_trim_clearance_m),
       // Left contact-stroke joint-travel gate (search replay AND validateLeftContactJointTravel,
       // every entry / cut / finish / lift stroke). aggregate (default, today's behaviour): every
       // joint's aggregate travel <= 1.0 rad. split (needs left_parallel_orientation_enabled):
@@ -2364,6 +2413,11 @@ private:
       const std::string patch_error =
         left_cut_patch::validateParams(s.left_cut_patch_min_gap_m, s.left_cut_patch_overlap_m);
       if (!patch_error.empty()) return patch_error;
+    }
+    {
+      const std::string trim_error = left_cut_gate_trim::validateParams(
+        s.left_cut_gate_trim_max_retries, s.left_cut_gate_trim_clearance_m);
+      if (!trim_error.empty()) return trim_error;
     }
     if (!std::isfinite(s.middle_seam_center_overlap_m) || !within(s.middle_seam_center_overlap_m, 0.0, 0.03)) {
       return std::string("middle_seam_center_overlap_m must be finite and within [0,0.03] m");
@@ -5768,8 +5822,17 @@ private:
         settings_.left_varying_max_theta_p_deg << "}";
       RCLCPP_INFO(get_logger(), "LEFTDIAG_HDR %s", header.str().c_str());
     }
+    // Left cut gate trim: a station outside the extra limits (travel coordinates) gets no nodes, so
+    // no chain can keep it; everything else of the search is unchanged. Not applied to the patch.
+    const bool gate_limited = extension != nullptr && !patch_search && extension->gate_limits.any();
     for (std::size_t station = 0; station <= intervals; ++station) {
       std::vector<left_varying::Node> nodes;
+      if (gate_limited && !extension->gate_limits.stationAllowed(station_s(station))) {
+        station_nodes[station] = nodes;
+        if (diag_on) diagnose_station(station, 0U);
+        dp.addStation(std::move(nodes), true);
+        continue;
+      }
       if (!evaluate_station(station, all_candidates, nodes)) {
         return timeout_error("evaluating station " + std::to_string(station) + " of " +
           std::to_string(intervals));
@@ -6399,6 +6462,12 @@ private:
     plan.blade_tolerance_deg = settings_.left_varying_theta_p_tolerance_deg;
     plan.span_origin = line_start;
     plan.travel_dir = travel_dir;
+    plan.travel_reverse = reverse_travel;
+    plan.min_kept_length_m = patch_search ? 0.0 : min_kept_length_m;
+    if (extension != nullptr && !patch_search) {
+      plan.physical_origin_m = extension->fromBackMiddleM(0.0);
+      plan.physical_sign = extension->fromBackMiddleM(1.0) - plan.physical_origin_m;
+    }
     plan.blade_normal = basis.normal;
     plan.blade_along = basis.along;
     const double spacing_m = full_length_m / static_cast<double>(intervals);
@@ -6637,6 +6706,7 @@ private:
       left_varying::stationIntervals(line.length_m, settings_.left_varying_station_spacing_m);
     const auto required = left_cut_patch::requiredStations(line, intervals);
     LeftExtension ext = forward_geometry;
+    ext.gate_limits = left_cut_gate_trim::Limits{};  // the gate trim limits belong to the forward stroke
     const auto travel = left_cut_direction::toTravel(forward_geometry.travelGeometry(), true);
     ext.nominal_start_m = travel.nominal_start_m;
     ext.seam_m = travel.seam_m;
@@ -10199,6 +10269,8 @@ private:
       // left_debug_stop_at_approach (left_only only, checked above): the full run is planned
       // exactly as usual; these hooks hand its results to the approach-only second run.
       const bool debug_stop_at_approach = settings_.left_debug_stop_at_approach;
+      // Left cut gate trim: only for the left cut this call plans itself (not the approach-only debug run).
+      options.allow_left_gate_trim = pattern_has_left && !debug_stop_at_approach;
       LeftRollCache debug_roll_cache;
       LeftVaryingPlan debug_varying_plan;
       std::vector<double> debug_hover_joints;
@@ -11251,11 +11323,148 @@ private:
     }
   }
 
+  // Left cut gate trim. Plans the segments; when that fails at the final collision gate with a
+  // contact inside the forward left cut stroke of the varying corner-to-corner search that
+  // planSnapshot ran itself (options.allow_left_gate_trim), the cut is shortened at the END NEARER to
+  // the contact (no station within left_cut_gate_trim_clearance_m of it is kept, toward the stroke
+  // middle) and everything is planned again, up to left_cut_gate_trim_max_retries times; limits
+  // accumulate. Nothing is loosened: the shortened plan goes through the same search requirements
+  // (seam band, minimum length, blade-angle caps, travel gates) and every validator, including the
+  // collision gate. A first attempt that passes never reaches this code. The reverse patch is not
+  // re-evaluated on a shortened cut. Works for both travel directions (limits are travel coordinates).
+  bool planCutSegments(
+    const Snapshot& snapshot, const std::vector<CutSegment>& segments,
+    const std::map<std::string, CutDebugCorrection>& active_corrections,
+    const std::string& motion_profile, const std::string& task_name,
+    const SegmentPlanOptions& options, std::unique_ptr<mtc::Task>& task,
+    std::vector<geometry_msgs::msg::PoseStamped>& cut_targets, std::string& message)
+  {
+    if (planCutSegmentsWithPatchRetry(
+        snapshot, segments, active_corrections, motion_profile, task_name, options, task,
+        cut_targets, message)) {
+      return true;
+    }
+    const auto& first = last_left_gate_failure_;
+    if (!options.allow_left_gate_trim || settings_.left_cut_gate_trim_max_retries <= 0 ||
+        options.reuse_varying != nullptr || options.stop_at_hover_start || options.cut_debug_start ||
+        options.side_tape_handoff || !first.hit.valid || !first.plan || !first.plan->extended ||
+        !left_cut_gate_trim::isForwardLeftStrokeStage(first.hit.stage)) {
+      return false;
+    }
+    const std::string original_error = message;
+    SegmentPlanOptions retry = options;
+    retry.left_gate_trim.initial_trim_back_mm = first.plan->trim_back_mm;
+    retry.left_gate_trim.initial_trim_front_mm = first.plan->trim_front_mm;
+    if (settings_.left_cut_patch_enabled && retry.drop_patch_reason.empty()) {
+      retry.drop_patch_reason = "the left cut was shortened because of the collision gate";
+    }
+    // On a final refusal forget the cached (untrimmed) plan so the caller does not retry it with
+    // another transit lift: the contact is in the left stroke, which no lift or seam length changes.
+    const auto refuse = [&](const std::string& why) {
+        if (options.varying_plan_out != nullptr) *options.varying_plan_out = LeftVaryingPlan{};
+        task.reset();
+        cut_targets.clear();
+        std::string events;
+        for (const auto& event : retry.left_gate_trim.events) events += (events.empty() ? "" : "; ") + event;
+        message = original_error + " [left cut gate trim: " +
+          (events.empty() ? std::string("no trim applied") : events) + "; " + why + "]";
+        RCLCPP_WARN(get_logger(), "left cut gate trim gave up: %s", message.c_str());
+        return false;
+      };
+    for (;;) {
+      const auto& failure = last_left_gate_failure_;
+      if (!failure.hit.valid || !failure.plan || !failure.plan->extended ||
+          !left_cut_gate_trim::isForwardLeftStrokeStage(failure.hit.stage)) {
+        // The shortened attempt failed somewhere else (e.g. a transit at this lift). When its search
+        // succeeded, the cache holds the SHORTENED plan (cleared before every retry, written only by a
+        // successful search): keep it and hand the latest failure back unchanged, so the caller's
+        // lift / top-cut-length retries still run on the shortened cut (every gate again on each).
+        if (options.varying_plan_out != nullptr && !options.varying_plan_out->stations.empty()) {
+          RCLCPP_WARN(
+            get_logger(), "left cut gate trim: the shortened cut failed for another reason (%s); "
+            "leaving it to the remaining retries", message.c_str());
+          return false;
+        }
+        return refuse("the last attempt failed for another reason: " + message);
+      }
+      const LeftVaryingPlan& failed = *failure.plan;
+      if (failed.stations.empty() || failed.full_station_count < 2U) {
+        return refuse("the failed plan has no stations");
+      }
+      const double spacing_m = failed.full_length_m / static_cast<double>(failed.full_station_count - 1U);
+      left_cut_gate_trim::Request request;
+      request.current = retry.left_gate_trim.limits;
+      request.retries_done = retry.left_gate_trim.retries;
+      request.max_retries = static_cast<int>(settings_.left_cut_gate_trim_max_retries);
+      request.contact_s_m = left_cut_gate_trim::travelCoordinate(
+        failure.hit.tool_position, failed.span_origin, failed.travel_dir);
+      request.kept_lo_m = static_cast<double>(failed.stations.front().station_index) * spacing_m;
+      request.kept_hi_m = static_cast<double>(failed.stations.back().station_index) * spacing_m;
+      request.clearance_m = settings_.left_cut_gate_trim_clearance_m;
+      request.min_kept_length_m = failed.min_kept_length_m;
+      request.span_length_m = failed.full_length_m;
+      const auto decision = left_cut_gate_trim::decide(request);
+      if (!decision.trim) return refuse("gave up: " + decision.reason);
+      const auto physical_mm = [&](double s_m) {
+          return (failed.physical_origin_m + failed.physical_sign * s_m) * 1000.0;
+        };
+      const bool at_end = decision.end == left_cut_gate_trim::End::kEnd;
+      const double limit_m = at_end ? decision.limits.max_end_m : decision.limits.min_start_m;
+      const std::string event = std::string("retry ") + std::to_string(request.retries_done + 1) +
+        " of " + std::to_string(request.max_retries) + ": contact (" + failure.hit.bodies + ") at " +
+        (failure.hit.between_waypoints ? "an interpolated state before waypoint " : "waypoint ") +
+        std::to_string(failure.hit.waypoint) + "/" + std::to_string(failure.hit.waypoint_count) +
+        " of '" + failure.hit.stage + "', " + formatDouble(physical_mm(decision.contact_s_m), 1) +
+        " mm from back_middle_left; shortening the " +
+        left_cut_gate_trim::physicalEndName(decision.end, failed.travel_reverse) +
+        " end: no station kept beyond " + formatDouble(physical_mm(limit_m), 1) +
+        " mm from back_middle_left (clearance " +
+        formatDouble(settings_.left_cut_gate_trim_clearance_m * 1000.0, 1) + " mm, removes at least " +
+        formatDouble(decision.removed_at_least_m * 1000.0, 1) + " mm of the " +
+        formatDouble((request.kept_hi_m - request.kept_lo_m) * 1000.0, 1) + " mm stroke)";
+      RCLCPP_WARN(
+        get_logger(), "left cut SHORTENED because of the collision gate: %s", event.c_str());
+      retry.left_gate_trim.limits = decision.limits;
+      retry.left_gate_trim.retries = request.retries_done + 1;
+      retry.left_gate_trim.events.push_back(event);
+      if (settings_.left_cut_patch_enabled) {
+        last_left_patch_summary_ =
+          "left reverse patch: not re-evaluated, the left cut was shortened because of the collision gate";
+      }
+      task.reset();
+      cut_targets.clear();
+      message.clear();
+      // Forget the plan that hit the gate: only a successful shortened search refills the cache.
+      if (options.varying_plan_out != nullptr) *options.varying_plan_out = LeftVaryingPlan{};
+      if (planCutSegmentsWithPatchRetry(
+          snapshot, segments, active_corrections, motion_profile, task_name, retry, task,
+          cut_targets, message)) {
+        return true;
+      }
+    }
+  }
+  // Plan message note of a shortened left cut (the final kept interval is already in found).
+  std::string leftGateTrimNote(
+    const SegmentPlanOptions::LeftGateTrim& trim, const LeftVaryingPlan& found) const
+  {
+    std::string events;
+    for (const auto& event : trim.events) events += (events.empty() ? "" : "; ") + event;
+    return "; LEFT CUT SHORTENED BECAUSE OF THE COLLISION GATE (" + std::to_string(trim.retries) +
+      " retries of left_cut_gate_trim_max_retries " +
+      std::to_string(settings_.left_cut_gate_trim_max_retries) + "): " + events +
+      "; shortened by " + formatDouble(found.trim_back_mm - trim.initial_trim_back_mm, 1) +
+      " mm at the back end and " + formatDouble(found.trim_front_mm - trim.initial_trim_front_mm, 1) +
+      " mm at the front end (final trim back " + formatDouble(found.trim_back_mm, 1) + " mm, front " +
+      formatDouble(found.trim_front_mm, 1) + " mm; was back " +
+      formatDouble(trim.initial_trim_back_mm, 1) + " mm, front " +
+      formatDouble(trim.initial_trim_front_mm, 1) + " mm before the gate trim)";
+  }
+
   // Plans the segments; when the plan carries a left reverse patch and fails for a patch-related
   // reason (patch stage, patch transit wrist gate, patch collision/straightness/contact checks), the
   // patch is DROPPED and the forward-only plan is planned again (never refuse the plan because of
   // the patch; no gate is loosened).
-  bool planCutSegments(
+  bool planCutSegmentsWithPatchRetry(
     const Snapshot& snapshot, const std::vector<CutSegment>& segments,
     const std::map<std::string, CutDebugCorrection>& active_corrections,
     const std::string& motion_profile, const std::string& task_name,
@@ -11310,6 +11519,7 @@ private:
     }
     last_transit_detour_summary_.clear();
     last_plan_failure_ = PlanFailureInfo{};
+    last_left_gate_failure_ = LeftGateFailure{};
     // Names of the stages before the first middle segment's cut stroke whose inputs are the same for every cut length
     // (the approach transit to the hover and the short align move); filled where they are built below.
     std::set<std::string> pre_stroke_stages;
@@ -11689,6 +11899,9 @@ private:
           cut_end = targetPose(
             snapshot, extended_end_point, extended_orientation_targets.second,
             target_clearance_m, tilt_deg);
+          if (options.left_gate_trim.retries > 0) {
+            geometry.gate_limits = options.left_gate_trim.limits;  // travel coordinates
+          }
           extension = geometry;
         }
         LeftVaryingPlan found;
@@ -11699,6 +11912,10 @@ private:
             snapshot, joint_group, ik_state, cut_start, cut_end, transit_seed,
             lift_follows_varying, found, message, extension ? &*extension : nullptr)) {
           return false;
+        }
+        if (options.left_gate_trim.retries > 0 && options.reuse_varying == nullptr && extension) {
+          // Left cut gate trim: the plan carries the note (cached with it for later lift/fraction retries).
+          found.summary += leftGateTrimNote(options.left_gate_trim, found);
         }
         // Left reverse patch: evaluated once behind the verified forward plan and cached in it.
         if (settings_.left_cut_patch_enabled && !found.patch_attempted && extension &&
@@ -12300,9 +12517,16 @@ private:
       message = wrist_error;
       return false;
     }
-    if (!validateTrajectoriesCollisionFree(solution, wrist_error)) {
-      message = wrist_error;
-      return false;
+    {
+      CollisionGateHit gate_hit;
+      if (!validateTrajectoriesCollisionFree(solution, wrist_error, &gate_hit)) {
+        message = wrist_error;
+        // Left cut gate trim: remember where the forward left stroke was hit and which plan it was.
+        if (gate_hit.valid && retained_varying && !options.stop_at_hover_start) {
+          last_left_gate_failure_ = LeftGateFailure{gate_hit, wrist_error, retained_varying};
+        }
+        return false;
+      }
     }
     // The approach-only debug task (stop_at_hover_start) has no stroke; the full task it was cut
     // from passed this check before it was derived.
@@ -12433,7 +12657,8 @@ private:
   // start scene (so the scoped knife/carton allowance applies only where the task set it). Catches
   // collisions a planner skipped between its checked states, which MoveIt's execution monitor
   // would otherwise only find while the arm is moving.
-  bool validateTrajectoriesCollisionFree(const mtc::SolutionBase& solution, std::string& error) const
+  bool validateTrajectoriesCollisionFree(
+    const mtc::SolutionBase& solution, std::string& error, CollisionGateHit* hit = nullptr) const
   {
     constexpr double kStepRad = 0.01;
     std::vector<const mtc::SubTrajectory*> leaves;
@@ -12495,6 +12720,11 @@ private:
             probe.update();
             const std::string bodies = colliding(probe);
             if (!bodies.empty()) {
+              if (hit != nullptr) {
+                *hit = CollisionGateHit{
+                  true, name, bodies, index, count, true,
+                  probe.getGlobalLinkTransform(settings_.tool_link).translation()};
+              }
               error = "collision gate: stage '" + name + "' collides (" + bodies + ") between waypoints " +
                 std::to_string(index - 1U) + " and " + std::to_string(index) + "/" + std::to_string(count) +
                 "; refusing the plan";
@@ -12506,6 +12736,11 @@ private:
         probe.update();
         const std::string bodies = colliding(probe);
         if (!bodies.empty()) {
+          if (hit != nullptr) {
+            *hit = CollisionGateHit{
+              true, name, bodies, index, count, false,
+              probe.getGlobalLinkTransform(settings_.tool_link).translation()};
+          }
           error = "collision gate: stage '" + name + "' collides (" + bodies + ") at waypoint " +
             std::to_string(index) + "/" + std::to_string(count) + "; refusing the plan";
           return false;
@@ -13243,6 +13478,9 @@ private:
     std::string reason;
   };
   PlanFailureInfo last_plan_failure_;
+  // Collision gate failure (with the varying left plan) of the last planCutSegmentsOnce; hit.valid
+  // false = the last attempt did not fail at the collision gate. Reset at its start.
+  LeftGateFailure last_left_gate_failure_;
   bool side_tape_handoff_pending_{false};
   SideTapeHandoffInfo side_tape_handoff_info_;
   std::optional<Snapshot> side_tape_handoff_snapshot_;

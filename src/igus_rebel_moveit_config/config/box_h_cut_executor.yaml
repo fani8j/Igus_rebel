@@ -22,7 +22,7 @@
 #   left_varying_start_ramp_m), left_contact_*,
 #   left_cut_corner_margin_m, left_cut_seam_cover_m, left_debug_stop_at_approach,
 #   left_cut_direction, left_reverse_frame, left_cut_patch_enabled, left_cut_patch_min_gap_m,
-#   left_cut_patch_overlap_m,
+#   left_cut_patch_overlap_m, left_cut_gate_trim_max_retries, left_cut_gate_trim_clearance_m,
 #   cut_debug_*_correction_file,
 #   side_tape_handoff_enabled/variant/standoff_mm/box_offset/max_search_angle.
 # - RUNTIME (read when used, never blocked): execution_enabled, debug_motion_execution_enabled,
@@ -166,6 +166,19 @@ box_h_cut_executor:
     left_cut_extend_to_corners: true
     left_cut_corner_margin_m: 0.005
     left_cut_seam_cover_m: 0.025
+    # Left cut gate trim (planning; defaults shown). Needs the same varying corner-to-corner mode as above.
+    # When the final collision gate (validateTrajectoriesCollisionFree, untouched) finds a contact inside
+    # the forward left cut stroke, the planner locates it (tool_link position projected onto the stroke),
+    # shortens the cut at the END NEARER to the contact (no station within left_cut_gate_trim_clearance_m
+    # [0, 0.05] m of the contact is kept, toward the stroke middle) and plans again with every other
+    # requirement and gate unchanged (seam band, minimum length, blade-angle caps, travel and wrist gates,
+    # straightness, the collision gate itself). Up to left_cut_gate_trim_max_retries [0, 5] times; the
+    # limits accumulate; 0 = refuse the plan as before. Only the stroke contact triggers it (not entry,
+    # finish, transit, patch, top or right cuts). A first attempt that passes is unchanged. The plan message
+    # and a WARN say which end was shortened, by how much and why; the reverse patch is not re-evaluated on
+    # a shortened cut. Unlike left_cut_corner_margin_m this trims only the end that touches.
+    left_cut_gate_trim_max_retries: 3
+    left_cut_gate_trim_clearance_m: 0.010
     # Left reverse patch (default false = plans bit-identical; operator-approved design 2026-11-06,
     # needs the forward varying corner-to-corner mode above, cut_pattern left_only/t_cut): when the
     # forward cut leaves a back-end gap > left_cut_patch_min_gap_m [0, 0.10] m, the SAME plan gets a

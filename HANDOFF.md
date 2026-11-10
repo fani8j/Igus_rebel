@@ -4,6 +4,43 @@
 > current conversation.** Everything below marked "verified" was verified in isolated mock
 > (`ROS_LOCALHOST_ONLY=1`, unused `ROS_DOMAIN_ID`) or against a fake CRI server, not on the
 > real arm.
+## 2026-11-10 Left cut gate trim (builder + lead fix + Astra review; MOCK ONLY, UNCOMMITTED, NOT in the main install)
+- Problem: new box pose (live picture 05:35, `scan_results/cleanup_mock_20261110/variants/live.json`) was refused: final collision gate found
+  `detected_carton / knife_c_handpiece` at waypoint 129/136 of the left side cut, between two search stations near the front end.
+- Change (`box_h_cut_executor.cpp`, new `left_cut_gate_trim.hpp` + gtest, YAML): on a gate contact inside the forward left cut stroke the cut is
+  shortened at the nearer end (no station within `left_cut_gate_trim_clearance_m` 0.010 of the contact) and planned again with every gate in
+  force, up to `left_cut_gate_trim_max_retries` 3 (0 = old refusal). First-attempt passes are unchanged. Not used for cut-debug, hand-off,
+  `left_debug_stop_at_approach`, supplied plans; the reverse patch is not re-evaluated on a shortened cut.
+- Astra review: no gate bypass; one finding fixed by the lead (a shortened cut that then fails elsewhere keeps its cached plan so the lift /
+  top-length retries still run). Open remarks: "clearance" is a distance along the cut, not a robot-to-box clearance; nearer-end choice is a
+  heuristic; no executor-level tests for reverse travel / patch / repeated contacts.
+- Mock (domain 226, overlay `build_gate`/`install_gate` on the main install, runs `gate_*`, `gate2_*`): live pose plans, kept 277.4 of 297.2 mm
+  (front trim 19.8 mm, 1 retry), mock-executed twice (138.7 s, 140.2 s, phases order); t054203 and the 05:02 pose are identical to before
+  (81.317 s / 80.208 s). At the live pose the primary `sequence` order still fails on the joint6 wrist gate of the top-cut transit, so the
+  coordinator uses a fallback order (2/4 or 3/4, varies per run).
+- The YAML is symlinked into the main install, so the 10-31 main executor also sees the two new parameters (it does not declare them).
+- Next: operator decision on commit + consolidated rebuild of the main install; nothing real was run.
+
+## 2026-11-10 Repo cleanup, merge of main, mock re-check (lead; MOCK ONLY, real arms not moved)
+- Committed on hcut-path-consistency (local, NOT pushed): 4b14cd4b src work incl. dual_cut_ui / side_cut_vision / rebel_servo_relay (were untracked),
+  5a903da9 tools, 4502ff07 docs, 3327f6f5 merge of main (carton height from snapshot `support_depth_below_top_m`, `carton_height_from_snapshot`
+  default true), 38bc29bf rebel_mocap_follower (+ `input_smoothing_tau_s`, default 0 = off, mock only, Astra review still open) and arm
+  diagnostics tools from jtc-tracking. UNCOMMITTED: removal of src/rebel_tcp_gui and src/side_tape_diag, CLAUDE.md, tcp_calibration_tutorial.html.
+- MAIN install NOT rebuilt: driver = source; executor and coordinator binaries are 10-31 (no carton-height code, no 11-06 left patch); dual_cut_ui only
+  in install_ui (10-24 copy). A rebuild changes the carton collision box on the real robot: do it with the stack down, mock test first.
+- Deleted: 23 build_*/install_* overlay pairs + log_ovl_rec (kept install_ui, install_vision, install_patch and their build dirs), 471 old colcon
+  log dirs, caches. 23.2 -> 29.6 GB free. List: scan_results/cleanup_mock_20261110/logs/overlay_delete_list.txt.
+- Mock (domain 226, main install as installed, snapshot t054203, sequence): before and after the cleanup identical: plan ok, makespan 81.317 s,
+  executed 83.6 s, IDLE -> PLANNED -> EXECUTING -> PLANNED. Evidence scan_results/cleanup_mock_20261110/.
+- Fresh picture (scene camera, domain 11, read-only detector writing only into the evidence folder): the running camera launch had stalled
+  (0 frames); operator asked to stop it; a scene-only launch gave frames. DetectBox ran end to end (2.4 s) but REJECTED the box on the table:
+  `no_top_face` (flaps already cut and lifted, box partly out of view). No snapshot, so no plan for the new box yet: needs a sealed box in view.
+- 04:55:06 the single right-arm driver (192.168.3.12, up since 11-09 18:58) received SIGINT and shut down cleanly (Disable + Quit); not sent by
+  the lead. Cameras, detector, SAM3 daemon and mock stack are stopped; nothing runs on domain 11.
+- NOT merged: jtc-tracking driver delta (CRI cart/joint jog modes, diagnostics; 24 conflicting files). The tracking settings themselves
+  (p3/ff0.6, scale 1.65, accel 0.4) are already on this branch and in the main install since 10-31. dio-gripper stays separate (operator).
+- Do not touch: mackay / box-3d / fani8j/box-3d / box/ / medicine-grasp and stand packages (operator).
+
 ## 2026-11-09 GR00T mocap EEF models (james's gr00t_real_infer.py): real runs by operator
 - Model B (clean): flap raised in 6/8 recorded runs; 6/8 ended with right joint 2 drive disabled (mask 2, kin 99, not latched), cause open. Model A (segmented): arm folds at joint 5, never reaches the box.
 - Report `~/groot/share/groot_report_20261109.md`; results `~/groot/share/groot_rollout_results_20261109_model{A,B}/`; script `~/groot/inference_code_20261109/rebel_flap_gr00t`. Script has known safety gaps (see report).

@@ -164,6 +164,12 @@ if(BUILD_TESTING)
   target_link_libraries(test_left_cut_direction Eigen3::Eigen)
   target_compile_features(test_left_cut_direction PUBLIC cxx_std_17)
 
+  ament_add_gtest(test_left_cut_gate_trim test/test_left_cut_gate_trim.cpp)
+  target_include_directories(test_left_cut_gate_trim PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+  target_link_libraries(test_left_cut_gate_trim Eigen3::Eigen)
+  target_compile_features(test_left_cut_gate_trim PUBLIC cxx_std_17)
+
   ament_add_gtest(test_middle_cut_sag test/test_middle_cut_sag.cpp)
   target_include_directories(test_middle_cut_sag PRIVATE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
