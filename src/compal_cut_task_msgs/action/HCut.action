@@ -1,0 +1,61 @@
+# HCut.action - cut the carton tape in an H pattern (top seam + the two edges next to it).
+#
+# Called by the H-cut behaviour tree (scripts/task_tree/h_cut/h_cut_tree.py).
+# This file is the reference interface. If your server already uses its own action type,
+# you do not have to switch: map it in scripts/task_tree/h_cut/h_cut_interface.py instead.
+#
+# Server contract (see scripts/task_tree/h_cut/README.md, section 4):
+#   * Finish the goal normally (succeed()) and report success=false for "expected" failures
+#     (perception failed, IK failed, ...). Use abort() only for crashes / internal errors.
+#   * NEVER move the robot unless BOTH safety bools are true.
+
+# ============================ Goal ============================
+
+# Safety: a zero-initialised goal must be harmless, so these are positive flags
+# (false = plan only, nothing moves). The robot may move only when BOTH are true.
+bool execute
+bool i_understand_this_moves_the_real_robot
+
+# 1 = first cut; 2, 3, ... = re-cut because CheckCut said NOT_FULLY_CUT.
+uint32 attempt
+
+# Empty on attempt 1. On a re-cut: the previous CheckCut result's report_json, which lists
+# the not-cut sections per arm / pass (percent from where each cut started). A server that
+# cannot do partial re-cuts may ignore it and cut the whole H again.
+string recut_hint_json
+
+# <= 0: use the server's own default.
+float32 timeout_sec
+
+---
+
+# ============================ Result ============================
+
+uint8 OK=0
+uint8 PERCEPTION_FAILED=1
+uint8 PLANNING_FAILED=2      # IK / MoveIt / MTC found no solution
+uint8 EXECUTION_FAILED=3     # planned, but the controller / hardware failed
+uint8 CANCELLED=4
+uint8 TIMEOUT=5
+uint8 BAD_GOAL=6             # e.g. only one of the two safety bools was true
+uint8 BUSY=7
+uint8 INTERNAL_ERROR=8
+
+bool success                 # true = the H-cut finished (plan only: planning succeeded)
+uint8 error_code
+string message               # one line, shown in the tree summary
+
+bool did_move                # true only if the arm really moved this time
+
+# Optional. If your server records the wrist cameras itself, put the run folder here
+# (a folder with wrist.mp4 = left arm, right_wrist.mp4 = right arm). Empty = the
+# cut_check node uses its own recording of the wrist-camera topics.
+string run_folder
+
+---
+
+# ============================ Feedback ============================
+
+string stage                 # free text, e.g. "perception" / "planning" / "left arm top seam"
+float32 progress             # 0.0 - 1.0, rough
+string message

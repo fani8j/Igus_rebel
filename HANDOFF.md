@@ -4,6 +4,23 @@
 > current conversation.** Everything below marked "verified" was verified in isolated mock
 > (`ROS_LOCALHOST_ONLY=1`, unused `ROS_DOMAIN_ID`) or against a fake CRI server, not on the
 > real arm.
+## 2026-11-11 Behaviour tree for the cutting (friend's py_trees_ros example + our HCut server; MOCK ONLY, UNCOMMITTED)
+- Imported from /home/farhan/Downloads/ros_BT: `tools/task_tree/` (tree `h_cut/h_cut_tree.py`, mock servers, tape check `cut_check_code/`) and
+  `src/compal_cut_task_msgs` (HCut.action, CheckCut.action; built only into `install_bt`). Friend's files are unmodified.
+- New: `tools/task_tree/h_cut/dual_cut_h_cut_server.py` (builder; pytest `test_dual_cut_h_cut_server.py`, 23 pass with fakes): HCut action
+  `/h_cut` = preflight -> DetectBox -> coordinator plan -> (both goal flags) coordinator execute -> follow status + exec_report. Never rearms,
+  never sets parameters (execution gates stay with the operator); cancel / timeout / stale status after execute -> coordinator `~/stop`.
+- py_trees / py_trees_ros 2.6: sudo is not usable from the agent session (no-new-privileges), so the three official debs are unpacked in
+  `/home/farhan/ros_bt_local` (source its `setup.bash` after ROS). Replace with `sudo apt install ros-humble-py-trees-ros` when convenient.
+- Mock (domain 173, `scan_results/bt_hcut_20261111/`, live.json box, mock detect server, tape check in mock-verdict mode): plan only OK;
+  execute with gates off -> "execute refused: execution_enabled is false"; gates on -> cut, mock NOT_FULLY_CUT -> second full cut -> SUCCESS;
+  Ctrl-C mid-cut -> stop latched 2 ms after the cancel, next run refuses "operator must rearm". Coordinator default `schedule_mode: phases`
+  refuses this box pose (no order fallback); the runs used `sequence`.
+- STATUS 2026-11-11: NEVER RUN ON THE REAL CELL (operator: "save it as un-runned"). Real tape check tried offline only: analyzer on recorded run
+  20261022_134130 = NOT_FULLY_CUT in 50 s (`scan_results/bt_hcut_20261111/cut_check_offline/`); needs wrist cameras on and ground truth.
+- Not done: real tape check (analyzer tuned on 10-20/10-22 wrist videos with the old tool, wrist cameras now off by default), re-cut is a
+  full second cut (hint ignored), no UI entry, nothing on the real cell.
+
 ## 2026-11-10 Left cut gate trim (builder + lead fix + Astra review; MOCK ONLY, UNCOMMITTED, NOT in the main install)
 - Problem: new box pose (live picture 05:35, `scan_results/cleanup_mock_20261110/variants/live.json`) was refused: final collision gate found
   `detected_carton / knife_c_handpiece` at waypoint 129/136 of the left side cut, between two search stations near the front end.

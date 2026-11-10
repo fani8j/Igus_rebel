@@ -1,0 +1,6 @@
+-r requirements.txt
+ultralytics==8.3.40
+# PyTorch: for an NVIDIA GPU install the CUDA build first, e.g.
+#   pip install torch==2.4.1 torchvision==0.19.1 --index-url https://download.pytorch.org/whl/cu121
+# or for CPU only:
+#   pip install torch==2.4.1 torchvision==0.19.1 --index-url https://download.pytorch.org/whl/cpu

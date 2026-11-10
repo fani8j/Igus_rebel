@@ -1,0 +1,3 @@
+# Large example outputs and model weights from the original zip stay local (not in git).
+cut_check_code/cut_check/results_to_view/
+cut_check_code/cut_check/models/*.pt

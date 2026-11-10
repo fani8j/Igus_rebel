@@ -1,0 +1,38 @@
+# CheckCut.action - was the tape fully cut? Served by scripts/task_tree/h_cut/cut_check_server.py,
+# which runs scripts/task_tree/cut_check_code/cut_check (check_run.py) on the wrist-camera videos.
+#
+# Usual sequence (the tree does this):
+#   1. ~/start (std_srvs/Trigger)  -> starts recording the wrist-camera topics
+#   2. the H-cut runs
+#   3. this action, run_folder ""   -> stops recording and judges that recording
+
+# ============================ Goal ============================
+
+# "" = judge what was recorded since ~/start.
+# A folder = judge that recorded run instead (wrist.mp4 = left arm, right_wrist.mp4 = right arm),
+# e.g. the folder your own recorder wrote, or an old run for offline testing.
+string run_folder
+
+---
+
+# ============================ Result ============================
+
+# verdict:
+#   "FULLY_CUT"      every cutting pass was cut properly           -> success = true
+#   "NOT_FULLY_CUT"  some part must be re-cut (see recut)           -> the tree re-cuts
+#   "NOT_CHECKED"    could not judge (no video, no cutting pass found, analysis error)
+#                    -> the tree stops; a re-cut would not help
+bool success
+string verdict
+string message
+
+string[] recut               # e.g. "left arm top seam: 30-45%" (percent from where that cut started)
+string report_dir            # folder with run_report.json and per-arm cut_map.png / annotated.mp4
+string report_json           # the full run_report.json (passed on to HCut.recut_hint_json)
+
+---
+
+# ============================ Feedback ============================
+
+string stage                 # "analyzing left arm", ...
+string message

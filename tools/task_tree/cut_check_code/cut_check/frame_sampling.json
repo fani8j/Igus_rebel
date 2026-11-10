@@ -1,0 +1,33 @@
+{
+  "output_dir": "dataset",
+  "every_s": 0.5,
+  "min_diff": 6.0,
+  "cut_spec": {
+    "top_cut": {"depth_mm": [3, 5, 3], "note": "start - middle - end of the top seam"},
+    "edge_cut": {"depth_mm": [3], "note": "constant depth along each side edge"}
+  },
+  "classes": ["box", "knife", "top_cut", "top_not_cut", "edge_cut", "edge_not_cut"],
+  "videos": [
+    {
+      "file": "videos/wrist.mp4",
+      "segments": [
+        {"phase": "edge_cut", "start": 16, "end": 40},
+        {"phase": "top_cut", "start": 42, "end": 65}
+      ]
+    },
+    {
+      "file": "videos/right_wrist.mp4",
+      "segments": [
+        {"phase": "top_cut", "start": 10, "end": 19},
+        {"phase": "edge_cut", "start": 33, "end": 50}
+      ]
+    },
+    {
+      "file": "videos/scene.mp4",
+      "every_s": 1.0,
+      "segments": [
+        {"phase": "scene", "start": 10, "end": 72}
+      ]
+    }
+  ]
+}
