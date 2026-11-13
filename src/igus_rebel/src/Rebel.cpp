@@ -420,6 +420,8 @@ void Rebel::HandleMessage(
           snapshot.systemStampNs = receivedSystemNs;
           snapshot.overridePercent = status.overrideValue;
           snapshot.counterSkipped = counterSkipped_;
+          snapshot.din = status.din;
+          snapshot.dout = status.dout;
           ++snapshot.sequence;
           published = snapshot;
         }
@@ -892,6 +894,39 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
     digitalOutputService_ = std::string("~/") + kDefaultDigitalOutputService;
   }
   readName("digital_output_service", digitalOutputService_);
+  // The iRC-numbered service resolves exactly like digital_output_service.
+  digitalOutputsService_ = kDefaultDigitalOutputsService;
+  if (nodeName_ != kDefaultNodeName) {
+    digitalOutputsService_ = std::string("~/") + kDefaultDigitalOutputsService;
+  }
+  readName("digital_outputs_service", digitalOutputsService_);
+  dioIrcOffset_ = Safety::kDefaultDioIrcOffset;
+  {
+    const auto it = params.find("dio_irc_offset");
+    if (it != params.end() && !it->second.empty()) {
+      std::vector<unsigned> parsed;
+      if (!Safety::ParseNumberRanges(it->second, parsed) || parsed.size() != 1 ||
+        parsed.front() > Safety::kMaxDioIrcOffset)
+      {
+        RCLCPP_FATAL(
+          logger_, "Invalid dio_irc_offset '%s' (expected an integer in [0, %u])",
+          it->second.c_str(), Safety::kMaxDioIrcOffset);
+        return CallbackReturn::ERROR;
+      }
+      dioIrcOffset_ = parsed.front();
+    }
+  }
+  dioAllowedOutputs_.clear();
+  {
+    std::string allowedText = "21-27,31-32";
+    readName("dio_allowed_outputs", allowedText);
+    if (!Safety::ParseNumberRanges(allowedText, dioAllowedOutputs_)) {
+      RCLCPP_FATAL(
+        logger_, "Invalid dio_allowed_outputs '%s' (expected e.g. '21-27,31-32')",
+        allowedText.c_str());
+      return CallbackReturn::ERROR;
+    }
+  }
   readName("trajectory_controller_name", trajectoryControllerName_);
   jogVelocityScale_ = JOINT_VELOCITY_SCALE;
   {
@@ -1063,6 +1098,9 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
     digital_output_srv_ = node_->create_service<igus_rebel_msgs::srv::SetDigitalOutput>(
       digitalOutputService_,
       std::bind(&Rebel::dio_callback, this, std::placeholders::_1, std::placeholders::_2));
+    digital_outputs_srv_ = node_->create_service<igus_rebel_msgs::srv::SetDigitalOutputs>(
+      digitalOutputsService_,
+      std::bind(&Rebel::dios_callback, this, std::placeholders::_1, std::placeholders::_2));
     // Own callback group: a cancel or goal request is never blocked by reset_and_enable.
     moveGroup_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     // Telemetry that keeps running while the component is latched/UNCONFIGURED/INACTIVE (read()
@@ -1072,10 +1110,14 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
       "~/robot_joint_states", rclcpp::SensorDataQoS().keep_last(10));
     hardwareStatePub_ = node_->create_publisher<igus_rebel_msgs::msg::HardwareState>(
       "~/hardware_state", rclcpp::QoS(rclcpp::KeepLast(10)).reliable());
+    digitalIoPub_ = node_->create_publisher<igus_rebel_msgs::msg::DigitalIOState>(
+      "~/digital_io", rclcpp::QoS(rclcpp::KeepLast(10)).reliable());
+    dioPubEverSent_ = false;
     // Own callback group: a 3 s reset_and_enable never stalls the hardware_state timer.
     telemetryGroup_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     hardwareStateTimer_ = node_->create_wall_timer(
-      kTelemetryPollPeriod, [this]() {PublishHardwareState();}, telemetryGroup_);
+      kTelemetryPollPeriod, [this]() {PublishHardwareState(); PublishDigitalIo();},
+      telemetryGroup_);
     moveServer_ = rclcpp_action::create_server<MoveJointAction>(
       node_, "~/move_joint",
       [this](const rclcpp_action::GoalUUID & uuid,
@@ -1093,8 +1135,10 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
     moveGroup_.reset();
     hardwareStateTimer_.reset();
     telemetryGroup_.reset();
+    digitalIoPub_.reset();
     hardwareStatePub_.reset();
     robotJointStatePub_.reset();
+    digital_outputs_srv_.reset();
     digital_output_srv_.reset();
     reset_enable_srv_.reset();
     node_.reset();
@@ -1704,6 +1748,37 @@ void Rebel::dio_callback(
   }
 }
 
+void Rebel::dios_callback(
+  const std::shared_ptr<igus_rebel_msgs::srv::SetDigitalOutputs::Request> request,
+  std::shared_ptr<igus_rebel_msgs::srv::SetDigitalOutputs::Response> response)
+{
+  std::vector<bool> states(request->states.begin(), request->states.end());
+  std::vector<int> criNumbers;
+  std::string error;
+  response->success = false;
+  if (!Safety::ValidateDigitalOutputs(
+      request->irc_outputs, states, dioAllowedOutputs_, dioIrcOffset_, criNumbers, error))
+  {
+    response->message = "rejected, nothing sent: " + error;
+    return;
+  }
+  if (!rebelSocket || !rebelSocket->IsConnected()) {
+    response->message = "not connected to the robot";
+    return;
+  }
+  // Back to back, in request order. The service shares the node's default (mutually exclusive)
+  // callback group with the other services, so two requests never interleave.
+  for (std::size_t i = 0; i < criNumbers.size(); ++i) {
+    if (!SetDigitalOut(criNumbers[i], states[i])) {
+      response->message = "send failed after " + std::to_string(i) + " of " +
+        std::to_string(criNumbers.size()) + " outputs (not connected)";
+      return;
+    }
+  }
+  response->success = true;
+  response->message = "sent " + std::to_string(criNumbers.size()) + " DOUT command(s)";
+}
+
 //
 // Robot-side joint move (CRI "CMD Move Joint")
 //
@@ -2031,6 +2106,58 @@ void Rebel::PublishHardwareState()
   } catch (const std::exception & error) {
     RCLCPP_WARN_THROTTLE(
       logger_, throttleClock_, 5000, "Could not publish hardware_state: %s", error.what());
+  }
+}
+
+void Rebel::PublishDigitalIo()
+{
+  if (!digitalIoPub_ || !rebelSocket) {
+    return;
+  }
+  JointSnapshot latest;
+  {
+    std::lock_guard<std::mutex> lock(snapshotLock);
+    latest = snapshot;
+  }
+  const auto steadyNow = Safety::SteadyClock::now();
+  const bool valid = latest.sequence != 0 &&
+    (steadyNow - latest.stamp) <= Safety::kStatusStaleTimeout;
+  const std::uint64_t din = latest.sequence != 0 ? latest.din : 0;
+  const std::uint64_t dout = latest.sequence != 0 ? latest.dout : 0;
+  const std::int64_t nowNs = ToNs(steadyNow);
+  const bool changed = !dioPubEverSent_ || valid != dioPubLastValid_ ||
+    (valid && (din != dioPubLastDin_ || dout != dioPubLastDout_));
+  if (!changed &&
+    nowNs - dioPubLastNs_ <
+    std::chrono::duration_cast<std::chrono::nanoseconds>(kHardwareStatePeriod).count())
+  {
+    return;
+  }
+  dioPubEverSent_ = true;
+  dioPubLastValid_ = valid;
+  dioPubLastDin_ = din;
+  dioPubLastDout_ = dout;
+  dioPubLastNs_ = nowNs;
+
+  igus_rebel_msgs::msg::DigitalIOState msg;
+  // Stamp = receive time of the STATUS the masks come from (ROS clock); zero if none yet.
+  if (latest.sequence != 0) {
+    msg.header.stamp = rclcpp::Time(latest.systemStampNs, RCL_SYSTEM_TIME);
+  }
+  msg.component = componentName_.empty() ? nodeName_ : componentName_;
+  msg.valid = valid;
+  msg.din_raw = din;
+  msg.dout_raw = dout;
+  msg.irc_offset = static_cast<std::uint8_t>(dioIrcOffset_);
+  if (valid) {
+    msg.din_on = Safety::MaskToIrcNumbers(din, dioIrcOffset_);
+    msg.dout_on = Safety::MaskToIrcNumbers(dout, dioIrcOffset_);
+  }
+  try {
+    digitalIoPub_->publish(msg);
+  } catch (const std::exception & error) {
+    RCLCPP_WARN_THROTTLE(
+      logger_, throttleClock_, 5000, "Could not publish digital_io: %s", error.what());
   }
 }
 

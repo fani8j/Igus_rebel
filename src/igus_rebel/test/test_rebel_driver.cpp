@@ -31,7 +31,9 @@
 
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "igus_rebel_msgs/action/move_joint.hpp"
+#include "igus_rebel_msgs/msg/digital_io_state.hpp"
 #include "igus_rebel_msgs/msg/hardware_state.hpp"
+#include "igus_rebel_msgs/srv/set_digital_outputs.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "std_srvs/srv/trigger.hpp"
@@ -126,6 +128,12 @@ public:
   void SetKinstate(int kinstate) {kinstate_ = kinstate;}
   // Value reported in the STATUS ESTOP field (0 in all captured/fake traffic).
   void SetEStopField(int value) {eStopField_ = value;}
+  // DIN / DOUT masks reported in every STATUS (printed as hex, as the real controller does).
+  void SetDigitalMasks(std::uint64_t din, std::uint64_t dout)
+  {
+    din_ = din;
+    dout_ = dout;
+  }
   std::size_t Connections() const {return connections_.load();}
 
   // ---- Robot-side "CMD Move Joint" emulation (measured behaviour of the real controller) ----
@@ -250,7 +258,8 @@ private:
       s << " " << (i < 6 ? joints[i] : 0.0f);
     }
     s << " POSCARTROBOT 0 0 0 0 0 0 POSCARTPLATTFORM 0 0 0 OVERRIDE " << override_.load() <<
-      " DIN 0 DOUT 0 ESTOP " << eStopField_.load() << " SUPPLY 48 CURRENTALL 2 CURRENTJOINTS";
+      " DIN " << std::hex << din_.load() << " DOUT " << dout_.load() << std::dec <<
+      " ESTOP " << eStopField_.load() << " SUPPLY 48 CURRENTALL 2 CURRENTJOINTS";
     for (int i = 0; i < 16; ++i) {
       s << " 0";
     }
@@ -501,6 +510,8 @@ private:
   std::atomic<bool> ignoreEnable_{false};
   std::atomic<int> kinstate_{0};
   std::atomic<int> eStopField_{0};
+  std::atomic<std::uint64_t> din_{0};
+  std::atomic<std::uint64_t> dout_{0};
   std::atomic<float> jointStepDeg_{0.0f};
   std::atomic<float> override_{40.0f};
   std::atomic<std::size_t> connections_{0};
@@ -1494,6 +1505,170 @@ TEST_F(RebelDriverTest, DigitalOutputReportsConnectionState)
   EXPECT_FALSE(response->success);
 }
 
+// ---- ~/digital_io and the iRC-numbered SetDigitalOutputs service ----
+class DigitalIoListener
+{
+public:
+  using Msg = igus_rebel_msgs::msg::DigitalIOState;
+  explicit DigitalIoListener(const std::string & topic = "/igus_rebel/digital_io")
+  {
+    node_ = std::make_shared<rclcpp::Node>("dio_listener_" + std::to_string(counter_++));
+    sub_ = node_->create_subscription<Msg>(
+      topic, rclcpp::QoS(rclcpp::KeepLast(10)).reliable(), [this](Msg::ConstSharedPtr msg) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        msgs_.push_back({*msg, Clock::now()});
+      });
+    executor_.add_node(node_);
+    thread_ = std::thread([this]() {executor_.spin(); finished_ = true;});
+  }
+  ~DigitalIoListener()
+  {
+    while (!finished_) {
+      executor_.cancel();
+      std::this_thread::sleep_for(2ms);
+    }
+    if (thread_.joinable()) {
+      thread_.join();
+    }
+  }
+  struct Sample
+  {
+    Msg msg;
+    Clock::time_point received;
+  };
+  std::vector<Sample> All()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return msgs_;
+  }
+  template<class Predicate>
+  bool Wait(Predicate predicate, std::chrono::milliseconds timeout)
+  {
+    return WaitFor(
+      [&]() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return !msgs_.empty() && predicate(msgs_.back().msg);
+      }, timeout);
+  }
+
+private:
+  static inline std::atomic<int> counter_{0};
+  std::atomic<bool> finished_{false};
+  rclcpp::Node::SharedPtr node_;
+  rclcpp::Subscription<Msg>::SharedPtr sub_;
+  rclcpp::executors::SingleThreadedExecutor executor_;
+  std::thread thread_;
+  std::mutex mutex_;
+  std::vector<Sample> msgs_;
+};
+
+TEST_F(RebelDriverTest, DigitalIoTopicDecodesMasksToIrcNumbers)
+{
+  FakeCriServer server;
+  server.SetDigitalMasks(0x5, 0x0);
+  StartDriver(server);
+  DigitalIoListener listener;
+
+  // DIN bits 0 and 2 -> iRC 1 and 3 (offset 1); DOUT empty.
+  ASSERT_TRUE(listener.Wait([](const auto & m) {return m.valid;}, 3000ms));
+  auto last = listener.All().back().msg;
+  EXPECT_EQ(last.din_raw, 0x5u);
+  EXPECT_EQ(last.dout_raw, 0u);
+  EXPECT_EQ(last.irc_offset, 1);
+  EXPECT_EQ(last.din_on, (std::vector<std::uint8_t>{1, 3}));
+  EXPECT_TRUE(last.dout_on.empty());
+  EXPECT_EQ(last.component, "rebel_arm_controller");
+
+  // A DOUT change (bit 30 = iRC DOut31) is published at once, well inside the 100 ms period.
+  const auto changeAt = Clock::now();
+  server.SetDigitalMasks(0x5, 1ull << 30);
+  ASSERT_TRUE(
+    listener.Wait([](const auto & m) {return m.valid && m.dout_raw == (1ull << 30);}, 1000ms));
+  const auto samples = listener.All();
+  EXPECT_LT(samples.back().received - changeAt, 120ms);
+  EXPECT_EQ(samples.back().msg.dout_on, (std::vector<std::uint8_t>{31}));
+
+  // 10 Hz while nothing changes: more than a few messages within a second.
+  const std::size_t before = listener.All().size();
+  std::this_thread::sleep_for(1000ms);
+  const std::size_t n = listener.All().size() - before;
+  EXPECT_GE(n, 7u);
+  EXPECT_LE(n, 13u);
+
+  // STATUS stops: valid goes false, lists are emptied.
+  server.SetSendStatus(false);
+  ASSERT_TRUE(listener.Wait([](const auto & m) {return !m.valid;}, 1500ms));
+  EXPECT_TRUE(listener.All().back().msg.dout_on.empty());
+}
+
+TEST_F(RebelDriverTest, DigitalOutputsServiceSendsIrcOffsetCommandsInOrder)
+{
+  FakeCriServer server;
+  StartDriver(server);
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands().size() >= 6;}, 2000ms));
+  const std::size_t base = server.Commands().size();
+
+  using Srv = igus_rebel_msgs::srv::SetDigitalOutputs;
+  auto request = std::make_shared<Srv::Request>();
+  auto response = std::make_shared<Srv::Response>();
+  request->irc_outputs = {31, 22, 21};
+  request->states = {true, false, true};
+  rebel->dios_callback(request, response);
+  EXPECT_TRUE(response->success) << response->message;
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands().size() >= base + 3;}, 1000ms));
+  const auto commands = server.Commands();
+  EXPECT_EQ(commands[base], "DOUT 30 true");
+  EXPECT_EQ(commands[base + 1], "DOUT 21 false");
+  EXPECT_EQ(commands[base + 2], "DOUT 20 true");
+
+  // Rejected requests send nothing at all (all-or-nothing validation).
+  const std::size_t count = server.Commands().size();
+  const std::vector<std::pair<std::vector<std::uint8_t>, std::vector<bool>>> bad = {
+    {{}, {}}, {{21, 22}, {true}}, {{21, 28}, {true, true}}, {{21, 21}, {true, false}},
+    {{21, 33}, {true, true}}};
+  for (const auto & [outputs, states] : bad) {
+    auto badRequest = std::make_shared<Srv::Request>();
+    badRequest->irc_outputs = outputs;
+    badRequest->states.assign(states.begin(), states.end());
+    auto badResponse = std::make_shared<Srv::Response>();
+    rebel->dios_callback(badRequest, badResponse);
+    EXPECT_FALSE(badResponse->success);
+    EXPECT_NE(badResponse->message.find("nothing sent"), std::string::npos);
+  }
+  std::this_thread::sleep_for(150ms);
+  EXPECT_EQ(server.Commands().size(), count);
+
+  // The old service keeps its CRI numbering.
+  auto oldRequest = std::make_shared<igus_rebel_msgs::srv::SetDigitalOutput::Request>();
+  auto oldResponse = std::make_shared<igus_rebel_msgs::srv::SetDigitalOutput::Response>();
+  oldRequest->output.output = 30;
+  oldRequest->output.is_on = true;
+  rebel->dio_callback(oldRequest, oldResponse);
+  EXPECT_TRUE(oldResponse->success);
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands().back() == "DOUT 30 true";}, 1000ms));
+
+  // Not connected: refused.
+  server.Shutdown();
+  std::this_thread::sleep_for(300ms);
+  rebel->dios_callback(request, response);
+  EXPECT_FALSE(response->success);
+  EXPECT_NE(response->message.find("not connected"), std::string::npos);
+}
+
+TEST_F(RebelDriverTest, DigitalOutputsServiceIsAdvertisedGlobally)
+{
+  FakeCriServer server;
+  StartDriver(server);
+  auto probe = std::make_shared<rclcpp::Node>("dio_global_probe");
+  EXPECT_TRUE(
+    WaitFor(
+      [&]() {
+        const auto names = probe->get_service_names_and_types();
+        return names.count("/set_digital_outputs") == 1 && names.count("/set_digital_output") == 1;
+      }, 3000ms));
+  rebel->Stop();
+}
+
 TEST_F(RebelDriverTest, StopIsBoundedWhileDisconnected)
 {
   FakeCriServer server;
@@ -1903,9 +2078,12 @@ TEST_F(RebelDualArmTest, RenamedNodesDefaultToPrivateDigitalOutputService)
       [&]() {
         const auto names = probe->get_service_names_and_types();
         return names.count("/igus_rebel_left/set_digital_output") == 1 &&
-        names.count("/igus_rebel_right/set_digital_output") == 1;
+        names.count("/igus_rebel_right/set_digital_output") == 1 &&
+        names.count("/igus_rebel_left/set_digital_outputs") == 1 &&
+        names.count("/igus_rebel_right/set_digital_outputs") == 1;
       }, 3000ms));
   EXPECT_EQ(probe->get_service_names_and_types().count("/set_digital_output"), 0u);
+  EXPECT_EQ(probe->get_service_names_and_types().count("/set_digital_outputs"), 0u);
   left.rebel->Stop();
   right.rebel->Stop();
 }

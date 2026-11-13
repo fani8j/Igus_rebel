@@ -18,10 +18,12 @@
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "rclcpp_lifecycle/state.hpp"
 #include "igus_rebel_msgs/action/move_joint.hpp"
+#include "igus_rebel_msgs/msg/digital_io_state.hpp"
 #include "igus_rebel_msgs/msg/digital_output.hpp"
 #include "igus_rebel_msgs/msg/hardware_state.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 #include "igus_rebel_msgs/srv/set_digital_output.hpp"
+#include "igus_rebel_msgs/srv/set_digital_outputs.hpp"
 #include "std_srvs/srv/trigger.hpp"
 #include <hardware_interface/system_interface.hpp>
 
@@ -42,6 +44,7 @@ public:
   // trajectory_controller_name.
   static constexpr const char * kDefaultNodeName = "igus_rebel";
   static constexpr const char * kDefaultDigitalOutputService = "set_digital_output";
+  static constexpr const char * kDefaultDigitalOutputsService = "set_digital_outputs";
   static constexpr const char * kDefaultTrajectoryControllerName =
     "rebel_arm_trajectory_controller";
 
@@ -59,6 +62,9 @@ private:
     // Cumulative count of CRI message counter values skipped (any message type) up to this
     // STATUS; a gap that skipped none was a delayed (retransmitted) segment, not lost messages.
     std::uint64_t counterSkipped = 0;
+    // DIN/DOUT masks of the same STATUS (valid when sequence > 0).
+    std::uint64_t din = 0;
+    std::uint64_t dout = 0;
   };
 
   rclcpp::Node::SharedPtr node_;
@@ -110,6 +116,11 @@ private:
   // distinct digital_output_service names, or a service that only one of them provides).
   std::string nodeName_ = kDefaultNodeName;
   std::string digitalOutputService_ = kDefaultDigitalOutputService;
+  // iRC-numbered multi-output service (hardware params digital_outputs_service, dio_irc_offset,
+  // dio_allowed_outputs); see Safety::kDefaultDioIrcOffset for the numbering.
+  std::string digitalOutputsService_ = kDefaultDigitalOutputsService;
+  unsigned dioIrcOffset_ = Safety::kDefaultDioIrcOffset;
+  std::vector<unsigned> dioAllowedOutputs_;
   std::string trajectoryControllerName_ = kDefaultTrajectoryControllerName;
   // Optional hardware parameter jog_velocity_scale: jog [%] = scale * velocity [deg/s]. Default is
   // JOINT_VELOCITY_SCALE (2.0); set once in on_init, read-only afterwards.
@@ -207,6 +218,7 @@ private:
 
   // ROS2 communication
   rclcpp::Service<igus_rebel_msgs::srv::SetDigitalOutput>::SharedPtr digital_output_srv_;
+  rclcpp::Service<igus_rebel_msgs::srv::SetDigitalOutputs>::SharedPtr digital_outputs_srv_;
 
   // ---- Robot-side joint move (CRI "CMD Move Joint"), see ExecuteMoveGoal() ----
   // Once a Move Joint is sent the robot owns the motion: zero jog, a paused ALIVEJOG or a closed
@@ -325,6 +337,15 @@ private:
   std::uint64_t hwPubLastVersion_ = 0;
   void PublishRobotJointStates(const JointSnapshot & sample);
   void PublishHardwareState();
+  // ~/digital_io: same timer; publishes at 10 Hz and immediately when DIN, DOUT or validity changed.
+  rclcpp::Publisher<igus_rebel_msgs::msg::DigitalIOState>::SharedPtr digitalIoPub_;
+  void PublishDigitalIo();
+  // Timer callback only.
+  std::uint64_t dioPubLastDin_ = 0;
+  std::uint64_t dioPubLastDout_ = 0;
+  bool dioPubLastValid_ = false;
+  bool dioPubEverSent_ = false;
+  std::int64_t dioPubLastNs_ = 0;
   void SetLatchReason(const std::string & reason);
   void ClearLatchReason();
 
@@ -489,6 +510,9 @@ public:
   void dio_callback(
     const std::shared_ptr<igus_rebel_msgs::srv::SetDigitalOutput::Request> request,
     std::shared_ptr<igus_rebel_msgs::srv::SetDigitalOutput::Response> response);
+  void dios_callback(
+    const std::shared_ptr<igus_rebel_msgs::srv::SetDigitalOutputs::Request> request,
+    std::shared_ptr<igus_rebel_msgs::srv::SetDigitalOutputs::Response> response);
 
   void Start();
   void Stop();

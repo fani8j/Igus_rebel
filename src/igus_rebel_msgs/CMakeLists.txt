@@ -13,8 +13,12 @@ find_package(builtin_interfaces REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/DigitalOutput.msg"
+  "msg/DigitalIOState.msg"
+  "msg/JxcGripperState.msg"
   "msg/HardwareState.msg"
   "srv/SetDigitalOutput.srv"
+  "srv/SetDigitalOutputs.srv"
+  "srv/JxcMoveStep.srv"
   "srv/SetCartesianIncrement.srv"
   "action/MoveJoint.action"
   DEPENDENCIES std_msgs builtin_interfaces

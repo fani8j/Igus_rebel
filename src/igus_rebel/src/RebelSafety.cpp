@@ -235,5 +235,110 @@ std::string FormatMoveJoint(
   const std::string text = MoveJointCommandText(jointsDeg, velocityPercent, accelerationPercent);
   return text.empty() ? std::string() : FormatCommand(counter, text);
 }
+
+bool ParseNumberRanges(const std::string & text, std::vector<unsigned> & numbers)
+{
+  std::vector<unsigned> parsed;
+  std::size_t pos = 0;
+  const auto skipSpace = [&]() {
+      while (pos < text.size() && (text[pos] == ' ' || text[pos] == '\t')) {
+        ++pos;
+      }
+    };
+  const auto readNumber = [&](unsigned & value) {
+      skipSpace();
+      if (pos >= text.size() || text[pos] < '0' || text[pos] > '9') {
+        return false;
+      }
+      unsigned long v = 0;
+      while (pos < text.size() && text[pos] >= '0' && text[pos] <= '9') {
+        v = v * 10 + static_cast<unsigned long>(text[pos] - '0');
+        if (v > 255) {
+          return false;
+        }
+        ++pos;
+      }
+      value = static_cast<unsigned>(v);
+      return true;
+    };
+  while (true) {
+    unsigned first = 0;
+    if (!readNumber(first)) {
+      return false;
+    }
+    unsigned last = first;
+    skipSpace();
+    if (pos < text.size() && text[pos] == '-') {
+      ++pos;
+      if (!readNumber(last) || last < first) {
+        return false;
+      }
+    }
+    for (unsigned n = first; n <= last; ++n) {
+      parsed.push_back(n);
+    }
+    skipSpace();
+    if (pos >= text.size()) {
+      break;
+    }
+    if (text[pos] != ',') {
+      return false;
+    }
+    ++pos;
+  }
+  std::sort(parsed.begin(), parsed.end());
+  parsed.erase(std::unique(parsed.begin(), parsed.end()), parsed.end());
+  numbers = parsed;
+  return true;
+}
+
+std::vector<std::uint8_t> MaskToIrcNumbers(std::uint64_t mask, unsigned ircOffset)
+{
+  std::vector<std::uint8_t> result;
+  for (unsigned bit = 0; bit < 64; ++bit) {
+    if ((mask >> bit) & 1u) {
+      result.push_back(static_cast<std::uint8_t>(bit + ircOffset));
+    }
+  }
+  return result;
+}
+
+bool ValidateDigitalOutputs(
+  const std::vector<std::uint8_t> & ircOutputs, const std::vector<bool> & states,
+  const std::vector<unsigned> & allowed, unsigned ircOffset, std::vector<int> & criNumbers,
+  std::string & error)
+{
+  criNumbers.clear();
+  if (ircOutputs.empty()) {
+    error = "irc_outputs is empty";
+    return false;
+  }
+  if (ircOutputs.size() != states.size()) {
+    error = "irc_outputs and states must have the same length";
+    return false;
+  }
+  std::vector<int> result;
+  for (std::size_t i = 0; i < ircOutputs.size(); ++i) {
+    const unsigned irc = ircOutputs[i];
+    if (std::find(allowed.begin(), allowed.end(), irc) == allowed.end()) {
+      error = "iRC output " + std::to_string(irc) + " is not in the allowed set";
+      return false;
+    }
+    for (std::size_t j = 0; j < i; ++j) {
+      if (ircOutputs[j] == irc) {
+        error = "iRC output " + std::to_string(irc) + " is listed twice";
+        return false;
+      }
+    }
+    if (irc < ircOffset) {
+      error = "iRC output " + std::to_string(irc) + " is below the iRC offset";
+      return false;
+    }
+    result.push_back(static_cast<int>(irc - ircOffset));
+  }
+  criNumbers = result;
+  error.clear();
+  return true;
+}
 }  // namespace Safety
 }  // namespace Igus

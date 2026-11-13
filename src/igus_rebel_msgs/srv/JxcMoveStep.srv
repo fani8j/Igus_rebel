@@ -1,0 +1,7 @@
+# Move the JXC61 gripper to one of its pre-taught steps 0..3 (IN0/IN1 binary select).
+# success = the JXC reported INP after the move. For a pushing (grip) step a timeout of INP
+# means "no part gripped / position not reached".
+uint8 step
+---
+bool success
+string message

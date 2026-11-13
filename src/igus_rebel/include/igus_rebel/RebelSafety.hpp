@@ -240,6 +240,27 @@ std::string MoveJointCommandText(
 std::string FormatMoveJoint(
   int counter, const std::array<double, 6> & jointsDeg, double velocityPercent,
   double accelerationPercent);
+
+// ---- Digital I/O (iRC panel numbering) ----
+// iRC number = STATUS mask bit index + offset. Measured: CRI "DOUT n" switches iRC DOut(n+1), so
+// the CRI number is iRC - offset with offset 1. The bit mapping of the STATUS masks is assumed
+// (bit b == CRI number b) and must be verified on the real robot (hardware param dio_irc_offset).
+constexpr unsigned kDefaultDioIrcOffset = 1;
+constexpr unsigned kMaxDioIrcOffset = 64;
+
+// Parses "21-27,31-32" (also single numbers, whitespace allowed) into a sorted, de-duplicated list
+// of numbers in 0..255. False (list untouched) on any malformed or empty input.
+bool ParseNumberRanges(const std::string & text, std::vector<unsigned> & numbers);
+
+// Sorted iRC numbers (bit index + offset) of the bits set in `mask`.
+std::vector<std::uint8_t> MaskToIrcNumbers(std::uint64_t mask, unsigned ircOffset);
+
+// All-or-nothing validation of a SetDigitalOutputs request. On success `criNumbers` holds
+// (irc - ircOffset) per entry in request order; otherwise `error` says why and nothing is valid.
+bool ValidateDigitalOutputs(
+  const std::vector<std::uint8_t> & ircOutputs, const std::vector<bool> & states,
+  const std::vector<unsigned> & allowed, unsigned ircOffset, std::vector<int> & criNumbers,
+  std::string & error);
 }  // namespace Safety
 }  // namespace Igus
 

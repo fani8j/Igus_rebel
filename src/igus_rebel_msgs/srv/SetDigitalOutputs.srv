@@ -1,0 +1,15 @@
+# Switch several digital outputs, addressed by their iRC panel numbers (e.g. DOut31), in the
+# given order and back to back. The driver subtracts its dio_irc_offset (default 1: CRI "DOUT 30"
+# switches iRC DOut31) and sends one "CMD DOUT <n> true|false" per entry.
+#
+# The request is validated completely before anything is sent: non-empty, equal lengths, every
+# number in the driver's allowed set (parameter dio_allowed_outputs, default 21-27,31-32), no
+# duplicates. Any violation rejects the whole request and nothing is sent.
+#
+# success means the commands were SENT (as for SetDigitalOutput), not that the controller
+# switched the outputs: confirm via the ~/digital_io topic (igus_rebel_msgs/DigitalIOState).
+uint8[] irc_outputs   # iRC output numbers
+bool[] states         # desired state per entry (same length as irc_outputs)
+---
+bool success
+string message

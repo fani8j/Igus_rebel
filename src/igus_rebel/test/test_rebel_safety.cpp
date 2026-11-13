@@ -5,7 +5,9 @@
 #include <chrono>
 #include <cmath>
 #include <limits>
+#include <cstdint>
 #include <string>
+#include <vector>
 
 #include "igus_rebel/RebelSafety.hpp"
 
@@ -409,4 +411,53 @@ TEST(ResendTimer, ArmNowTwiceInARowIsStillDetectedByTheSender)
   timer.ArmNow();                      // "send now" #2 while sending (same logical state, new value)
   EXPECT_FALSE(timer.Defer(token, 9000000000LL));
   EXPECT_TRUE(timer.Due(0));
+}
+
+TEST(DigitalIo, MaskDecodesToSortedIrcNumbers)
+{
+  using Igus::Safety::MaskToIrcNumbers;
+  EXPECT_TRUE(MaskToIrcNumbers(0, 1).empty());
+  EXPECT_EQ(MaskToIrcNumbers(0x5, 1), (std::vector<std::uint8_t>{1, 3}));
+  EXPECT_EQ(MaskToIrcNumbers(1ull << 30, 1), (std::vector<std::uint8_t>{31}));
+  EXPECT_EQ(MaskToIrcNumbers((1ull << 20) | (1ull << 31), 1), (std::vector<std::uint8_t>{21, 32}));
+  EXPECT_EQ(MaskToIrcNumbers(1ull << 30, 0), (std::vector<std::uint8_t>{30}));
+  EXPECT_EQ(MaskToIrcNumbers(1ull << 63, 1), (std::vector<std::uint8_t>{64}));
+  EXPECT_EQ(MaskToIrcNumbers(~0ull, 1).size(), 64u);
+}
+
+TEST(DigitalIo, ParseNumberRanges)
+{
+  using Igus::Safety::ParseNumberRanges;
+  std::vector<unsigned> n;
+  ASSERT_TRUE(ParseNumberRanges("21-27,31-32", n));
+  EXPECT_EQ(n, (std::vector<unsigned>{21, 22, 23, 24, 25, 26, 27, 31, 32}));
+  ASSERT_TRUE(ParseNumberRanges(" 5 , 3-4,5 ", n));
+  EXPECT_EQ(n, (std::vector<unsigned>{3, 4, 5}));
+  const auto before = n;
+  for (const char * bad : {"", "a", "3-", "-3", "5-3", "1,,2", "1 2", "300", "1-2-3", "1,"}) {
+    EXPECT_FALSE(ParseNumberRanges(bad, n)) << bad;
+    EXPECT_EQ(n, before);
+  }
+}
+
+TEST(DigitalIo, ValidateDigitalOutputs)
+{
+  using Igus::Safety::ValidateDigitalOutputs;
+  const std::vector<unsigned> allowed{21, 22, 23, 24, 25, 26, 27, 31, 32};
+  std::vector<int> cri;
+  std::string error;
+  ASSERT_TRUE(ValidateDigitalOutputs({31, 22}, {true, false}, allowed, 1, cri, error)) << error;
+  EXPECT_EQ(cri, (std::vector<int>{30, 21}));
+  EXPECT_FALSE(ValidateDigitalOutputs({}, {}, allowed, 1, cri, error));
+  EXPECT_TRUE(cri.empty());
+  EXPECT_FALSE(ValidateDigitalOutputs({21, 22}, {true}, allowed, 1, cri, error));
+  EXPECT_NE(error.find("same length"), std::string::npos);
+  EXPECT_FALSE(ValidateDigitalOutputs({21, 28}, {true, true}, allowed, 1, cri, error));
+  EXPECT_NE(error.find("28"), std::string::npos);
+  EXPECT_TRUE(cri.empty());
+  EXPECT_FALSE(ValidateDigitalOutputs({21, 22, 21}, {true, true, true}, allowed, 1, cri, error));
+  EXPECT_NE(error.find("twice"), std::string::npos);
+  // Offset 0 sends the iRC number unchanged.
+  ASSERT_TRUE(ValidateDigitalOutputs({31}, {true}, allowed, 0, cri, error));
+  EXPECT_EQ(cri, (std::vector<int>{31}));
 }
