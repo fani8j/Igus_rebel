@@ -33,6 +33,7 @@
 #include "igus_rebel_msgs/action/move_joint.hpp"
 #include "igus_rebel_msgs/msg/digital_io_state.hpp"
 #include "igus_rebel_msgs/msg/hardware_state.hpp"
+#include "igus_rebel_msgs/srv/set_digital_output.hpp"
 #include "igus_rebel_msgs/srv/set_digital_outputs.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
@@ -1611,13 +1612,13 @@ TEST_F(RebelDriverTest, DigitalOutputsServiceSendsIrcOffsetCommandsInOrder)
   using Srv = igus_rebel_msgs::srv::SetDigitalOutputs;
   auto request = std::make_shared<Srv::Request>();
   auto response = std::make_shared<Srv::Response>();
-  request->irc_outputs = {31, 22, 21};
+  request->irc_outputs = {27, 22, 21};
   request->states = {true, false, true};
   rebel->dios_callback(request, response);
   EXPECT_TRUE(response->success) << response->message;
   ASSERT_TRUE(WaitFor([&]() {return server.Commands().size() >= base + 3;}, 1000ms));
   const auto commands = server.Commands();
-  EXPECT_EQ(commands[base], "DOUT 30 true");
+  EXPECT_EQ(commands[base], "DOUT 26 true");
   EXPECT_EQ(commands[base + 1], "DOUT 21 false");
   EXPECT_EQ(commands[base + 2], "DOUT 20 true");
 
@@ -1666,6 +1667,147 @@ TEST_F(RebelDriverTest, DigitalOutputsServiceIsAdvertisedGlobally)
         const auto names = probe->get_service_names_and_types();
         return names.count("/set_digital_outputs") == 1 && names.count("/set_digital_output") == 1;
       }, 3000ms));
+  rebel->Stop();
+}
+
+TEST_F(RebelDriverTest, DigitalOutputsDefaultAllowListRefusesTheKnifeOutput)
+{
+  FakeCriServer server;
+  StartDriver(server);
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands().size() >= 6;}, 2000ms));
+  const std::size_t base = server.Commands().size();
+
+  using Srv = igus_rebel_msgs::srv::SetDigitalOutputs;
+  for (unsigned pin : {31u, 32u, 28u, 20u}) {
+    auto request = std::make_shared<Srv::Request>();
+    auto response = std::make_shared<Srv::Response>();
+    request->irc_outputs = {21, static_cast<std::uint8_t>(pin)};
+    request->states = {true, true};
+    rebel->dios_callback(request, response);
+    EXPECT_FALSE(response->success) << pin;
+    EXPECT_NE(response->message.find("nothing sent"), std::string::npos) << pin;
+  }
+  std::this_thread::sleep_for(150ms);
+  EXPECT_EQ(server.Commands().size(), base);  // all-or-nothing: not even DOut21 went out
+
+  auto request = std::make_shared<Srv::Request>();
+  auto response = std::make_shared<Srv::Response>();
+  request->irc_outputs = {21, 27};
+  request->states = {true, true};
+  rebel->dios_callback(request, response);
+  EXPECT_TRUE(response->success) << response->message;
+  rebel->Stop();
+}
+
+TEST(RebelDriverInit, DioAllowedOutputsAndIrcOffsetAreParsedInOnInit)
+{
+  using Srv = igus_rebel_msgs::srv::SetDigitalOutputs;
+  FakeCriServer server;
+  Igus::Rebel rebel("127.0.0.1", server.port());
+  auto info = MakeInfo("rebel_arm_controller");
+  info.hardware_parameters["dio_allowed_outputs"] = "21-27, 31";   // explicit knife opt-in
+  info.hardware_parameters["dio_irc_offset"] = "0";
+  ASSERT_EQ(rebel.on_init(info), CallbackReturn::SUCCESS);
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands().size() >= 6;}, 2000ms));
+  const std::size_t base = server.Commands().size();
+
+  auto request = std::make_shared<Srv::Request>();
+  auto response = std::make_shared<Srv::Response>();
+  request->irc_outputs = {31, 22};
+  request->states = {true, true};
+  rebel.dios_callback(request, response);
+  EXPECT_TRUE(response->success) << response->message;
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands().size() >= base + 2;}, 1000ms));
+  EXPECT_EQ(server.Commands()[base], "DOUT 31 true");      // offset 0: CRI number == iRC number
+  EXPECT_EQ(server.Commands()[base + 1], "DOUT 22 true");
+
+  auto refused = std::make_shared<Srv::Request>();           // 32 is not in the custom list
+  auto refusedResponse = std::make_shared<Srv::Response>();
+  refused->irc_outputs = {32};
+  refused->states = {true};
+  rebel.dios_callback(refused, refusedResponse);
+  EXPECT_FALSE(refusedResponse->success);
+  rebel.Stop();
+}
+
+TEST(RebelDriverInit, RejectsInvalidDioParametersBeforeConnecting)
+{
+  for (const auto & bad : std::vector<std::pair<std::string, std::string>>{
+    {"dio_irc_offset", "abc"}, {"dio_irc_offset", "65"}, {"dio_irc_offset", "-1"},
+    {"dio_irc_offset", "1,2"}, {"dio_allowed_outputs", "abc"}, {"dio_allowed_outputs", "21-"},
+    {"dio_allowed_outputs", "27-21"}, {"dio_allowed_outputs", "21,,22"},
+    {"dio_allowed_outputs", "300"}})
+  {
+    Igus::Rebel rebel("127.0.0.1", 1);
+    auto info = MakeInfo();
+    info.hardware_parameters[bad.first] = bad.second;
+    const auto start = Clock::now();
+    EXPECT_EQ(rebel.on_init(info), CallbackReturn::ERROR) << bad.first << "=" << bad.second;
+    EXPECT_LT(Clock::now() - start, 500ms) << "must fail before connecting";
+  }
+}
+
+TEST_F(RebelDriverTest, DigitalOutputServicesAnswerWhileResetAndEnableIsRunning)
+{
+  FakeCriServer server;
+  StartDriver(server);
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 6;}, 2000ms));
+  ASSERT_EQ(rebel->on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+
+  // The drives report "Motor not enabled" and ignore Enable: reset_and_enable runs its full 3 s.
+  server.SetIgnoreEnable(true);
+  server.SetDisabledMask(0x3f);
+  ASSERT_TRUE(WaitFor([&]() {return rebel->DrivesDisabledMask() == 0x3f;}, 1000ms));
+
+  auto client = std::make_shared<rclcpp::Node>("dio_during_reset_client");
+  rclcpp::executors::SingleThreadedExecutor clientExecutor;
+  clientExecutor.add_node(client);
+  std::thread clientThread([&]() {clientExecutor.spin();});
+  auto resetClient = client->create_client<std_srvs::srv::Trigger>("/igus_rebel/reset_and_enable");
+  auto dioClient =
+    client->create_client<igus_rebel_msgs::srv::SetDigitalOutputs>("/set_digital_outputs");
+  auto oldDioClient =
+    client->create_client<igus_rebel_msgs::srv::SetDigitalOutput>("/set_digital_output");
+  ASSERT_TRUE(resetClient->wait_for_service(3s));
+  ASSERT_TRUE(dioClient->wait_for_service(3s));
+  ASSERT_TRUE(oldDioClient->wait_for_service(3s));
+
+  const auto resetStart = Clock::now();
+  auto resetFuture = resetClient->async_send_request(
+    std::make_shared<std_srvs::srv::Trigger::Request>());
+  // reset_and_enable is in progress once it has re-sent the start-up sequence.
+  ASSERT_TRUE(WaitFor([&]() {return server.Commands(1).size() >= 12;}, 1500ms));
+  ASSERT_NE(resetFuture.wait_for(0ms), std::future_status::ready);
+
+  auto request = std::make_shared<igus_rebel_msgs::srv::SetDigitalOutputs::Request>();
+  request->irc_outputs = {26};
+  request->states = {true};
+  const auto dioStart = Clock::now();
+  auto dioFuture = dioClient->async_send_request(request);
+  ASSERT_EQ(dioFuture.wait_for(1s), std::future_status::ready)
+    << "DIO service blocked behind reset_and_enable";
+  EXPECT_TRUE(dioFuture.get()->success);
+  EXPECT_LT(Clock::now() - dioStart, 700ms);
+  auto oldRequest = std::make_shared<igus_rebel_msgs::srv::SetDigitalOutput::Request>();
+  oldRequest->output.output = 5;
+  oldRequest->output.is_on = true;
+  auto oldFuture = oldDioClient->async_send_request(oldRequest);
+  ASSERT_EQ(oldFuture.wait_for(1s), std::future_status::ready);
+  EXPECT_TRUE(oldFuture.get()->success);
+  EXPECT_NE(resetFuture.wait_for(0ms), std::future_status::ready)
+    << "reset_and_enable must still have been running when the DIO calls returned";
+  EXPECT_TRUE(WaitFor([&]() {
+      const auto commands = server.Commands();
+      return std::count(commands.begin(), commands.end(), std::string("DOUT 25 true")) == 1;
+    }, 500ms));
+
+  // reset_and_enable itself ends (false: the drives never re-enabled) after about 3 s.
+  ASSERT_EQ(resetFuture.wait_for(5s), std::future_status::ready);
+  EXPECT_FALSE(resetFuture.get()->success);
+  EXPECT_GE(Clock::now() - resetStart, 2500ms);
+
+  clientExecutor.cancel();
+  clientThread.join();
   rebel->Stop();
 }
 

@@ -27,7 +27,7 @@ _PIN_PARAMS = ("out_in0", "out_in1", "out_setup", "out_drive", "out_reset", "out
                "in_seton", "in_inp", "in_svre", "in_alarm", "in_busy")
 _TIME_PARAMS = ("stale_s", "servo_on_timeout_s", "home_timeout_s", "dout_confirm_timeout_s",
                 "step_setup_delay_s", "inp_clear_timeout_s", "move_timeout_s",
-                "servo_off_timeout_s", "reset_timeout_s")
+                "servo_off_timeout_s", "reset_timeout_s", "unseen_start_min_wait_s")
 _AUTO_PARAMS = ("auto_reset_alarm", "auto_reset_max", "auto_reset_window_s")
 _MONITOR_HZ = 20.0
 
@@ -155,6 +155,7 @@ class JxcGripperNode(Node):
     def _move_step(self, request, response):
         result = self._hs.move_step(int(request.step))
         response.success, response.message = result.success, result.message
+        response.start_seen = bool(result.start_seen)
         self._log(result)
         self._publish_state()
         return response

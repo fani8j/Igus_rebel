@@ -101,6 +101,10 @@ class JxcConfig:
     step_setup_delay_s: float = 0.05     # IN0/IN1 stable before DRIVE
     inp_clear_timeout_s: float = 0.5     # DRIVE on -> INP OFF (or BUSY ON); ASSUMPTION, verify
     move_timeout_s: float = 5.0          # start of motion -> INP on (and BUSY off)
+    # Without BUSY, when INP never drops after DRIVE (start not seen): DRIVE stays on and the guards
+    # active at least this long since DRIVE on, then INP must be ON in a newer sample. Real
+    # hardware 2026-11-13: homing ~1 s, a grip ~4.2 s.
+    unseen_start_min_wait_s: float = 2.0
     servo_off_timeout_s: float = 1.0     # SVON off -> SVRE off
     reset_timeout_s: float = 1.0         # RESET on -> *ALARM back ON (healthy)
     # Automatic alarm reset (auto_reset_alarm_poll); operator decision 2026-11-13: default on.
@@ -122,6 +126,7 @@ class JxcConfig:
 class Result:
     success: bool
     message: str
+    start_seen: bool = False   # move_step: the start of the move was observed (INP drop / BUSY on)
 
 
 class _Abort(Exception):
@@ -134,13 +139,14 @@ class JxcHandshake:
         self.cfg = config or JxcConfig()
         self._lock = threading.Lock()
         self._busy = False
+        self._cmd_seq = 0                # counts started commands (ends the SVRE observation)
         self._last_error = ""
         self._uncertain = False
         self._uncertain_reason = ""
         self._shutdown = False
         self._touched = False
         # automatic alarm reset state
-        self._auto_active = False        # an auto reset (incl. the SVRE wait) is in progress
+        self._auto_active = False        # an auto reset (RESET pulse, not the SVRE observation) is in progress
         self._auto_times: List[float] = []
         self._auto_count = 0
         self._auto_last: Optional[float] = None
@@ -225,6 +231,8 @@ class JxcHandshake:
         return self._run("home", body)
 
     def move_step(self, step: int) -> Result:
+        seen = [False]
+
         def body():
             c = self.cfg
             if not isinstance(step, int) or not 0 <= step <= 3:
@@ -262,6 +270,7 @@ class JxcHandshake:
             if c.busy_wired:
                 self._wait(lambda v: c.in_busy in v.din_on, c.inp_clear_timeout_s,
                            "BUSY never came ON after DRIVE", since=t_drv, guards=guards)
+                seen[0] = True
                 self._wait(lambda v: c.in_busy not in v.din_on and c.in_inp in v.din_on,
                            c.move_timeout_s,
                            "BUSY/INP: position not reached / no part gripped", since=t_drv,
@@ -269,8 +278,11 @@ class JxcHandshake:
             else:
                 # Without BUSY the start of the move is only visible as INP dropping. On the real
                 # JXC (2026-11-13) INP can stay ON (already in position, e.g. holding after an
-                # alarm reset), so a missing drop is NOT an error (operator decision 2026-11-13):
-                # the move is then judged only by INP being ON afterwards.
+                # alarm reset), so a missing drop is NOT an error (operator decision 2026-11-13).
+                # But INP ON then proves nothing about a move that may still be running: keep DRIVE
+                # on and the guards active for `unseen_start_min_wait_s` since DRIVE on, and only
+                # then accept INP ON from a sample newer than the end of that wait.
+                t_on = self._io.clock()   # after the DRIVE confirmation: never earlier than real
                 start_seen = True
                 try:
                     self._wait(lambda v: c.in_inp not in v.din_on, c.inp_clear_timeout_s,
@@ -279,14 +291,33 @@ class JxcHandshake:
                     if not str(error).startswith("timeout"):
                         raise
                     start_seen = False
-                self._wait(lambda v: c.in_inp in v.din_on, c.move_timeout_s,
-                           "INP not ON in time: position not reached / no part gripped",
-                           since=t_drv, guards=guards)
                 if not start_seen:
+                    remaining = t_on + c.unseen_start_min_wait_s - self._io.clock()
+                    if remaining > 0.0:
+                        try:    # a late INP drop = the move did start after all
+                            self._wait(lambda v: c.in_inp not in v.din_on, remaining,
+                                       "INP never went OFF after DRIVE", since=t_drv,
+                                       guards=guards)
+                            start_seen = True
+                        except _Abort as error:
+                            if not str(error).startswith("timeout"):
+                                raise
+                if start_seen:
+                    seen[0] = True
+                    self._wait(lambda v: c.in_inp in v.din_on, c.move_timeout_s,
+                               "INP not ON in time: position not reached / no part gripped",
+                               since=t_drv, guards=guards)
+                else:
+                    t_end = self._io.clock()
+                    self._wait(lambda v: c.in_inp in v.din_on, c.move_timeout_s,
+                               "INP not ON in time: position not reached / no part gripped",
+                               since=t_end, guards=guards)
                     return (f"step {step} reached (INP stayed ON: start of the move not seen "
-                            "without BUSY)")
+                            f"without BUSY, waited {c.unseen_start_min_wait_s:g} s)")
             return f"step {step} reached"
-        return self._run("move_step", body)
+        result = self._run("move_step", body)
+        result.start_seen = bool(seen[0] and result.success)
+        return result
 
     def servo_off(self) -> Result:
         def body():
@@ -364,10 +395,12 @@ class JxcHandshake:
             self._auto_times.append(now)
             self._auto_count += 1
             self._auto_last = time.time()
-            self._auto_svre_outcome()
-            return result
         finally:
             self._auto_active = False
+        # The SVRE wait is observation only: commands (release_all, servo_off, ...) are accepted
+        # again as soon as RESET is off; the wait ends quietly if one starts.
+        self._auto_svre_outcome()
+        return result
 
     def _disable_auto(self, message: str):
         self._auto_disabled_reason = message
@@ -376,6 +409,7 @@ class JxcHandshake:
     def _auto_svre_outcome(self):
         c = self.cfg
         n = self._auto_count
+        seq = self._cmd_seq
         view = self._view()
         if c.out_svon not in view.dout_on:
             self.log("warn", f"auto reset #{n}: alarm cleared (SVON not commanded, not waiting "
@@ -383,9 +417,13 @@ class JxcHandshake:
             return
         try:
             self._wait(lambda v: c.in_svre in v.din_on, c.servo_on_timeout_s, "SVRE",
-                       check_alarm=False)
+                       check_alarm=False,
+                       guards=[(lambda v: self._cmd_seq == seq, "a command started")])
             self.log("warn", f"auto reset #{n}: alarm cleared, SVRE back")
         except _Abort as error:
+            if "a command started" in str(error):
+                self.log("info", f"auto reset #{n}: SVRE outcome not observed: a command started")
+                return
             self.log("warn", f"auto reset #{n}: alarm cleared, SVRE did not return ({error})")
 
     def release_all(self) -> Result:
@@ -404,6 +442,7 @@ class JxcHandshake:
         if not self._lock.acquire(blocking=False):
             return Result(False, f"busy: another command is running (refused {name})")
         self._busy = True
+        self._cmd_seq += 1
         self._touched = False
         try:
             if self._uncertain and name not in ("release_all", "servo_off"):

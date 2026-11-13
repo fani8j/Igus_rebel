@@ -918,11 +918,13 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
   }
   dioAllowedOutputs_.clear();
   {
-    std::string allowedText = "21-27,31-32";
+    // Default: the gripper/base outputs only. The knife (DOut31) and DOut32 are NOT allowed unless
+    // a deployment opts in with dio_allowed_outputs (e.g. "21-27,31").
+    std::string allowedText = "21-27";
     readName("dio_allowed_outputs", allowedText);
     if (!Safety::ParseNumberRanges(allowedText, dioAllowedOutputs_)) {
       RCLCPP_FATAL(
-        logger_, "Invalid dio_allowed_outputs '%s' (expected e.g. '21-27,31-32')",
+        logger_, "Invalid dio_allowed_outputs '%s' (expected e.g. '21-27' or '21-27,31')",
         allowedText.c_str());
       return CallbackReturn::ERROR;
     }
@@ -1095,12 +1097,18 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
         std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
         response->success = ResetAndEnable(response->message);
       });
+    // Own mutually exclusive callback group for both DIO services: a gripper output call is never
+    // queued behind a 3 s reset_and_enable (which would exceed a client's 1 s timeout), while the
+    // two DIO services still never interleave with each other (in-order guarantee).
+    dioGroup_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     digital_output_srv_ = node_->create_service<igus_rebel_msgs::srv::SetDigitalOutput>(
       digitalOutputService_,
-      std::bind(&Rebel::dio_callback, this, std::placeholders::_1, std::placeholders::_2));
+      std::bind(&Rebel::dio_callback, this, std::placeholders::_1, std::placeholders::_2),
+      rmw_qos_profile_services_default, dioGroup_);
     digital_outputs_srv_ = node_->create_service<igus_rebel_msgs::srv::SetDigitalOutputs>(
       digitalOutputsService_,
-      std::bind(&Rebel::dios_callback, this, std::placeholders::_1, std::placeholders::_2));
+      std::bind(&Rebel::dios_callback, this, std::placeholders::_1, std::placeholders::_2),
+      rmw_qos_profile_services_default, dioGroup_);
     // Own callback group: a cancel or goal request is never blocked by reset_and_enable.
     moveGroup_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     // Telemetry that keeps running while the component is latched/UNCONFIGURED/INACTIVE (read()
@@ -1133,6 +1141,7 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
       digitalOutputService_.c_str(), error.what());
     moveServer_.reset();
     moveGroup_.reset();
+    dioGroup_.reset();
     hardwareStateTimer_.reset();
     telemetryGroup_.reset();
     digitalIoPub_.reset();
@@ -1150,10 +1159,11 @@ CallbackReturn Rebel::on_init(const HardwareInfo & hardware_info)
   rebelSocket->SetConnectedCallback([this](bool reconnect) {OnConnected(reconnect);});
 
   // Service/action callbacks run on their own executor threads instead of inside write().
-  // Three threads: reset_and_enable (up to 3 s) occupies one, the move_joint callbacks and the
-  // hardware_state timer (separate callback groups) always find a free one.
+  // Four threads: reset_and_enable (up to 3 s, default group) occupies one; the move_joint
+  // callbacks, the hardware_state timer and the DIO services (separate callback groups) always
+  // find a free one. This executor and its groups never touch the motion/jog/ALIVEJOG path.
   executor_ = std::make_shared<rclcpp::executors::MultiThreadedExecutor>(
-    rclcpp::ExecutorOptions(), 3);
+    rclcpp::ExecutorOptions(), 4);
   executor_->add_node(node_);
   executorThread = std::thread([this]() {executor_->spin();});
 
@@ -1766,8 +1776,9 @@ void Rebel::dios_callback(
     response->message = "not connected to the robot";
     return;
   }
-  // Back to back, in request order. The service shares the node's default (mutually exclusive)
-  // callback group with the other services, so two requests never interleave.
+  // Back to back, in request order. Both DIO services share one mutually exclusive callback group
+  // (dioGroup_), so two requests never interleave; reset_and_enable runs in the default group and
+  // cannot delay them.
   for (std::size_t i = 0; i < criNumbers.size(); ++i) {
     if (!SetDigitalOut(criNumbers[i], states[i])) {
       response->message = "send failed after " + std::to_string(i) + " of " +

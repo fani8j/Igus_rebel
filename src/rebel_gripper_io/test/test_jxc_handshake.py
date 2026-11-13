@@ -112,9 +112,58 @@ def test_inp_never_clears_is_not_an_error_without_busy():
     sim, hs = make()
     ready(sim, hs)
     sim.never_clears_inp = True
+    t0 = sim.t
     r = hs.move_step(1)
-    assert r.success and "start of the move not seen" in r.message
+    assert r.success and "start of the move not seen" in r.message and not r.start_seen
+    drive_on = [t for t, st in sim.drive_trace if st][-1]
+    assert sim.t - drive_on >= CFG.unseen_start_min_wait_s     # waited the minimum, DRIVE kept on
+    assert [t for t, st in sim.drive_trace if not st][-1] >= drive_on + CFG.unseen_start_min_wait_s
+    assert sim.t - t0 >= CFG.unseen_start_min_wait_s
     final_off(sim)
+
+
+def test_unseen_start_waits_even_if_inp_is_on_immediately_and_guards_stay_active():
+    sim, hs = make()
+    ready(sim, hs)
+    sim.never_clears_inp = True
+    sim.events.append((sim.t + 1.0, lambda s: s._raise_push_alarm()))   # SVRE + *ALARM drop during the wait
+    r = hs.move_step(1)
+    assert not r.success and "aborted" in r.message
+    final_off(sim)
+
+
+def test_unseen_start_late_inp_drop_falls_back_to_normal_wait():
+    sim, hs = make(move_time=0.3)
+    ready(sim, hs)
+    sim.never_clears_inp = True
+    sim.never_reaches = True
+    # INP drops at 1.0 s (inside the min wait) and comes back at 1.6 s: the move started late
+    sim.events.append((sim.t + 1.0, lambda s: setattr(s, "inp", False)))
+    sim.events.append((sim.t + 1.6, lambda s: setattr(s, "inp", True)))
+    r = hs.move_step(1)
+    assert r.success and r.start_seen and "not seen" not in r.message
+    final_off(sim)
+
+
+def test_seen_start_is_unaffected_by_min_wait():
+    sim, hs = make(move_time=0.3)
+    ready(sim, hs)
+    t0 = sim.t
+    r = hs.move_step(1)
+    assert r.success and r.start_seen and sim.t - t0 < CFG.unseen_start_min_wait_s
+    final_off(sim)
+
+
+def test_busy_path_start_seen():
+    sim, hs = make(cfg=JxcConfig(in_busy=25))
+    ready(sim, hs)
+    r = hs.move_step(1)
+    assert r.success and r.start_seen
+
+
+def test_failed_move_has_no_start_seen():
+    sim, hs = make()
+    assert not hs.move_step(1).start_seen
 
 
 def test_inp_never_clears_then_never_on_still_fails():
@@ -125,7 +174,7 @@ def test_inp_never_clears_then_never_on_still_fails():
     # INP drops late (near the end of the start window) and never comes back -> still a failure
     sim.events.append((sim.t + 0.6, lambda s: setattr(s, "inp", False)))
     r = hs.move_step(1)
-    assert not r.success and "INP not ON" in r.message
+    assert not r.success and "INP not ON" in r.message and not r.start_seen
     final_off(sim)
 
 
@@ -687,3 +736,28 @@ def test_service_refused_during_auto_reset():
         assert not seen[k].success and "busy: auto alarm reset running" in seen[k].message
     assert sim.alarm_ok and hs.auto_reset_state["count"] == 1
     assert not hs.auto_reset_state["running"]
+
+
+def test_release_all_and_servo_off_accepted_during_auto_reset_svre_wait():
+    sim, hs = auto_make()
+    sim.svre_return_delay = 2.0          # SVRE comes back late: the observation wait is long
+    ready(sim, hs)
+    assert hs.move_step(2).success
+    seen = {}
+    orig = sim.sleep
+
+    def sleeper(sec):
+        # first poll after RESET is off and the reset call returned (no longer "running")
+        if hs._auto_count == 1 and "r" not in seen and CFG.out_reset not in sim.dout:
+            seen["running"] = hs.auto_reset_state["running"]
+            seen["r"] = hs.release_all()
+        orig(sec)
+    sim.sleep = sleeper
+    monitor(sim, hs, 3.5)
+    sim.sleep = orig
+    assert seen["running"] is False
+    assert seen["r"].success, seen["r"].message
+    assert CFG.out_svon not in sim.dout
+    assert any("SVRE outcome not observed: a command started" in m for _, m in hs.logs)
+    assert not any("SVRE did not return" in m for _, m in hs.logs)
+

@@ -270,3 +270,44 @@ def test_auto_reset_monitor_timer_after_grip(rig):
     finally:
         driver.sim.push_alarm_delay_s = None
         node._hs.cfg.auto_reset_alarm = False
+
+
+def test_move_step_start_seen_and_unseen(rig):
+    driver, client, states = rig
+    node = driver.gripper
+    call(client, Trigger, "/jxc_gripper_node/release_all", Trigger.Request())
+    r = call(client, Trigger, "/jxc_gripper_node/servo_on", Trigger.Request())
+    assert r.success, r.message
+    r = call(client, Trigger, "/jxc_gripper_node/home", Trigger.Request())
+    assert r.success, r.message
+    assert node.get_parameter("unseen_start_min_wait_s").value == 2.0
+    driver.sim.move_time = 0.2
+    r = call(client, JxcMoveStep, "/jxc_gripper_node/move_step", JxcMoveStep.Request(step=1))
+    assert r.success and r.start_seen, r.message
+    driver.sim.never_clears_inp = True
+    t0 = time.time()
+    r = call(client, JxcMoveStep, "/jxc_gripper_node/move_step", JxcMoveStep.Request(step=2))
+    driver.sim.never_clears_inp = False
+    assert r.success and not r.start_seen and "not seen" in r.message, r.message
+    assert time.time() - t0 >= 2.0
+    r = call(client, JxcMoveStep, "/jxc_gripper_node/move_step", JxcMoveStep.Request(step=9))
+    assert not r.success and not r.start_seen
+    call(client, Trigger, "/jxc_gripper_node/release_all", Trigger.Request())
+    assert wait_for(lambda: not (driver.sim.dout & {21, 22, 23, 24, 25, 26}))
+
+
+def test_shutdown_cleanup_leaves_svon_and_steps(rig):
+    # shutdown_outputs_off (what main() runs on SIGINT/SIGTERM) drops only DRIVE/SETUP/RESET:
+    # SVON and IN0/IN1 stay as they are (the gripper may hold a part).
+    driver, client, states = rig
+    node = driver.gripper
+    r = call(client, Trigger, "/jxc_gripper_node/servo_on", Trigger.Request())
+    assert r.success, r.message
+    driver.sim.dout.update({21, 22, 24})      # IN0, IN1, DRIVE as left by an interrupted command
+    assert wait_for(lambda: 24 in driver.sim.dout)
+    ok, why = node._hs.shutdown_outputs_off()
+    assert ok, why
+    assert wait_for(lambda: 24 not in driver.sim.dout)
+    assert {21, 22, 26} <= driver.sim.dout and not (driver.sim.dout & {23, 25})
+    flat = [p for req in driver.requests for p in req]
+    assert (26, False) not in flat[-6:] and (21, False) not in flat[-6:]

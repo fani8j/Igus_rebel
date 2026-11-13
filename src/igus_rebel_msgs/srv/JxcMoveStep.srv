@@ -4,4 +4,8 @@
 uint8 step
 ---
 bool success
+# true when the start of the move was observed (INP dropped, or BUSY came on). false when INP never
+# dropped (JXC already in position, or a very short move): then success only means INP was ON after
+# the node's unseen_start_min_wait_s (default 2.0 s) minimum wait.
+bool start_seen
 string message

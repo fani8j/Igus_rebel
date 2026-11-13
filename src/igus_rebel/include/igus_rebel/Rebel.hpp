@@ -316,6 +316,7 @@ private:
   double moveMaxAccelerationPercent_ = Move::kDefaultMaxAccelerationPercent;
   std::array<std::array<double, 2>, 6> jointLimits_ = Move::HardwareJointLimits();
   rclcpp::CallbackGroup::SharedPtr moveGroup_;
+  rclcpp::CallbackGroup::SharedPtr dioGroup_;  // both DIO services (not the default group)
   rclcpp_action::Server<MoveJointAction>::SharedPtr moveServer_;
 
   // ---- Telemetry that survives a latch (see hardwareErrorLatched_) ----

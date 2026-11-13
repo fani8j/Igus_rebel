@@ -28,7 +28,14 @@ All pin numbers are iRC panel numbers (base I/O DIn/DOut21-27, arm/tool I/O DIn/
 | `in_alarm` | DIn24 | JXC -> robot | *ALARM: input ON = healthy, OFF = alarm (or wire break) |
 | `in_busy` | -1 (not wired) | JXC -> robot | BUSY (optional, see below) |
 
-The tool DOut31/32 are used for the knife and are not touched here.
+The tool DOut31/32 are used for the knife and are not touched here. The driver's
+`set_digital_outputs` service accepts only the outputs in the hardware parameter `dio_allowed_outputs`, whose
+default is **21-27** (base outputs): the knife DOut31 is refused (nothing sent) unless a deployment
+opts in explicitly, e.g. `dio_allowed_outputs: "21-27,31"` in the ros2_control hardware tag
+(`dio_irc_offset`, default 1, sets the iRC-to-CRI numbering). The older `set_digital_output`
+service (CRI numbering, used by `tools/knife_io/knife_dout.py`) has no allow list and is unchanged.
+Both DIO services run in their own callback group of the driver node, so a 3 s `reset_and_enable`
+never delays a gripper output call.
 
 ## Services (`~` = `/jxc_gripper_node` or `/arm_<left|right>/jxc_gripper_node`)
 
@@ -36,13 +43,13 @@ The tool DOut31/32 are used for the knife and are not touched here.
 |---|---|---|
 | `~/servo_on` | Trigger | refuse if io stale, alarm or latch; SVON on; confirm SVON in dout; wait SVRE (`servo_on_timeout_s` 3.0; aborts if SVON disappears); on failure SVON off |
 | `~/home` | Trigger | requires SVRE; if SETON is already ON: success "already homed", **no SETUP pulse**; else SETUP on, confirm SETUP in dout, wait SETON and INP (and BUSY off if wired) from samples newer than the SETUP request (`home_timeout_s` 30; aborts on SVRE drop / SETUP dropped), SETUP off |
-| `~/move_step` | JxcMoveStep (`step` 0..3) | requires SVRE, SETON, no alarm, DRIVE off; set IN0/IN1; confirm both bits in dout; wait `step_setup_delay_s` 0.05; re-check fresh io, alarm, SVRE, SETON and IN0/IN1 still selected; DRIVE on; **confirm DRIVE in dout first**; then (BUSY not wired) wait INP **off** (`inp_clear_timeout_s` 0.5) and INP **on** (`move_timeout_s` 5.0), or (BUSY wired) wait BUSY on, then BUSY off and INP on. Aborts on alarm, stale io, SVRE or SETON dropping, or DRIVE disappearing from dout. DRIVE off at the end. For a pushing/grip step the final timeout means "no part gripped / position not reached" |
+| `~/move_step` | JxcMoveStep (`step` 0..3) | requires SVRE, SETON, no alarm, DRIVE off; set IN0/IN1; confirm both bits in dout; wait `step_setup_delay_s` 0.05; re-check fresh io, alarm, SVRE, SETON and IN0/IN1 still selected; DRIVE on; **confirm DRIVE in dout first**; then (BUSY not wired) wait INP **off** (`inp_clear_timeout_s` 0.5) and INP **on** (`move_timeout_s` 5.0); if INP never drops (start not seen) DRIVE stays on and all guards stay active until `unseen_start_min_wait_s` (2.0, homing took ~1 s and a grip ~4.2 s on the real hardware) have passed since DRIVE on, then INP must be ON in a sample newer than the end of that wait; an INP drop during the wait falls back to the normal wait-for-INP-ON path. The response has `start_seen` (true when INP was seen dropping or BUSY came on) and `message`. Or (BUSY wired) wait BUSY on, then BUSY off and INP on. Aborts on alarm, stale io, SVRE or SETON dropping, or DRIVE disappearing from dout. DRIVE off at the end. For a pushing/grip step the final timeout means "no part gripped / position not reached" |
 | `~/servo_off` | Trigger | DRIVE, SETUP, SVON off (confirmed); wait SVRE off |
 | `~/reset_alarm` | Trigger | only when *ALARM is OFF (alarm active), io fresh, no other command, no latch; DRIVE and SETUP off (confirmed); RESET on, confirm in dout; wait *ALARM ON (`reset_timeout_s` 1.0) in a sample newer than the request; RESET off (confirmed) on every exit. If the alarm stays: "alarm did not clear: check the JXC alarm code; some alarms need a power cycle". RESET not confirmed off -> `outputs_uncertain` |
 | `~/release_all` | Trigger | all six JXC outputs off, confirmed in a fresh digital_io sample; clears the `outputs_uncertain` latch |
 
 Rules:
-* One command at a time (a concurrent call is refused with "busy"). Every command is refused when
+* One command at a time (a concurrent call is refused with "busy"). `reset_alarm`'s RESET pulse is the only part of an automatic reset that refuses other commands; the SVRE wait afterwards is observation only (`release_all` / `servo_off` are accepted as soon as RESET is off and the wait then ends with "SVRE outcome not observed: a command started"). Every command is refused when
   `digital_io` is invalid or older than `stale_s` (0.3 s).
 * **Freshness comes from the source**: age = now - `header.stamp` of the digital_io message (the
   driver's STATUS receive time, system clock, same machine), not the DDS receipt time. A zero stamp
@@ -65,8 +72,9 @@ Rules:
   reset happens afterwards. A `move_step` that sees the alarm only after it returned keeps its success.
   Afterwards, if SVON is commanded on, it waits up to `servo_on_timeout_s` for SVRE and logs a WARN
   ("auto reset #n: alarm cleared, SVRE back" / "... SVRE did not return"). It never turns SVON on,
-  homes or moves. Service calls arriving while an auto reset runs (including the SVRE wait) are
-  refused with "busy: auto alarm reset running".
+  homes or moves. Service calls arriving while the auto reset's RESET pulse runs are refused with
+  "busy: auto alarm reset running"; during the SVRE wait afterwards every command is accepted and
+  ends the wait.
   Rate limit: more than `auto_reset_max` (3) auto resets within `auto_reset_window_s` (60 s), or one
   auto reset that does not clear the alarm, logs an ERROR and disables auto reset (no retry loop)
   until a successful manual `~/reset_alarm` or a node restart.
@@ -75,7 +83,9 @@ Rules:
   `auto_reset_count`, `last_auto_reset` (epoch s or null).
 * `~/state`: `valid, svre, seton, inp, alarm_ok, outputs_uncertain, busy, last_error`, 10 Hz and on change.
 * Shutdown (SIGINT/SIGTERM): the node keeps its executor running, aborts a running command and
-  sends DRIVE/SETUP off, confirmed in digital_io, with bounded timeouts; the log says whether it was confirmed.
+  sends DRIVE/SETUP/RESET off, confirmed in digital_io, with bounded timeouts; the log says whether it was confirmed.
+  **Shutdown deliberately leaves SVON, IN0 and IN1 as they are**: the gripper may be holding a part
+  and dropping SVON or the step select could release it. Use `release_all` / `servo_off` to switch them off.
 
 ## Safety limits (read this)
 
@@ -87,9 +97,10 @@ Rules:
   SVRE or the output disappearing from dout and aborts, but the gripper state is then unknown.
 * **Recommended: wire the JXC BUSY output to a spare DIn (e.g. DIn25, free) and set `in_busy: 25`.**
   Without it, move completion is inferred from INP going OFF then ON, which is an assumption about
-  JXC timing and cannot tell "move finished" from "INP was low all along" (a step to the current
-  position never clears INP and is reported as a failure). With BUSY the start of motion is
-  observed directly.
+  JXC timing and cannot tell "move finished" from "INP was ON all along". A step to the current
+  position (INP never drops) is therefore a **success with `start_seen=false`** after the minimum wait
+  `unseen_start_min_wait_s` (2.0 s), not a failure; the wait is a time guess, not proof the jaws
+  stopped. With BUSY the start of motion is observed directly.
 
 ## Launch
 
